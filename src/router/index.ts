@@ -25,12 +25,6 @@ const router = createRouter({
       component: () => import('@/views/Search.vue'),
     },
     {
-      path: '/watchlist',
-      name: 'watchlist',
-      component: () => import('@/views/Watchlist.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/Login.vue'),

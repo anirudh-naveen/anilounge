@@ -230,7 +230,7 @@ export const getContentDetails = async (req, res) => {
 
 export const addToWatchlist = async (req, res) => {
   try {
-    const { contentId } = req.body
+    const { contentId, status = 'plan_to_watch', rating, currentEpisode, notes } = req.body
 
     const user = await User.findById(req.user._id)
     const content = await Content.findById(contentId)
@@ -242,14 +242,34 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
-    if (user.watchlist.includes(contentId)) {
+    // Check if content is already in watchlist (handle both old and new formats)
+    const existingItem = user.watchlist.find((item) => {
+      if (typeof item === 'string') {
+        return item === contentId
+      }
+      return item.content.toString() === contentId
+    })
+
+    if (existingItem) {
       return res.status(400).json({
         success: false,
         message: 'Content already in watchlist',
       })
     }
 
-    user.watchlist.push(contentId)
+    // Add to watchlist with enhanced data
+    const watchlistItem = {
+      content: contentId,
+      status,
+      rating,
+      currentEpisode: currentEpisode || 0,
+      totalEpisodes: content.numberOfEpisodes || content.runtime ? 1 : null,
+      notes,
+      addedAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    user.watchlist.push(watchlistItem)
     await user.save()
 
     res.json({
@@ -271,7 +291,13 @@ export const removeFromWatchlist = async (req, res) => {
     const { contentId } = req.params
 
     const user = await User.findById(req.user._id)
-    user.watchlist = user.watchlist.filter((id) => id.toString() !== contentId)
+    user.watchlist = user.watchlist.filter((item) => {
+      // Handle both old format (string) and new format (object)
+      if (typeof item === 'string') {
+        return item !== contentId
+      }
+      return item.content.toString() !== contentId
+    })
     await user.save()
 
     res.json({
@@ -284,6 +310,50 @@ export const removeFromWatchlist = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error removing from watchlist',
+    })
+  }
+}
+
+export const updateWatchlistItem = async (req, res) => {
+  try {
+    const { contentId } = req.params
+    const { status, rating, currentEpisode, notes } = req.body
+
+    const user = await User.findById(req.user._id)
+    const watchlistItem = user.watchlist.find((item) => {
+      // Handle both old format (string) and new format (object)
+      if (typeof item === 'string') {
+        return item === contentId
+      }
+      return item.content.toString() === contentId
+    })
+
+    if (!watchlistItem) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found in watchlist',
+      })
+    }
+
+    // Update fields if provided
+    if (status) watchlistItem.status = status
+    if (rating !== undefined) watchlistItem.rating = rating
+    if (currentEpisode !== undefined) watchlistItem.currentEpisode = currentEpisode
+    if (notes !== undefined) watchlistItem.notes = notes
+    watchlistItem.updatedAt = new Date()
+
+    await user.save()
+
+    res.json({
+      success: true,
+      message: 'Watchlist item updated successfully',
+      data: { watchlist: user.watchlist },
+    })
+  } catch (error) {
+    console.error('Error updating watchlist item:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error updating watchlist item',
     })
   }
 }

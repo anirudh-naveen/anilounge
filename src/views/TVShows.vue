@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="tv-page">
     <div class="container">
@@ -13,6 +14,14 @@
         <p>Loading amazing TV shows...</p>
       </div>
 
+      <!-- Error State -->
+      <div v-else-if="contentStore.error" class="error-state">
+        <div class="error-icon">⚠️</div>
+        <h3>Failed to load TV shows</h3>
+        <p>{{ contentStore.error }}</p>
+        <button @click="loadTVShows(1)" class="btn btn-primary">Try Again</button>
+      </div>
+
       <!-- TV Shows Grid -->
       <div v-else-if="contentStore.tvShows.length > 0" class="shows-grid">
         <div
@@ -25,16 +34,6 @@
             <img :src="getPosterUrl(show.posterPath)" :alt="show.title" @error="handleImageError" />
             <div class="show-overlay">
               <div class="show-rating">⭐ {{ show.voteAverage?.toFixed(1) || 'N/A' }}</div>
-              <div class="show-actions">
-                <button
-                  v-if="authStore.isAuthenticated"
-                  @click.stop="toggleWatchlist(show._id)"
-                  class="action-btn"
-                  :class="{ 'in-watchlist': contentStore.isInWatchlist(show._id) }"
-                >
-                  {{ contentStore.isInWatchlist(show._id) ? '✓' : '+' }}
-                </button>
-              </div>
             </div>
           </div>
           <div class="show-info">
@@ -56,7 +55,7 @@
       </div>
 
       <!-- Empty State -->
-      <div v-else class="empty-state">
+      <div v-if="!contentStore.isLoading && contentStore.tvShows.length === 0" class="empty-state">
         <div class="empty-icon">📺</div>
         <h3>No TV shows found</h3>
         <p>Try refreshing the page or check back later</p>
@@ -91,15 +90,11 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
-import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl } from '@/services/api'
-import { useToast } from 'vue-toastification'
 import type { TVShow } from '@/types'
 
 const router = useRouter()
 const contentStore = useContentStore()
-const authStore = useAuthStore()
-const toast = useToast()
 
 const currentPage = ref(1)
 
@@ -113,7 +108,6 @@ const loadTVShows = async (page = 1) => {
     currentPage.value = page
   } catch (error) {
     console.error('Error loading TV shows:', error)
-    toast.error('Failed to load TV shows')
   }
 }
 
@@ -135,26 +129,6 @@ const loadPreviousPage = (event?: Event) => {
 
 const viewShowDetails = (show: TVShow) => {
   router.push(`/tv/${show.tmdbId}`)
-}
-
-const toggleWatchlist = async (contentId: string) => {
-  if (!authStore.isAuthenticated) {
-    toast.warning('Please login to add items to your watchlist')
-    return
-  }
-
-  try {
-    if (contentStore.isInWatchlist(contentId)) {
-      await contentStore.removeFromWatchlist(contentId)
-      toast.success('Removed from watchlist')
-    } else {
-      await contentStore.addToWatchlist(contentId)
-      toast.success('Added to watchlist')
-    }
-  } catch (error) {
-    console.error('Error updating watchlist:', error)
-    toast.error('Failed to update watchlist')
-  }
 }
 
 const truncateText = (text: string, maxLength: number) => {
@@ -350,6 +324,30 @@ const handleImageError = (event: Event) => {
   gap: 1rem;
   font-size: 0.9rem;
   color: var(--text-muted);
+}
+
+.error-state {
+  text-align: center;
+  padding: 4rem 0;
+  color: var(--text-secondary);
+}
+
+.error-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.error-state h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.error-state p {
+  margin-bottom: 2rem;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .empty-state {

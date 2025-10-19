@@ -104,6 +104,7 @@ export const login = async (req, res) => {
           id: user._id,
           username: user.username,
           email: user.email,
+          watchlist: user.watchlist,
           preferences: user.preferences,
         },
         token,
@@ -120,7 +121,12 @@ export const login = async (req, res) => {
 
 export const getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate('watchlist').populate('ratings.content')
+    const user = await User.findById(req.user._id)
+      .populate({
+        path: 'watchlist.content',
+        model: 'Content',
+      })
+      .populate('ratings.content')
 
     res.json({
       success: true,

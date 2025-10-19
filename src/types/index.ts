@@ -4,6 +4,17 @@ export interface Genre {
   _id?: string
 }
 
+export interface WatchlistItem {
+  content: string | Content
+  status: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
+  rating?: number
+  currentEpisode: number
+  totalEpisodes?: number
+  notes?: string
+  addedAt: string
+  updatedAt: string
+}
+
 export interface User {
   id: string
   username: string
@@ -12,7 +23,7 @@ export interface User {
     favoriteGenres: string[]
     favoriteStudios: string[]
   }
-  watchlist?: string[]
+  watchlist?: WatchlistItem[]
   ratings?: any[]
 }
 
@@ -82,3 +93,50 @@ export interface TVShow {
 }
 
 export type Content = Movie | TVShow
+
+// API Types
+export interface LoginCredentials {
+  email: string
+  password: string
+}
+
+export interface RegisterData {
+  username: string
+  email: string
+  password: string
+}
+
+export interface UpdateProfileData {
+  username?: string
+  email?: string
+  preferences?: {
+    favoriteGenres: string[]
+    favoriteStudios: string[]
+  }
+}
+
+export interface WatchlistData {
+  contentId: string
+  status?: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
+  rating?: number
+  currentEpisode?: number
+  notes?: string
+}
+
+export interface UpdateWatchlistData {
+  status?: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
+  rating?: number
+  currentEpisode?: number
+  notes?: string
+}
+
+export interface RateContentData {
+  contentId: string
+  rating: number
+  review?: string
+}
+
+export interface ContentParams {
+  page?: number
+  limit?: number
+}

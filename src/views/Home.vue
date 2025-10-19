@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="home-page">
     <!-- Hero Section -->
@@ -13,10 +14,9 @@
             recommendations.
           </p>
           <div class="hero-actions">
-            <router-link to="/movies" class="btn btn-primary btn-large">
-              🎬 Browse Movies
+            <router-link to="/search" class="btn btn-primary btn-large">
+              🔍 Search Content
             </router-link>
-            <router-link to="/tv" class="btn btn-secondary btn-large"> 📺 TV Shows </router-link>
           </div>
         </div>
       </div>
@@ -25,43 +25,34 @@
     <!-- Featured Content -->
     <section class="featured-section">
       <div class="container">
-        <h2 class="section-title">Featured Movies</h2>
+        <h2 class="section-title">Featured Content</h2>
         <div v-if="contentStore.isLoading" class="loading-container">
           <div class="spinner"></div>
           <p>Loading amazing content...</p>
         </div>
-        <div v-else-if="contentStore.movies.length > 0" class="movies-grid">
+        <div v-else-if="featuredContent.length > 0" class="content-grid">
           <div
-            v-for="movie in contentStore.movies.slice(0, 6)"
-            :key="movie._id"
-            class="movie-card"
-            @click="viewMovieDetails(movie)"
+            v-for="item in featuredContent.slice(0, 8)"
+            :key="item._id"
+            class="content-card"
+            @click="viewContentDetails(item)"
           >
-            <div class="movie-poster">
+            <div class="content-poster">
               <img
-                :src="getPosterUrl(movie.posterPath)"
-                :alt="movie.title"
+                :src="getPosterUrl(item.posterPath)"
+                :alt="item.title"
                 @error="handleImageError"
               />
-              <div class="movie-overlay">
-                <div class="movie-rating">⭐ {{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
-                <div class="movie-actions">
-                  <button
-                    v-if="authStore.isAuthenticated"
-                    @click.stop="toggleWatchlist(movie._id)"
-                    class="action-btn"
-                    :class="{ 'in-watchlist': contentStore.isInWatchlist(movie._id) }"
-                  >
-                    {{ contentStore.isInWatchlist(movie._id) ? '✓' : '+' }}
-                  </button>
-                </div>
+              <div class="content-overlay">
+                <div class="content-rating">⭐ {{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
+                <div class="content-type">{{ item.contentType === 'movie' ? '🎬' : '📺' }}</div>
               </div>
             </div>
-            <div class="movie-info">
-              <h3 class="movie-title">{{ movie.title }}</h3>
-              <p class="movie-overview">{{ truncateText(movie.overview, 100) }}</p>
-              <div class="movie-genres">
-                <span v-for="genre in movie.genres?.slice(0, 2)" :key="genre.id" class="genre-tag">
+            <div class="content-info">
+              <h3 class="content-title">{{ item.title }}</h3>
+              <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
+              <div class="content-genres">
+                <span v-for="genre in item.genres?.slice(0, 2)" :key="genre.id" class="genre-tag">
                   {{ genre.name }}
                 </span>
               </div>
@@ -69,7 +60,7 @@
           </div>
         </div>
         <div v-else class="error-state">
-          <p>No movies found. Please try again later.</p>
+          <p>No content found. Please try again later.</p>
         </div>
       </div>
     </section>
@@ -105,49 +96,43 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
-import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl } from '@/services/api'
-import { useToast } from 'vue-toastification'
+import type { Content } from '@/types'
 
 const router = useRouter()
 const contentStore = useContentStore()
-const authStore = useAuthStore()
-const toast = useToast()
+
+// Combine movies and TV shows for featured content
+const featuredContent = computed(() => {
+  const movies = contentStore.movies.map((movie) => ({ ...movie, contentType: 'movie' as const }))
+  const tvShows = contentStore.tvShows.map((show) => ({ ...show, contentType: 'tv' as const }))
+
+  // Mix movies and TV shows, prioritizing higher-rated content
+  const allContent = [...movies, ...tvShows]
+  return allContent.sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
+})
 
 onMounted(async () => {
-  if (contentStore.movies.length === 0) {
-    try {
+  try {
+    // Load both movies and TV shows if not already loaded
+    if (contentStore.movies.length === 0) {
       await contentStore.getMovies(1)
-    } catch (error) {
-      console.error('Error loading movies:', error)
     }
+    if (contentStore.tvShows.length === 0) {
+      await contentStore.getTVShows(1)
+    }
+  } catch (error) {
+    console.error('Error loading content:', error)
   }
 })
 
-const viewMovieDetails = (movie: any) => {
-  router.push(`/movie/${movie.tmdbId}`)
-}
-
-const toggleWatchlist = async (contentId: string) => {
-  if (!authStore.isAuthenticated) {
-    toast.warning('Please login to add items to your watchlist')
-    return
-  }
-
-  try {
-    if (contentStore.isInWatchlist(contentId)) {
-      await contentStore.removeFromWatchlist(contentId)
-      toast.success('Removed from watchlist')
-    } else {
-      await contentStore.addToWatchlist(contentId)
-      toast.success('Added to watchlist')
-    }
-  } catch (error) {
-    toast.error('Failed to update watchlist')
-  }
+const viewContentDetails = (content: Content) => {
+  const route =
+    content.contentType === 'movie' ? `/movie/${content.tmdbId}` : `/tv/${content.tmdbId}`
+  router.push(route)
 }
 
 const truncateText = (text: string, maxLength: number) => {
@@ -262,7 +247,7 @@ const handleImageError = (event: Event) => {
   color: var(--text-secondary);
 }
 
-.movies-grid {
+.content-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
@@ -270,7 +255,7 @@ const handleImageError = (event: Event) => {
   margin: 0 auto;
 }
 
-.movie-card {
+.content-card {
   background: var(--bg-card);
   border-radius: 12px;
   overflow: hidden;
@@ -279,30 +264,30 @@ const handleImageError = (event: Event) => {
   border: 1px solid var(--border-color);
 }
 
-.movie-card:hover {
+.content-card:hover {
   transform: translateY(-8px);
   box-shadow: var(--shadow-lg);
   border-color: var(--border-hover);
 }
 
-.movie-poster {
+.content-poster {
   position: relative;
   aspect-ratio: 2/3;
   overflow: hidden;
 }
 
-.movie-poster img {
+.content-poster img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
 }
 
-.movie-card:hover .movie-poster img {
+.content-card:hover .content-poster img {
   transform: scale(1.05);
 }
 
-.movie-overlay {
+.content-overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -317,11 +302,11 @@ const handleImageError = (event: Event) => {
   transition: opacity 0.3s ease;
 }
 
-.movie-card:hover .movie-overlay {
+.content-card:hover .content-overlay {
   opacity: 1;
 }
 
-.movie-rating {
+.content-rating {
   background: var(--highlight-color);
   color: white;
   padding: 0.25rem 0.75rem;
@@ -331,7 +316,18 @@ const handleImageError = (event: Event) => {
   align-self: flex-start;
 }
 
-.movie-actions {
+.content-type {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+.content-actions {
   display: flex;
   justify-content: flex-end;
 }
@@ -360,25 +356,25 @@ const handleImageError = (event: Event) => {
   background: var(--success-color);
 }
 
-.movie-info {
+.content-info {
   padding: 1.5rem;
 }
 
-.movie-title {
+.content-title {
   font-size: 1.25rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
 }
 
-.movie-overview {
+.content-overview {
   color: var(--text-secondary);
   font-size: 0.9rem;
   line-height: 1.5;
   margin-bottom: 1rem;
 }
 
-.movie-genres {
+.content-genres {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
@@ -455,7 +451,7 @@ const handleImageError = (event: Event) => {
     align-items: center;
   }
 
-  .movies-grid {
+  .content-grid {
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 1.5rem;
   }

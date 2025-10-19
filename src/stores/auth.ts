@@ -9,7 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
-  const isAuthenticated = computed(() => !!token.value && !!user.value)
+  const isAuthenticated = computed(() => !!token.value)
 
   const login = async (credentials) => {
     try {
@@ -72,7 +72,13 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = response.data.data.user
       localStorage.setItem('user', JSON.stringify(user.value))
     } catch (err) {
-      logout()
+      console.error('Error loading user:', err)
+      // Only logout if it's an authentication error (401)
+      if (err.response?.status === 401) {
+        logout()
+      }
+      // For other errors, just throw them without logging out
+      throw err
     }
   }
 

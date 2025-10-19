@@ -29,8 +29,39 @@ const userSchema = new mongoose.Schema(
     // Watchlist information
     watchlist: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Content',
+        content: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Content',
+        },
+        status: {
+          type: String,
+          enum: ['plan_to_watch', 'watching', 'completed', 'dropped'],
+          default: 'plan_to_watch',
+        },
+        rating: {
+          type: Number,
+          min: 1,
+          max: 10,
+        },
+        currentEpisode: {
+          type: Number,
+          default: 0,
+        },
+        totalEpisodes: {
+          type: Number,
+        },
+        notes: {
+          type: String,
+          maxlength: 500,
+        },
+        addedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        updatedAt: {
+          type: Date,
+          default: Date.now,
+        },
       },
     ],
     ratings: [

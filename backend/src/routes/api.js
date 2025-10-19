@@ -44,6 +44,7 @@ router.get('/content/:id', contentController.getContentDetails)
 
 // User-specific content routes (require authentication)
 router.post('/user/watchlist', authenticateToken, contentController.addToWatchlist)
+router.put('/user/watchlist/:contentId', authenticateToken, contentController.updateWatchlistItem)
 router.delete(
   '/user/watchlist/:contentId',
   authenticateToken,

@@ -1,4 +1,13 @@
 import axios from 'axios'
+import type {
+  LoginCredentials,
+  RegisterData,
+  UpdateProfileData,
+  WatchlistData,
+  UpdateWatchlistData,
+  RateContentData,
+  ContentParams,
+} from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
 
@@ -40,38 +49,40 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  register: (userData) => api.post('/auth/register', userData),
-  login: (credentials) => api.post('/auth/login', credentials),
+  register: (userData: RegisterData) => api.post('/auth/register', userData),
+  login: (credentials: LoginCredentials) => api.post('/auth/login', credentials),
   getProfile: () => api.get('/auth/profile'),
-  updateProfile: (data) => api.put('/auth/profile', data),
+  updateProfile: (data: UpdateProfileData) => api.put('/auth/profile', data),
 }
 
 // Content API
 export const contentAPI = {
-  getMovies: (params) => api.get('/content/movies', { params }),
-  getTVShows: (params) => api.get('/content/tv', { params }),
-  searchContent: (query, page = 1) =>
+  getMovies: (params: ContentParams) => api.get('/content/movies', { params }),
+  getTVShows: (params: ContentParams) => api.get('/content/tv', { params }),
+  searchContent: (query: string, page = 1) =>
     api.get('/content/search', {
       params: { query, page },
     }),
-  getContentDetails: (id) => api.get(`/content/${id}`),
+  getContentDetails: (id: string) => api.get(`/content/${id}`),
 }
 
 // User API
 export const userAPI = {
-  addToWatchlist: (contentId) => api.post('/user/watchlist', { contentId }),
-  removeFromWatchlist: (contentId) => api.delete(`/user/watchlist/${contentId}`),
-  rateContent: (data) => api.post('/user/rate', data),
+  addToWatchlist: (data: WatchlistData) => api.post('/user/watchlist', data),
+  updateWatchlistItem: (contentId: string, data: UpdateWatchlistData) =>
+    api.put(`/user/watchlist/${contentId}`, data),
+  removeFromWatchlist: (contentId: string) => api.delete(`/user/watchlist/${contentId}`),
+  rateContent: (data: RateContentData) => api.post('/user/rate', data),
   getRecommendations: () => api.get('/user/recommendations'),
 }
 
 // Utility functions
-export const getImageUrl = (path, size = 'w500') => {
+export const getImageUrl = (path: string, size = 'w500') => {
   if (!path) return '/placeholder-movie.jpg'
   return `https://image.tmdb.org/t/p/${size}${path}`
 }
 
-export const getPosterUrl = (path) => getImageUrl(path, 'w500')
-export const getBackdropUrl = (path) => getImageUrl(path, 'w1280')
+export const getPosterUrl = (path: string) => getImageUrl(path, 'w500')
+export const getBackdropUrl = (path: string) => getImageUrl(path, 'w1280')
 
 export default api
