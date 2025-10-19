@@ -51,7 +51,6 @@ class TMDBService {
         },
       })
 
-      // Since we're already filtering by Animation genre, we don't need additional filtering
       return response.data
     } catch (error) {
       console.error('Error fetching animated movies:', error)
@@ -71,7 +70,6 @@ class TMDBService {
         },
       })
 
-      // Since we're already filtering by Animation genre, we don't need additional filtering
       return response.data
     } catch (error) {
       console.error('Error fetching animated TV shows:', error)
