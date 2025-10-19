@@ -56,6 +56,11 @@
                 </div>
                 <div class="movie-info">
                   <h3 class="movie-title">{{ movie.title }}</h3>
+                  <div class="movie-genres">
+                    <span v-for="genre in movie.genres" :key="genre" class="genre-tag">{{
+                      genre
+                    }}</span>
+                  </div>
                   <p class="movie-overview">{{ truncateText(movie.overview, 100) }}</p>
                 </div>
               </div>
@@ -84,6 +89,11 @@
                 </div>
                 <div class="show-info">
                   <h3 class="show-title">{{ show.title }}</h3>
+                  <div class="show-genres">
+                    <span v-for="genre in show.genres" :key="genre" class="genre-tag">{{
+                      genre
+                    }}</span>
+                  </div>
                   <p class="show-overview">{{ truncateText(show.overview, 100) }}</p>
                 </div>
               </div>
@@ -335,6 +345,24 @@ const handleImageError = (event: Event) => {
 .movie-info,
 .show-info {
   padding: 1rem;
+}
+
+.movie-genres,
+.show-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.genre-tag {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
 }
 
 .movie-title,

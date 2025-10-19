@@ -3,6 +3,55 @@ import User from '../models/User.js'
 import tmdbService from '../services/tmdbService.js'
 import { validationResult } from 'express-validator'
 
+// Genre ID to name mapping
+const genreMap = {
+  16: 'Animation',
+  28: 'Action',
+  12: 'Adventure',
+  35: 'Comedy',
+  80: 'Crime',
+  99: 'Documentary',
+  18: 'Drama',
+  10751: 'Family',
+  14: 'Fantasy',
+  36: 'History',
+  27: 'Horror',
+  10402: 'Music',
+  9648: 'Mystery',
+  10749: 'Romance',
+  878: 'Science Fiction',
+  10770: 'TV Movie',
+  53: 'Thriller',
+  10752: 'War',
+  37: 'Western',
+  10759: 'Action & Adventure',
+  10762: 'Kids',
+  10763: 'News',
+  10764: 'Reality',
+  10765: 'Sci-Fi & Fantasy',
+  10766: 'Soap',
+  10767: 'Talk',
+  10768: 'War & Politics',
+}
+
+// Convert genre IDs to genre names (handles both old and new formats)
+const convertGenreIds = (genreIds) => {
+  if (!genreIds || !Array.isArray(genreIds)) return []
+
+  return genreIds
+    .map((id) => {
+      // If it's already a string, return it
+      if (typeof id === 'string') return id
+      // If it's an object with name property, return the name
+      if (typeof id === 'object' && id.name) return id.name
+      // If it's a number (genre ID), convert to name
+      if (typeof id === 'number') return genreMap[id] || `Genre ${id}`
+      return null
+    })
+    .filter(Boolean)
+    .filter((genre) => genre !== 'Animation') // Remove Animation genre as it's implied
+}
+
 // Saves Animated Movie content to database
 export const getAnimatedMovies = async (req, res) => {
   try {
@@ -27,9 +76,7 @@ export const getAnimatedMovies = async (req, res) => {
               backdropPath: movie.backdrop_path,
               releaseDate: movie.release_date ? new Date(movie.release_date) : null,
               contentType: 'movie',
-              genres: movie.genre_ids
-                ? movie.genre_ids.map((id) => ({ id, name: getGenreName(id) }))
-                : [],
+              genres: convertGenreIds(movie.genre_ids),
               adult: movie.adult,
               originalLanguage: movie.original_language,
               popularity: movie.popularity,
@@ -38,11 +85,19 @@ export const getAnimatedMovies = async (req, res) => {
               runtime: movie.runtime,
               isAnimated: true,
             })
-
             await content.save()
+          } else {
+            // Update existing content with genres if missing
+            if (!content.genres || content.genres.length === 0) {
+              content.genres = convertGenreIds(movie.genre_ids)
+              await content.save()
+            }
           }
 
-          return content
+          return {
+            ...content.toObject(),
+            genres: convertGenreIds(content.genres),
+          }
         } catch (error) {
           console.error(`Error processing movie ${movie.id}:`, error)
           return null
@@ -94,9 +149,7 @@ export const getAnimatedTVShows = async (req, res) => {
               backdropPath: show.backdrop_path,
               releaseDate: show.first_air_date ? new Date(show.first_air_date) : null,
               contentType: 'tv',
-              genres: show.genre_ids
-                ? show.genre_ids.map((id) => ({ id, name: getGenreName(id) }))
-                : [],
+              genres: convertGenreIds(show.genre_ids),
               adult: show.adult,
               originalLanguage: show.original_language,
               popularity: show.popularity,
@@ -106,11 +159,19 @@ export const getAnimatedTVShows = async (req, res) => {
               numberOfEpisodes: show.number_of_episodes,
               isAnimated: true,
             })
-
             await content.save()
+          } else {
+            // Update existing content with genres if missing
+            if (!content.genres || content.genres.length === 0) {
+              content.genres = convertGenreIds(show.genre_ids)
+              await content.save()
+            }
           }
 
-          return content
+          return {
+            ...content.toObject(),
+            genres: convertGenreIds(content.genres),
+          }
         } catch (error) {
           console.error(`Error processing TV show ${show.id}:`, error)
           return null
@@ -153,11 +214,43 @@ export const searchContent = async (req, res) => {
 
     const searchResults = await tmdbService.searchAnimatedContent(query, page)
 
+    // Process movies - convert genre_ids to genre names and create proper structure
+    const processedMovies = searchResults.movies.results.map((movie) => ({
+      _id: `tmdb_${movie.id}`,
+      tmdbId: movie.id,
+      title: movie.title,
+      originalTitle: movie.original_title,
+      overview: movie.overview,
+      posterPath: movie.poster_path,
+      backdropPath: movie.backdrop_path,
+      releaseDate: movie.release_date ? new Date(movie.release_date) : null,
+      contentType: 'movie',
+      genres: convertGenreIds(movie.genre_ids),
+      voteAverage: movie.vote_average,
+      voteCount: movie.vote_count,
+    }))
+
+    // Process TV shows - convert genre_ids to genre names and create proper structure
+    const processedTVShows = searchResults.tv.results.map((show) => ({
+      _id: `tmdb_${show.id}`,
+      tmdbId: show.id,
+      title: show.name,
+      originalTitle: show.original_name,
+      overview: show.overview,
+      posterPath: show.poster_path,
+      backdropPath: show.backdrop_path,
+      releaseDate: show.first_air_date ? new Date(show.first_air_date) : null,
+      contentType: 'tv',
+      genres: convertGenreIds(show.genre_ids),
+      voteAverage: show.vote_average,
+      voteCount: show.vote_count,
+    }))
+
     res.json({
       success: true,
       data: {
-        movies: searchResults.movies.results,
-        tv: searchResults.tv.results,
+        movies: processedMovies,
+        tv: processedTVShows,
         pagination: {
           page: parseInt(page),
           totalPages: Math.max(searchResults.movies.total_pages, searchResults.tv.total_pages),
@@ -458,30 +551,4 @@ async function updateContentAverageRating(contentId) {
   } catch (error) {
     console.error('Error updating content average rating:', error)
   }
-}
-
-// Helper function to get genre name by ID
-function getGenreName(genreId) {
-  const genres = {
-    16: 'Animation',
-    28: 'Action',
-    12: 'Adventure',
-    35: 'Comedy',
-    80: 'Crime',
-    99: 'Documentary',
-    18: 'Drama',
-    10751: 'Family',
-    14: 'Fantasy',
-    36: 'History',
-    27: 'Horror',
-    10402: 'Music',
-    9648: 'Mystery',
-    10749: 'Romance',
-    878: 'Science Fiction',
-    10770: 'TV Movie',
-    53: 'Thriller',
-    10752: 'War',
-    37: 'Western',
-  }
-  return genres[genreId] || 'Unknown'
 }

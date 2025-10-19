@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authAPI } from '@/services/api'
-import type { User } from '@/types'
+import type { User, LoginCredentials, RegisterData, UpdateProfileData } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
@@ -11,7 +11,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value)
 
-  const login = async (credentials) => {
+  const login = async (credentials: LoginCredentials) => {
     try {
       isLoading.value = true
       error.value = null
@@ -26,15 +26,16 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('user', JSON.stringify(userData))
 
       return response.data
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Login failed'
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string }; status?: number } }
+      error.value = apiError.response?.data?.message || 'Login failed'
       throw err
     } finally {
       isLoading.value = false
     }
   }
 
-  const register = async (userData) => {
+  const register = async (userData: RegisterData) => {
     try {
       isLoading.value = true
       error.value = null
@@ -49,8 +50,9 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('user', JSON.stringify(newUser))
 
       return response.data
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Registration failed'
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string }; status?: number } }
+      error.value = apiError.response?.data?.message || 'Registration failed'
       throw err
     } finally {
       isLoading.value = false
@@ -71,10 +73,11 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authAPI.getProfile()
       user.value = response.data.data.user
       localStorage.setItem('user', JSON.stringify(user.value))
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error loading user:', err)
+      const apiError = err as { response?: { status?: number } }
       // Only logout if it's an authentication error (401)
-      if (err.response?.status === 401) {
+      if (apiError.response?.status === 401) {
         logout()
       }
       // For other errors, just throw them without logging out
@@ -82,7 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const updateProfile = async (data) => {
+  const updateProfile = async (data: UpdateProfileData) => {
     try {
       isLoading.value = true
       error.value = null
@@ -92,8 +95,9 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('user', JSON.stringify(user.value))
 
       return response.data
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Profile update failed'
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string } } }
+      error.value = apiError.response?.data?.message || 'Profile update failed'
       throw err
     } finally {
       isLoading.value = false

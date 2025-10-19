@@ -32,26 +32,26 @@
         >
           <div class="show-poster">
             <img :src="getPosterUrl(show.posterPath)" :alt="show.title" @error="handleImageError" />
-              <div class="show-overlay">
-                <div class="show-rating">⭐ {{ show.voteAverage?.toFixed(1) || 'N/A' }}</div>
-                <div class="show-actions">
-                  <button
-                    v-if="authStore.isAuthenticated"
-                    @click.stop="handleWatchlistClick(show._id)"
-                    class="action-btn"
-                    :class="{ 'in-watchlist': contentStore.isInWatchlist(show._id) }"
-                  >
-                    {{ contentStore.isInWatchlist(show._id) ? '✓' : '+' }}
-                  </button>
-                </div>
+            <div class="show-overlay">
+              <div class="show-rating">⭐ {{ show.voteAverage?.toFixed(1) || 'N/A' }}</div>
+              <div class="show-actions">
+                <button
+                  v-if="authStore.isAuthenticated"
+                  @click.stop="handleWatchlistClick(show._id)"
+                  class="action-btn"
+                  :class="{ 'in-watchlist': contentStore.isInWatchlist(show._id) }"
+                >
+                  {{ contentStore.isInWatchlist(show._id) ? '✓' : '+' }}
+                </button>
               </div>
+            </div>
           </div>
           <div class="show-info">
             <h3 class="show-title">{{ show.title }}</h3>
             <p class="show-overview">{{ truncateText(show.overview, 120) }}</p>
             <div class="show-genres">
-              <span v-for="genre in show.genres?.slice(0, 3)" :key="genre.id" class="genre-tag">
-                {{ genre.name }}
+              <span v-for="genre in show.genres?.slice(0, 3)" :key="genre" class="genre-tag">
+                {{ genre }}
               </span>
             </div>
             <div class="show-meta">

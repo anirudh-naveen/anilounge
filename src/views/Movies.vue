@@ -36,26 +36,26 @@
               :alt="movie.title"
               @error="handleImageError"
             />
-              <div class="movie-overlay">
-                <div class="movie-rating">⭐ {{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
-                <div class="movie-actions">
-                  <button
-                    v-if="authStore.isAuthenticated"
-                    @click.stop="handleWatchlistClick(movie._id)"
-                    class="action-btn"
-                    :class="{ 'in-watchlist': contentStore.isInWatchlist(movie._id) }"
-                  >
-                    {{ contentStore.isInWatchlist(movie._id) ? '✓' : '+' }}
-                  </button>
-                </div>
+            <div class="movie-overlay">
+              <div class="movie-rating">⭐ {{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
+              <div class="movie-actions">
+                <button
+                  v-if="authStore.isAuthenticated"
+                  @click.stop="handleWatchlistClick(movie._id)"
+                  class="action-btn"
+                  :class="{ 'in-watchlist': contentStore.isInWatchlist(movie._id) }"
+                >
+                  {{ contentStore.isInWatchlist(movie._id) ? '✓' : '+' }}
+                </button>
               </div>
+            </div>
           </div>
           <div class="movie-info">
             <h3 class="movie-title">{{ movie.title }}</h3>
             <p class="movie-overview">{{ truncateText(movie.overview, 120) }}</p>
             <div class="movie-genres">
-              <span v-for="genre in movie.genres?.slice(0, 3)" :key="genre.id" class="genre-tag">
-                {{ genre.name }}
+              <span v-for="genre in movie.genres?.slice(0, 3)" :key="genre" class="genre-tag">
+                {{ genre }}
               </span>
             </div>
             <div class="movie-meta">

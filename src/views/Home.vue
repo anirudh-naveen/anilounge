@@ -32,7 +32,7 @@
         </div>
         <div v-else-if="featuredContent.length > 0" class="content-grid">
           <div
-            v-for="item in featuredContent.slice(0, 10)"
+            v-for="item in featuredContent.slice(0, 8)"
             :key="item._id"
             class="content-card"
             @click="viewContentDetails(item)"
@@ -62,8 +62,8 @@
               <h3 class="content-title">{{ item.title }}</h3>
               <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
               <div class="content-genres">
-                <span v-for="genre in item.genres?.slice(0, 2)" :key="genre.id" class="genre-tag">
-                  {{ genre.name }}
+                <span v-for="genre in item.genres?.slice(0, 2)" :key="genre" class="genre-tag">
+                  {{ genre }}
                 </span>
               </div>
             </div>
@@ -85,19 +85,14 @@
             <div class="stat-label">Animated Movies</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">📺</div>
-            <div class="stat-number">500+</div>
-            <div class="stat-label">TV Shows</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">⭐</div>
-            <div class="stat-number">4.5</div>
-            <div class="stat-label">Average Rating</div>
-          </div>
-          <div class="stat-card">
             <div class="stat-icon">🎯</div>
             <div class="stat-number">AI</div>
             <div class="stat-label">Recommendations</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">📺</div>
+            <div class="stat-number">500+</div>
+            <div class="stat-label">Animated TV Shows</div>
           </div>
         </div>
       </div>
@@ -314,9 +309,9 @@ const getContentType = (contentId: string) => {
 
 .content-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.5rem;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -517,8 +512,8 @@ const getContentType = (contentId: string) => {
   }
 
   .content-grid {
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 1rem;
   }
 
   .stats-grid {

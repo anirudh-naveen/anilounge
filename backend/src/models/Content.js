@@ -34,12 +34,7 @@ const contentSchema = new mongoose.Schema(
       enum: ['movie', 'tv'],
       required: true,
     },
-    genres: [
-      {
-        id: Number,
-        name: String,
-      },
-    ],
+    genres: [String],
     adult: {
       type: Boolean,
       default: false,
@@ -148,7 +143,7 @@ const contentSchema = new mongoose.Schema(
 // Index for efficient queries
 contentSchema.index({ contentType: 1 })
 contentSchema.index({ isAnimated: 1 })
-contentSchema.index({ 'genres.name': 1 })
+contentSchema.index({ genres: 1 })
 contentSchema.index({ averageUserRating: -1 })
 contentSchema.index({ popularity: -1 })
 

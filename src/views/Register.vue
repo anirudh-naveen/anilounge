@@ -43,8 +43,27 @@
               class="input"
               placeholder="Create a password"
               required
-              minlength="6"
+              minlength="8"
             />
+          </div>
+
+          <div class="form-group">
+            <label for="confirmPassword" class="form-label">Confirm Password</label>
+            <input
+              id="confirmPassword"
+              v-model="form.confirmPassword"
+              type="password"
+              class="input"
+              placeholder="Confirm your password"
+              required
+              minlength="8"
+            />
+            <div
+              v-if="form.confirmPassword && form.password !== form.confirmPassword"
+              class="error-text"
+            >
+              Passwords do not match
+            </div>
           </div>
 
           <button type="submit" class="btn btn-primary btn-large" :disabled="authStore.isLoading">
@@ -81,9 +100,25 @@ const form = ref({
   username: '',
   email: '',
   password: '',
+  confirmPassword: '',
 })
 
 const handleRegister = async () => {
+  // Validate password match
+  if (form.value.password !== form.value.confirmPassword) {
+    toast.error('Passwords do not match')
+    return
+  }
+
+  // Validate password strength
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
+  if (!passwordRegex.test(form.value.password)) {
+    toast.error(
+      'Password requirements:\n• Minimum eight characters\n• At least one uppercase letter\n• One lowercase letter\n• One number\n• One special character',
+    )
+    return
+  }
+
   try {
     await authStore.register(form.value)
     toast.success('Account created successfully!')
@@ -167,6 +202,12 @@ const handleRegister = async () => {
   border-radius: 8px;
   font-size: 0.9rem;
   text-align: center;
+}
+
+.error-text {
+  color: var(--error-color);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
 }
 
 .register-footer {

@@ -35,14 +35,29 @@
 
           <div class="nav-actions">
             <div v-if="authStore.isAuthenticated" class="user-menu">
-              <div class="user-info">
-                <span class="user-avatar">👤</span>
-                <span class="user-name">{{ authStore.user?.username }}</span>
+              <div class="user-dropdown" :class="{ active: showDropdown }">
+                <button @click="toggleDropdown" class="user-trigger">
+                  <span class="user-avatar">👤</span>
+                  <span class="user-name">{{ authStore.user?.username }}</span>
+                  <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
+                </button>
+
+                <div v-if="showDropdown" class="dropdown-menu">
+                  <router-link to="/profile" class="dropdown-item" @click="closeDropdown">
+                    <span class="item-icon">👤</span>
+                    <span class="item-text">Profile</span>
+                  </router-link>
+                  <router-link to="/settings" class="dropdown-item" @click="closeDropdown">
+                    <span class="item-icon">⚙️</span>
+                    <span class="item-text">Settings</span>
+                  </router-link>
+                  <div class="dropdown-divider"></div>
+                  <button @click="handleLogout" class="dropdown-item logout-item">
+                    <span class="item-icon">🚪</span>
+                    <span class="item-text">Logout</span>
+                  </button>
+                </div>
               </div>
-              <button @click="handleLogout" class="btn btn-logout">
-                <span class="btn-icon">🚪</span>
-                <span class="btn-text">Logout</span>
-              </button>
             </div>
             <div v-else class="auth-buttons">
               <router-link to="/login" class="btn btn-secondary">
@@ -74,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
@@ -83,14 +98,40 @@ const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
 
+const showDropdown = ref(false)
+
 onMounted(() => {
   authStore.initAuth()
+  // Close dropdown when clicking outside
+  document.addEventListener('click', handleClickOutside)
 })
 
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
+const toggleDropdown = () => {
+  showDropdown.value = !showDropdown.value
+}
+
+const closeDropdown = () => {
+  showDropdown.value = false
+}
+
+const handleClickOutside = (event: Event) => {
+  const target = event.target as HTMLElement
+  if (!target.closest('.user-dropdown')) {
+    showDropdown.value = false
+  }
+}
+
 const handleLogout = () => {
-  authStore.logout()
-  toast.success('Logged out successfully!')
-  router.push('/')
+  if (confirm('Are you sure you want to logout?')) {
+    authStore.logout()
+    toast.success('Logged out successfully!')
+    router.push('/')
+    closeDropdown()
+  }
 }
 </script>
 
@@ -152,7 +193,7 @@ const handleLogout = () => {
   color: var(--text-secondary);
   text-decoration: none;
   font-weight: 500;
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 0.8rem;
   border-radius: 8px;
   transition: all 0.3s ease;
   position: relative;
@@ -192,6 +233,7 @@ const handleLogout = () => {
 
 .nav-text {
   font-size: 0.95rem;
+  white-space: nowrap;
 }
 
 .nav-actions {
@@ -201,12 +243,14 @@ const handleLogout = () => {
 }
 
 .user-menu {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+  position: relative;
 }
 
-.user-info {
+.user-dropdown {
+  position: relative;
+}
+
+.user-trigger {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -214,6 +258,16 @@ const handleLogout = () => {
   background: var(--bg-card);
   border-radius: 25px;
   border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.user-trigger:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
 }
 
 .user-avatar {
@@ -223,7 +277,86 @@ const handleLogout = () => {
 .user-name {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.dropdown-arrow {
+  font-size: 0.8rem;
+  transition: transform 0.3s ease;
+  color: var(--text-secondary);
+}
+
+.dropdown-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  min-width: 180px;
+  z-index: 1000;
+  overflow: hidden;
+  animation: dropdownSlide 0.2s ease-out;
+}
+
+@keyframes dropdownSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
   font-size: 0.9rem;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+.dropdown-item.logout-item {
+  color: #dc3545;
+}
+
+.dropdown-item.logout-item:hover {
+  background: rgba(220, 53, 69, 0.1);
+}
+
+.item-icon {
+  font-size: 1rem;
+  width: 16px;
+  text-align: center;
+}
+
+.item-text {
+  font-weight: 500;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 0.25rem 0;
 }
 
 .auth-buttons {
