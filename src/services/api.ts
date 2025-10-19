@@ -146,6 +146,7 @@ interface ContentData {
   genres?: Array<{ id?: number; name?: string }> | string[]
   voteAverage?: number
   malScore?: number
+  unifiedScore?: number
   voteCount?: number
   malScoredBy?: number
   runtime?: number
@@ -175,7 +176,7 @@ export const getContentDisplayInfo = (content: ContentData) => {
     releaseDate: content.releaseDate,
     genres: content.genres || [],
     rating: {
-      score: content.voteAverage || content.malScore || 0,
+      score: content.unifiedScore || 0,
       count: content.voteCount || content.malScoredBy || 0,
       source: content.malScore ? 'mal' : 'tmdb',
     },

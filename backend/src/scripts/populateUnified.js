@@ -11,11 +11,16 @@ class DatabasePopulator {
       totalProcessed: 0,
       newAdded: 0,
       updated: 0,
+      merged: 0,
       errors: 0,
-      skipped: 0
+      skipped: 0,
     }
     this.batchSize = 10
     this.delayBetweenBatches = 1000
+  }
+
+  async delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   async connectDB() {
@@ -37,17 +42,35 @@ class DatabasePopulator {
     }
   }
 
-  async delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms))
+  // Calculate weighted unified score based on user votes
+  calculateWeightedScore(tmdbScore, tmdbVotes, malScore, malVotes) {
+    if (!tmdbScore && !malScore) return null
+    if (!tmdbScore) return malScore
+    if (!malScore) return tmdbScore
+
+    // Ensure we have valid numbers
+    const tmdb = Number(tmdbScore) || 0
+    const mal = Number(malScore) || 0
+    const tmdbVotesNum = Number(tmdbVotes) || 0
+    const malVotesNum = Number(malVotes) || 0
+
+    if (tmdb === 0 && mal === 0) return null
+
+    // Weight scores by the number of votes (logarithmic scaling to prevent extreme weighting)
+    const tmdbWeight = Math.log10(Math.max(tmdbVotesNum, 1))
+    const malWeight = Math.log10(Math.max(malVotesNum, 1))
+    const totalWeight = tmdbWeight + malWeight
+
+    if (totalWeight === 0) return (tmdb + mal) / 2
+
+    const weightedScore = (tmdb * tmdbWeight + mal * malWeight) / totalWeight
+
+    // Ensure we return a valid number
+    return isNaN(weightedScore) ? null : weightedScore
   }
 
   async populateDatabase(options = {}) {
-    const {
-      tmdbLimit = 50,
-      malLimit = 50,
-      skipTmdb = false,
-      skipMal = false
-    } = options
+    const { tmdbLimit = 50, malLimit = 50, skipTmdb = false, skipMal = false } = options
 
     console.log('🚀 Starting unified database population...')
     console.log(`📊 Target: ${tmdbLimit} TMDB items, ${malLimit} MAL items`)
@@ -73,7 +96,6 @@ class DatabasePopulator {
       await this.printFinalStats()
 
       console.log('🎉 Database population completed successfully!')
-
     } catch (error) {
       console.error('❌ Database population failed:', error)
       throw error
@@ -109,7 +131,6 @@ class DatabasePopulator {
         }
 
         await this.delay(500) // Rate limiting
-
       } catch (error) {
         console.error(`❌ Error processing TMDB page ${page}:`, error.message)
         this.stats.errors++
@@ -145,7 +166,6 @@ class DatabasePopulator {
         }
 
         await this.delay(this.delayBetweenBatches)
-
       } catch (error) {
         console.error(`❌ Error processing MAL movies batch ${batch + 1}:`, error.message)
         this.stats.errors++
@@ -171,7 +191,6 @@ class DatabasePopulator {
         }
 
         await this.delay(this.delayBetweenBatches)
-
       } catch (error) {
         console.error(`❌ Error processing MAL TV batch ${batch + 1}:`, error.message)
         this.stats.errors++
@@ -193,18 +212,33 @@ class DatabasePopulator {
       if (existingContent) {
         // Update existing content
         Object.assign(existingContent, contentData)
+
+        // Update unified score using weighted calculation
+        if (contentData.voteAverage && existingContent.malScore) {
+          existingContent.unifiedScore = this.calculateWeightedScore(
+            contentData.voteAverage,
+            contentData.voteCount,
+            existingContent.malScore,
+            existingContent.malScoredBy,
+          )
+        } else {
+          existingContent.unifiedScore = contentData.voteAverage || existingContent.malScore
+        }
+
         existingContent.lastUpdated = new Date()
         await existingContent.save()
         this.stats.updated++
         console.log(`🔄 Updated TMDB ${contentType}: ${contentData.title}`)
       } else {
-        // Create new content
+        // Create new content with unified score
+        if (contentData.voteAverage) {
+          contentData.unifiedScore = contentData.voteAverage
+        }
         const newContent = new Content(contentData)
         await newContent.save()
         this.stats.newAdded++
         console.log(`➕ Added TMDB ${contentType}: ${contentData.title}`)
       }
-
     } catch (error) {
       console.error(`❌ Error saving TMDB content:`, error.message)
       this.stats.errors++
@@ -217,7 +251,7 @@ class DatabasePopulator {
 
       const contentData = unifiedContentService.convertMalToContent(malData)
 
-      // Check if content already exists
+      // Check if content already exists by malId
       const existingContent = await Content.findOne({ malId: malData.id })
 
       if (existingContent) {
@@ -226,15 +260,68 @@ class DatabasePopulator {
         existingContent.lastUpdated = new Date()
         await existingContent.save()
         this.stats.updated++
-        console.log(`🔄 Updated MAL ${contentType}: ${contentData.title}`)
+        console.log(`🔄 Updated MAL content: ${contentData.title}`)
       } else {
-        // Create new content
-        const newContent = new Content(contentData)
-        await newContent.save()
-        this.stats.newAdded++
-        console.log(`➕ Added MAL ${contentType}: ${contentData.title}`)
-      }
+        // Check if same content exists in TMDB by title matching
+        const existingTmdbContent = await Content.findOne({
+          title: {
+            $regex: new RegExp(contentData.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+          },
+          tmdbId: { $exists: true },
+        })
 
+        if (existingTmdbContent) {
+          // Merge MAL data into existing TMDB content
+          existingTmdbContent.malId = contentData.malId
+          existingTmdbContent.malScore = contentData.malScore
+          existingTmdbContent.malScoredBy = contentData.malScoredBy
+          existingTmdbContent.malRank = contentData.malRank
+          existingTmdbContent.malStatus = contentData.malStatus
+          existingTmdbContent.malEpisodes = contentData.malEpisodes
+          existingTmdbContent.malSource = contentData.malSource
+          existingTmdbContent.malRating = contentData.malRating
+          existingTmdbContent.studios = [
+            ...new Set([...(existingTmdbContent.studios || []), ...(contentData.studios || [])]),
+          ]
+          existingTmdbContent.alternativeTitles = [
+            ...new Set([
+              ...(existingTmdbContent.alternativeTitles || []),
+              ...(contentData.alternativeTitles || []),
+            ]),
+          ]
+
+          // Create unified score using weighted calculation
+          if (existingTmdbContent.voteAverage && contentData.malScore) {
+            existingTmdbContent.unifiedScore = this.calculateWeightedScore(
+              existingTmdbContent.voteAverage,
+              existingTmdbContent.voteCount,
+              contentData.malScore,
+              contentData.malScoredBy,
+            )
+          } else {
+            existingTmdbContent.unifiedScore =
+              existingTmdbContent.voteAverage || contentData.malScore
+          }
+
+          existingTmdbContent.dataSources.mal = {
+            hasData: true,
+            lastUpdated: new Date(),
+          }
+          existingTmdbContent.lastUpdated = new Date()
+          await existingTmdbContent.save()
+          this.stats.merged++
+          console.log(`🔗 Merged MAL data into TMDB content: ${contentData.title}`)
+        } else {
+          // Create new content with unified score
+          if (contentData.malScore) {
+            contentData.unifiedScore = contentData.malScore
+          }
+          const newContent = new Content(contentData)
+          await newContent.save()
+          this.stats.newAdded++
+          console.log(`➕ Added MAL content: ${contentData.title}`)
+        }
+      }
     } catch (error) {
       console.error(`❌ Error saving MAL content:`, error.message)
       this.stats.errors++
@@ -246,6 +333,7 @@ class DatabasePopulator {
     console.log(`   Total processed: ${this.stats.totalProcessed}`)
     console.log(`   New content added: ${this.stats.newAdded}`)
     console.log(`   Content updated: ${this.stats.updated}`)
+    console.log(`   Content merged: ${this.stats.merged}`)
     console.log(`   Errors: ${this.stats.errors}`)
     console.log(`   Skipped: ${this.stats.skipped}`)
 
@@ -253,15 +341,15 @@ class DatabasePopulator {
     const totalContent = await Content.countDocuments()
     const tmdbOnlyContent = await Content.countDocuments({
       tmdbId: { $exists: true },
-      malId: { $exists: false }
+      malId: { $exists: false },
     })
     const malOnlyContent = await Content.countDocuments({
       malId: { $exists: true },
-      tmdbId: { $exists: false }
+      tmdbId: { $exists: false },
     })
     const mergedContent = await Content.countDocuments({
       tmdbId: { $exists: true },
-      malId: { $exists: true }
+      malId: { $exists: true },
     })
 
     console.log('\n📈 Database Statistics:')
@@ -280,15 +368,31 @@ class DatabasePopulator {
   }
 }
 
+// Parse command line arguments
+const parseArgs = () => {
+  const args = process.argv.slice(2)
+  const options = { tmdbLimit: 2000, malLimit: 2000 }
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--tmdbLimit' && args[i + 1]) {
+      options.tmdbLimit = parseInt(args[i + 1])
+      i++
+    } else if (args[i] === '--malLimit' && args[i + 1]) {
+      options.malLimit = parseInt(args[i + 1])
+      i++
+    }
+  }
+
+  return options
+}
+
 // Main execution
 const runPopulation = async () => {
+  const options = parseArgs()
   const populator = new DatabasePopulator()
 
   try {
-    await populator.populateDatabase({
-      tmdbLimit: 500,
-      malLimit: 500
-    })
+    await populator.populateDatabase(options)
   } catch (error) {
     console.error('❌ Population failed:', error)
     process.exit(1)

@@ -111,10 +111,10 @@ const selectedContentId = ref('')
 
 // Get featured content from unified store
 const featuredContent = computed(() => {
-  // Use allContent from the unified store, sorted by rating
+  // Use allContent from the unified store, sorted by unified score
   const sorted = [...contentStore.allContent].sort((a, b) => {
-    const aRating = a.malScore || a.voteAverage || 0
-    const bRating = b.malScore || b.voteAverage || 0
+    const aRating = a.unifiedScore || 0
+    const bRating = b.unifiedScore || 0
     return bRating - aRating
   })
   return sorted.slice(0, 8) // Show only 8 items
@@ -122,7 +122,7 @@ const featuredContent = computed(() => {
 
 // Helper functions
 const getDisplayRating = (item: UnifiedContent) => {
-  const rating = item.malScore || item.voteAverage
+  const rating = item.unifiedScore
   return rating ? rating.toFixed(1) : 'N/A'
 }
 

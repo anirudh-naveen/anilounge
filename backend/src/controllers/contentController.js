@@ -17,8 +17,12 @@ export const getContent = async (req, res) => {
       query.contentType = contentType
     }
 
+    // Sort by unified score (averaged from TMDB and MAL), then popularity
     const content = await Content.find(query)
-      .sort({ popularity: -1, malScore: -1 })
+      .sort({
+        unifiedScore: -1,
+        popularity: -1,
+      })
       .skip(skip)
       .limit(limit)
 
@@ -27,16 +31,14 @@ export const getContent = async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        content,
-        pagination: {
-          currentPage: page,
-          totalPages,
-          totalItems: total,
-          itemsPerPage: limit,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1,
-        },
+      data: content,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems: total,
+        itemsPerPage: limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
       },
     })
   } catch (error) {
@@ -326,7 +328,7 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
-    const { contentId, status, rating, currentEpisode, totalEpisodes, notes } = req.body
+    const { contentId, status, rating, currentEpisode, notes } = req.body
     const userId = req.user.id
 
     const user = await User.findById(userId)
@@ -345,8 +347,20 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
+    // Get max episodes from content
+    const maxEpisodes =
+      content.episodeCount || content.malEpisodes || (content.contentType === 'movie' ? 1 : 0)
+
+    // Validate currentEpisode doesn't exceed max episodes
+    if (currentEpisode !== undefined && currentEpisode > maxEpisodes) {
+      return res.status(400).json({
+        success: false,
+        message: `Current episode cannot exceed ${maxEpisodes} episodes`,
+      })
+    }
+
     // Check if already in watchlist
-    const existingItem = user.watchlist.find((item) => item.contentId.toString() === contentId)
+    const existingItem = user.watchlist.find((item) => item.content.toString() === contentId)
 
     if (existingItem) {
       // Update existing item
@@ -354,18 +368,17 @@ export const addToWatchlist = async (req, res) => {
       existingItem.rating = rating !== undefined ? rating : existingItem.rating
       existingItem.currentEpisode =
         currentEpisode !== undefined ? currentEpisode : existingItem.currentEpisode
-      existingItem.totalEpisodes =
-        totalEpisodes !== undefined ? totalEpisodes : existingItem.totalEpisodes
+      existingItem.totalEpisodes = maxEpisodes
       existingItem.notes = notes || existingItem.notes
       existingItem.updatedAt = new Date()
     } else {
       // Add new item
       user.watchlist.push({
-        contentId,
+        content: contentId,
         status: status || 'plan_to_watch',
-        rating: rating || 0,
+        rating: rating,
         currentEpisode: currentEpisode || 0,
-        totalEpisodes: totalEpisodes || content.episodeCount || content.malEpisodes || 0,
+        totalEpisodes: maxEpisodes,
         notes: notes || '',
         addedAt: new Date(),
         updatedAt: new Date(),
@@ -395,7 +408,7 @@ export const addToWatchlist = async (req, res) => {
 export const getWatchlist = async (req, res) => {
   try {
     const userId = req.user.id
-    const user = await User.findById(userId).populate('watchlist.contentId')
+    const user = await User.findById(userId).populate('watchlist.content')
 
     if (!user) {
       return res.status(404).json({
@@ -431,7 +444,7 @@ export const removeFromWatchlist = async (req, res) => {
       })
     }
 
-    user.watchlist = user.watchlist.filter((item) => item.contentId.toString() !== contentId)
+    user.watchlist = user.watchlist.filter((item) => item.content.toString() !== contentId)
     await user.save()
 
     res.json({
@@ -451,7 +464,7 @@ export const removeFromWatchlist = async (req, res) => {
 export const updateWatchlistItem = async (req, res) => {
   try {
     const { contentId } = req.params
-    const { status, rating, currentEpisode, totalEpisodes, notes } = req.body
+    const { status, rating, currentEpisode, notes } = req.body
     const userId = req.user.id
 
     const user = await User.findById(userId)
@@ -462,7 +475,7 @@ export const updateWatchlistItem = async (req, res) => {
       })
     }
 
-    const watchlistItem = user.watchlist.find((item) => item.contentId.toString() === contentId)
+    const watchlistItem = user.watchlist.find((item) => item.content.toString() === contentId)
     if (!watchlistItem) {
       return res.status(404).json({
         success: false,
@@ -470,10 +483,30 @@ export const updateWatchlistItem = async (req, res) => {
       })
     }
 
+    // Get the content to validate episode count
+    const content = await Content.findById(contentId)
+    if (!content) {
+      return res.status(404).json({
+        success: false,
+        message: 'Content not found',
+      })
+    }
+
+    // Get max episodes from content
+    const maxEpisodes =
+      content.episodeCount || content.malEpisodes || (content.contentType === 'movie' ? 1 : 0)
+
+    // Validate currentEpisode doesn't exceed max episodes
+    if (currentEpisode !== undefined && currentEpisode > maxEpisodes) {
+      return res.status(400).json({
+        success: false,
+        message: `Current episode cannot exceed ${maxEpisodes} episodes`,
+      })
+    }
+
     if (status) watchlistItem.status = status
     if (rating !== undefined) watchlistItem.rating = rating
     if (currentEpisode !== undefined) watchlistItem.currentEpisode = currentEpisode
-    if (totalEpisodes !== undefined) watchlistItem.totalEpisodes = totalEpisodes
     if (notes !== undefined) watchlistItem.notes = notes
 
     watchlistItem.updatedAt = new Date()

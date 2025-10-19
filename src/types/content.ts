@@ -11,6 +11,8 @@ export interface UnifiedContent {
   genres: Array<{ id?: number; name?: string }> | string[]
   voteAverage?: number
   malScore?: number
+  unifiedScore?: number // Combined score from TMDB and MAL
+  malStatus?: string
   voteCount?: number
   malScoredBy?: number
   runtime?: number
@@ -26,4 +28,9 @@ export interface UnifiedContent {
     tmdb?: { hasData?: boolean }
     mal?: { hasData?: boolean }
   }
+}
+
+// Extended interface for content with unified score
+export interface UnifiedContentWithScore extends UnifiedContent {
+  unifiedScore: number
 }

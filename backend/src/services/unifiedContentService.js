@@ -14,15 +14,15 @@ class UnifiedContentService {
 
     this.tmdbClient = axios.create({
       baseURL: this.tmdbBaseURL,
-      timeout: 30000
+      timeout: 30000,
     })
 
     this.malClient = axios.create({
       baseURL: this.malBaseURL,
       headers: {
-        'X-MAL-CLIENT-ID': this.malClientId
+        'X-MAL-CLIENT-ID': this.malClientId,
       },
-      timeout: 30000
+      timeout: 30000,
     })
 
     this.hasTmdbKey = !!this.tmdbApiKey
@@ -31,7 +31,7 @@ class UnifiedContentService {
 
   // Delay utility for rate limiting
   async delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms))
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   // TMDB Methods
@@ -49,8 +49,8 @@ class UnifiedContentService {
           with_genres: '16', // Animation genre
           sort_by: 'popularity.desc',
           page,
-          include_adult: false
-        }
+          include_adult: false,
+        },
       })
 
       return response.data.results.slice(0, limit)
@@ -74,8 +74,8 @@ class UnifiedContentService {
           with_genres: '16', // Animation genre
           sort_by: 'popularity.desc',
           page,
-          include_adult: false
-        }
+          include_adult: false,
+        },
       })
 
       return response.data.results.slice(0, limit)
@@ -93,8 +93,8 @@ class UnifiedContentService {
       const endpoint = contentType === 'movie' ? '/movie' : '/tv'
       const response = await this.tmdbClient.get(`${endpoint}/${tmdbId}`, {
         params: {
-          api_key: this.tmdbApiKey
-        }
+          api_key: this.tmdbApiKey,
+        },
       })
 
       return response.data
@@ -118,24 +118,29 @@ class UnifiedContentService {
           ranking_type: 'all',
           limit: Math.min(limit * 3, 300), // Get more to filter for movies
           offset,
-          fields: 'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source'
-        }
+          fields:
+            'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users',
+        },
       })
 
       // Filter for anime movies (typically have 1 episode or are movies)
       const allAnime = response.data.data || []
-      const movies = allAnime.filter(anime => {
-        const episodes = anime.num_episodes || 0
-        const title = anime.title?.toLowerCase() || ''
+      const movies = allAnime
+        .filter((anime) => {
+          const episodes = anime.num_episodes || 0
+          const title = anime.title?.toLowerCase() || ''
 
-        // Movies typically have 1 episode, or are marked as movies
-        return episodes === 1 ||
-               title.includes('movie') ||
-               title.includes('film') ||
-               title.includes('ova') ||
-               title.includes('special') ||
-               (episodes === 0 && anime.status === 'finished_airing')
-      }).slice(0, limit)
+          // Movies typically have 1 episode, or are marked as movies
+          return (
+            episodes === 1 ||
+            title.includes('movie') ||
+            title.includes('film') ||
+            title.includes('ova') ||
+            title.includes('special') ||
+            (episodes === 0 && anime.status === 'finished_airing')
+          )
+        })
+        .slice(0, limit)
 
       return movies
     } catch (error) {
@@ -157,8 +162,9 @@ class UnifiedContentService {
           ranking_type: 'all',
           limit: Math.min(limit, 100),
           offset,
-          fields: 'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source'
-        }
+          fields:
+            'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users',
+        },
       })
 
       return response.data.data || []
@@ -175,8 +181,9 @@ class UnifiedContentService {
       await this.delay(300)
       const response = await this.malClient.get(`/anime/${malId}`, {
         params: {
-          fields: 'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source'
-        }
+          fields:
+            'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users',
+        },
       })
 
       return response.data
@@ -195,8 +202,9 @@ class UnifiedContentService {
         params: {
           q: query,
           limit: Math.min(limit, 100),
-          fields: 'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source'
-        }
+          fields:
+            'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users',
+        },
       })
 
       return response.data.data || []
@@ -221,13 +229,13 @@ class UnifiedContentService {
       popularity: tmdbData.popularity,
       tmdbId: tmdbData.id,
       genres: tmdbData.genres || [],
-      productionCompanies: tmdbData.production_companies?.map(company => company.name) || [],
+      productionCompanies: tmdbData.production_companies?.map((company) => company.name) || [],
       dataSources: {
         tmdb: {
           hasData: true,
-          lastUpdated: new Date()
-        }
-      }
+          lastUpdated: new Date(),
+        },
+      },
     }
 
     // Add runtime/episode info based on content type
@@ -267,23 +275,30 @@ class UnifiedContentService {
       malEpisodes: anime.num_episodes,
       malSource: anime.source,
       malRating: anime.rating,
-      genres: anime.genres?.map(genre => ({ id: genre.id, name: genre.name })) || [],
-      studios: anime.studios?.map(studio => studio.name) || [],
-      alternativeTitles: anime.alternative_titles ? Object.values(anime.alternative_titles).flat() : [],
+      genres: anime.genres?.map((genre) => ({ id: genre.id, name: genre.name })) || [],
+      studios: anime.studios?.map((studio) => studio.name) || [],
+      alternativeTitles: anime.alternative_titles
+        ? Object.values(anime.alternative_titles).flat()
+        : [],
       dataSources: {
         mal: {
           hasData: true,
-          lastUpdated: new Date()
-        }
-      }
+          lastUpdated: new Date(),
+        },
+      },
     }
 
     // Set release date from start season
     if (anime.start_season) {
       const year = anime.start_season.year
-      const month = anime.start_season.season === 'winter' ? 1 :
-                   anime.start_season.season === 'spring' ? 4 :
-                   anime.start_season.season === 'summer' ? 7 : 10
+      const month =
+        anime.start_season.season === 'winter'
+          ? 1
+          : anime.start_season.season === 'spring'
+            ? 4
+            : anime.start_season.season === 'summer'
+              ? 7
+              : 10
       content.releaseDate = new Date(year, month - 1, 1)
     }
 
@@ -299,12 +314,7 @@ class UnifiedContentService {
 
   // Unified Search Method
   async searchContent(query, options = {}) {
-    const {
-      contentType = 'all',
-      limit = 20,
-      includeTmdb = true,
-      includeMal = true
-    } = options
+    const { contentType = 'all', limit = 20, includeTmdb = true, includeMal = true } = options
 
     const results = []
 
@@ -312,10 +322,12 @@ class UnifiedContentService {
     if (includeTmdb && this.hasTmdbKey) {
       try {
         const tmdbResults = await this.searchTmdb(query, contentType, limit)
-        results.push(...tmdbResults.map(item => ({
-          ...item,
-          source: 'tmdb'
-        })))
+        results.push(
+          ...tmdbResults.map((item) => ({
+            ...item,
+            source: 'tmdb',
+          })),
+        )
       } catch (error) {
         console.error('TMDB search error:', error.message)
       }
@@ -325,10 +337,12 @@ class UnifiedContentService {
     if (includeMal && this.hasMalKey) {
       try {
         const malResults = await this.searchMalAnime(query, limit)
-        results.push(...malResults.map(item => ({
-          ...this.convertMalToContent(item),
-          source: 'mal'
-        })))
+        results.push(
+          ...malResults.map((item) => ({
+            ...this.convertMalToContent(item),
+            source: 'mal',
+          })),
+        )
       } catch (error) {
         console.error('MAL search error:', error.message)
       }
@@ -351,14 +365,14 @@ class UnifiedContentService {
           params: {
             api_key: this.tmdbApiKey,
             query,
-            include_adult: false
-          }
+            include_adult: false,
+          },
         })
 
         const movies = movieResponse.data.results
-          .filter(movie => this.isAnimatedContent(movie))
+          .filter((movie) => this.isAnimatedContent(movie))
           .slice(0, searchLimit)
-          .map(movie => this.convertTmdbToContent(movie, 'movie'))
+          .map((movie) => this.convertTmdbToContent(movie, 'movie'))
 
         results.push(...movies)
       }
@@ -369,14 +383,14 @@ class UnifiedContentService {
           params: {
             api_key: this.tmdbApiKey,
             query,
-            include_adult: false
-          }
+            include_adult: false,
+          },
         })
 
         const tvShows = tvResponse.data.results
-          .filter(tv => this.isAnimatedContent(tv))
+          .filter((tv) => this.isAnimatedContent(tv))
           .slice(0, searchLimit)
-          .map(tv => this.convertTmdbToContent(tv, 'tv'))
+          .map((tv) => this.convertTmdbToContent(tv, 'tv'))
 
         results.push(...tvShows)
       }
@@ -426,12 +440,7 @@ class UnifiedContentService {
 
   // Get popular content from both sources
   async getPopularContent(options = {}) {
-    const {
-      contentType = 'all',
-      limit = 20,
-      includeTmdb = true,
-      includeMal = true
-    } = options
+    const { contentType = 'all', limit = 20, includeTmdb = true, includeMal = true } = options
 
     const results = []
 
@@ -440,18 +449,22 @@ class UnifiedContentService {
       try {
         if (contentType === 'all' || contentType === 'movie') {
           const movies = await this.getTmdbAnimatedMovies(1, Math.ceil(limit / 2))
-          results.push(...movies.map(movie => ({
-            ...this.convertTmdbToContent(movie, 'movie'),
-            source: 'tmdb'
-          })))
+          results.push(
+            ...movies.map((movie) => ({
+              ...this.convertTmdbToContent(movie, 'movie'),
+              source: 'tmdb',
+            })),
+          )
         }
 
         if (contentType === 'all' || contentType === 'tv') {
           const tvShows = await this.getTmdbAnimatedTVShows(1, Math.ceil(limit / 2))
-          results.push(...tvShows.map(tv => ({
-            ...this.convertTmdbToContent(tv, 'tv'),
-            source: 'tmdb'
-          })))
+          results.push(
+            ...tvShows.map((tv) => ({
+              ...this.convertTmdbToContent(tv, 'tv'),
+              source: 'tmdb',
+            })),
+          )
         }
       } catch (error) {
         console.error('Error getting TMDB popular content:', error.message)
@@ -462,10 +475,12 @@ class UnifiedContentService {
     if (includeMal && this.hasMalKey) {
       try {
         const malAnime = await this.getMalTopAnime(Math.ceil(limit / 2))
-        results.push(...malAnime.map(anime => ({
-          ...this.convertMalToContent(anime),
-          source: 'mal'
-        })))
+        results.push(
+          ...malAnime.map((anime) => ({
+            ...this.convertMalToContent(anime),
+            source: 'mal',
+          })),
+        )
       } catch (error) {
         console.error('Error getting MAL popular content:', error.message)
       }

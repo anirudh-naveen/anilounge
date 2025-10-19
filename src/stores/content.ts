@@ -40,8 +40,8 @@ export const useContentStore = defineStore('content', () => {
       const response = await contentAPI.getContent(params)
 
       if (response.data.success) {
-        allContent.value = response.data.data.content
-        pagination.value = response.data.data.pagination
+        allContent.value = response.data.data
+        pagination.value = response.data.pagination
 
         // Separate movies and TV shows
         movies.value = allContent.value.filter((item) => item.contentType === 'movie')
@@ -286,7 +286,7 @@ export const useContentStore = defineStore('content', () => {
       releaseDate: content.releaseDate,
       genres: formatGenres(content.genres),
       rating: {
-        score: content.malScore || content.voteAverage || 0,
+        score: content.unifiedScore || 0,
         count: content.malScoredBy || content.voteCount || 0,
         source: content.malScore ? 'mal' : 'tmdb',
       },

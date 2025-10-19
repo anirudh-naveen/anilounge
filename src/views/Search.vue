@@ -258,7 +258,7 @@ const filteredResults = computed(() => {
   if (filters.value.rating !== 'all') {
     const minRating = parseFloat(filters.value.rating)
     results = results.filter((item) => {
-      const rating = item.malScore || item.voteAverage || 0
+      const rating = item.unifiedScore || 0
       return rating >= minRating
     })
   }
@@ -291,7 +291,7 @@ const paginatedResults = computed(() => {
 
 // Helper functions
 const getDisplayRating = (item: UnifiedContent) => {
-  const rating = item.malScore || item.voteAverage
+  const rating = item.unifiedScore
   return rating ? rating.toFixed(1) : 'N/A'
 }
 

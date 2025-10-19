@@ -137,7 +137,7 @@ const movies = computed(() => {
 
 // Helper functions
 const getDisplayRating = (movie: UnifiedContent) => {
-  const rating = movie.malScore || movie.voteAverage
+  const rating = movie.unifiedScore
   return rating ? rating.toFixed(1) : 'N/A'
 }
 
@@ -197,7 +197,7 @@ onMounted(async () => {
   try {
     // Load movies specifically if not already loaded
     if (contentStore.movies.length === 0) {
-      await contentStore.getPopularContent('movie', 20)
+      await contentStore.getContent(1, 'movie', 20)
     }
 
     // Load watchlist if user is authenticated

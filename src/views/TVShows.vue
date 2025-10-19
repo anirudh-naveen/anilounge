@@ -140,7 +140,7 @@ const tvShows = computed(() => {
 
 // Helper functions
 const getDisplayRating = (show: UnifiedContent) => {
-  const rating = show.malScore || show.voteAverage
+  const rating = show.unifiedScore
   return rating ? rating.toFixed(1) : 'N/A'
 }
 
@@ -200,7 +200,7 @@ onMounted(async () => {
   try {
     // Load TV shows if not already loaded
     if (contentStore.tvShows.length === 0) {
-      await contentStore.getPopularContent('tv', 20)
+      await contentStore.getContent(1, 'tv', 20)
     }
 
     // Load watchlist if user is authenticated

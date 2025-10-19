@@ -314,7 +314,7 @@ const getContentSeasons = (item: WatchlistItem) => {
 const getContentRating = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'N/A'
   if (typeof item.content === 'string') return 'N/A'
-  return item.content.voteAverage?.toFixed(1) || 'N/A'
+  return item.content.unifiedScore?.toFixed(1) || 'N/A'
 }
 
 const getCurrentEpisodes = (item: WatchlistItem) => {
@@ -441,14 +441,8 @@ const refreshWatchlist = async () => {
   }, 5000)
 
   try {
-    // Always fetch fresh data from server
-    await authStore.loadUser()
-
-    if (authStore.user?.watchlist) {
-      contentStore.initializeWatchlist(authStore.user.watchlist)
-    } else {
-      contentStore.clearWatchlist()
-    }
+    // Use the proper content store method to load watchlist
+    await contentStore.loadWatchlist()
     toast.success('Watchlist refreshed')
   } catch (error: unknown) {
     console.error('Error refreshing watchlist:', error)
@@ -484,15 +478,11 @@ onMounted(async () => {
     return
   }
 
-  // Always refresh user data from backend to get populated watchlist
+  // Use the proper content store method to load watchlist
   try {
-    await authStore.loadUser()
-
-    if (authStore.user?.watchlist) {
-      contentStore.initializeWatchlist(authStore.user.watchlist)
-    }
+    await contentStore.loadWatchlist()
   } catch (error) {
-    console.error('Error loading user data:', error)
+    console.error('Error loading watchlist:', error)
     toast.error('Failed to load watchlist')
   } finally {
     isLoading.value = false

@@ -43,7 +43,7 @@
           <div class="movie-meta">
             <div class="rating">
               <i class="fas fa-star"></i>
-              <span>{{ movie.voteAverage?.toFixed(1) || 'N/A' }}</span>
+              <span>{{ movie.unifiedScore?.toFixed(1) || 'N/A' }}</span>
               <span class="vote-count">({{ movie.voteCount || 0 }} votes)</span>
             </div>
 
@@ -141,14 +141,14 @@ import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { contentAPI } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
-import type { Movie } from '@/types'
+import type { UnifiedContent } from '@/types/content'
 
 const route = useRoute()
 const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 
-const movie = ref<Movie | null>(null)
+const movie = ref<UnifiedContent | null>(null)
 const loading = ref(true)
 const error = ref('')
 const showStatusDropdown = ref(false)

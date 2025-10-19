@@ -40,32 +40,32 @@
           <div class="show-meta">
             <div class="rating">
               <i class="fas fa-star"></i>
-              <span>{{ show.voteAverage?.toFixed(1) || 'N/A' }}</span>
+              <span>{{ show.unifiedScore?.toFixed(1) || 'N/A' }}</span>
               <span class="vote-count">({{ show.voteCount || 0 }} votes)</span>
             </div>
 
             <div class="first-air-date">
               <i class="fas fa-calendar"></i>
-              <span>{{ formatDate(show.releaseDate) }}</span>
+              <span>{{ show.releaseDate ? formatDate(show.releaseDate) : 'N/A' }}</span>
             </div>
 
-            <div v-if="show.numberOfSeasons" class="seasons">
+            <div v-if="show.seasonCount" class="seasons">
               <i class="fas fa-layer-group"></i>
-              <span
-                >{{ show.numberOfSeasons }} season{{ show.numberOfSeasons > 1 ? 's' : '' }}</span
-              >
+              <span>{{ show.seasonCount }} season{{ show.seasonCount > 1 ? 's' : '' }}</span>
             </div>
 
-            <div v-if="show.numberOfEpisodes" class="episodes">
+            <div v-if="show.episodeCount || show.malEpisodes" class="episodes">
               <i class="fas fa-play-circle"></i>
               <span
-                >{{ show.numberOfEpisodes }} episode{{ show.numberOfEpisodes > 1 ? 's' : '' }}</span
+                >{{ show.episodeCount || show.malEpisodes }} episode{{
+                  (show.episodeCount || show.malEpisodes || 0) > 1 ? 's' : ''
+                }}</span
               >
             </div>
 
-            <div v-if="show.status" class="status">
+            <div v-if="show.malStatus" class="status">
               <i class="fas fa-info-circle"></i>
-              <span>{{ show.status }}</span>
+              <span>{{ show.malStatus }}</span>
             </div>
           </div>
 
@@ -107,15 +107,11 @@
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
 
-      <div v-if="show.networks?.length" class="network-info">
-        <h3>Networks</h3>
+      <div v-if="show.studios?.length" class="network-info">
+        <h3>Studios</h3>
         <div class="networks">
-          <span
-            v-for="network in show.networks"
-            :key="`network-${network.id || network._id || network.name}`"
-            class="network-tag"
-          >
-            {{ network.name }}
+          <span v-for="studio in show.studios" :key="`studio-${studio}`" class="network-tag">
+            {{ studio }}
           </span>
         </div>
       </div>
@@ -123,30 +119,17 @@
       <div v-if="show.productionCompanies?.length" class="production-info">
         <h3>Production Companies</h3>
         <div class="companies">
-          <span v-for="company in show.productionCompanies" :key="company.id" class="company-tag">
-            {{ company.name }}
+          <span v-for="company in show.productionCompanies" :key="company" class="company-tag">
+            {{ company }}
           </span>
         </div>
       </div>
 
-      <div v-if="show.productionCountries?.length" class="production-info">
-        <h3>Production Countries</h3>
-        <div class="countries">
-          <span
-            v-for="country in show.productionCountries"
-            :key="country.iso_3166_1"
-            class="country-tag"
-          >
-            {{ country.name }}
-          </span>
-        </div>
-      </div>
-
-      <div v-if="show.createdBy?.length" class="creator-info">
-        <h3>Created By</h3>
-        <div class="creators">
-          <span v-for="creator in show.createdBy" :key="creator.id" class="creator-tag">
-            {{ creator.name }}
+      <div v-if="show.alternativeTitles?.length" class="alternative-titles">
+        <h3>Alternative Titles</h3>
+        <div class="titles">
+          <span v-for="title in show.alternativeTitles" :key="title" class="title-tag">
+            {{ title }}
           </span>
         </div>
       </div>
@@ -170,14 +153,14 @@ import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { contentAPI } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
-import type { TVShow } from '@/types'
+import type { UnifiedContent } from '@/types/content'
 
 const route = useRoute()
 const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 
-const show = ref<TVShow | null>(null)
+const show = ref<UnifiedContent | null>(null)
 const loading = ref(true)
 const error = ref('')
 const showStatusDropdown = ref(false)
