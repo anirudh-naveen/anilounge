@@ -49,50 +49,25 @@
           </div>
 
           <div class="filter-group">
-            <label>Genre:</label>
-            <select v-model="filters.genre" @change="applyFilters">
-              <option value="all">All Genres</option>
-              <option value="action">Action</option>
-              <option value="adventure">Adventure</option>
-              <option value="comedy">Comedy</option>
-              <option value="drama">Drama</option>
-              <option value="fantasy">Fantasy</option>
-              <option value="horror">Horror</option>
-              <option value="romance">Romance</option>
-              <option value="sci-fi">Sci-Fi</option>
-              <option value="thriller">Thriller</option>
-              <option value="family">Family</option>
-            </select>
-          </div>
-
-          <div class="filter-group">
             <label>Rating:</label>
-            <input
-              type="range"
-              v-model="filters.minRating"
-              min="0"
-              max="10"
-              step="0.5"
-              @change="applyFilters"
-            />
-            <span>{{ filters.minRating }}+</span>
+            <select v-model="filters.rating" @change="applyFilters">
+              <option value="all">All Ratings</option>
+              <option value="8">8+ Stars</option>
+              <option value="7">7+ Stars</option>
+              <option value="6">6+ Stars</option>
+            </select>
           </div>
 
           <div class="filter-group">
             <label>Year:</label>
             <select v-model="filters.year" @change="applyFilters">
               <option value="all">All Years</option>
-              <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
-            </select>
-          </div>
-
-          <div class="filter-group">
-            <label>Sort by:</label>
-            <select v-model="filters.sortBy" @change="applyFilters">
-              <option value="relevance">Relevance</option>
-              <option value="rating">Rating</option>
-              <option value="year">Year</option>
-              <option value="title">Title</option>
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
+              <option value="2022">2022</option>
+              <option value="2021">2021</option>
+              <option value="2020">2020</option>
+              <option value="older">Older</option>
             </select>
           </div>
 
@@ -100,255 +75,238 @@
         </div>
       </div>
 
+      <!-- Loading State -->
+      <div v-if="contentStore.isLoading" class="loading-container">
+        <div class="spinner"></div>
+        <p>Searching for amazing content...</p>
+      </div>
+
+      <!-- Error State -->
+      <div v-else-if="contentStore.error" class="error-state">
+        <div class="error-icon">⚠️</div>
+        <h3>Search failed</h3>
+        <p>{{ contentStore.error }}</p>
+        <button @click="handleSearch" class="btn btn-primary">Try Again</button>
+      </div>
+
       <!-- Search Results -->
-      <div v-if="hasSearched" class="search-results">
-        <div v-if="contentStore.isLoading" class="loading-container">
-          <div class="spinner"></div>
-          <p>Searching for content...</p>
+      <div v-else-if="hasSearched && filteredResults.length > 0" class="search-results">
+        <div class="results-header">
+          <h2>Search Results</h2>
+          <p>
+            {{ filteredResults.length }} result{{ filteredResults.length !== 1 ? 's' : '' }} found
+          </p>
         </div>
 
-        <div v-else-if="hasResults" class="results-container">
-          <!-- Combined Results -->
-          <div v-if="contentStore.searchResults.results.length > 0" class="results-section">
-            <h2 class="results-title">Search Results</h2>
-            <div class="content-grid">
-              <div
-                v-for="item in contentStore.searchResults.results"
-                :key="item._id"
-                class="content-card"
-                @click="
-                  item.contentType === 'movie' ? viewMovieDetails(item) : viewShowDetails(item)
-                "
-              >
-                <div class="content-poster">
-                  <img
-                    :src="getPosterUrl(item.posterPath)"
-                    :alt="item.title"
-                    @error="handleImageError"
-                  />
-                  <div class="content-overlay">
-                    <div class="content-type">{{ item.typeIcon }}</div>
-                    <div class="content-rating">{{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
-                    <button
-                      class="add-to-watchlist-btn"
-                      @click.stop="handleAddToWatchlist(item)"
-                      :disabled="contentStore.isInWatchlist(item._id)"
-                    >
-                      {{ contentStore.isInWatchlist(item._id) ? '✓' : '+' }}
-                    </button>
-                  </div>
+        <div class="results-grid">
+          <div
+            v-for="item in paginatedResults"
+            :key="item._id"
+            class="result-card"
+            @click="viewContentDetails(item)"
+          >
+            <div class="result-poster">
+              <img
+                :src="getPosterUrl(item.posterPath || '')"
+                :alt="item.title"
+                @error="handleImageError"
+              />
+              <div class="result-overlay">
+                <div class="result-rating">{{ getDisplayRating(item) }}</div>
+                <div class="result-type">
+                  {{ getContentTypeDisplay(item.contentType) }}
                 </div>
-                <div class="content-info">
-                  <h3 class="content-title">{{ item.title }}</h3>
-                  <div class="content-genres">
-                    <span
-                      v-for="genre in item.genres"
-                      :key="typeof genre === 'string' ? genre : genre.name"
-                      class="genre-tag"
-                      >{{ typeof genre === 'string' ? genre : genre.name }}</span
-                    >
-                  </div>
-                  <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
+                <div class="result-actions">
+                  <button
+                    v-if="authStore.isAuthenticated"
+                    @click.stop="handleWatchlistClick(item._id)"
+                    class="action-btn"
+                    :class="{ 'in-watchlist': contentStore.isInWatchlist(item._id) }"
+                  >
+                    {{ contentStore.isInWatchlist(item._id) ? '✓' : '+' }}
+                  </button>
                 </div>
+              </div>
+            </div>
+            <div class="result-info">
+              <h3 class="result-title">{{ item.title }}</h3>
+              <p class="result-overview">{{ truncateText(item.overview, 100) }}</p>
+              <div class="result-genres">
+                <span
+                  v-for="genre in getDisplayGenres(item.genres)?.slice(0, 2)"
+                  :key="genre"
+                  class="genre-tag"
+                >
+                  {{ genre }}
+                </span>
+              </div>
+              <div class="result-meta">
+                <span v-if="item.releaseDate" class="release-year">
+                  {{ getReleaseYear(item.releaseDate) }}
+                </span>
+                <span v-if="item.contentType === 'movie' && item.runtime" class="runtime">
+                  {{ item.runtime }} min
+                </span>
+                <span
+                  v-if="item.contentType === 'tv' && (item.episodeCount || item.malEpisodes)"
+                  class="episodes"
+                >
+                  {{ item.episodeCount || item.malEpisodes }} episodes
+                </span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Pagination -->
-        <div v-if="hasResults && pagination.totalPages > 1" class="pagination-container">
-          <div class="pagination">
-            <button
-              @click="goToPage(pagination.page - 1)"
-              :disabled="pagination.page <= 1"
-              class="pagination-btn"
-            >
-              ← Previous
-            </button>
-
-            <div class="pagination-numbers">
-              <button
-                v-for="pageNum in visiblePages"
-                :key="pageNum"
-                @click="goToPage(pageNum)"
-                :class="['pagination-number', { active: pageNum === pagination.page }]"
-              >
-                {{ pageNum }}
-              </button>
-            </div>
-
-            <button
-              @click="goToPage(pagination.page + 1)"
-              :disabled="pagination.page >= pagination.totalPages"
-              class="pagination-btn"
-            >
-              Next →
-            </button>
-          </div>
-          <p class="pagination-info">
-            Page {{ pagination.page }} of {{ pagination.totalPages }} ({{ pagination.totalResults }}
-            results)
-          </p>
-        </div>
-
-        <div v-else class="no-results">
-          <div class="no-results-icon">No Results</div>
-          <h3>No results found</h3>
-          <p>Try searching for something else or check your spelling</p>
+        <div v-if="totalPages > 1" class="pagination">
+          <button
+            @click="currentPage = Math.max(1, currentPage - 1)"
+            :disabled="currentPage === 1"
+            class="btn btn-secondary"
+          >
+            Previous
+          </button>
+          <span class="pagination-info"> Page {{ currentPage }} of {{ totalPages }} </span>
+          <button
+            @click="currentPage = Math.min(totalPages, currentPage + 1)"
+            :disabled="currentPage === totalPages"
+            class="btn btn-secondary"
+          >
+            Next
+          </button>
         </div>
       </div>
+
+      <!-- No Results -->
+      <div v-else-if="hasSearched && filteredResults.length === 0" class="no-results">
+        <div class="no-results-icon">🔍</div>
+        <h3>No results found</h3>
+        <p>Try adjusting your search terms or filters.</p>
+        <button @click="clearSearch" class="btn btn-primary">Clear Search</button>
+      </div>
+
+      <!-- Initial State -->
+      <div v-else class="initial-state">
+        <div class="initial-icon">🎬</div>
+        <h3>Start your search</h3>
+        <p>Enter a movie or TV show title to get started.</p>
+      </div>
+
+      <!-- Status Dropdown -->
+      <StatusDropdown
+        :show-dropdown="showStatusDropdown"
+        :content-id="selectedContentId"
+        :content-type="getContentType(selectedContentId)"
+        @close="closeStatusDropdown"
+      />
+
+      <!-- Chatbot Modal -->
+      <Chatbot
+        v-if="showChatbot"
+        :show-chatbot="showChatbot"
+        @close="showChatbot = false"
+        @search="handleAISearch"
+      />
     </div>
-
-    <!-- Status Dropdown -->
-    <StatusDropdown
-      v-if="showDropdown && selectedContent"
-      :show-dropdown="showDropdown"
-      :content-id="selectedContent._id"
-      :content-type="getContentType(selectedContent)"
-      @close="closeDropdown"
-    />
-
-    <!-- AI Chatbot -->
-    <Chatbot v-if="showChatbot" :show-chatbot="showChatbot" @close="showChatbot = false" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl } from '@/services/api'
+import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import Chatbot from '@/components/Chatbot.vue'
-import type { Movie, TVShow } from '@/types'
+import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
 
+// State
 const searchQuery = ref('')
 const hasSearched = ref(false)
-const showDropdown = ref(false)
-const selectedContent = ref<Movie | TVShow | null>(null)
 const showChatbot = ref(false)
+const showStatusDropdown = ref(false)
+const selectedContentId = ref('')
+const currentPage = ref(1)
+const itemsPerPage = 12
 
-// Filters
 const filters = ref({
   type: 'all',
-  genre: 'all',
-  minRating: 0,
+  rating: 'all',
   year: 'all',
-  sortBy: 'relevance',
 })
 
-// Pagination
-const pagination = ref({
-  page: 1,
-  totalPages: 1,
-  totalResults: 0,
-})
+// Computed properties
+const searchResults = computed(() => contentStore.searchResults)
 
-// Generate years for filter (last 30 years)
-const years = Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i)
+const filteredResults = computed(() => {
+  let results = [...searchResults.value]
 
-const hasResults = computed(() => {
-  return contentStore.searchResults.results.length > 0
-})
-
-// Pagination computed properties
-const visiblePages = computed(() => {
-  const current = pagination.value.page
-  const total = pagination.value.totalPages
-  const pages = []
-
-  // Show up to 5 pages around current page
-  const start = Math.max(1, current - 2)
-  const end = Math.min(total, current + 2)
-
-  for (let i = start; i <= end; i++) {
-    pages.push(i)
+  // Apply type filter
+  if (filters.value.type !== 'all') {
+    results = results.filter((item) => item.contentType === filters.value.type)
   }
 
-  return pages
-})
-
-const handleSearch = async () => {
-  if (!searchQuery.value.trim()) return
-
-  try {
-    hasSearched.value = true
-    pagination.value.page = 1 // Reset to first page on new search
-    await performSearch()
-  } catch (error) {
-    console.error('Search error:', error)
+  // Apply rating filter
+  if (filters.value.rating !== 'all') {
+    const minRating = parseFloat(filters.value.rating)
+    results = results.filter((item) => {
+      const rating = item.malScore || item.voteAverage || 0
+      return rating >= minRating
+    })
   }
-}
 
-const performSearch = async () => {
-  try {
-    const searchParams = {
-      query: searchQuery.value.trim(),
-      page: pagination.value.page,
-      ...filters.value,
-    }
+  // Apply year filter
+  if (filters.value.year !== 'all') {
+    results = results.filter((item) => {
+      if (!item.releaseDate) return false
+      const year = new Date(item.releaseDate).getFullYear()
 
-    await contentStore.searchContent(searchParams)
-
-    // Update pagination info from response
-    if (contentStore.searchResults.pagination) {
-      pagination.value = {
-        page: Number(contentStore.searchResults.pagination.page) || 1,
-        totalPages: Number(contentStore.searchResults.pagination.totalPages) || 1,
-        totalResults: Number(contentStore.searchResults.pagination.totalResults) || 0,
+      if (filters.value.year === 'older') {
+        return year < 2020
       }
-    }
-  } catch (error) {
-    console.error('Search error:', error)
-    toast.error('Failed to search content')
+      return year === parseInt(filters.value.year)
+    })
   }
+
+  return results
+})
+
+const totalPages = computed(() => {
+  return Math.ceil(filteredResults.value.length / itemsPerPage)
+})
+
+const paginatedResults = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  const end = start + itemsPerPage
+  return filteredResults.value.slice(start, end)
+})
+
+// Helper functions
+const getDisplayRating = (item: UnifiedContent) => {
+  const rating = item.malScore || item.voteAverage
+  return rating ? rating.toFixed(1) : 'N/A'
 }
 
-const applyFilters = () => {
-  pagination.value.page = 1 // Reset to first page when applying filters
-  performSearch()
+const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
+  return formatGenres(genres)
 }
 
-const clearFilters = () => {
-  filters.value = {
-    type: 'all',
-    genre: 'all',
-    minRating: 0,
-    year: 'all',
-    sortBy: 'relevance',
-  }
-  pagination.value.page = 1
-  performSearch()
+const getReleaseYear = (dateString: string | Date) => {
+  const date = new Date(dateString)
+  return date.getFullYear()
 }
 
-const goToPage = (pageNum: number) => {
-  if (pageNum >= 1 && pageNum <= pagination.value.totalPages) {
-    pagination.value.page = pageNum
-    performSearch()
-  }
-}
-
-const viewMovieDetails = (movie: Movie) => {
-  router.push({
-    name: 'movie-details',
-    params: { id: movie._id },
-    query: { from: router.currentRoute.value.fullPath },
-  })
-}
-
-const viewShowDetails = (show: TVShow) => {
-  router.push({
-    name: 'tv-details',
-    params: { id: show._id },
-    query: { from: router.currentRoute.value.fullPath },
-  })
+const getContentType = (contentId: string) => {
+  const content = searchResults.value.find((item: UnifiedContent) => item._id === contentId)
+  return content?.contentType || 'movie'
 }
 
 const truncateText = (text: string, maxLength: number) => {
@@ -361,177 +319,273 @@ const handleImageError = (event: Event) => {
   img.src = '/placeholder-movie.jpg'
 }
 
-const handleAddToWatchlist = (content: Movie | TVShow) => {
+const viewContentDetails = (item: UnifiedContent) => {
+  const routeName = item.contentType === 'movie' ? 'MovieDetails' : 'TVDetails'
+  router.push({ name: routeName, params: { id: item._id } })
+}
+
+const handleWatchlistClick = (contentId: string) => {
   if (!authStore.isAuthenticated) {
     toast.error('Please log in to add items to your watchlist')
-    router.push('/login')
     return
   }
 
-  selectedContent.value = content
-  showDropdown.value = true
+  if (contentStore.isInWatchlist(contentId)) {
+    toast.info('Already in your watchlist!')
+    return
+  }
+
+  selectedContentId.value = contentId
+  showStatusDropdown.value = true
 }
 
-const closeDropdown = () => {
-  showDropdown.value = false
-  selectedContent.value = null
+const closeStatusDropdown = () => {
+  showStatusDropdown.value = false
+  selectedContentId.value = ''
 }
 
-const getContentType = (content: Movie | TVShow) => {
-  return content.contentType || 'movie'
+const handleSearch = async () => {
+  if (!searchQuery.value.trim()) return
+
+  try {
+    hasSearched.value = true
+    currentPage.value = 1
+    await contentStore.searchContent(searchQuery.value, 'all', 1, 50)
+  } catch (error) {
+    console.error('Search error:', error)
+    toast.error('Search failed. Please try again.')
+  }
 }
+
+const handleAISearch = async (query: string) => {
+  searchQuery.value = query
+  await handleSearch()
+}
+
+const applyFilters = () => {
+  currentPage.value = 1
+}
+
+const clearFilters = () => {
+  filters.value = {
+    type: 'all',
+    rating: 'all',
+    year: 'all',
+  }
+  currentPage.value = 1
+}
+
+const clearSearch = () => {
+  searchQuery.value = ''
+  hasSearched.value = false
+  currentPage.value = 1
+  contentStore.clearSearchResults()
+}
+
+// Watch for filter changes
+watch(
+  filters,
+  () => {
+    applyFilters()
+  },
+  { deep: true },
+)
 </script>
 
 <style scoped>
 .search-page {
   min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 2rem 0;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
 }
 
 .search-header {
   text-align: center;
   margin-bottom: 3rem;
+  color: white;
 }
 
 .search-title {
   font-size: 3rem;
-  font-weight: 800;
+  font-weight: 700;
   margin-bottom: 1rem;
-  background: linear-gradient(135deg, var(--highlight-color), var(--purple-accent));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .search-subtitle {
   font-size: 1.25rem;
-  color: var(--text-secondary);
-  max-width: 600px;
-  margin: 0 auto;
+  opacity: 0.9;
 }
 
 .search-form-container {
-  max-width: 600px;
-  margin: 0 auto 3rem;
+  margin-bottom: 2rem;
 }
 
 .search-form {
-  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 .search-input-group {
   display: flex;
   gap: 1rem;
+  align-items: center;
 }
 
 .search-input {
   flex: 1;
   padding: 1rem;
-  font-size: 1.1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.9);
 }
 
-.search-btn {
+.search-input:focus {
+  outline: none;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.3);
+}
+
+.search-btn,
+.ai-btn {
   padding: 1rem 2rem;
-  font-size: 1.1rem;
-  white-space: nowrap;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.ai-btn {
-  padding: 1rem 1.5rem;
-  font-size: 1rem;
-  white-space: nowrap;
-  background: var(--purple-accent);
+.search-btn {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
   color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
 }
 
-.ai-btn:hover:not(:disabled) {
-  background: var(--highlight-color);
+.ai-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.search-btn:hover,
+.ai-btn:hover {
   transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
 
+.search-btn:disabled,
 .ai-btn:disabled {
-  background: var(--text-secondary);
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none;
 }
 
-.loading-container {
+.filters-container {
+  margin-bottom: 2rem;
+}
+
+.filters-bar {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: white;
+}
+
+.filter-group label {
+  font-weight: 600;
+}
+
+.filter-group select {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.clear-filters-btn {
+  background: rgba(255, 107, 107, 0.8);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.clear-filters-btn:hover {
+  background: rgba(255, 107, 107, 1);
+}
+
+.results-header {
   text-align: center;
-  padding: 4rem 0;
+  margin-bottom: 2rem;
+  color: white;
 }
 
-.loading-container p {
-  margin-top: 1rem;
-  color: var(--text-secondary);
+.results-header h2 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
 }
 
-.results-container {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.results-section {
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
   margin-bottom: 3rem;
 }
 
-.results-title {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 2rem;
-  color: var(--text-primary);
-}
-
-/* Content Grid */
-.content-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.content-card {
-  background: var(--card-bg);
+.result-card {
+  background: white;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
   cursor: pointer;
 }
 
-.content-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+.result-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
-.content-poster {
+.result-poster {
   position: relative;
   aspect-ratio: 2/3;
   overflow: hidden;
 }
 
-.content-poster img {
+.result-poster img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.2s;
+  transition: transform 0.3s ease;
 }
 
-.content-card:hover .content-poster img {
+.result-card:hover .result-poster img {
   transform: scale(1.05);
 }
 
-.content-overlay {
+.result-overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -548,133 +602,43 @@ const getContentType = (content: Movie | TVShow) => {
   justify-content: space-between;
   padding: 1rem;
   opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.content-card:hover .content-overlay {
-  opacity: 1;
-}
-
-.content-type {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: white;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-}
-
-.content-rating {
-  font-size: 1rem;
-  color: #ffd700;
-  font-weight: bold;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-}
-
-.content-info {
-  padding: 1.5rem;
-}
-
-.content-title {
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-  line-height: 1.3;
-}
-
-.content-genres {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.content-overview {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.4;
-  margin: 0;
-}
-
-/* Legacy grid styles for backward compatibility */
-.movies-grid,
-.shows-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem;
-}
-
-.movie-card,
-.show-card {
-  background: var(--bg-card);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border: 1px solid var(--border-color);
-}
-
-.movie-card:hover,
-.show-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--border-hover);
-}
-
-.movie-poster,
-.show-poster {
-  position: relative;
-  aspect-ratio: 2/3;
-  overflow: hidden;
-}
-
-.movie-poster img,
-.show-poster img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.movie-overlay,
-.show-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.7) 100%);
-  display: flex;
-  justify-content: flex-start;
-  align-items: flex-start;
-  padding: 1rem;
-  opacity: 0;
   transition: opacity 0.3s ease;
 }
 
-.movie-card:hover .movie-overlay,
-.show-card:hover .show-overlay {
+.result-card:hover .result-overlay {
   opacity: 1;
 }
 
-.movie-rating,
-.show-rating {
-  background: var(--highlight-color);
-  color: white;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
+.result-rating {
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-weight: 600;
   font-size: 0.9rem;
+  align-self: flex-start;
 }
 
-.add-to-watchlist-btn {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: var(--purple-accent);
+.result-type {
+  background: rgba(102, 126, 234, 0.9);
   color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  align-self: flex-start;
+}
+
+.result-actions {
+  align-self: flex-end;
+}
+
+.action-btn {
+  background: rgba(255, 255, 255, 0.9);
   border: none;
   border-radius: 50%;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -682,263 +646,170 @@ const getContentType = (content: Movie | TVShow) => {
   font-weight: bold;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.add-to-watchlist-btn:hover {
-  background: var(--highlight-color);
+.action-btn:hover {
+  background: white;
   transform: scale(1.1);
 }
 
-.add-to-watchlist-btn:disabled {
-  background: #4ade80;
-  cursor: not-allowed;
-  transform: none;
+.action-btn.in-watchlist {
+  background: #4ecdc4;
+  color: white;
 }
 
-.movie-info,
-.show-info {
-  padding: 1rem;
+.result-info {
+  padding: 1.5rem;
 }
 
-.movie-genres,
-.show-genres {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-bottom: 0.75rem;
-}
-
-.genre-tag {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  padding: 0.25rem 0.5rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border: 1px solid var(--border-color);
-}
-
-.movie-title,
-.show-title {
-  font-size: 1rem;
+.result-title {
+  font-size: 1.25rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: var(--text-primary);
+  color: #333;
+  line-height: 1.3;
 }
 
-.movie-overview,
-.show-overview {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.no-results {
-  text-align: center;
-  padding: 4rem 0;
-}
-
-.no-results-icon {
-  font-size: 4rem;
+.result-overview {
+  color: #666;
+  font-size: 0.9rem;
+  line-height: 1.5;
   margin-bottom: 1rem;
 }
 
-.no-results h3 {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-primary);
-}
-
-.no-results p {
-  color: var(--text-secondary);
-}
-
-.popular-searches {
-  max-width: 800px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.popular-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 2rem;
-  color: var(--text-primary);
-}
-
-.search-tags {
+.result-genres {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: center;
-}
-
-.search-tag {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 0.9rem;
-}
-
-.search-tag:hover {
-  background: var(--highlight-color);
-  border-color: var(--highlight-color);
-  transform: translateY(-2px);
-}
-
-/* Filters Bar */
-.filters-container {
-  margin: 2rem 0;
-}
-
-.filters-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: center;
-  padding: 1rem;
-  background: var(--card-bg);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
   gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
-.filter-group label {
+.genre-tag {
+  background: #f0f0f0;
+  color: #666;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
   font-weight: 500;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
 }
 
-.filter-group select,
-.filter-group input[type='range'] {
-  padding: 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 0.9rem;
+.result-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: #999;
 }
 
-.filter-group input[type='range'] {
-  width: 100px;
+.release-year,
+.runtime,
+.episodes {
+  background: #f8f9fa;
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 
-.filter-group span {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  min-width: 30px;
-}
-
-.clear-filters-btn {
-  padding: 0.5rem 1rem;
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s;
-}
-
-.clear-filters-btn:hover {
-  background: var(--accent-hover);
-}
-
-/* Pagination */
-.pagination-container {
-  margin: 2rem 0;
+.loading-container,
+.error-state,
+.no-results,
+.initial-state {
   text-align: center;
+  padding: 4rem 0;
+  color: white;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid #4ecdc4;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.error-icon,
+.no-results-icon,
+.initial-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  color: white;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .pagination {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.pagination-btn {
-  padding: 0.5rem 1rem;
-  background: var(--card-bg);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.pagination-btn:hover:not(:disabled) {
-  background: var(--accent-color);
-  color: white;
-  border-color: var(--accent-color);
-}
-
-.pagination-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pagination-numbers {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.pagination-number {
-  padding: 0.5rem 0.75rem;
-  background: var(--card-bg);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  min-width: 40px;
-}
-
-.pagination-number:hover {
-  background: var(--accent-color);
-  color: white;
-  border-color: var(--accent-color);
-}
-
-.pagination-number.active {
-  background: var(--accent-color);
-  color: white;
-  border-color: var(--accent-color);
+  gap: 1rem;
+  margin-top: 2rem;
 }
 
 .pagination-info {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
+  color: white;
+  font-weight: 500;
 }
 
 @media (max-width: 768px) {
   .search-title {
-    font-size: 2.5rem;
+    font-size: 2rem;
   }
 
   .search-input-group {
     flex-direction: column;
   }
 
-  .search-btn {
-    justify-content: center;
+  .filters-bar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .movies-grid,
-  .shows-grid {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
+  .results-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .pagination {
+    flex-direction: column;
+    gap: 0.5rem;
   }
 }
 </style>

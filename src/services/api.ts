@@ -5,7 +5,6 @@ import type {
   UpdateProfileData,
   WatchlistData,
   UpdateWatchlistData,
-  RateContentData,
   ContentParams,
 } from '@/types'
 
@@ -55,43 +54,162 @@ export const authAPI = {
   updateProfile: (data: UpdateProfileData) => api.put('/auth/profile', data),
 }
 
-// Content API
+// Unified Content API
 export const contentAPI = {
-  getMovies: (params: ContentParams) => api.get('/content/movies', { params }),
-  getTVShows: (params: ContentParams) => api.get('/content/tv', { params }),
-  getMovieDetails: (id: string) => api.get(`/content/movies/${id}`),
-  getTVShowDetails: (id: string) => api.get(`/content/tv/${id}`),
-  searchContent: (searchParams: Record<string, string | number>) =>
-    api.get('/content/search', {
-      params: searchParams,
+  // Get all content with pagination and filtering
+  getContent: (params: ContentParams) => api.get('/content', { params }),
+
+  // Get content by ID
+  getContentById: (id: string) => api.get(`/content/${id}`),
+
+  // Get content by external ID (TMDB or MAL)
+  getContentByExternalId: (id: string, source?: 'tmdb' | 'mal') =>
+    api.get(`/content/external/${id}`, {
+      params: source ? { source } : {},
     }),
-  getContentDetails: (id: string) => api.get(`/content/${id}`),
+
+  // Search content
+  searchContent: (searchParams: Record<string, string | number>) =>
+    api.get('/search', { params: searchParams }),
+
+  // Get popular content
+  getPopularContent: (params?: { type?: string; limit?: number }) =>
+    api.get('/popular', { params }),
+
+  // Get similar content
+  getSimilarContent: (id: string, limit?: number) =>
+    api.get(`/content/${id}/similar`, {
+      params: limit ? { limit } : {},
+    }),
+
+  // Get database statistics
+  getDatabaseStats: () => api.get('/stats'),
 }
 
 // AI API
 export const aiAPI = {
+  // AI-powered search
+  search: (query: string) => api.post('/ai-search', { query }),
+
+  // Legacy endpoints for compatibility
   getRecommendations: (userId: string) => api.get(`/ai/recommendations/${userId}`),
   analyzeContent: (contentId: string) => api.get(`/ai/analyze/${contentId}`),
   chat: (message: string) => api.post('/ai/chat', { message }),
 }
 
-// User API
-export const userAPI = {
-  addToWatchlist: (data: WatchlistData) => api.post('/user/watchlist', data),
+// Watchlist API
+export const watchlistAPI = {
+  // Add to watchlist
+  addToWatchlist: (data: WatchlistData) => api.post('/watchlist', data),
+
+  // Get user watchlist
+  getWatchlist: () => api.get('/watchlist'),
+
+  // Update watchlist item
   updateWatchlistItem: (contentId: string, data: UpdateWatchlistData) =>
-    api.put(`/user/watchlist/${contentId}`, data),
-  removeFromWatchlist: (contentId: string) => api.delete(`/user/watchlist/${contentId}`),
-  rateContent: (data: RateContentData) => api.post('/user/rate', data),
-  getRecommendations: () => api.get('/user/recommendations'),
+    api.put(`/watchlist/${contentId}`, data),
+
+  // Remove from watchlist
+  removeFromWatchlist: (contentId: string) => api.delete(`/watchlist/${contentId}`),
 }
 
-// Utility functions
+// Legacy API compatibility - removed redundant userAPI
+// All watchlist functionality is now handled by watchlistAPI
+
+// Utility functions for images
 export const getImageUrl = (path: string, size = 'w500') => {
   if (!path) return '/placeholder-movie.jpg'
+
+  // Handle MAL images (they're already full URLs)
+  if (path.startsWith('http')) {
+    return path
+  }
+
+  // Handle TMDB images
   return `https://image.tmdb.org/t/p/${size}${path}`
 }
 
 export const getPosterUrl = (path: string) => getImageUrl(path, 'w500')
 export const getBackdropUrl = (path: string) => getImageUrl(path, 'w1280')
+
+// Content interface for type safety
+interface ContentData {
+  _id?: string
+  id?: string
+  title?: string
+  displayTitle?: string
+  overview?: string
+  posterPath?: string
+  backdropPath?: string
+  contentType?: string
+  releaseDate?: string | Date
+  genres?: Array<{ id?: number; name?: string }> | string[]
+  voteAverage?: number
+  malScore?: number
+  voteCount?: number
+  malScoredBy?: number
+  runtime?: number
+  episodeCount?: number
+  malEpisodes?: number
+  seasonCount?: number
+  studios?: string[]
+  productionCompanies?: string[]
+  alternativeTitles?: string[]
+  tmdbId?: number
+  malId?: number
+  dataSources?: {
+    tmdb?: { hasData?: boolean }
+    mal?: { hasData?: boolean }
+  }
+}
+
+// Utility function to get content display info
+export const getContentDisplayInfo = (content: ContentData) => {
+  return {
+    id: content._id || content.id,
+    title: content.title || content.displayTitle || 'Unknown Title',
+    overview: content.overview || '',
+    posterPath: content.posterPath,
+    backdropPath: content.backdropPath,
+    contentType: content.contentType,
+    releaseDate: content.releaseDate,
+    genres: content.genres || [],
+    rating: {
+      score: content.voteAverage || content.malScore || 0,
+      count: content.voteCount || content.malScoredBy || 0,
+      source: content.malScore ? 'mal' : 'tmdb',
+    },
+    // Additional info
+    runtime: content.runtime,
+    episodeCount: content.episodeCount || content.malEpisodes,
+    seasonCount: content.seasonCount,
+    studios: content.studios || content.productionCompanies || [],
+    alternativeTitles: content.alternativeTitles || [],
+    // External IDs
+    tmdbId: content.tmdbId,
+    malId: content.malId,
+    // Data sources
+    hasTmdbData: content.dataSources?.tmdb?.hasData || false,
+    hasMalData: content.dataSources?.mal?.hasData || false,
+  }
+}
+
+// Utility function to format genres
+export const formatGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
+  if (!genres || !Array.isArray(genres)) return []
+
+  return genres
+    .map((genre) => {
+      if (typeof genre === 'string') return genre
+      if (typeof genre === 'object' && genre.name) return genre.name
+      return 'Unknown'
+    })
+    .filter((genre) => genre !== 'Animation') // Filter out Animation genre as requested
+}
+
+// Utility function to get content type display
+export const getContentTypeDisplay = (contentType: string) => {
+  return contentType === 'movie' ? 'Movie' : 'TV Show'
+}
 
 export default api

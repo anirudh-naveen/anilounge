@@ -5,7 +5,6 @@ import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
 import connectDB from '../config/database.js'
 import apiRoutes from './routes/api.js'
-
 // Load environment variables
 dotenv.config()
 

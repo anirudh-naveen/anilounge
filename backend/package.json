@@ -232,6 +232,7 @@
     "naive-ui": "^2.43.1",
     "natural-compare": "^1.4.0",
     "negotiator": "^0.6.3",
+    "node-cron": "^4.2.1",
     "node-domexception": "^1.0.0",
     "node-fetch": "^2.7.0",
     "node-int64": "^0.4.0",
@@ -343,6 +344,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "populate-unified": "node src/scripts/populateUnified.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

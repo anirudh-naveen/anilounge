@@ -55,3 +55,6 @@ export const authenticateToken = async (req, res, next) => {
 export const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' })
 }
+
+// Default export for backward compatibility
+export default authenticateToken

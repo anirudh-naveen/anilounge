@@ -176,7 +176,7 @@ onMounted(async () => {
     }
 
     // If not in store, fetch from API
-    const response = await contentAPI.getMovieDetails(movieId)
+    const response = await contentAPI.getContentById(movieId)
     movie.value = response.data.data
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load movie'

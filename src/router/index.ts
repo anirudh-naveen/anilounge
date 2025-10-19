@@ -55,12 +55,12 @@ const router = createRouter({
     },
     {
       path: '/movie/:id',
-      name: 'movie-details',
+      name: 'MovieDetails',
       component: () => import('@/views/MovieDetails.vue'),
     },
     {
       path: '/tv/:id',
-      name: 'tv-details',
+      name: 'TVDetails',
       component: () => import('@/views/TVShowDetails.vue'),
     },
   ],

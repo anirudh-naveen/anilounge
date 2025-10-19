@@ -39,14 +39,14 @@
           >
             <div class="content-poster">
               <img
-                :src="getPosterUrl(item.posterPath)"
+                :src="getPosterUrl(item.posterPath || '')"
                 :alt="item.title"
                 @error="handleImageError"
               />
               <div class="content-overlay">
-                <div class="content-rating">{{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
+                <div class="content-rating">{{ getDisplayRating(item) }}</div>
                 <div class="content-type">
-                  {{ item.contentType === 'movie' ? 'Movie' : 'TV Show' }}
+                  {{ getContentTypeDisplay(item.contentType) }}
                 </div>
                 <div class="content-actions">
                   <button
@@ -65,11 +65,11 @@
               <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
               <div class="content-genres">
                 <span
-                  v-for="genre in item.genres?.slice(0, 2)"
-                  :key="typeof genre === 'string' ? genre : genre.name || genre.id"
+                  v-for="genre in getDisplayGenres(item.genres)?.slice(0, 2)"
+                  :key="genre"
                   class="genre-tag"
                 >
-                  {{ typeof genre === 'string' ? genre : genre.name }}
+                  {{ genre }}
                 </span>
               </div>
             </div>
@@ -77,29 +77,6 @@
         </div>
         <div v-else class="error-state">
           <p>No content found. Please try again later.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Quick Stats -->
-    <section class="stats-section">
-      <div class="container">
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon">Movies</div>
-            <div class="stat-number">{{ contentStore.pagination.totalResults || '1000+' }}</div>
-            <div class="stat-label">Animated Movies</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">AI</div>
-            <div class="stat-number">AI</div>
-            <div class="stat-label">Recommendations</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">TV Shows</div>
-            <div class="stat-number">500+</div>
-            <div class="stat-label">Animated TV Shows</div>
-          </div>
         </div>
       </div>
     </section>
@@ -119,10 +96,10 @@ import { onMounted, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl } from '@/services/api'
+import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { useToast } from 'vue-toastification'
-import type { Content } from '@/types'
 import StatusDropdown from '@/components/StatusDropdown.vue'
+import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -132,78 +109,30 @@ const toast = useToast()
 const showStatusDropdown = ref(false)
 const selectedContentId = ref('')
 
-// Combine movies and TV shows for featured content
+// Get featured content from unified store
 const featuredContent = computed(() => {
-  const movies = contentStore.movies.map((movie) => ({ ...movie, contentType: 'movie' as const }))
-  const tvShows = contentStore.tvShows.map((show) => ({ ...show, contentType: 'tv' as const }))
-
-  // Mix movies and TV shows, prioritizing higher-rated content
-  const allContent = [...movies, ...tvShows]
-  return allContent.sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0))
+  // Use allContent from the unified store, sorted by rating
+  const sorted = [...contentStore.allContent].sort((a, b) => {
+    const aRating = a.malScore || a.voteAverage || 0
+    const bRating = b.malScore || b.voteAverage || 0
+    return bRating - aRating
+  })
+  return sorted.slice(0, 8) // Show only 8 items
 })
 
-onMounted(async () => {
-  try {
-    // Load both movies and TV shows if not already loaded
-    if (contentStore.movies.length === 0) {
-      await contentStore.getMovies(1)
-    }
-    if (contentStore.tvShows.length === 0) {
-      await contentStore.getTVShows(1)
-    }
-  } catch (error) {
-    console.error('Error loading content:', error)
-  }
-})
-
-const viewContentDetails = (content: Content) => {
-  if (content.contentType === 'movie') {
-    router.push({
-      name: 'movie-details',
-      params: { id: content._id },
-      query: { from: router.currentRoute.value.fullPath },
-    })
-  } else {
-    router.push({
-      name: 'tv-details',
-      params: { id: content._id },
-      query: { from: router.currentRoute.value.fullPath },
-    })
-  }
+// Helper functions
+const getDisplayRating = (item: UnifiedContent) => {
+  const rating = item.malScore || item.voteAverage
+  return rating ? rating.toFixed(1) : 'N/A'
 }
 
-const handleWatchlistClick = (contentId: string) => {
-  if (contentStore.isInWatchlist(contentId)) {
-    toggleWatchlist(contentId)
-  } else {
-    selectedContentId.value = contentId
-    showStatusDropdown.value = true
-  }
+const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
+  return formatGenres(genres)
 }
 
-const closeStatusDropdown = () => {
-  showStatusDropdown.value = false
-  selectedContentId.value = ''
-}
-
-const toggleWatchlist = async (contentId: string) => {
-  if (!authStore.isAuthenticated) {
-    toast.warning('Please login to add items to your watchlist')
-    return
-  }
-
-  try {
-    if (contentStore.isInWatchlist(contentId)) {
-      await contentStore.removeFromWatchlist(contentId)
-      toast.success('Removed from watchlist')
-    } else {
-      await contentStore.addToWatchlist(contentId)
-      toast.success('Added to watchlist')
-    }
-  } catch (error) {
-    console.error('Failed to update watchlist:', error)
-    toast.error('Failed to update watchlist')
-  }
+const getContentType = (contentId: string) => {
+  const content = contentStore.allContent.find((item: UnifiedContent) => item._id === contentId)
+  return content?.contentType || 'movie'
 }
 
 const truncateText = (text: string, maxLength: number) => {
@@ -216,65 +145,73 @@ const handleImageError = (event: Event) => {
   img.src = '/placeholder-movie.jpg'
 }
 
-const getContentType = (contentId: string) => {
-  const movie = contentStore.movies.find((m) => m._id === contentId)
-  return movie ? 'movie' : 'tv'
+const viewContentDetails = (item: UnifiedContent) => {
+  const routeName = item.contentType === 'movie' ? 'MovieDetails' : 'TVDetails'
+  router.push({ name: routeName, params: { id: item._id } })
 }
+
+const handleWatchlistClick = (contentId: string) => {
+  if (!authStore.isAuthenticated) {
+    toast.error('Please log in to add items to your watchlist')
+    return
+  }
+
+  if (contentStore.isInWatchlist(contentId)) {
+    toast.info('Already in your watchlist!')
+    return
+  }
+
+  selectedContentId.value = contentId
+  showStatusDropdown.value = true
+}
+
+const closeStatusDropdown = () => {
+  showStatusDropdown.value = false
+  selectedContentId.value = ''
+}
+
+onMounted(async () => {
+  try {
+    // Load popular content (which includes both movies and TV shows)
+    await contentStore.getPopularContent('all', 20)
+
+    // Load watchlist if user is authenticated
+    if (authStore.isAuthenticated) {
+      await contentStore.loadWatchlist()
+    }
+  } catch (error) {
+    console.error('Error loading home page data:', error)
+    toast.error('Failed to load content. Please try again.')
+  }
+})
 </script>
 
 <style scoped>
 .home-page {
   min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .hero {
-  background: linear-gradient(
-    135deg,
-    var(--primary-color) 0%,
-    var(--secondary-color) 50%,
-    var(--accent-color) 100%
-  );
-  padding: 4rem 0;
+  padding: 120px 0 80px;
   text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.hero::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="stars" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23stars)"/></svg>');
-  animation: twinkle 3s ease-in-out infinite;
-}
-
-@keyframes twinkle {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-  50% {
-    opacity: 0.8;
-  }
+  color: white;
 }
 
 .hero-content {
-  position: relative;
-  z-index: 1;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 .hero-title {
   font-size: 3.5rem;
-  font-weight: 800;
-  margin-bottom: 1rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
   line-height: 1.2;
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, var(--highlight-color), var(--purple-accent));
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -282,27 +219,50 @@ const getContentType = (contentId: string) => {
 
 .hero-subtitle {
   font-size: 1.25rem;
-  color: var(--text-secondary);
   margin-bottom: 2rem;
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
+  opacity: 0.9;
+  line-height: 1.6;
 }
 
 .hero-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  flex-wrap: wrap;
+  margin-top: 2rem;
+}
+
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  color: white;
 }
 
 .btn-large {
-  padding: 1rem 2rem;
+  padding: 16px 32px;
   font-size: 1.1rem;
 }
 
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
 .featured-section {
-  padding: 4rem 0;
+  padding: 80px 0;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
 }
 
 .section-title {
@@ -310,40 +270,28 @@ const getContentType = (contentId: string) => {
   font-weight: 700;
   text-align: center;
   margin-bottom: 3rem;
-  color: var(--text-primary);
-}
-
-.loading-container {
-  text-align: center;
-  padding: 4rem 0;
-}
-
-.loading-container p {
-  margin-top: 1rem;
-  color: var(--text-secondary);
+  color: #333;
 }
 
 .content-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 1.5rem;
-  max-width: 1400px;
-  margin: 0 auto;
+  margin-bottom: 3rem;
 }
 
 .content-card {
-  background: var(--bg-card);
+  background: white;
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   cursor: pointer;
-  border: 1px solid var(--border-color);
 }
 
 .content-card:hover {
   transform: translateY(-8px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--border-hover);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
 .content-poster {
@@ -369,7 +317,12 @@ const getContentType = (contentId: string) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.7) 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0.3) 50%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -383,53 +336,52 @@ const getContentType = (contentId: string) => {
 }
 
 .content-rating {
-  background: var(--highlight-color);
-  color: white;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-weight: 600;
   font-size: 0.9rem;
   align-self: flex-start;
 }
 
 .content-type {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(102, 126, 234, 0.9);
   color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
   font-size: 0.8rem;
+  align-self: flex-start;
 }
 
 .content-actions {
-  display: flex;
-  justify-content: flex-end;
+  align-self: flex-end;
 }
 
 .action-btn {
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 50%;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 1.2rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 .action-btn:hover {
-  background: var(--highlight-color);
+  background: white;
   transform: scale(1.1);
 }
 
 .action-btn.in-watchlist {
-  background: var(--success-color);
+  background: #4ecdc4;
+  color: white;
 }
 
 .content-info {
@@ -440,11 +392,12 @@ const getContentType = (contentId: string) => {
   font-size: 1.25rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: var(--text-primary);
+  color: #333;
+  line-height: 1.3;
 }
 
 .content-overview {
-  color: var(--text-secondary);
+  color: #666;
   font-size: 0.9rem;
   line-height: 1.5;
   margin-bottom: 1rem;
@@ -452,65 +405,69 @@ const getContentType = (contentId: string) => {
 
 .content-genres {
   display: flex;
-  gap: 0.5rem;
   flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .genre-tag {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
+  background: #f0f0f0;
+  color: #666;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 0.8rem;
   font-weight: 500;
 }
 
-.stats-section {
-  background: var(--bg-secondary);
+.loading-container {
+  text-align: center;
   padding: 4rem 0;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 2rem;
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid #4ecdc4;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
 }
 
-.stat-card {
-  text-align: center;
-  padding: 2rem;
-  background: var(--bg-card);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
-}
-
-.stat-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-}
-
-.stat-number {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: var(--highlight-color);
-  margin-bottom: 0.5rem;
-}
-
-.stat-label {
-  color: var(--text-secondary);
-  font-weight: 500;
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .error-state {
   text-align: center;
   padding: 4rem 0;
-  color: var(--text-secondary);
+  color: #666;
+}
+
+.fade-in {
+  animation: fadeIn 1s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1200px) {
+  .content-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
 }
 
 @media (max-width: 768px) {
@@ -518,22 +475,20 @@ const getContentType = (contentId: string) => {
     font-size: 2.5rem;
   }
 
-  .hero-subtitle {
-    font-size: 1.1rem;
-  }
-
-  .hero-actions {
-    flex-direction: column;
-    align-items: center;
-  }
-
   .content-grid {
-    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
   }
 
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
   }
 }
 </style>

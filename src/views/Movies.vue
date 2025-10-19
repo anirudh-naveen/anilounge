@@ -4,7 +4,7 @@
     <div class="container">
       <!-- Page Header -->
       <div class="page-header">
-        <h1 class="page-title">Animated Movies</h1>
+        <h1 class="page-title">Animated Content</h1>
         <p class="page-subtitle">Discover amazing animated films from around the world</p>
       </div>
 
@@ -23,21 +23,21 @@
       </div>
 
       <!-- Movies Grid -->
-      <div v-else-if="contentStore.movies.length > 0" class="movies-grid">
+      <div v-else-if="movies.length > 0" class="movies-grid">
         <div
-          v-for="movie in contentStore.movies"
+          v-for="movie in movies"
           :key="movie._id"
           class="movie-card"
           @click="viewMovieDetails(movie)"
         >
           <div class="movie-poster">
             <img
-              :src="getPosterUrl(movie.posterPath)"
+              :src="getPosterUrl(movie.posterPath || '')"
               :alt="movie.title"
               @error="handleImageError"
             />
             <div class="movie-overlay">
-              <div class="movie-rating">{{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
+              <div class="movie-rating">{{ getDisplayRating(movie) }}</div>
               <div class="movie-actions">
                 <button
                   v-if="authStore.isAuthenticated"
@@ -54,146 +54,100 @@
             <h3 class="movie-title">{{ movie.title }}</h3>
             <p class="movie-overview">{{ truncateText(movie.overview, 120) }}</p>
             <div class="movie-genres">
-              <span v-for="genre in movie.genres?.slice(0, 3)" :key="genre" class="genre-tag">
+              <span
+                v-for="genre in getDisplayGenres(movie.genres)?.slice(0, 3)"
+                :key="genre"
+                class="genre-tag"
+              >
                 {{ genre }}
               </span>
             </div>
             <div class="movie-meta">
-              <span class="release-year">{{ getReleaseYear(movie.releaseDate) }}</span>
-              <span class="runtime" v-if="movie.runtime">{{ movie.runtime }}min</span>
+              <span v-if="movie.releaseDate" class="release-year">
+                {{ getReleaseYear(movie.releaseDate) }}
+              </span>
+              <span v-if="movie.runtime" class="runtime"> {{ movie.runtime }} min </span>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Empty State -->
-      <div v-if="!contentStore.isLoading && contentStore.movies.length === 0" class="empty-state">
-        <div class="empty-icon">Movies</div>
+      <div v-else class="empty-state">
+        <div class="empty-icon">🎬</div>
         <h3>No movies found</h3>
-        <p>Try refreshing the page or check back later</p>
-        <button @click="() => loadMovies(1)" class="btn btn-primary">Refresh</button>
+        <p>We couldn't find any animated movies at the moment.</p>
+        <button @click="loadMovies(1)" class="btn btn-primary">Refresh</button>
       </div>
 
       <!-- Pagination -->
-      <div v-if="contentStore.movies.length > 0" class="pagination">
+      <div v-if="contentStore.pagination.totalPages > 1" class="pagination">
         <button
-          @click="loadPreviousPage"
-          :disabled="contentStore.pagination.page <= 1"
+          @click="loadMovies(contentStore.pagination.currentPage - 1)"
+          :disabled="!contentStore.pagination.hasPrevPage"
           class="btn btn-secondary"
         >
-          ← Previous
+          Previous
         </button>
-        <span class="page-info">
-          Page {{ contentStore.pagination.page }} of {{ contentStore.pagination.totalPages }}
+        <span class="pagination-info">
+          Page {{ contentStore.pagination.currentPage }} of {{ contentStore.pagination.totalPages }}
         </span>
         <button
-          @click="loadNextPage"
-          :disabled="contentStore.pagination.page >= contentStore.pagination.totalPages"
+          @click="loadMovies(contentStore.pagination.currentPage + 1)"
+          :disabled="!contentStore.pagination.hasNextPage"
           class="btn btn-secondary"
         >
-          Next →
+          Next
         </button>
       </div>
-    </div>
 
-    <!-- Status Dropdown -->
-    <StatusDropdown
-      :show-dropdown="showStatusDropdown"
-      :content-id="selectedContentId"
-      content-type="movie"
-      @close="closeStatusDropdown"
-    />
+      <!-- Status Dropdown -->
+      <StatusDropdown
+        :show-dropdown="showStatusDropdown"
+        :content-id="selectedContentId"
+        content-type="movie"
+        @close="closeStatusDropdown"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl } from '@/services/api'
+import { getPosterUrl, formatGenres } from '@/services/api'
 import { useToast } from 'vue-toastification'
-import type { Movie } from '@/types'
 import StatusDropdown from '@/components/StatusDropdown.vue'
+import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
 
-const currentPage = ref(1)
 const showStatusDropdown = ref(false)
 const selectedContentId = ref('')
 
-onMounted(async () => {
-  await loadMovies()
+// Get movies from unified store
+const movies = computed(() => {
+  return contentStore.movies
 })
 
-const loadMovies = async (page = 1) => {
-  try {
-    await contentStore.getMovies(page)
-    currentPage.value = page
-  } catch (error) {
-    console.error('Error loading movies:', error)
-  }
+// Helper functions
+const getDisplayRating = (movie: UnifiedContent) => {
+  const rating = movie.malScore || movie.voteAverage
+  return rating ? rating.toFixed(1) : 'N/A'
 }
 
-const loadNextPage = (event?: Event) => {
-  event?.preventDefault()
-  const nextPage = currentPage.value + 1
-  if (nextPage <= contentStore.pagination.totalPages) {
-    loadMovies(nextPage)
-  }
+const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
+  return formatGenres(genres)
 }
 
-const loadPreviousPage = (event?: Event) => {
-  event?.preventDefault()
-  const prevPage = currentPage.value - 1
-  if (prevPage >= 1) {
-    loadMovies(prevPage)
-  }
-}
-
-const viewMovieDetails = (movie: Movie) => {
-  router.push({
-    name: 'movie-details',
-    params: { id: movie._id },
-    query: { from: router.currentRoute.value.fullPath }
-  })
-}
-
-const handleWatchlistClick = (contentId: string) => {
-  if (contentStore.isInWatchlist(contentId)) {
-    toggleWatchlist(contentId)
-  } else {
-    selectedContentId.value = contentId
-    showStatusDropdown.value = true
-  }
-}
-
-const closeStatusDropdown = () => {
-  showStatusDropdown.value = false
-  selectedContentId.value = ''
-}
-
-const toggleWatchlist = async (contentId: string) => {
-  if (!authStore.isAuthenticated) {
-    toast.warning('Please login to add items to your watchlist')
-    return
-  }
-
-  try {
-    if (contentStore.isInWatchlist(contentId)) {
-      await contentStore.removeFromWatchlist(contentId)
-      toast.success('Removed from watchlist')
-    } else {
-      await contentStore.addToWatchlist(contentId)
-      toast.success('Added to watchlist')
-    }
-  } catch (error) {
-    console.error('Error updating watchlist:', error)
-    toast.error('Failed to update watchlist')
-  }
+const getReleaseYear = (dateString: string | Date) => {
+  const date = new Date(dateString)
+  return date.getFullYear()
 }
 
 const truncateText = (text: string, maxLength: number) => {
@@ -201,78 +155,111 @@ const truncateText = (text: string, maxLength: number) => {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
 }
 
-const getReleaseYear = (dateString: string | Date) => {
-  if (!dateString) return 'N/A'
-  return new Date(dateString).getFullYear()
-}
-
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
   img.src = '/placeholder-movie.jpg'
 }
+
+const viewMovieDetails = (movie: UnifiedContent) => {
+  router.push({ name: 'MovieDetails', params: { id: movie._id } })
+}
+
+const handleWatchlistClick = (contentId: string) => {
+  if (!authStore.isAuthenticated) {
+    toast.error('Please log in to add items to your watchlist')
+    return
+  }
+
+  if (contentStore.isInWatchlist(contentId)) {
+    toast.info('Already in your watchlist!')
+    return
+  }
+
+  selectedContentId.value = contentId
+  showStatusDropdown.value = true
+}
+
+const closeStatusDropdown = () => {
+  showStatusDropdown.value = false
+  selectedContentId.value = ''
+}
+
+const loadMovies = async (page: number) => {
+  try {
+    await contentStore.getContent(page, 'movie', 20)
+  } catch (error) {
+    console.error('Error loading movies:', error)
+    toast.error('Failed to load movies. Please try again.')
+  }
+}
+
+onMounted(async () => {
+  try {
+    // Load movies specifically if not already loaded
+    if (contentStore.movies.length === 0) {
+      await contentStore.getPopularContent('movie', 20)
+    }
+
+    // Load watchlist if user is authenticated
+    if (authStore.isAuthenticated) {
+      await contentStore.loadWatchlist()
+    }
+  } catch (error) {
+    console.error('Error loading movies page:', error)
+    toast.error('Failed to load movies. Please try again.')
+  }
+})
 </script>
 
 <style scoped>
 .movies-page {
   min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 2rem 0;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
 }
 
 .page-header {
   text-align: center;
   margin-bottom: 3rem;
+  color: white;
 }
 
 .page-title {
   font-size: 3rem;
-  font-weight: 800;
+  font-weight: 700;
   margin-bottom: 1rem;
-  background: linear-gradient(135deg, var(--highlight-color), var(--purple-accent));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .page-subtitle {
   font-size: 1.25rem;
-  color: var(--text-secondary);
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.loading-container {
-  text-align: center;
-  padding: 4rem 0;
-}
-
-.loading-container p {
-  margin-top: 1rem;
-  color: var(--text-secondary);
+  opacity: 0.9;
 }
 
 .movies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
   margin-bottom: 3rem;
-  max-width: 1200px;
-  margin-left: auto;
-  margin-right: auto;
 }
 
 .movie-card {
-  background: var(--bg-card);
+  background: white;
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   cursor: pointer;
-  border: 1px solid var(--border-color);
 }
 
 .movie-card:hover {
   transform: translateY(-8px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--border-hover);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
 .movie-poster {
@@ -298,7 +285,12 @@ const handleImageError = (event: Event) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.7) 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0.3) 50%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -312,42 +304,42 @@ const handleImageError = (event: Event) => {
 }
 
 .movie-rating {
-  background: var(--highlight-color);
-  color: white;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-weight: 600;
   font-size: 0.9rem;
   align-self: flex-start;
 }
 
 .movie-actions {
-  display: flex;
-  justify-content: flex-end;
+  align-self: flex-end;
 }
 
 .action-btn {
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 50%;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 1.2rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 .action-btn:hover {
-  background: var(--highlight-color);
+  background: white;
   transform: scale(1.1);
 }
 
 .action-btn.in-watchlist {
-  background: var(--success-color);
+  background: #4ecdc4;
+  color: white;
 }
 
 .movie-info {
@@ -358,11 +350,12 @@ const handleImageError = (event: Event) => {
   font-size: 1.25rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: var(--text-primary);
+  color: #333;
+  line-height: 1.3;
 }
 
 .movie-overview {
-  color: var(--text-secondary);
+  color: #666;
   font-size: 0.9rem;
   line-height: 1.5;
   margin-bottom: 1rem;
@@ -370,16 +363,16 @@ const handleImageError = (event: Event) => {
 
 .movie-genres {
   display: flex;
-  gap: 0.5rem;
   flex-wrap: wrap;
+  gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
 .genre-tag {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
+  background: #f0f0f0;
+  color: #666;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 0.8rem;
   font-weight: 500;
 }
@@ -387,71 +380,99 @@ const handleImageError = (event: Event) => {
 .movie-meta {
   display: flex;
   gap: 1rem;
-  font-size: 0.9rem;
-  color: var(--text-muted);
+  font-size: 0.8rem;
+  color: #999;
 }
 
-.error-state {
-  text-align: center;
-  padding: 4rem 0;
-  color: var(--text-secondary);
+.release-year,
+.runtime {
+  background: #f8f9fa;
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 
-.error-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-}
-
-.error-state h3 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.error-state p {
-  margin-bottom: 2rem;
-  max-width: 500px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
+.loading-container,
+.error-state,
 .empty-state {
   text-align: center;
   padding: 4rem 0;
+  color: white;
 }
 
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid #4ecdc4;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.error-icon,
 .empty-icon {
-  font-size: 4rem;
+  font-size: 3rem;
   margin-bottom: 1rem;
 }
 
-.empty-state h3 {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-primary);
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
 }
 
-.empty-state p {
-  color: var(--text-secondary);
-  margin-bottom: 2rem;
+.btn-primary {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  color: white;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .pagination {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 2rem;
-  margin-top: 3rem;
+  gap: 1rem;
+  margin-top: 2rem;
 }
 
-.page-info {
-  color: var(--text-secondary);
+.pagination-info {
+  color: white;
   font-weight: 500;
 }
 
 @media (max-width: 768px) {
   .page-title {
-    font-size: 2.5rem;
+    font-size: 2rem;
   }
 
   .movies-grid {
@@ -461,7 +482,7 @@ const handleImageError = (event: Event) => {
 
   .pagination {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.5rem;
   }
 }
 </style>
