@@ -6,3 +6,7 @@ This site follows the MEVN stack architecture:
  - Express.js
  - Vue.js
  - Node.js
+
+The application also utilizes the Tmdb and Anthropic APIs in its functionality.
+
+WIP
