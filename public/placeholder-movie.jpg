@@ -1,0 +1,6 @@
+<!-- Placeholder for movie poster -->
+<svg width="300" height="450" xmlns="http://www.w3.org/2000/svg">
+  <rect width="300" height="450" fill="#1a1a2e"/>
+  <text x="150" y="200" text-anchor="middle" fill="#ffffff" font-family="Arial" font-size="16">No Image</text>
+  <text x="150" y="230" text-anchor="middle" fill="#b0b0b0" font-family="Arial" font-size="12">Available</text>
+</svg>

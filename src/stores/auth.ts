@@ -1,0 +1,117 @@
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { authAPI } from '@/services/api'
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref(null)
+  const token = ref(localStorage.getItem('token'))
+  const isLoading = ref(false)
+  const error = ref(null)
+
+  const isAuthenticated = computed(() => !!token.value && !!user.value)
+
+  const login = async (credentials) => {
+    try {
+      isLoading.value = true
+      error.value = null
+
+      const response = await authAPI.login(credentials)
+      const { user: userData, token: authToken } = response.data.data
+
+      user.value = userData
+      token.value = authToken
+
+      localStorage.setItem('token', authToken)
+      localStorage.setItem('user', JSON.stringify(userData))
+
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.message || 'Login failed'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const register = async (userData) => {
+    try {
+      isLoading.value = true
+      error.value = null
+
+      const response = await authAPI.register(userData)
+      const { user: newUser, token: authToken } = response.data.data
+
+      user.value = newUser
+      token.value = authToken
+
+      localStorage.setItem('token', authToken)
+      localStorage.setItem('user', JSON.stringify(newUser))
+
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.message || 'Registration failed'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const logout = () => {
+    user.value = null
+    token.value = null
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+  }
+
+  const loadUser = async () => {
+    if (!token.value) return
+
+    try {
+      const response = await authAPI.getProfile()
+      user.value = response.data.data.user
+      localStorage.setItem('user', JSON.stringify(user.value))
+    } catch (err) {
+      logout()
+    }
+  }
+
+  const updateProfile = async (data) => {
+    try {
+      isLoading.value = true
+      error.value = null
+
+      const response = await authAPI.updateProfile(data)
+      user.value = response.data.data.user
+      localStorage.setItem('user', JSON.stringify(user.value))
+
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.message || 'Profile update failed'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  // Initialize user from localStorage
+  const initAuth = () => {
+    const savedUser = localStorage.getItem('user')
+    if (savedUser && token.value) {
+      user.value = JSON.parse(savedUser)
+    }
+  }
+
+  return {
+    user,
+    token,
+    isLoading,
+    error,
+    isAuthenticated,
+    login,
+    register,
+    logout,
+    loadUser,
+    updateProfile,
+    initAuth,
+  }
+})

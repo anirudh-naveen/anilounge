@@ -1,0 +1,77 @@
+import axios from 'axios'
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
+
+// Create axios instance
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+// Request interceptor to add auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  },
+)
+
+// Response interceptor to handle errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  },
+)
+
+// Auth API
+export const authAPI = {
+  register: (userData) => api.post('/auth/register', userData),
+  login: (credentials) => api.post('/auth/login', credentials),
+  getProfile: () => api.get('/auth/profile'),
+  updateProfile: (data) => api.put('/auth/profile', data),
+}
+
+// Content API
+export const contentAPI = {
+  getMovies: (params) => api.get('/content/movies', { params }),
+  getTVShows: (params) => api.get('/content/tv', { params }),
+  searchContent: (query, page = 1) =>
+    api.get('/content/search', {
+      params: { query, page },
+    }),
+  getContentDetails: (id) => api.get(`/content/${id}`),
+}
+
+// User API
+export const userAPI = {
+  addToWatchlist: (contentId) => api.post('/user/watchlist', { contentId }),
+  removeFromWatchlist: (contentId) => api.delete(`/user/watchlist/${contentId}`),
+  rateContent: (data) => api.post('/user/rate', data),
+  getRecommendations: () => api.get('/user/recommendations'),
+}
+
+// Utility functions
+export const getImageUrl = (path, size = 'w500') => {
+  if (!path) return '/placeholder-movie.jpg'
+  return `https://image.tmdb.org/t/p/${size}${path}`
+}
+
+export const getPosterUrl = (path) => getImageUrl(path, 'w500')
+export const getBackdropUrl = (path) => getImageUrl(path, 'w1280')
+
+export default api
