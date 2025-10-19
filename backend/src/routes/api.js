@@ -42,6 +42,11 @@ router.get('/content/tv', contentController.getAnimatedTVShows)
 router.get('/content/search', contentController.searchContent)
 router.get('/content/:id', contentController.getContentDetails)
 
+// AI-powered routes
+router.get('/ai/recommendations/:userId', authenticateToken, contentController.getAIRecommendations)
+router.get('/ai/analyze/:contentId', contentController.analyzeContent)
+router.post('/ai/chat', authenticateToken, contentController.chatWithAI)
+
 // User-specific content routes (require authentication)
 router.post('/user/watchlist', authenticateToken, contentController.addToWatchlist)
 router.put('/user/watchlist/:contentId', authenticateToken, contentController.updateWatchlistItem)

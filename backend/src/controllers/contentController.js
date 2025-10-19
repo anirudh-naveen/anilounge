@@ -1,6 +1,7 @@
 import Content from '../models/Content.js'
 import User from '../models/User.js'
 import tmdbService from '../services/tmdbService.js'
+import geminiService from '../services/geminiService.js'
 import { validationResult } from 'express-validator'
 
 // Genre ID to name mapping
@@ -55,7 +56,7 @@ const convertGenreIds = (genreIds) => {
 // Saves Animated Movie content to database
 export const getAnimatedMovies = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query
+    const { page = 1 } = req.query
 
     // Try to get from TMDB first
     const tmdbData = await tmdbService.getAnimatedMovies(page)
@@ -130,7 +131,7 @@ export const getAnimatedMovies = async (req, res) => {
 // Saves Animated TV Show content to database
 export const getAnimatedTVShows = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query
+    const { page = 1 } = req.query
 
     const tmdbData = await tmdbService.getAnimatedTVShows(page)
 
@@ -201,6 +202,85 @@ export const getAnimatedTVShows = async (req, res) => {
   }
 }
 
+// Enhanced search with fuzzy matching and genre support
+const fuzzyMatch = (str1, str2) => {
+  const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+  if (s1 === s2) return 1
+  if (s1.includes(s2) || s2.includes(s1)) return 0.8
+
+  // Simple Levenshtein distance approximation
+  const longer = s1.length > s2.length ? s1 : s2
+  const shorter = s1.length > s2.length ? s2 : s1
+  const editDistance = levenshteinDistance(longer, shorter)
+  return Math.max(0, 1 - editDistance / longer.length)
+}
+
+const levenshteinDistance = (str1, str2) => {
+  const matrix = []
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i]
+  }
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j
+  }
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1]
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1,
+        )
+      }
+    }
+  }
+  return matrix[str2.length][str1.length]
+}
+
+// Calculate search relevance score
+const calculateRelevanceScore = (item, query) => {
+  const queryLower = query.toLowerCase()
+  let score = 0
+
+  // Title exact match (highest priority)
+  if (item.title && item.title.toLowerCase().includes(queryLower)) {
+    score += 10
+  }
+
+  // Original title match
+  if (item.originalTitle && item.originalTitle.toLowerCase().includes(queryLower)) {
+    score += 8
+  }
+
+  // Overview match
+  if (item.overview && item.overview.toLowerCase().includes(queryLower)) {
+    score += 3
+  }
+
+  // Genre match
+  if (item.genres && Array.isArray(item.genres)) {
+    const genreMatch = item.genres.some((genre) => genre.toLowerCase().includes(queryLower))
+    if (genreMatch) score += 5
+  }
+
+  // Fuzzy title match
+  if (item.title) {
+    const fuzzyScore = fuzzyMatch(item.title, query)
+    score += fuzzyScore * 4
+  }
+
+  // Popularity boost
+  if (item.voteAverage) {
+    score += item.voteAverage / 10
+  }
+
+  return score
+}
+
 export const searchContent = async (req, res) => {
   try {
     const { query, page = 1 } = req.query
@@ -212,6 +292,7 @@ export const searchContent = async (req, res) => {
       })
     }
 
+    // Get initial search results
     const searchResults = await tmdbService.searchAnimatedContent(query, page)
 
     // Process movies - convert genre_ids to genre names and create proper structure
@@ -246,11 +327,63 @@ export const searchContent = async (req, res) => {
       voteCount: show.vote_count,
     }))
 
+    // AI Enhancement (only try if API key is available)
+    let aiEnhancement = null
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        aiEnhancement = await geminiService.enhanceSearchQuery(query)
+      } catch {
+        console.log('AI enhancement failed, using fallback suggestions')
+        aiEnhancement = {
+          refinedQuery: query,
+          suggestedGenres: [],
+          recommendations: [],
+          searchSuggestions: [],
+        }
+      }
+    } else {
+      console.log('No Anthropic API key, skipping AI enhancement')
+      aiEnhancement = {
+        refinedQuery: query,
+        suggestedGenres: [],
+        recommendations: [],
+        searchSuggestions: [],
+      }
+    }
+
+    // Calculate relevance scores and sort by relevance
+    const scoredMovies = processedMovies
+      .map((movie) => ({
+        ...movie,
+        relevanceScore: calculateRelevanceScore(movie, query),
+      }))
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+
+    const scoredTVShows = processedTVShows
+      .map((show) => ({
+        ...show,
+        relevanceScore: calculateRelevanceScore(show, query),
+      }))
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+
+    // Remove relevance score from final response
+    const finalMovies = scoredMovies.map((movie) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { relevanceScore, ...movieWithoutScore } = movie
+      return movieWithoutScore
+    })
+    const finalTVShows = scoredTVShows.map((show) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { relevanceScore, ...showWithoutScore } = show
+      return showWithoutScore
+    })
+
     res.json({
       success: true,
       data: {
-        movies: processedMovies,
-        tv: processedTVShows,
+        movies: finalMovies,
+        tv: finalTVShows,
+        aiEnhancement: aiEnhancement, // Include AI suggestions
         pagination: {
           page: parseInt(page),
           totalPages: Math.max(searchResults.movies.total_pages, searchResults.tv.total_pages),
@@ -263,6 +396,156 @@ export const searchContent = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error searching content',
+    })
+  }
+}
+
+// AI-powered content recommendations
+export const getAIRecommendations = async (req, res) => {
+  try {
+    const { userId } = req.params
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI recommendations not available',
+      })
+    }
+
+    // Get user's watchlist and preferences
+    const user = await User.findById(userId).populate('watchlist.content')
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      })
+    }
+
+    // Get some popular content for recommendations
+    const popularMovies = await tmdbService.getAnimatedMovies(1)
+    const popularShows = await tmdbService.getAnimatedTVShows(1)
+    const availableContent = [...popularMovies.results, ...popularShows.results]
+
+    // Create user preferences object
+    const userPreferences = {
+      watchlistCount: user.watchlist.length,
+      favoriteGenres: user.watchlist.reduce((acc, item) => {
+        if (item.content && item.content.genres) {
+          item.content.genres.forEach((genre) => {
+            acc[genre] = (acc[genre] || 0) + 1
+          })
+        }
+        return acc
+      }, {}),
+      averageRating:
+        user.watchlist.reduce((sum, item) => sum + (item.rating || 0), 0) / user.watchlist.length ||
+        0,
+    }
+
+    // Get AI recommendations
+    const recommendations = await geminiService.generateRecommendations(
+      userPreferences,
+      availableContent,
+    )
+
+    res.json({
+      success: true,
+      data: {
+        recommendations: recommendations.recommendations || [],
+        userPreferences,
+      },
+    })
+  } catch (error) {
+    console.error('AI recommendations error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error generating AI recommendations',
+    })
+  }
+}
+
+// AI-powered chatbot
+export const chatWithAI = async (req, res) => {
+  try {
+    const { message } = req.body
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Message is required',
+      })
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI chatbot not available',
+      })
+    }
+
+    // Get AI response using Gemini
+    const aiResponse = await geminiService.chatWithUser(message)
+
+    res.json({
+      success: true,
+      data: {
+        response: aiResponse.response,
+        searchSuggestion: aiResponse.searchSuggestion,
+      },
+    })
+  } catch (error) {
+    console.error('AI chat error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error processing chat message',
+    })
+  }
+}
+
+// AI-powered content analysis
+export const analyzeContent = async (req, res) => {
+  try {
+    const { contentId } = req.params
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({
+        success: false,
+        message: 'AI analysis not available',
+      })
+    }
+
+    // Get content from database or TMDB
+    let content = await Content.findOne({ tmdbId: contentId })
+
+    if (!content) {
+      // Try to get from TMDB
+      const tmdbContent = await tmdbService.getContentDetails('movie', contentId)
+      content = {
+        title: tmdbContent.title || tmdbContent.name,
+        overview: tmdbContent.overview,
+        genres: convertGenreIds(tmdbContent.genre_ids),
+      }
+    }
+
+    // Get AI analysis
+    const analysis = await geminiService.analyzeContent(content)
+
+    res.json({
+      success: true,
+      data: {
+        content: {
+          title: content.title,
+          overview: content.overview,
+          genres: content.genres,
+        },
+        analysis,
+      },
+    })
+  } catch (error) {
+    console.error('AI content analysis error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error analyzing content',
     })
   }
 }

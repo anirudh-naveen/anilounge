@@ -59,11 +59,17 @@ export const authAPI = {
 export const contentAPI = {
   getMovies: (params: ContentParams) => api.get('/content/movies', { params }),
   getTVShows: (params: ContentParams) => api.get('/content/tv', { params }),
-  searchContent: (query: string, page = 1) =>
+  searchContent: (query: string, page = 1, useAI = true) =>
     api.get('/content/search', {
-      params: { query, page },
+      params: { query, page, useAI },
     }),
   getContentDetails: (id: string) => api.get(`/content/${id}`),
+}
+
+// AI API
+export const aiAPI = {
+  getRecommendations: (userId: string) => api.get(`/ai/recommendations/${userId}`),
+  analyzeContent: (contentId: string) => api.get(`/ai/analyze/${contentId}`),
 }
 
 // User API

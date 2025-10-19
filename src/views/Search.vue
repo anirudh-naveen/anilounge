@@ -22,6 +22,14 @@
               <span v-if="contentStore.isLoading" class="spinner"></span>
               {{ contentStore.isLoading ? 'Searching...' : 'Search' }}
             </button>
+            <button
+              type="button"
+              class="ai-btn"
+              @click="showChatbot = true"
+              :disabled="!authStore.isAuthenticated"
+            >
+              🤖 AI Assistant
+            </button>
           </div>
         </form>
       </div>
@@ -52,6 +60,13 @@
                   />
                   <div class="movie-overlay">
                     <div class="movie-rating">⭐ {{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
+                    <button
+                      class="add-to-watchlist-btn"
+                      @click.stop="handleAddToWatchlist(movie)"
+                      :disabled="contentStore.isInWatchlist(movie._id)"
+                    >
+                      {{ contentStore.isInWatchlist(movie._id) ? '✓' : '+' }}
+                    </button>
                   </div>
                 </div>
                 <div class="movie-info">
@@ -85,6 +100,13 @@
                   />
                   <div class="show-overlay">
                     <div class="show-rating">⭐ {{ show.voteAverage?.toFixed(1) || 'N/A' }}</div>
+                    <button
+                      class="add-to-watchlist-btn"
+                      @click.stop="handleAddToWatchlist(show)"
+                      :disabled="contentStore.isInWatchlist(show._id)"
+                    >
+                      {{ contentStore.isInWatchlist(show._id) ? '✓' : '+' }}
+                    </button>
                   </div>
                 </div>
                 <div class="show-info">
@@ -123,6 +145,22 @@
         </div>
       </div>
     </div>
+
+    <!-- Status Dropdown -->
+    <StatusDropdown
+      v-if="showDropdown && selectedContent"
+      :show-dropdown="showDropdown"
+      :content-id="selectedContent._id"
+      :content-type="getContentType(selectedContent)"
+      @close="closeDropdown"
+    />
+
+    <!-- AI Chatbot -->
+    <Chatbot
+      v-if="showChatbot"
+      :show-chatbot="showChatbot"
+      @close="showChatbot = false"
+    />
   </div>
 </template>
 
@@ -130,13 +168,22 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
+import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl } from '@/services/api'
+import { useToast } from 'vue-toastification'
+import StatusDropdown from '@/components/StatusDropdown.vue'
+import Chatbot from '@/components/Chatbot.vue'
 
 const router = useRouter()
 const contentStore = useContentStore()
+const authStore = useAuthStore()
+const toast = useToast()
 
 const searchQuery = ref('')
 const hasSearched = ref(false)
+const showDropdown = ref(false)
+const selectedContent = ref(null)
+const showChatbot = ref(false)
 
 const popularSearches = [
   'Disney',
@@ -187,6 +234,26 @@ const truncateText = (text: string, maxLength: number) => {
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
   img.src = '/placeholder-movie.jpg'
+}
+
+const handleAddToWatchlist = (content: any) => {
+  if (!authStore.isAuthenticated) {
+    toast.error('Please log in to add items to your watchlist')
+    router.push('/login')
+    return
+  }
+
+  selectedContent.value = content
+  showDropdown.value = true
+}
+
+const closeDropdown = () => {
+  showDropdown.value = false
+  selectedContent.value = null
+}
+
+const getContentType = (content: any) => {
+  return content.contentType || (content.releaseDate ? 'movie' : 'tv')
 }
 </script>
 
@@ -245,6 +312,30 @@ const handleImageError = (event: Event) => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.ai-btn {
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  white-space: nowrap;
+  background: var(--purple-accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.ai-btn:hover:not(:disabled) {
+  background: var(--highlight-color);
+  transform: translateY(-2px);
+}
+
+.ai-btn:disabled {
+  background: var(--text-secondary);
+  cursor: not-allowed;
+  transform: none;
 }
 
 .loading-container {
@@ -340,6 +431,37 @@ const handleImageError = (event: Event) => {
   border-radius: 20px;
   font-weight: 600;
   font-size: 0.9rem;
+}
+
+.add-to-watchlist-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: var(--purple-accent);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.add-to-watchlist-btn:hover {
+  background: var(--highlight-color);
+  transform: scale(1.1);
+}
+
+.add-to-watchlist-btn:disabled {
+  background: #4ade80;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .movie-info,
