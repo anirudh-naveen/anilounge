@@ -60,7 +60,7 @@
         <div class="empty-icon">📺</div>
         <h3>No TV shows found</h3>
         <p>Try refreshing the page or check back later</p>
-        <button @click="loadTVShows" class="btn btn-primary">Refresh</button>
+        <button @click="() => loadTVShows(1)" class="btn btn-primary">Refresh</button>
       </div>
 
       <!-- Pagination -->
@@ -94,6 +94,7 @@ import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl } from '@/services/api'
 import { useToast } from 'vue-toastification'
+import type { TVShow } from '@/types'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -111,23 +112,28 @@ const loadTVShows = async (page = 1) => {
     await contentStore.getTVShows(page)
     currentPage.value = page
   } catch (error) {
+    console.error('Error loading TV shows:', error)
     toast.error('Failed to load TV shows')
   }
 }
 
-const loadNextPage = () => {
-  if (currentPage.value < contentStore.pagination.totalPages) {
-    loadTVShows(currentPage.value + 1)
+const loadNextPage = (event?: Event) => {
+  event?.preventDefault()
+  const nextPage = currentPage.value + 1
+  if (nextPage <= contentStore.pagination.totalPages) {
+    loadTVShows(nextPage)
   }
 }
 
-const loadPreviousPage = () => {
-  if (currentPage.value > 1) {
-    loadTVShows(currentPage.value - 1)
+const loadPreviousPage = (event?: Event) => {
+  event?.preventDefault()
+  const prevPage = currentPage.value - 1
+  if (prevPage >= 1) {
+    loadTVShows(prevPage)
   }
 }
 
-const viewShowDetails = (show: any) => {
+const viewShowDetails = (show: TVShow) => {
   router.push(`/tv/${show.tmdbId}`)
 }
 
@@ -146,6 +152,7 @@ const toggleWatchlist = async (contentId: string) => {
       toast.success('Added to watchlist')
     }
   } catch (error) {
+    console.error('Error updating watchlist:', error)
     toast.error('Failed to update watchlist')
   }
 }
@@ -206,9 +213,12 @@ const handleImageError = (event: Event) => {
 
 .shows-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
   margin-bottom: 3rem;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .show-card {

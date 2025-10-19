@@ -26,4 +26,7 @@ app.use(Toast, {
   rtl: false,
 })
 
+console.log('Main.ts: Mounting app...')
 app.mount('#app')
+
+console.log('Main.ts: App mounted successfully!')

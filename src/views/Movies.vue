@@ -62,7 +62,7 @@
         <div class="empty-icon">🎬</div>
         <h3>No movies found</h3>
         <p>Try refreshing the page or check back later</p>
-        <button @click="loadMovies" class="btn btn-primary">Refresh</button>
+        <button @click="() => loadMovies(1)" class="btn btn-primary">Refresh</button>
       </div>
 
       <!-- Pagination -->
@@ -96,6 +96,7 @@ import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl } from '@/services/api'
 import { useToast } from 'vue-toastification'
+import type { Movie } from '@/types'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -113,23 +114,28 @@ const loadMovies = async (page = 1) => {
     await contentStore.getMovies(page)
     currentPage.value = page
   } catch (error) {
+    console.error('Error loading movies:', error)
     toast.error('Failed to load movies')
   }
 }
 
-const loadNextPage = () => {
-  if (currentPage.value < contentStore.pagination.totalPages) {
-    loadMovies(currentPage.value + 1)
+const loadNextPage = (event?: Event) => {
+  event?.preventDefault()
+  const nextPage = currentPage.value + 1
+  if (nextPage <= contentStore.pagination.totalPages) {
+    loadMovies(nextPage)
   }
 }
 
-const loadPreviousPage = () => {
-  if (currentPage.value > 1) {
-    loadMovies(currentPage.value - 1)
+const loadPreviousPage = (event?: Event) => {
+  event?.preventDefault()
+  const prevPage = currentPage.value - 1
+  if (prevPage >= 1) {
+    loadMovies(prevPage)
   }
 }
 
-const viewMovieDetails = (movie: any) => {
+const viewMovieDetails = (movie: Movie) => {
   router.push(`/movie/${movie.tmdbId}`)
 }
 
@@ -148,6 +154,7 @@ const toggleWatchlist = async (contentId: string) => {
       toast.success('Added to watchlist')
     }
   } catch (error) {
+    console.error('Error updating watchlist:', error)
     toast.error('Failed to update watchlist')
   }
 }
@@ -208,9 +215,12 @@ const handleImageError = (event: Event) => {
 
 .movies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
   margin-bottom: 3rem;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .movie-card {

@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authAPI } from '@/services/api'
+import type { User } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref(null)
-  const token = ref(localStorage.getItem('token'))
+  const user = ref<User | null>(null)
+  const token = ref<string | null>(localStorage.getItem('token'))
   const isLoading = ref(false)
-  const error = ref(null)
+  const error = ref<string | null>(null)
 
   const isAuthenticated = computed(() => !!token.value && !!user.value)
 

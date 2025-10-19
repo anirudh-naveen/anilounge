@@ -51,12 +51,8 @@ class TMDBService {
         },
       })
 
-      const animatedMovies = response.data.results.filter((movie) => this.isAnimatedContent(movie))
-
-      return {
-        ...response.data,
-        results: animatedMovies,
-      }
+      // Since we're already filtering by Animation genre, we don't need additional filtering
+      return response.data
     } catch (error) {
       console.error('Error fetching animated movies:', error)
       throw error
@@ -75,12 +71,8 @@ class TMDBService {
         },
       })
 
-      const animatedShows = response.data.results.filter((show) => this.isAnimatedContent(show))
-
-      return {
-        ...response.data,
-        results: animatedShows,
-      }
+      // Since we're already filtering by Animation genre, we don't need additional filtering
+      return response.data
     } catch (error) {
       console.error('Error fetching animated TV shows:', error)
       throw error
@@ -99,11 +91,19 @@ class TMDBService {
         }),
       ])
 
-      const animatedMovies = moviesResponse.data.results.filter((movie) =>
-        this.isAnimatedContent(movie),
-      )
+      // For search, we'll be more lenient and include content that might be animated
+      // We'll filter for Animation genre or content that contains animation keywords
+      const animatedMovies = moviesResponse.data.results.filter((movie) => {
+        const hasAnimationGenre = movie.genre_ids && movie.genre_ids.includes(16)
+        const hasAnimationKeywords = this.isAnimatedContent(movie)
+        return hasAnimationGenre || hasAnimationKeywords
+      })
 
-      const animatedShows = tvResponse.data.results.filter((show) => this.isAnimatedContent(show))
+      const animatedShows = tvResponse.data.results.filter((show) => {
+        const hasAnimationGenre = show.genre_ids && show.genre_ids.includes(16)
+        const hasAnimationKeywords = this.isAnimatedContent(show)
+        return hasAnimationGenre || hasAnimationKeywords
+      })
 
       return {
         movies: {

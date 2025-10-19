@@ -119,7 +119,11 @@ const toast = useToast()
 
 onMounted(async () => {
   if (contentStore.movies.length === 0) {
-    await contentStore.getMovies(1)
+    try {
+      await contentStore.getMovies(1)
+    } catch (error) {
+      console.error('Error loading movies:', error)
+    }
   }
 })
 
@@ -260,8 +264,10 @@ const handleImageError = (event: Event) => {
 
 .movies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .movie-card {

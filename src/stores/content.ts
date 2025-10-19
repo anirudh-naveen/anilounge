@@ -1,18 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { contentAPI, userAPI } from '@/services/api'
+import type { Movie, TVShow } from '@/types'
 
 export const useContentStore = defineStore('content', () => {
-  const movies = ref([])
-  const tvShows = ref([])
-  const searchResults = ref({ movies: [], tv: [] })
-  const currentContent = ref(null)
-  const watchlist = ref([])
-  const userRatings = ref([])
-  const recommendations = ref([])
+  const movies = ref<Movie[]>([])
+  const tvShows = ref<TVShow[]>([])
+  const searchResults = ref({ movies: [] as Movie[], tv: [] as TVShow[] })
+  const currentContent = ref<Movie | TVShow | null>(null)
+  const watchlist = ref<string[]>([])
+  const userRatings = ref<any[]>([])
+  const recommendations = ref<any[]>([])
 
   const isLoading = ref(false)
-  const error = ref(null)
+  const error = ref<string | null>(null)
   const pagination = ref({
     page: 1,
     totalPages: 1,
@@ -25,11 +26,13 @@ export const useContentStore = defineStore('content', () => {
       error.value = null
 
       const response = await contentAPI.getMovies({ page })
+
       movies.value = response.data.data.movies
       pagination.value = response.data.data.pagination
 
       return response.data
     } catch (err) {
+      console.error('Error fetching movies:', err)
       error.value = err.response?.data?.message || 'Failed to fetch movies'
       throw err
     } finally {
@@ -43,6 +46,7 @@ export const useContentStore = defineStore('content', () => {
       error.value = null
 
       const response = await contentAPI.getTVShows({ page })
+
       tvShows.value = response.data.data.shows
       pagination.value = response.data.data.pagination
 
@@ -61,6 +65,7 @@ export const useContentStore = defineStore('content', () => {
       error.value = null
 
       const response = await contentAPI.searchContent(query, page)
+
       searchResults.value = {
         movies: response.data.data.movies,
         tv: response.data.data.tv,

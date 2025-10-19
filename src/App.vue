@@ -51,6 +51,7 @@ import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+import type { User } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
