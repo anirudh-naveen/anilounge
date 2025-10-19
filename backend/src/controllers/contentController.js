@@ -53,69 +53,29 @@ const convertGenreIds = (genreIds) => {
     .filter((genre) => genre !== 'Animation') // Remove Animation genre as it's implied
 }
 
-// Saves Animated Movie content to database
+// Gets animated movies from database
 export const getAnimatedMovies = async (req, res) => {
   try {
-    const { page = 1 } = req.query
+    const { page = 1, limit = 20 } = req.query
+    const skip = (page - 1) * limit
 
-    // Try to get from TMDB first
-    const tmdbData = await tmdbService.getAnimatedMovies(page)
+    // Get movies from database
+    const movies = await Content.find({ contentType: 'movie' })
+      .sort({ popularity: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
 
-    // Process and save to database
-    const processedMovies = await Promise.all(
-      tmdbData.results.map(async (movie) => {
-        try {
-          let content = await Content.findOne({ tmdbId: movie.id })
-
-          if (!content) {
-            content = new Content({
-              tmdbId: movie.id,
-              title: movie.title,
-              originalTitle: movie.original_title,
-              overview: movie.overview,
-              posterPath: movie.poster_path,
-              backdropPath: movie.backdrop_path,
-              releaseDate: movie.release_date ? new Date(movie.release_date) : null,
-              contentType: 'movie',
-              genres: convertGenreIds(movie.genre_ids),
-              adult: movie.adult,
-              originalLanguage: movie.original_language,
-              popularity: movie.popularity,
-              voteAverage: movie.vote_average,
-              voteCount: movie.vote_count,
-              runtime: movie.runtime,
-              isAnimated: true,
-            })
-            await content.save()
-          } else {
-            // Update existing content with genres if missing
-            if (!content.genres || content.genres.length === 0) {
-              content.genres = convertGenreIds(movie.genre_ids)
-              await content.save()
-            }
-          }
-
-          return {
-            ...content.toObject(),
-            genres: convertGenreIds(content.genres),
-          }
-        } catch (error) {
-          console.error(`Error processing movie ${movie.id}:`, error)
-          return null
-        }
-      }),
-    )
-
-    const validMovies = processedMovies.filter((movie) => movie !== null)
+    // Get total count
+    const totalMovies = await Content.countDocuments({ contentType: 'movie' })
 
     res.json({
       success: true,
       data: {
-        movies: validMovies,
+        movies,
         pagination: {
           page: parseInt(page),
-          totalPages: tmdbData.total_pages,
-          totalResults: tmdbData.total_results,
+          totalPages: Math.ceil(totalMovies / limit),
+          totalResults: totalMovies,
         },
       },
     })
@@ -129,67 +89,29 @@ export const getAnimatedMovies = async (req, res) => {
 }
 
 // Saves Animated TV Show content to database
+// Gets animated TV shows from database
 export const getAnimatedTVShows = async (req, res) => {
   try {
-    const { page = 1 } = req.query
+    const { page = 1, limit = 20 } = req.query
+    const skip = (page - 1) * limit
 
-    const tmdbData = await tmdbService.getAnimatedTVShows(page)
+    // Get TV shows from database
+    const shows = await Content.find({ contentType: 'tv' })
+      .sort({ popularity: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
 
-    const processedShows = await Promise.all(
-      tmdbData.results.map(async (show) => {
-        try {
-          let content = await Content.findOne({ tmdbId: show.id })
-
-          if (!content) {
-            content = new Content({
-              tmdbId: show.id,
-              title: show.name,
-              originalTitle: show.original_name,
-              overview: show.overview,
-              posterPath: show.poster_path,
-              backdropPath: show.backdrop_path,
-              releaseDate: show.first_air_date ? new Date(show.first_air_date) : null,
-              contentType: 'tv',
-              genres: convertGenreIds(show.genre_ids),
-              adult: show.adult,
-              originalLanguage: show.original_language,
-              popularity: show.popularity,
-              voteAverage: show.vote_average,
-              voteCount: show.vote_count,
-              numberOfSeasons: show.number_of_seasons,
-              numberOfEpisodes: show.number_of_episodes,
-              isAnimated: true,
-            })
-            await content.save()
-          } else {
-            // Update existing content with genres if missing
-            if (!content.genres || content.genres.length === 0) {
-              content.genres = convertGenreIds(show.genre_ids)
-              await content.save()
-            }
-          }
-
-          return {
-            ...content.toObject(),
-            genres: convertGenreIds(content.genres),
-          }
-        } catch (error) {
-          console.error(`Error processing TV show ${show.id}:`, error)
-          return null
-        }
-      }),
-    )
-
-    const validShows = processedShows.filter((show) => show !== null)
+    // Get total count
+    const totalShows = await Content.countDocuments({ contentType: 'tv' })
 
     res.json({
       success: true,
       data: {
-        shows: validShows,
+        shows,
         pagination: {
           page: parseInt(page),
-          totalPages: tmdbData.total_pages,
-          totalResults: tmdbData.total_results,
+          totalPages: Math.ceil(totalShows / limit),
+          totalResults: totalShows,
         },
       },
     })
@@ -283,7 +205,16 @@ const calculateRelevanceScore = (item, query) => {
 
 export const searchContent = async (req, res) => {
   try {
-    const { query, page = 1 } = req.query
+    const {
+      query,
+      page = 1,
+      type = 'all', // 'all', 'movie', 'tv'
+      genre = 'all', // 'all' or specific genre
+      minRating = 0, // minimum rating
+      maxRating = 10, // maximum rating
+      year = 'all', // 'all' or specific year
+      sortBy = 'relevance', // 'relevance', 'rating', 'year', 'title'
+    } = req.query
 
     if (!query) {
       return res.status(400).json({
@@ -295,99 +226,142 @@ export const searchContent = async (req, res) => {
     // Get initial search results
     const searchResults = await tmdbService.searchAnimatedContent(query, page)
 
-    // Process movies - convert genre_ids to genre names and create proper structure
-    const processedMovies = searchResults.movies.results.map((movie) => ({
-      _id: `tmdb_${movie.id}`,
-      tmdbId: movie.id,
-      title: movie.title,
-      originalTitle: movie.original_title,
-      overview: movie.overview,
-      posterPath: movie.poster_path,
-      backdropPath: movie.backdrop_path,
-      releaseDate: movie.release_date ? new Date(movie.release_date) : null,
-      contentType: 'movie',
-      genres: convertGenreIds(movie.genre_ids),
-      voteAverage: movie.vote_average,
-      voteCount: movie.vote_count,
+    // Process combined results - convert genre_ids to genre names and create proper structure
+    const processedResults = searchResults.results.map((item) => ({
+      _id: `tmdb_${item.id}`,
+      tmdbId: item.id,
+      title: item.title || item.name,
+      originalTitle: item.original_title || item.original_name,
+      overview: item.overview,
+      posterPath: item.poster_path,
+      backdropPath: item.backdrop_path,
+      releaseDate: item.release_date
+        ? new Date(item.release_date)
+        : item.first_air_date
+          ? new Date(item.first_air_date)
+          : null,
+      contentType: item.contentType,
+      typeIcon: item.typeIcon,
+      genres: convertGenreIds(item.genre_ids),
+      voteAverage: item.vote_average,
+      voteCount: item.vote_count,
     }))
 
-    // Process TV shows - convert genre_ids to genre names and create proper structure
-    const processedTVShows = searchResults.tv.results.map((show) => ({
-      _id: `tmdb_${show.id}`,
-      tmdbId: show.id,
-      title: show.name,
-      originalTitle: show.original_name,
-      overview: show.overview,
-      posterPath: show.poster_path,
-      backdropPath: show.backdrop_path,
-      releaseDate: show.first_air_date ? new Date(show.first_air_date) : null,
-      contentType: 'tv',
-      genres: convertGenreIds(show.genre_ids),
-      voteAverage: show.vote_average,
-      voteCount: show.vote_count,
-    }))
+    // Separate movies and TV shows for backward compatibility (not used in response)
+    // const processedMovies = processedResults.filter(item => item.contentType === 'movie')
+    // const processedTVShows = processedResults.filter(item => item.contentType === 'tv')
 
-    // AI Enhancement (only try if API key is available)
-    let aiEnhancement = null
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        aiEnhancement = await geminiService.enhanceSearchQuery(query)
-      } catch {
-        console.log('AI enhancement failed, using fallback suggestions')
-        aiEnhancement = {
-          refinedQuery: query,
-          suggestedGenres: [],
-          recommendations: [],
-          searchSuggestions: [],
-        }
-      }
-    } else {
-      console.log('No Anthropic API key, skipping AI enhancement')
-      aiEnhancement = {
-        refinedQuery: query,
-        suggestedGenres: [],
-        recommendations: [],
-        searchSuggestions: [],
-      }
+    // AI Enhancement disabled to prevent timeout errors
+    const aiEnhancement = {
+      refinedQuery: query,
+      suggestedGenres: [],
+      recommendations: [],
+      searchSuggestions: [],
     }
 
-    // Calculate relevance scores and sort by relevance
-    const scoredMovies = processedMovies
-      .map((movie) => ({
-        ...movie,
-        relevanceScore: calculateRelevanceScore(movie, query),
-      }))
-      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    // Apply filters to combined results
+    let filteredResults = processedResults
 
-    const scoredTVShows = processedTVShows
-      .map((show) => ({
-        ...show,
-        relevanceScore: calculateRelevanceScore(show, query),
+    // Filter by type
+    if (type === 'movie') {
+      filteredResults = filteredResults.filter((item) => item.contentType === 'movie')
+    } else if (type === 'tv') {
+      filteredResults = filteredResults.filter((item) => item.contentType === 'tv')
+    }
+
+    // Filter by genre
+    if (genre !== 'all') {
+      filteredResults = filteredResults.filter((item) =>
+        item.genres.some((g) => g.toLowerCase() === genre.toLowerCase()),
+      )
+    }
+
+    // Filter by rating
+    filteredResults = filteredResults.filter(
+      (item) => item.voteAverage >= minRating && item.voteAverage <= maxRating,
+    )
+
+    // Filter by year
+    if (year !== 'all') {
+      const targetYear = parseInt(year)
+      filteredResults = filteredResults.filter(
+        (item) => item.releaseDate && item.releaseDate.getFullYear() === targetYear,
+      )
+    }
+
+    // Sort results
+    if (sortBy === 'rating') {
+      filteredResults.sort((a, b) => b.voteAverage - a.voteAverage)
+    } else if (sortBy === 'year') {
+      filteredResults.sort((a, b) => {
+        const yearA = a.releaseDate ? a.releaseDate.getFullYear() : 0
+        const yearB = b.releaseDate ? b.releaseDate.getFullYear() : 0
+        return yearB - yearA
+      })
+    } else if (sortBy === 'title') {
+      filteredResults.sort((a, b) => a.title.localeCompare(b.title))
+    }
+    // 'relevance' is default - keep original order
+
+    // Apply pagination to combined results
+    const itemsPerPage = 20
+    const startIndex = (page - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const paginatedResults = filteredResults.slice(startIndex, endIndex)
+
+    // Separate for backward compatibility (not used in response)
+    // const filteredMovies = paginatedResults.filter(item => item.contentType === 'movie')
+    // const filteredTVShows = paginatedResults.filter(item => item.contentType === 'tv')
+
+    // Calculate relevance scores and sort combined results
+    const scoredResults = paginatedResults
+      .map((item) => ({
+        ...item,
+        relevanceScore: calculateRelevanceScore(item, query),
       }))
-      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+      .sort((a, b) => {
+        switch (sortBy) {
+          case 'rating':
+            return b.voteAverage - a.voteAverage
+          case 'year':
+            return (b.releaseDate?.getFullYear() || 0) - (a.releaseDate?.getFullYear() || 0)
+          case 'title':
+            return a.title.localeCompare(b.title)
+          default: // 'relevance'
+            return b.relevanceScore - a.relevanceScore
+        }
+      })
 
     // Remove relevance score from final response
-    const finalMovies = scoredMovies.map((movie) => {
+    const finalResults = scoredResults.map((item) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { relevanceScore, ...movieWithoutScore } = movie
-      return movieWithoutScore
+      const { relevanceScore, ...itemWithoutScore } = item
+      return itemWithoutScore
     })
-    const finalTVShows = scoredTVShows.map((show) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { relevanceScore, ...showWithoutScore } = show
-      return showWithoutScore
-    })
+
+    // Separate for backward compatibility
+    const finalMovies = finalResults.filter((item) => item.contentType === 'movie')
+    const finalTVShows = finalResults.filter((item) => item.contentType === 'tv')
 
     res.json({
       success: true,
       data: {
-        movies: finalMovies,
-        tv: finalTVShows,
-        aiEnhancement: aiEnhancement, // Include AI suggestions
+        results: finalResults, // Combined results
+        movies: finalMovies, // Backward compatibility
+        tv: finalTVShows, // Backward compatibility
+        aiEnhancement: aiEnhancement,
+        filters: {
+          type,
+          genre,
+          minRating: parseFloat(minRating),
+          maxRating: parseFloat(maxRating),
+          year,
+          sortBy,
+        },
         pagination: {
           page: parseInt(page),
-          totalPages: Math.max(searchResults.movies.total_pages, searchResults.tv.total_pages),
-          totalResults: searchResults.movies.total_results + searchResults.tv.total_results,
+          totalPages: Math.ceil(filteredResults.length / itemsPerPage),
+          totalResults: filteredResults.length,
         },
       },
     })

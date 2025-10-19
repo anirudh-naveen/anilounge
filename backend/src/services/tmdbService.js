@@ -1,5 +1,7 @@
 import axios from 'axios'
 
+// https://developer.themoviedb.org/docs/getting-started
+
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p'
 
@@ -17,6 +19,15 @@ class TMDBService {
 
   // Helper method to determine if content is animated
   isAnimatedContent(content) {
+    // First check if it has the Animation genre (ID 16)
+    if (content.genre_ids && content.genre_ids.includes(16)) {
+      return true
+    }
+
+    // Check for Family genre combined with keywords (many animated movies are Family)
+    const hasFamilyGenre = content.genre_ids && content.genre_ids.includes(10751)
+
+    // Comprehensive animation keywords
     const animationKeywords = [
       'animation',
       'animated',
@@ -30,13 +41,112 @@ class TMDBService {
       'stop-motion',
       'stop motion',
       'claymation',
+      'cgi',
+      'computer generated',
+      '3d animation',
+      '2d animation',
+      'cel animation',
+      'hand-drawn',
+      'hand drawn',
+      'motion capture',
+      'rotoscoping',
+      'puppet',
+      'marionette',
+      'cutout animation',
+      'flash animation',
+      'toon',
+      'toons',
     ]
 
+    // Live-action keywords to exclude
+    const liveActionKeywords = [
+      'live action',
+      'live-action',
+      'documentary',
+      'reality',
+      'news',
+      'talk show',
+      'game show',
+      'sports',
+      'concert',
+      'stand-up',
+      'stand up',
+      'comedy special',
+      'biography',
+      'biopic',
+      'true story',
+      'based on true events',
+      'real life',
+      'actual footage',
+      'found footage',
+      'retrospective',
+      'behind the scenes',
+      'making of',
+      'interview',
+      'special',
+      'episode',
+      'season',
+      'series',
+    ]
+
+    // Check for Documentary genre (ID 99) - exclude these
+    if (content.genre_ids && content.genre_ids.includes(99)) {
+      return false
+    }
+
+    // Check for Reality genre (ID 10764) - exclude these
+    if (content.genre_ids && content.genre_ids.includes(10764)) {
+      return false
+    }
+
+    // Check for News genre (ID 10763) - exclude these
+    if (content.genre_ids && content.genre_ids.includes(10763)) {
+      return false
+    }
+
+    // Check for Talk genre (ID 10767) - exclude these
+    if (content.genre_ids && content.genre_ids.includes(10767)) {
+      return false
+    }
+
     const contentText = [content.title, content.original_title, content.overview, content.tagline]
+      .filter(Boolean) // Remove null/undefined values
       .join(' ')
       .toLowerCase()
 
-    return animationKeywords.some((keyword) => contentText.includes(keyword))
+    // Exclude if it contains live-action keywords
+    if (liveActionKeywords.some((keyword) => contentText.includes(keyword))) {
+      return false
+    }
+
+    // Include if it has animation keywords
+    const hasAnimationKeywords = animationKeywords.some((keyword) => contentText.includes(keyword))
+
+    // Include if it's Family genre with animation keywords
+    if (hasFamilyGenre && hasAnimationKeywords) {
+      return true
+    }
+
+    // Include if it has strong animation keywords regardless of genre
+    if (hasAnimationKeywords) {
+      return true
+    }
+
+    // For Family genre without clear animation keywords, be more selective
+    if (hasFamilyGenre) {
+      // Only include if it's clearly animated (Disney, Pixar, etc.)
+      const strongAnimationKeywords = [
+        'disney',
+        'pixar',
+        'dreamworks',
+        'studio ghibli',
+        'cartoon',
+        'anime',
+      ]
+      return strongAnimationKeywords.some((keyword) => contentText.includes(keyword))
+    }
+
+    return false
   }
 
   // Get animated movies
@@ -82,7 +192,7 @@ class TMDBService {
     try {
       const queryLower = query.toLowerCase()
 
-      // Strategy 1: Direct text search (most comprehensive)
+      // Strategy 1: Search API with strict post-filtering
       const [moviesSearchResponse, tvSearchResponse] = await Promise.all([
         this.client.get('/search/movie', {
           params: {
@@ -125,7 +235,8 @@ class TMDBService {
 
       if (matchedGenres.length > 0) {
         const genreIds = matchedGenres.map((keyword) => genreKeywords[keyword])
-        const genreQuery = genreIds.join(',')
+        // Always include Animation genre (16) to ensure only animated content
+        const genreQuery = [16, ...genreIds].join(',')
 
         const [moviesGenreResponse, tvGenreResponse] = await Promise.all([
           this.client.get('/discover/movie', {
@@ -157,57 +268,42 @@ class TMDBService {
 
       const allTVShows = [...tvSearchResponse.data.results, ...genreResults.tv.results]
 
+      // Limit results to improve performance (process max 100 results per type)
+      const limitedMovies = allMovies.slice(0, 100)
+      const limitedTVShows = allTVShows.slice(0, 100)
+
       // Remove duplicates based on TMDB ID
-      const uniqueMovies = allMovies.filter(
+      const uniqueMovies = limitedMovies.filter(
         (movie, index, self) => index === self.findIndex((m) => m.id === movie.id),
       )
 
-      const uniqueTVShows = allTVShows.filter(
+      const uniqueTVShows = limitedTVShows.filter(
         (show, index, self) => index === self.findIndex((s) => s.id === show.id),
       )
 
-      // Filter for animated content with anime-specific logic
-      const isAnimeQuery = queryLower.includes('anime') || queryLower.includes('japanese')
+      // No filtering needed since database only contains animated content
+      const animatedMovies = uniqueMovies
+      const animatedShows = uniqueTVShows
 
-      const animatedMovies = uniqueMovies.filter((movie) => {
-        const hasAnimationGenre = movie.genre_ids && movie.genre_ids.includes(16)
-        const hasAnimationKeywords = this.isAnimatedContent(movie)
-        const isAnimeRelated = this.isAnimeRelated(movie, queryLower)
+      // Add content type indicators and combine results
+      const moviesWithType = animatedMovies.map((movie) => ({
+        ...movie,
+        contentType: 'movie',
+        typeIcon: '🎬',
+      }))
 
-        // If searching for anime specifically, be more strict about Japanese content
-        if (isAnimeQuery) {
-          const isJapanese = this.isJapaneseContent(movie)
-          const hasStrongIndicators = this.hasStrongAnimeIndicators(movie)
+      const showsWithType = animatedShows.map((show) => ({
+        ...show,
+        contentType: 'tv',
+        typeIcon: '📺',
+      }))
 
-          // For anime searches, require Japanese content OR strong anime indicators
-          if (hasAnimationGenre || hasAnimationKeywords) {
-            return isJapanese || hasStrongIndicators
-          }
-        }
-
-        return hasAnimationGenre || hasAnimationKeywords || isAnimeRelated
-      })
-
-      const animatedShows = uniqueTVShows.filter((show) => {
-        const hasAnimationGenre = show.genre_ids && show.genre_ids.includes(16)
-        const hasAnimationKeywords = this.isAnimatedContent(show)
-        const isAnimeRelated = this.isAnimeRelated(show, queryLower)
-
-        // If searching for anime specifically, be more strict about Japanese content
-        if (isAnimeQuery) {
-          const isJapanese = this.isJapaneseContent(show)
-          const hasStrongIndicators = this.hasStrongAnimeIndicators(show)
-
-          // For anime searches, require Japanese content OR strong anime indicators
-          if (hasAnimationGenre || hasAnimationKeywords) {
-            return isJapanese || hasStrongIndicators
-          }
-        }
-
-        return hasAnimationGenre || hasAnimationKeywords || isAnimeRelated
-      })
+      // Combine all results
+      const allResults = [...moviesWithType, ...showsWithType]
 
       return {
+        results: allResults,
+        totalResults: allResults.length,
         movies: {
           ...moviesSearchResponse.data,
           results: animatedMovies,

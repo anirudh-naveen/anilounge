@@ -59,9 +59,9 @@ export const authAPI = {
 export const contentAPI = {
   getMovies: (params: ContentParams) => api.get('/content/movies', { params }),
   getTVShows: (params: ContentParams) => api.get('/content/tv', { params }),
-  searchContent: (query: string, page = 1, useAI = true) =>
+  searchContent: (searchParams: Record<string, string | number>) =>
     api.get('/content/search', {
-      params: { query, page, useAI },
+      params: searchParams,
     }),
   getContentDetails: (id: string) => api.get(`/content/${id}`),
 }

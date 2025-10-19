@@ -16,6 +16,7 @@
               type="text"
               class="search-input"
               placeholder="Search for movies or TV shows..."
+              @keydown.enter="handleSearch"
               required
             />
             <button type="submit" class="search-btn" :disabled="contentStore.isLoading">
@@ -34,6 +35,70 @@
         </form>
       </div>
 
+      <!-- Filters Bar -->
+      <div v-if="hasSearched" class="filters-container">
+        <div class="filters-bar">
+          <div class="filter-group">
+            <label>Type:</label>
+            <select v-model="filters.type" @change="applyFilters">
+              <option value="all">All</option>
+              <option value="movie">Movies</option>
+              <option value="tv">TV Shows</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Genre:</label>
+            <select v-model="filters.genre" @change="applyFilters">
+              <option value="all">All Genres</option>
+              <option value="action">Action</option>
+              <option value="adventure">Adventure</option>
+              <option value="comedy">Comedy</option>
+              <option value="drama">Drama</option>
+              <option value="fantasy">Fantasy</option>
+              <option value="horror">Horror</option>
+              <option value="romance">Romance</option>
+              <option value="sci-fi">Sci-Fi</option>
+              <option value="thriller">Thriller</option>
+              <option value="family">Family</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Rating:</label>
+            <input
+              type="range"
+              v-model="filters.minRating"
+              min="0"
+              max="10"
+              step="0.5"
+              @change="applyFilters"
+            />
+            <span>{{ filters.minRating }}+</span>
+          </div>
+
+          <div class="filter-group">
+            <label>Year:</label>
+            <select v-model="filters.year" @change="applyFilters">
+              <option value="all">All Years</option>
+              <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label>Sort by:</label>
+            <select v-model="filters.sortBy" @change="applyFilters">
+              <option value="relevance">Relevance</option>
+              <option value="rating">Rating</option>
+              <option value="year">Year</option>
+              <option value="title">Title</option>
+            </select>
+          </div>
+
+          <button @click="clearFilters" class="clear-filters-btn">Clear Filters</button>
+        </div>
+      </div>
+
       <!-- Search Results -->
       <div v-if="hasSearched" class="search-results">
         <div v-if="contentStore.isLoading" class="loading-container">
@@ -42,106 +107,93 @@
         </div>
 
         <div v-else-if="hasResults" class="results-container">
-          <!-- Movies Results -->
-          <div v-if="contentStore.searchResults.movies.length > 0" class="results-section">
-            <h2 class="results-title">🎬 Movies</h2>
-            <div class="movies-grid">
+          <!-- Combined Results -->
+          <div v-if="contentStore.searchResults.results.length > 0" class="results-section">
+            <h2 class="results-title">🎬📺 Search Results</h2>
+            <div class="content-grid">
               <div
-                v-for="movie in contentStore.searchResults.movies"
-                :key="movie._id"
-                class="movie-card"
-                @click="viewMovieDetails(movie)"
+                v-for="item in contentStore.searchResults.results"
+                :key="item._id"
+                class="content-card"
+                @click="
+                  item.contentType === 'movie' ? viewMovieDetails(item) : viewShowDetails(item)
+                "
               >
-                <div class="movie-poster">
+                <div class="content-poster">
                   <img
-                    :src="getPosterUrl(movie.posterPath)"
-                    :alt="movie.title"
+                    :src="getPosterUrl(item.posterPath)"
+                    :alt="item.title"
                     @error="handleImageError"
                   />
-                  <div class="movie-overlay">
-                    <div class="movie-rating">⭐ {{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
+                  <div class="content-overlay">
+                    <div class="content-type">{{ item.typeIcon }}</div>
+                    <div class="content-rating">⭐ {{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
                     <button
                       class="add-to-watchlist-btn"
-                      @click.stop="handleAddToWatchlist(movie)"
-                      :disabled="contentStore.isInWatchlist(movie._id)"
+                      @click.stop="handleAddToWatchlist(item)"
+                      :disabled="contentStore.isInWatchlist(item._id)"
                     >
-                      {{ contentStore.isInWatchlist(movie._id) ? '✓' : '+' }}
+                      {{ contentStore.isInWatchlist(item._id) ? '✓' : '+' }}
                     </button>
                   </div>
                 </div>
-                <div class="movie-info">
-                  <h3 class="movie-title">{{ movie.title }}</h3>
-                  <div class="movie-genres">
-                    <span v-for="genre in movie.genres" :key="genre" class="genre-tag">{{
-                      genre
-                    }}</span>
+                <div class="content-info">
+                  <h3 class="content-title">{{ item.title }}</h3>
+                  <div class="content-genres">
+                    <span
+                      v-for="genre in item.genres"
+                      :key="typeof genre === 'string' ? genre : genre.name"
+                      class="genre-tag"
+                      >{{ typeof genre === 'string' ? genre : genre.name }}</span
+                    >
                   </div>
-                  <p class="movie-overview">{{ truncateText(movie.overview, 100) }}</p>
+                  <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- TV Shows Results -->
-          <div v-if="contentStore.searchResults.tv.length > 0" class="results-section">
-            <h2 class="results-title">📺 TV Shows</h2>
-            <div class="shows-grid">
-              <div
-                v-for="show in contentStore.searchResults.tv"
-                :key="show._id"
-                class="show-card"
-                @click="viewShowDetails(show)"
+        <!-- Pagination -->
+        <div v-if="hasResults && pagination.totalPages > 1" class="pagination-container">
+          <div class="pagination">
+            <button
+              @click="goToPage(pagination.page - 1)"
+              :disabled="pagination.page <= 1"
+              class="pagination-btn"
+            >
+              ← Previous
+            </button>
+
+            <div class="pagination-numbers">
+              <button
+                v-for="pageNum in visiblePages"
+                :key="pageNum"
+                @click="goToPage(pageNum)"
+                :class="['pagination-number', { active: pageNum === pagination.page }]"
               >
-                <div class="show-poster">
-                  <img
-                    :src="getPosterUrl(show.posterPath)"
-                    :alt="show.title"
-                    @error="handleImageError"
-                  />
-                  <div class="show-overlay">
-                    <div class="show-rating">⭐ {{ show.voteAverage?.toFixed(1) || 'N/A' }}</div>
-                    <button
-                      class="add-to-watchlist-btn"
-                      @click.stop="handleAddToWatchlist(show)"
-                      :disabled="contentStore.isInWatchlist(show._id)"
-                    >
-                      {{ contentStore.isInWatchlist(show._id) ? '✓' : '+' }}
-                    </button>
-                  </div>
-                </div>
-                <div class="show-info">
-                  <h3 class="show-title">{{ show.title }}</h3>
-                  <div class="show-genres">
-                    <span v-for="genre in show.genres" :key="genre" class="genre-tag">{{
-                      genre
-                    }}</span>
-                  </div>
-                  <p class="show-overview">{{ truncateText(show.overview, 100) }}</p>
-                </div>
-              </div>
+                {{ pageNum }}
+              </button>
             </div>
+
+            <button
+              @click="goToPage(pagination.page + 1)"
+              :disabled="pagination.page >= pagination.totalPages"
+              class="pagination-btn"
+            >
+              Next →
+            </button>
           </div>
+          <p class="pagination-info">
+            Page {{ pagination.page }} of {{ pagination.totalPages }} ({{ pagination.totalResults }}
+            results)
+          </p>
         </div>
 
         <div v-else class="no-results">
           <div class="no-results-icon">🔍</div>
           <h3>No results found</h3>
           <p>Try searching for something else or check your spelling</p>
-        </div>
-      </div>
-
-      <!-- Popular Searches -->
-      <div v-else class="popular-searches">
-        <h2 class="popular-title">Popular Searches</h2>
-        <div class="search-tags">
-          <button
-            v-for="tag in popularSearches"
-            :key="tag"
-            @click="searchForTag(tag)"
-            class="search-tag"
-          >
-            {{ tag }}
-          </button>
         </div>
       </div>
     </div>
@@ -156,11 +208,7 @@
     />
 
     <!-- AI Chatbot -->
-    <Chatbot
-      v-if="showChatbot"
-      :show-chatbot="showChatbot"
-      @close="showChatbot = false"
-    />
+    <Chatbot v-if="showChatbot" :show-chatbot="showChatbot" @close="showChatbot = false" />
   </div>
 </template>
 
@@ -173,6 +221,7 @@ import { getPosterUrl } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import Chatbot from '@/components/Chatbot.vue'
+import type { Movie, TVShow } from '@/types'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -182,24 +231,47 @@ const toast = useToast()
 const searchQuery = ref('')
 const hasSearched = ref(false)
 const showDropdown = ref(false)
-const selectedContent = ref(null)
+const selectedContent = ref<Movie | TVShow | null>(null)
 const showChatbot = ref(false)
 
-const popularSearches = [
-  'Disney',
-  'Pixar',
-  'Studio Ghibli',
-  'Anime',
-  'Cartoon',
-  'Spirited Away',
-  'Toy Story',
-  'Frozen',
-  'Avatar',
-  'Naruto',
-]
+// Filters
+const filters = ref({
+  type: 'all',
+  genre: 'all',
+  minRating: 0,
+  year: 'all',
+  sortBy: 'relevance',
+})
+
+// Pagination
+const pagination = ref({
+  page: 1,
+  totalPages: 1,
+  totalResults: 0,
+})
+
+// Generate years for filter (last 30 years)
+const years = Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i)
 
 const hasResults = computed(() => {
-  return contentStore.searchResults.movies.length > 0 || contentStore.searchResults.tv.length > 0
+  return contentStore.searchResults.results.length > 0
+})
+
+// Pagination computed properties
+const visiblePages = computed(() => {
+  const current = pagination.value.page
+  const total = pagination.value.totalPages
+  const pages = []
+
+  // Show up to 5 pages around current page
+  const start = Math.max(1, current - 2)
+  const end = Math.min(total, current + 2)
+
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+
+  return pages
 })
 
 const handleSearch = async () => {
@@ -207,22 +279,66 @@ const handleSearch = async () => {
 
   try {
     hasSearched.value = true
-    await contentStore.searchContent(searchQuery.value.trim())
+    pagination.value.page = 1 // Reset to first page on new search
+    await performSearch()
   } catch (error) {
     console.error('Search error:', error)
   }
 }
 
-const searchForTag = (tag: string) => {
-  searchQuery.value = tag
-  handleSearch()
+const performSearch = async () => {
+  try {
+    const searchParams = {
+      query: searchQuery.value.trim(),
+      page: pagination.value.page,
+      ...filters.value,
+    }
+
+    await contentStore.searchContent(searchParams)
+
+    // Update pagination info from response
+    if (contentStore.searchResults.pagination) {
+      pagination.value = {
+        page: Number(contentStore.searchResults.pagination.page) || 1,
+        totalPages: Number(contentStore.searchResults.pagination.totalPages) || 1,
+        totalResults: Number(contentStore.searchResults.pagination.totalResults) || 0,
+      }
+    }
+  } catch (error) {
+    console.error('Search error:', error)
+    toast.error('Failed to search content')
+  }
 }
 
-const viewMovieDetails = (movie: any) => {
+const applyFilters = () => {
+  pagination.value.page = 1 // Reset to first page when applying filters
+  performSearch()
+}
+
+const clearFilters = () => {
+  filters.value = {
+    type: 'all',
+    genre: 'all',
+    minRating: 0,
+    year: 'all',
+    sortBy: 'relevance',
+  }
+  pagination.value.page = 1
+  performSearch()
+}
+
+const goToPage = (pageNum: number) => {
+  if (pageNum >= 1 && pageNum <= pagination.value.totalPages) {
+    pagination.value.page = pageNum
+    performSearch()
+  }
+}
+
+const viewMovieDetails = (movie: Movie) => {
   router.push(`/movie/${movie.tmdbId}`)
 }
 
-const viewShowDetails = (show: any) => {
+const viewShowDetails = (show: TVShow) => {
   router.push(`/tv/${show.tmdbId}`)
 }
 
@@ -236,7 +352,7 @@ const handleImageError = (event: Event) => {
   img.src = '/placeholder-movie.jpg'
 }
 
-const handleAddToWatchlist = (content: any) => {
+const handleAddToWatchlist = (content: Movie | TVShow) => {
   if (!authStore.isAuthenticated) {
     toast.error('Please log in to add items to your watchlist')
     router.push('/login')
@@ -252,8 +368,8 @@ const closeDropdown = () => {
   selectedContent.value = null
 }
 
-const getContentType = (content: any) => {
-  return content.contentType || (content.releaseDate ? 'movie' : 'tv')
+const getContentType = (content: Movie | TVShow) => {
+  return content.contentType || 'movie'
 }
 </script>
 
@@ -364,6 +480,113 @@ const getContentType = (content: any) => {
   color: var(--text-primary);
 }
 
+/* Content Grid */
+.content-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.content-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+  cursor: pointer;
+}
+
+.content-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.content-poster {
+  position: relative;
+  aspect-ratio: 2/3;
+  overflow: hidden;
+}
+
+.content-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+}
+
+.content-card:hover .content-poster img {
+  transform: scale(1.05);
+}
+
+.content-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0.3) 50%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.content-card:hover .content-overlay {
+  opacity: 1;
+}
+
+.content-type {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: white;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.content-rating {
+  font-size: 1rem;
+  color: #ffd700;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.content-info {
+  padding: 1.5rem;
+}
+
+.content-title {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+.content-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.content-overview {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Legacy grid styles for backward compatibility */
 .movies-grid,
 .shows-grid {
   display: grid;
@@ -557,6 +780,137 @@ const getContentType = (content: any) => {
   background: var(--highlight-color);
   border-color: var(--highlight-color);
   transform: translateY(-2px);
+}
+
+/* Filters Bar */
+.filters-container {
+  margin: 2rem 0;
+}
+
+.filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filter-group label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.filter-group select,
+.filter-group input[type='range'] {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.filter-group input[type='range'] {
+  width: 100px;
+}
+
+.filter-group span {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  min-width: 30px;
+}
+
+.clear-filters-btn {
+  padding: 0.5rem 1rem;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.clear-filters-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Pagination */
+.pagination-container {
+  margin: 2rem 0;
+  text-align: center;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.pagination-btn {
+  padding: 0.5rem 1rem;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-numbers {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.pagination-number {
+  padding: 0.5rem 0.75rem;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 40px;
+}
+
+.pagination-number:hover {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.pagination-number.active {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.pagination-info {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 @media (max-width: 768px) {

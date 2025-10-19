@@ -1,18 +1,32 @@
-import { GoogleGenAI } from '@google/genai'
+// import { GoogleGenAI } from '@google/genai' // Temporarily disabled
+
+// https://ai.google.dev/gemini-api/docs
 
 class GeminiService {
   constructor() {
     this.client = null
-    if (process.env.GEMINI_API_KEY) {
-      this.client = new GoogleGenAI({})
-    }
+    this.hasApiKey = false // Temporarily disable all Gemini API calls
+    // if (this.hasApiKey) {
+    //   this.client = new GoogleGenAI({})
+    // }
+  }
+
+  // Helper method to make API calls with timeout
+  async makeApiCall(prompt) {
+    return Promise.race([
+      this.client.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), 3000)),
+    ])
   }
 
   // Enhanced search with AI semantic understanding (optimized)
   async enhanceSearchQuery(userQuery) {
     try {
       // Only use AI if we have a client and the query is complex enough
-      if (!this.client || userQuery.length < 3) {
+      if (!this.hasApiKey || userQuery.length < 3) {
         return {
           refinedQuery: userQuery,
           suggestedGenres: [],
@@ -31,10 +45,7 @@ Suggest 3-5 better search terms for finding animated content. Focus on:
 
 Respond as simple comma-separated terms: term1, term2, term3`
 
-      const response = await this.client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      })
+      const response = await this.makeApiCall(prompt)
       const suggestions = response.text
         .split(',')
         .map((s) => s.trim())
@@ -103,7 +114,7 @@ Respond as simple comma-separated terms: term1, term2, term3`
   // Chat with user (conversational AI)
   async chatWithUser(userMessage) {
     try {
-      if (!this.client) {
+      if (!this.hasApiKey) {
         return {
           response: "I'm sorry, but I'm not available right now. Please try again later.",
           searchSuggestion: null,
@@ -125,10 +136,7 @@ Keep responses conversational and helpful. If you suggest a search, mention it c
 
 Respond in 1-2 sentences max.`
 
-      const response = await this.client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      })
+      const response = await this.makeApiCall(prompt)
       const aiResponse = response.text
 
       // Extract search suggestion if present
@@ -179,10 +187,7 @@ Respond in JSON format:
   ]
 }`
 
-      const response = await this.client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      })
+      const response = await this.makeApiCall(prompt)
       const content = response.text
       return JSON.parse(content)
     } catch (error) {
@@ -209,10 +214,7 @@ Extract and return in JSON format:
   "tags": ["tag1", "tag2", "tag3"]
 }`
 
-      const response = await this.client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      })
+      const response = await this.makeApiCall(prompt)
       const responseContent = response.text
       return JSON.parse(responseContent)
     } catch (error) {
@@ -244,10 +246,7 @@ Create a personalized description that highlights aspects the user would be inte
 
 Respond with just the description text.`
 
-      const response = await this.client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      })
+      const response = await this.makeApiCall(prompt)
       return response.text
     } catch (error) {
       console.error('Gemini description generation error:', error)

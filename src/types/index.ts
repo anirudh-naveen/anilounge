@@ -35,8 +35,9 @@ export interface Movie {
   overview: string
   posterPath: string
   backdropPath: string
-  releaseDate: string
+  releaseDate: string | Date
   contentType: 'movie'
+  typeIcon?: string
   genres: Genre[]
   adult: boolean
   originalLanguage: string
@@ -67,8 +68,9 @@ export interface TVShow {
   overview: string
   posterPath: string
   backdropPath: string
-  releaseDate: string
+  releaseDate: string | Date
   contentType: 'tv'
+  typeIcon?: string
   genres: Genre[]
   adult: boolean
   originalLanguage: string

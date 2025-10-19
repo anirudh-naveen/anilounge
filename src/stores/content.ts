@@ -6,7 +6,13 @@ import type { Movie, TVShow, WatchlistItem, RateContentData, Content } from '@/t
 export const useContentStore = defineStore('content', () => {
   const movies = ref<Movie[]>([])
   const tvShows = ref<TVShow[]>([])
-  const searchResults = ref({ movies: [] as Movie[], tv: [] as TVShow[] })
+  const searchResults = ref({
+    results: [] as (Movie | TVShow)[],
+    movies: [] as Movie[],
+    tv: [] as TVShow[],
+    pagination: null as Record<string, string | number> | null,
+    filters: null as Record<string, string | number> | null,
+  })
   const currentContent = ref<Movie | TVShow | null>(null)
   const watchlist = ref<WatchlistItem[]>([])
   const userRatings = ref<RateContentData[]>([])
@@ -60,18 +66,20 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  const searchContent = async (query: string, page = 1) => {
+  const searchContent = async (searchParams: Record<string, string | number>) => {
     try {
       isLoading.value = true
       error.value = null
 
-      const response = await contentAPI.searchContent(query, page)
+      const response = await contentAPI.searchContent(searchParams)
 
       searchResults.value = {
+        results: response.data.data.results,
         movies: response.data.data.movies,
         tv: response.data.data.tv,
+        pagination: response.data.data.pagination,
+        filters: response.data.data.filters,
       }
-      pagination.value = response.data.data.pagination
 
       return response.data
     } catch (err: unknown) {
@@ -282,7 +290,13 @@ export const useContentStore = defineStore('content', () => {
   }
 
   const clearSearchResults = () => {
-    searchResults.value = { movies: [], tv: [] }
+    searchResults.value = {
+      results: [] as (Movie | TVShow)[],
+      movies: [] as Movie[],
+      tv: [] as TVShow[],
+      pagination: null,
+      filters: null,
+    }
   }
 
   const clearCurrentContent = () => {
