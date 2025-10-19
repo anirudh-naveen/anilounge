@@ -32,7 +32,7 @@
         </div>
         <div v-else-if="featuredContent.length > 0" class="content-grid">
           <div
-            v-for="item in featuredContent.slice(0, 8)"
+            v-for="item in featuredContent.slice(0, 10)"
             :key="item._id"
             class="content-card"
             @click="viewContentDetails(item)"
@@ -46,6 +46,16 @@
               <div class="content-overlay">
                 <div class="content-rating">⭐ {{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
                 <div class="content-type">{{ item.contentType === 'movie' ? '🎬' : '📺' }}</div>
+                <div class="content-actions">
+                  <button
+                    v-if="authStore.isAuthenticated"
+                    @click.stop="handleWatchlistClick(item._id)"
+                    class="action-btn"
+                    :class="{ 'in-watchlist': contentStore.isInWatchlist(item._id) }"
+                  >
+                    {{ contentStore.isInWatchlist(item._id) ? '✓' : '+' }}
+                  </button>
+                </div>
               </div>
             </div>
             <div class="content-info">
@@ -92,18 +102,34 @@
         </div>
       </div>
     </section>
+
+    <!-- Status Dropdown -->
+    <StatusDropdown
+      :show-dropdown="showStatusDropdown"
+      :content-id="selectedContentId"
+      :content-type="getContentType(selectedContentId)"
+      @close="closeStatusDropdown"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
+import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl } from '@/services/api'
+import { useToast } from 'vue-toastification'
 import type { Content } from '@/types'
+import StatusDropdown from '@/components/StatusDropdown.vue'
 
 const router = useRouter()
 const contentStore = useContentStore()
+const authStore = useAuthStore()
+const toast = useToast()
+
+const showStatusDropdown = ref(false)
+const selectedContentId = ref('')
 
 // Combine movies and TV shows for featured content
 const featuredContent = computed(() => {
@@ -135,6 +161,40 @@ const viewContentDetails = (content: Content) => {
   router.push(route)
 }
 
+const handleWatchlistClick = (contentId: string) => {
+  if (contentStore.isInWatchlist(contentId)) {
+    toggleWatchlist(contentId)
+  } else {
+    selectedContentId.value = contentId
+    showStatusDropdown.value = true
+  }
+}
+
+const closeStatusDropdown = () => {
+  showStatusDropdown.value = false
+  selectedContentId.value = ''
+}
+
+const toggleWatchlist = async (contentId: string) => {
+  if (!authStore.isAuthenticated) {
+    toast.warning('Please login to add items to your watchlist')
+    return
+  }
+
+  try {
+    if (contentStore.isInWatchlist(contentId)) {
+      await contentStore.removeFromWatchlist(contentId)
+      toast.success('Removed from watchlist')
+    } else {
+      await contentStore.addToWatchlist(contentId)
+      toast.success('Added to watchlist')
+    }
+  } catch (error) {
+    console.error('Failed to update watchlist:', error)
+    toast.error('Failed to update watchlist')
+  }
+}
+
 const truncateText = (text: string, maxLength: number) => {
   if (!text) return ''
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
@@ -143,6 +203,11 @@ const truncateText = (text: string, maxLength: number) => {
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
   img.src = '/placeholder-movie.jpg'
+}
+
+const getContentType = (contentId: string) => {
+  const movie = contentStore.movies.find((m) => m._id === contentId)
+  return movie ? 'movie' : 'tv'
 }
 </script>
 

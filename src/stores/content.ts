@@ -107,19 +107,30 @@ export const useContentStore = defineStore('content', () => {
     notes?: string,
   ) => {
     try {
-      await userAPI.addToWatchlist({ contentId, status, rating, currentEpisode, notes })
-
-      // Add to local watchlist
-      const watchlistItem: WatchlistItem = {
-        content: contentId,
+      const response = await userAPI.addToWatchlist({
+        contentId,
         status,
         rating,
-        currentEpisode: currentEpisode || 0,
+        currentEpisode,
         notes,
-        addedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+      })
+
+      // Update local watchlist with server response
+      if (response.data?.data?.watchlist) {
+        watchlist.value = response.data.data.watchlist
+      } else {
+        // Fallback: add to local watchlist
+        const watchlistItem: WatchlistItem = {
+          content: contentId,
+          status,
+          rating,
+          currentEpisode: currentEpisode || 0,
+          notes,
+          addedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        watchlist.value.push(watchlistItem)
       }
-      watchlist.value.push(watchlistItem)
       return true
     } catch (err: unknown) {
       error.value = err instanceof Error ? err.message : 'Failed to add to watchlist'

@@ -27,6 +27,10 @@
               <span class="nav-icon">🔍</span>
               <span class="nav-text">Search</span>
             </router-link>
+            <router-link to="/watchlist" class="nav-link" v-if="authStore.isAuthenticated">
+              <span class="nav-icon">📋</span>
+              <span class="nav-text">Watchlist</span>
+            </router-link>
           </nav>
 
           <div class="nav-actions">

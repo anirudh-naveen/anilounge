@@ -232,9 +232,31 @@ export const addToWatchlist = async (req, res) => {
   try {
     const { contentId, status = 'plan_to_watch', rating, currentEpisode, notes } = req.body
 
-    const user = await User.findById(req.user._id)
-    const content = await Content.findById(contentId)
+    // Validate contentId format
+    if (!contentId || typeof contentId !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid content ID',
+      })
+    }
 
+    // Check if contentId is a valid ObjectId
+    if (!contentId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid content ID format',
+      })
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      })
+    }
+
+    const content = await Content.findById(contentId)
     if (!content) {
       return res.status(404).json({
         success: false,
@@ -247,7 +269,7 @@ export const addToWatchlist = async (req, res) => {
       if (typeof item === 'string') {
         return item === contentId
       }
-      return item.content.toString() === contentId
+      return item.content && item.content.toString() === contentId
     })
 
     if (existingItem) {

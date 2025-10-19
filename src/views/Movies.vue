@@ -36,9 +36,19 @@
               :alt="movie.title"
               @error="handleImageError"
             />
-            <div class="movie-overlay">
-              <div class="movie-rating">⭐ {{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
-            </div>
+              <div class="movie-overlay">
+                <div class="movie-rating">⭐ {{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
+                <div class="movie-actions">
+                  <button
+                    v-if="authStore.isAuthenticated"
+                    @click.stop="handleWatchlistClick(movie._id)"
+                    class="action-btn"
+                    :class="{ 'in-watchlist': contentStore.isInWatchlist(movie._id) }"
+                  >
+                    {{ contentStore.isInWatchlist(movie._id) ? '✓' : '+' }}
+                  </button>
+                </div>
+              </div>
           </div>
           <div class="movie-info">
             <h3 class="movie-title">{{ movie.title }}</h3>
@@ -85,6 +95,14 @@
         </button>
       </div>
     </div>
+
+    <!-- Status Dropdown -->
+    <StatusDropdown
+      :show-dropdown="showStatusDropdown"
+      :content-id="selectedContentId"
+      content-type="movie"
+      @close="closeStatusDropdown"
+    />
   </div>
 </template>
 
@@ -92,13 +110,20 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
+import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl } from '@/services/api'
+import { useToast } from 'vue-toastification'
 import type { Movie } from '@/types'
+import StatusDropdown from '@/components/StatusDropdown.vue'
 
 const router = useRouter()
 const contentStore = useContentStore()
+const authStore = useAuthStore()
+const toast = useToast()
 
 const currentPage = ref(1)
+const showStatusDropdown = ref(false)
+const selectedContentId = ref('')
 
 onMounted(async () => {
   await loadMovies()
@@ -131,6 +156,40 @@ const loadPreviousPage = (event?: Event) => {
 
 const viewMovieDetails = (movie: Movie) => {
   router.push(`/movie/${movie.tmdbId}`)
+}
+
+const handleWatchlistClick = (contentId: string) => {
+  if (contentStore.isInWatchlist(contentId)) {
+    toggleWatchlist(contentId)
+  } else {
+    selectedContentId.value = contentId
+    showStatusDropdown.value = true
+  }
+}
+
+const closeStatusDropdown = () => {
+  showStatusDropdown.value = false
+  selectedContentId.value = ''
+}
+
+const toggleWatchlist = async (contentId: string) => {
+  if (!authStore.isAuthenticated) {
+    toast.warning('Please login to add items to your watchlist')
+    return
+  }
+
+  try {
+    if (contentStore.isInWatchlist(contentId)) {
+      await contentStore.removeFromWatchlist(contentId)
+      toast.success('Removed from watchlist')
+    } else {
+      await contentStore.addToWatchlist(contentId)
+      toast.success('Added to watchlist')
+    }
+  } catch (error) {
+    console.error('Error updating watchlist:', error)
+    toast.error('Failed to update watchlist')
+  }
 }
 
 const truncateText = (text: string, maxLength: number) => {

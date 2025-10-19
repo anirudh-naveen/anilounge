@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '@/views/Home.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -23,6 +24,12 @@ const router = createRouter({
       path: '/search',
       name: 'search',
       component: () => import('@/views/Search.vue'),
+    },
+    {
+      path: '/watchlist',
+      name: 'watchlist',
+      component: () => import('@/views/Watchlist.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/login',
@@ -49,9 +56,14 @@ const router = createRouter({
 
 // Navigation guard for protected routes
 router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
+  const authStore = useAuthStore()
 
-  if (to.meta.requiresAuth && !token) {
+  // Initialize auth if not already done
+  if (!authStore.user && localStorage.getItem('token')) {
+    authStore.initAuth()
+  }
+
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
   } else {
     next()
