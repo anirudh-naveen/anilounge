@@ -39,6 +39,8 @@ router.put('/auth/profile', authenticateToken, authController.updateProfile)
 // Obtaining user content routes (public)
 router.get('/content/movies', contentController.getAnimatedMovies)
 router.get('/content/tv', contentController.getAnimatedTVShows)
+router.get('/content/movies/:id', contentController.getMovieDetails)
+router.get('/content/tv/:id', contentController.getTVShowDetails)
 router.get('/content/search', contentController.searchContent)
 router.get('/content/:id', contentController.getContentDetails)
 

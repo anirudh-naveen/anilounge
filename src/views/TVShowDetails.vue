@@ -1,5 +1,5 @@
 <template>
-  <div class="movie-details">
+  <div class="tv-details">
     <div class="back-button" @click="goBack">
       <i class="fas fa-arrow-left"></i>
       Back
@@ -7,60 +7,71 @@
 
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
-      <p>Loading movie details...</p>
+      <p>Loading TV show details...</p>
     </div>
 
     <div v-else-if="error" class="error">
-      <h2>Error loading movie</h2>
+      <h2>Error loading TV show</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>
 
-    <div v-else-if="movie" class="movie-content">
-      <div class="movie-header">
-        <div class="movie-poster">
+    <div v-else-if="show" class="show-content">
+      <div class="show-header">
+        <div class="show-poster">
           <img
-            v-if="movie.posterPath"
-            :src="`https://image.tmdb.org/t/p/w500${movie.posterPath}`"
-            :alt="movie.title"
+            v-if="show.posterPath"
+            :src="`https://image.tmdb.org/t/p/w500${show.posterPath}`"
+            :alt="show.title"
             @error="handleImageError"
           />
           <div v-else class="no-poster">
-            <i class="fas fa-film"></i>
+            <i class="fas fa-tv"></i>
             <p>No poster available</p>
           </div>
         </div>
 
-        <div class="movie-info">
-          <h1 class="movie-title">{{ movie.title }}</h1>
-          <p
-            v-if="movie.originalTitle && movie.originalTitle !== movie.title"
-            class="original-title"
-          >
-            Original Title: {{ movie.originalTitle }}
+        <div class="show-info">
+          <h1 class="show-title">{{ show.title }}</h1>
+          <p v-if="show.originalTitle && show.originalTitle !== show.title" class="original-title">
+            Original Title: {{ show.originalTitle }}
           </p>
 
-          <div class="movie-meta">
+          <div class="show-meta">
             <div class="rating">
               <i class="fas fa-star"></i>
-              <span>{{ movie.voteAverage?.toFixed(1) || 'N/A' }}</span>
-              <span class="vote-count">({{ movie.voteCount || 0 }} votes)</span>
+              <span>{{ show.voteAverage?.toFixed(1) || 'N/A' }}</span>
+              <span class="vote-count">({{ show.voteCount || 0 }} votes)</span>
             </div>
 
-            <div class="release-date">
+            <div class="first-air-date">
               <i class="fas fa-calendar"></i>
-              <span>{{ formatDate(movie.releaseDate) }}</span>
+              <span>{{ formatDate(show.releaseDate) }}</span>
             </div>
 
-            <div v-if="movie.runtime" class="runtime">
-              <i class="fas fa-clock"></i>
-              <span>{{ movie.runtime }} minutes</span>
+            <div v-if="show.numberOfSeasons" class="seasons">
+              <i class="fas fa-layer-group"></i>
+              <span
+                >{{ show.numberOfSeasons }} season{{ show.numberOfSeasons > 1 ? 's' : '' }}</span
+              >
+            </div>
+
+            <div v-if="show.numberOfEpisodes" class="episodes">
+              <i class="fas fa-play-circle"></i>
+              <span
+                >{{ show.numberOfEpisodes }} episode{{ show.numberOfEpisodes > 1 ? 's' : '' }}</span
+              >
+            </div>
+
+            <div v-if="show.status" class="status">
+              <i class="fas fa-info-circle"></i>
+              <span>{{ show.status }}</span>
             </div>
           </div>
 
           <div class="genres">
             <span
-              v-for="genre in movie.genres"
+              v-for="genre in show.genres"
               :key="typeof genre === 'string' ? genre : genre.name || genre.id"
               class="genre-tag"
             >
@@ -68,7 +79,7 @@
             </span>
           </div>
 
-          <div class="movie-actions">
+          <div class="show-actions">
             <button
               v-if="!isInWatchlist"
               @click="showStatusDropdown = true"
@@ -83,7 +94,7 @@
               In Watchlist
             </button>
 
-            <button @click="shareMovie" class="btn-outline">
+            <button @click="shareShow" class="btn-outline">
               <i class="fas fa-share"></i>
               Share
             </button>
@@ -91,33 +102,51 @@
         </div>
       </div>
 
-      <div class="movie-description">
+      <div class="show-description">
         <h2>Overview</h2>
-        <p>{{ movie.overview || 'No overview available.' }}</p>
+        <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
 
-      <div v-if="movie.productionCompanies?.length" class="production-info">
+      <div v-if="show.networks?.length" class="network-info">
+        <h3>Networks</h3>
+        <div class="networks">
+          <span
+            v-for="network in show.networks"
+            :key="`network-${network.id || network._id || network.name}`"
+            class="network-tag"
+          >
+            {{ network.name }}
+          </span>
+        </div>
+      </div>
+
+      <div v-if="show.productionCompanies?.length" class="production-info">
         <h3>Production Companies</h3>
         <div class="companies">
-          <span
-            v-for="company in movie.productionCompanies"
-            :key="`company-${company.id || company._id || company.name}`"
-            class="company-tag"
-          >
+          <span v-for="company in show.productionCompanies" :key="company.id" class="company-tag">
             {{ company.name }}
           </span>
         </div>
       </div>
 
-      <div v-if="movie.productionCountries?.length" class="production-info">
+      <div v-if="show.productionCountries?.length" class="production-info">
         <h3>Production Countries</h3>
         <div class="countries">
           <span
-            v-for="country in movie.productionCountries"
+            v-for="country in show.productionCountries"
             :key="country.iso_3166_1"
             class="country-tag"
           >
             {{ country.name }}
+          </span>
+        </div>
+      </div>
+
+      <div v-if="show.createdBy?.length" class="creator-info">
+        <h3>Created By</h3>
+        <div class="creators">
+          <span v-for="creator in show.createdBy" :key="creator.id" class="creator-tag">
+            {{ creator.name }}
           </span>
         </div>
       </div>
@@ -127,8 +156,8 @@
     <StatusDropdown
       v-if="showStatusDropdown"
       :show-dropdown="showStatusDropdown"
-      :content-id="movie?._id || ''"
-      :content-type="'movie'"
+      :content-id="show?._id || ''"
+      :content-type="'tv'"
       @close="showStatusDropdown = false"
     />
   </div>
@@ -141,45 +170,45 @@ import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { contentAPI } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
-import type { Movie } from '@/types'
+import type { TVShow } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 
-const movie = ref<Movie | null>(null)
+const show = ref<TVShow | null>(null)
 const loading = ref(true)
 const error = ref('')
 const showStatusDropdown = ref(false)
 
 const isInWatchlist = computed(() => {
-  if (!movie.value || !authStore.user?.watchlist) return false
-  return authStore.user.watchlist.some((item) => item.content._id === movie.value?._id)
+  if (!show.value || !authStore.user?.watchlist) return false
+  return authStore.user.watchlist.some((item) => item.content._id === show.value?._id)
 })
 
 onMounted(async () => {
-  const movieId = route.params.id as string
-  if (!movieId) {
-    error.value = 'No movie ID provided'
+  const showId = route.params.id as string
+  if (!showId) {
+    error.value = 'No TV show ID provided'
     loading.value = false
     return
   }
 
   try {
-    // Try to get movie from store first
-    const existingMovie = contentStore.movies.find((m) => m._id === movieId)
-    if (existingMovie) {
-      movie.value = existingMovie
+    // Try to get show from store first
+    const existingShow = contentStore.tvShows.find((s) => s._id === showId)
+    if (existingShow) {
+      show.value = existingShow
       loading.value = false
       return
     }
 
     // If not in store, fetch from API
-    const response = await contentAPI.getMovieDetails(movieId)
-    movie.value = response.data.data
+    const response = await contentAPI.getTVShowDetails(showId)
+    show.value = response.data.data
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load movie'
+    error.value = err instanceof Error ? err.message : 'Failed to load TV show'
   } finally {
     loading.value = false
   }
@@ -191,26 +220,26 @@ const goBack = () => {
   if (previousPage) {
     router.push(previousPage)
   } else {
-    // Default fallback to movies page
-    router.push('/movies')
+    // Default fallback to TV shows page
+    router.push('/tv-shows')
   }
 }
 
 const removeFromWatchlist = async () => {
-  if (!movie.value) return
+  if (!show.value) return
 
   try {
-    await contentStore.removeFromWatchlist(movie.value._id)
+    await contentStore.removeFromWatchlist(show.value._id)
   } catch (err) {
     console.error('Failed to remove from watchlist:', err)
   }
 }
 
-const shareMovie = () => {
-  if (navigator.share && movie.value) {
+const shareShow = () => {
+  if (navigator.share && show.value) {
     navigator.share({
-      title: movie.value.title,
-      text: movie.value.overview,
+      title: show.value.title,
+      text: show.value.overview,
       url: window.location.href,
     })
   } else {
@@ -237,7 +266,7 @@ const handleImageError = (event: Event) => {
 </script>
 
 <style scoped>
-.movie-details {
+.tv-details {
   min-height: 100vh;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -292,23 +321,23 @@ const handleImageError = (event: Event) => {
   }
 }
 
-.movie-content {
+.show-content {
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.movie-header {
+.show-header {
   display: grid;
   grid-template-columns: 300px 1fr;
   gap: 2rem;
   margin-bottom: 3rem;
 }
 
-.movie-poster {
+.show-poster {
   position: relative;
 }
 
-.movie-poster img {
+.show-poster img {
   width: 100%;
   height: auto;
   border-radius: 12px;
@@ -333,13 +362,13 @@ const handleImageError = (event: Event) => {
   margin-bottom: 1rem;
 }
 
-.movie-info {
+.show-info {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.movie-title {
+.show-title {
   font-size: 2.5rem;
   font-weight: 700;
   margin: 0;
@@ -353,21 +382,21 @@ const handleImageError = (event: Event) => {
   margin: 0;
 }
 
-.movie-meta {
+.show-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
   margin: 1rem 0;
 }
 
-.movie-meta > div {
+.show-meta > div {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 1rem;
 }
 
-.movie-meta i {
+.show-meta i {
   color: var(--highlight-color);
   width: 16px;
 }
@@ -393,7 +422,7 @@ const handleImageError = (event: Event) => {
   font-weight: 500;
 }
 
-.movie-actions {
+.show-actions {
   display: flex;
   gap: 1rem;
   margin-top: 1.5rem;
@@ -445,41 +474,49 @@ const handleImageError = (event: Event) => {
   border-color: var(--highlight-color);
 }
 
-.movie-description {
+.show-description {
   margin-bottom: 2rem;
 }
 
-.movie-description h2 {
+.show-description h2 {
   font-size: 1.5rem;
   margin-bottom: 1rem;
   color: var(--text-primary);
 }
 
-.movie-description p {
+.show-description p {
   font-size: 1.1rem;
   line-height: 1.6;
   color: var(--text-muted);
 }
 
-.production-info {
+.network-info,
+.production-info,
+.creator-info {
   margin-bottom: 2rem;
 }
 
-.production-info h3 {
+.network-info h3,
+.production-info h3,
+.creator-info h3 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
 }
 
+.networks,
 .companies,
-.countries {
+.countries,
+.creators {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
+.network-tag,
 .company-tag,
-.country-tag {
+.country-tag,
+.creator-tag {
   background: var(--bg-card);
   color: var(--text-primary);
   padding: 0.25rem 0.75rem;
@@ -489,25 +526,25 @@ const handleImageError = (event: Event) => {
 }
 
 @media (max-width: 768px) {
-  .movie-details {
+  .tv-details {
     padding: 1rem;
   }
 
-  .movie-header {
+  .show-header {
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
 
-  .movie-title {
+  .show-title {
     font-size: 2rem;
   }
 
-  .movie-meta {
+  .show-meta {
     flex-direction: column;
     gap: 0.5rem;
   }
 
-  .movie-actions {
+  .show-actions {
     flex-direction: column;
   }
 }

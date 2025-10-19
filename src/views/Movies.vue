@@ -4,7 +4,7 @@
     <div class="container">
       <!-- Page Header -->
       <div class="page-header">
-        <h1 class="page-title">🎬 Animated Movies</h1>
+        <h1 class="page-title">Animated Movies</h1>
         <p class="page-subtitle">Discover amazing animated films from around the world</p>
       </div>
 
@@ -37,7 +37,7 @@
               @error="handleImageError"
             />
             <div class="movie-overlay">
-              <div class="movie-rating">⭐ {{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
+              <div class="movie-rating">{{ movie.voteAverage?.toFixed(1) || 'N/A' }}</div>
               <div class="movie-actions">
                 <button
                   v-if="authStore.isAuthenticated"
@@ -68,7 +68,7 @@
 
       <!-- Empty State -->
       <div v-if="!contentStore.isLoading && contentStore.movies.length === 0" class="empty-state">
-        <div class="empty-icon">🎬</div>
+        <div class="empty-icon">Movies</div>
         <h3>No movies found</h3>
         <p>Try refreshing the page or check back later</p>
         <button @click="() => loadMovies(1)" class="btn btn-primary">Refresh</button>
@@ -155,7 +155,11 @@ const loadPreviousPage = (event?: Event) => {
 }
 
 const viewMovieDetails = (movie: Movie) => {
-  router.push(`/movie/${movie.tmdbId}`)
+  router.push({
+    name: 'movie-details',
+    params: { id: movie._id },
+    query: { from: router.currentRoute.value.fullPath }
+  })
 }
 
 const handleWatchlistClick = (contentId: string) => {
@@ -197,7 +201,7 @@ const truncateText = (text: string, maxLength: number) => {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
 }
 
-const getReleaseYear = (dateString: string) => {
+const getReleaseYear = (dateString: string | Date) => {
   if (!dateString) return 'N/A'
   return new Date(dateString).getFullYear()
 }

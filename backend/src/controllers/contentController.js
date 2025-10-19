@@ -809,3 +809,55 @@ async function updateContentAverageRating(contentId) {
     console.error('Error updating content average rating:', error)
   }
 }
+
+// Get individual movie details
+export const getMovieDetails = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const movie = await Content.findById(id)
+    if (!movie) {
+      return res.status(404).json({
+        success: false,
+        message: 'Movie not found',
+      })
+    }
+
+    res.json({
+      success: true,
+      data: movie,
+    })
+  } catch (error) {
+    console.error('Error fetching movie details:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching movie details',
+    })
+  }
+}
+
+// Get individual TV show details
+export const getTVShowDetails = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const tvShow = await Content.findById(id)
+    if (!tvShow) {
+      return res.status(404).json({
+        success: false,
+        message: 'TV show not found',
+      })
+    }
+
+    res.json({
+      success: true,
+      data: tvShow,
+    })
+  } catch (error) {
+    console.error('Error fetching TV show details:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching TV show details',
+    })
+  }
+}

@@ -61,7 +61,7 @@ const router = createRouter({
     {
       path: '/tv/:id',
       name: 'tv-details',
-      component: () => import('@/views/TVDetails.vue'),
+      component: () => import('@/views/TVShowDetails.vue'),
     },
   ],
 })

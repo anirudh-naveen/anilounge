@@ -4,7 +4,7 @@
     <div class="container">
       <!-- Page Header -->
       <div class="page-header">
-        <h1 class="page-title">📺 Animated TV Shows</h1>
+        <h1 class="page-title">Animated TV Shows</h1>
         <p class="page-subtitle">Explore amazing animated series and cartoons</p>
       </div>
 
@@ -33,7 +33,7 @@
           <div class="show-poster">
             <img :src="getPosterUrl(show.posterPath)" :alt="show.title" @error="handleImageError" />
             <div class="show-overlay">
-              <div class="show-rating">⭐ {{ show.voteAverage?.toFixed(1) || 'N/A' }}</div>
+              <div class="show-rating">{{ show.voteAverage?.toFixed(1) || 'N/A' }}</div>
               <div class="show-actions">
                 <button
                   v-if="authStore.isAuthenticated"
@@ -50,8 +50,12 @@
             <h3 class="show-title">{{ show.title }}</h3>
             <p class="show-overview">{{ truncateText(show.overview, 120) }}</p>
             <div class="show-genres">
-              <span v-for="genre in show.genres?.slice(0, 3)" :key="genre" class="genre-tag">
-                {{ genre }}
+              <span
+                v-for="genre in show.genres?.slice(0, 3)"
+                :key="typeof genre === 'string' ? genre : genre.name || genre.id"
+                class="genre-tag"
+              >
+                {{ typeof genre === 'string' ? genre : genre.name }}
               </span>
             </div>
             <div class="show-meta">
@@ -66,7 +70,7 @@
 
       <!-- Empty State -->
       <div v-if="!contentStore.isLoading && contentStore.tvShows.length === 0" class="empty-state">
-        <div class="empty-icon">📺</div>
+        <div class="empty-icon">TV Shows</div>
         <h3>No TV shows found</h3>
         <p>Try refreshing the page or check back later</p>
         <button @click="() => loadTVShows(1)" class="btn btn-primary">Refresh</button>
@@ -153,7 +157,11 @@ const loadPreviousPage = (event?: Event) => {
 }
 
 const viewShowDetails = (show: TVShow) => {
-  router.push(`/tv/${show.tmdbId}`)
+  router.push({
+    name: 'tv-details',
+    params: { id: show._id },
+    query: { from: router.currentRoute.value.fullPath },
+  })
 }
 
 const handleWatchlistClick = (contentId: string) => {
@@ -195,7 +203,7 @@ const truncateText = (text: string, maxLength: number) => {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
 }
 
-const getReleaseYear = (dateString: string) => {
+const getReleaseYear = (dateString: string | Date) => {
   if (!dateString) return 'N/A'
   return new Date(dateString).getFullYear()
 }

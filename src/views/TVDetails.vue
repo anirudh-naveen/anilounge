@@ -1,7 +1,7 @@
 <template>
   <div class="tv-details-page">
     <div class="container">
-      <h1>📺 TV Show Details</h1>
+      <h1>TV Show Details</h1>
       <p>TV show details functionality coming soon!</p>
     </div>
   </div>

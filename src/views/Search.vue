@@ -1,9 +1,10 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="search-page">
     <div class="container">
       <!-- Search Header -->
       <div class="search-header">
-        <h1 class="search-title">🔍 Search Animated Content</h1>
+        <h1 class="search-title">Search Animated Content</h1>
         <p class="search-subtitle">Find your next favorite animated movie or TV show</p>
       </div>
 
@@ -29,7 +30,7 @@
               @click="showChatbot = true"
               :disabled="!authStore.isAuthenticated"
             >
-              🤖 AI Assistant
+              AI Assistant
             </button>
           </div>
         </form>
@@ -109,7 +110,7 @@
         <div v-else-if="hasResults" class="results-container">
           <!-- Combined Results -->
           <div v-if="contentStore.searchResults.results.length > 0" class="results-section">
-            <h2 class="results-title">🎬📺 Search Results</h2>
+            <h2 class="results-title">Search Results</h2>
             <div class="content-grid">
               <div
                 v-for="item in contentStore.searchResults.results"
@@ -127,7 +128,7 @@
                   />
                   <div class="content-overlay">
                     <div class="content-type">{{ item.typeIcon }}</div>
-                    <div class="content-rating">⭐ {{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
+                    <div class="content-rating">{{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
                     <button
                       class="add-to-watchlist-btn"
                       @click.stop="handleAddToWatchlist(item)"
@@ -191,7 +192,7 @@
         </div>
 
         <div v-else class="no-results">
-          <div class="no-results-icon">🔍</div>
+          <div class="no-results-icon">No Results</div>
           <h3>No results found</h3>
           <p>Try searching for something else or check your spelling</p>
         </div>
@@ -335,11 +336,19 @@ const goToPage = (pageNum: number) => {
 }
 
 const viewMovieDetails = (movie: Movie) => {
-  router.push(`/movie/${movie.tmdbId}`)
+  router.push({
+    name: 'movie-details',
+    params: { id: movie._id },
+    query: { from: router.currentRoute.value.fullPath },
+  })
 }
 
 const viewShowDetails = (show: TVShow) => {
-  router.push(`/tv/${show.tmdbId}`)
+  router.push({
+    name: 'tv-details',
+    params: { id: show._id },
+    query: { from: router.currentRoute.value.fullPath },
+  })
 }
 
 const truncateText = (text: string, maxLength: number) => {

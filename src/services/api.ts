@@ -59,6 +59,8 @@ export const authAPI = {
 export const contentAPI = {
   getMovies: (params: ContentParams) => api.get('/content/movies', { params }),
   getTVShows: (params: ContentParams) => api.get('/content/tv', { params }),
+  getMovieDetails: (id: string) => api.get(`/content/movies/${id}`),
+  getTVShowDetails: (id: string) => api.get(`/content/tv/${id}`),
   searchContent: (searchParams: Record<string, string | number>) =>
     api.get('/content/search', {
       params: searchParams,
@@ -70,6 +72,7 @@ export const contentAPI = {
 export const aiAPI = {
   getRecommendations: (userId: string) => api.get(`/ai/recommendations/${userId}`),
   analyzeContent: (contentId: string) => api.get(`/ai/analyze/${contentId}`),
+  chat: (message: string) => api.post('/ai/chat', { message }),
 }
 
 // User API

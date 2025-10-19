@@ -1,18 +1,15 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="chatbot-container">
     <div class="chatbot-header">
-      <h3>🤖 AI Assistant</h3>
+      <h3>AI Assistant</h3>
       <button @click="toggleChatbot" class="close-btn">×</button>
     </div>
 
     <div class="chatbot-messages" ref="messagesContainer">
-      <div
-        v-for="message in messages"
-        :key="message.id"
-        :class="['message', message.type]"
-      >
+      <div v-for="message in messages" :key="message.id" :class="['message', message.type]">
         <div class="message-content">
-          <div v-if="message.type === 'bot'" class="bot-avatar">🤖</div>
+          <div v-if="message.type === 'bot'" class="bot-avatar">AI</div>
           <div class="message-text">{{ message.text }}</div>
         </div>
         <div class="message-time">{{ formatTime(message.timestamp) }}</div>
@@ -20,7 +17,7 @@
 
       <div v-if="isTyping" class="message bot">
         <div class="message-content">
-          <div class="bot-avatar">🤖</div>
+          <div class="bot-avatar">AI</div>
           <div class="typing-indicator">
             <span></span>
             <span></span>
@@ -37,18 +34,15 @@
         placeholder="Ask me about anime recommendations..."
         :disabled="isTyping"
       />
-      <button @click="sendMessage" :disabled="!inputMessage.trim() || isTyping">
-        Send
-      </button>
+      <button @click="sendMessage" :disabled="!inputMessage.trim() || isTyping">Send</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// eslint-disable-next-line vue/multi-word-component-names
 import { ref, nextTick, onMounted } from 'vue'
 import { useContentStore } from '@/stores/content'
-import { useAuthStore } from '@/stores/auth'
+import { aiAPI } from '@/services/api'
 
 interface Message {
   id: string
@@ -66,7 +60,6 @@ const emit = defineEmits<{
 }>()
 
 const contentStore = useContentStore()
-const authStore = useAuthStore()
 
 const messages = ref<Message[]>([])
 const inputMessage = ref('')
@@ -84,7 +77,7 @@ const sendMessage = async () => {
     id: Date.now().toString(),
     type: 'user',
     text: inputMessage.value.trim(),
-    timestamp: new Date()
+    timestamp: new Date(),
   }
 
   messages.value.push(userMessage)
@@ -97,22 +90,14 @@ const sendMessage = async () => {
 
   try {
     // Get AI response
-    const response = await fetch('/api/ai/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authStore.token}`
-      },
-      body: JSON.stringify({ message: query })
-    })
-
-    const data = await response.json()
+    const response = await aiAPI.chat(query)
+    const data = response.data
 
     const botMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'bot',
-      text: data.response || 'Sorry, I couldn\'t process your request.',
-      timestamp: new Date()
+      text: data.response || "Sorry, I couldn't process your request.",
+      timestamp: new Date(),
     }
 
     messages.value.push(botMessage)
@@ -121,14 +106,13 @@ const sendMessage = async () => {
     if (data.searchSuggestion) {
       await contentStore.searchContent(data.searchSuggestion)
     }
-
   } catch (error) {
     console.error('Chatbot error:', error)
     const errorMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'bot',
-      text: 'Sorry, I\'m having trouble connecting right now. Please try again later.',
-      timestamp: new Date()
+      text: "Sorry, I'm having trouble connecting right now. Please try again later.",
+      timestamp: new Date(),
     }
     messages.value.push(errorMessage)
   } finally {
@@ -154,7 +138,7 @@ onMounted(() => {
     id: 'welcome',
     type: 'bot',
     text: 'Hi! I\'m your AI assistant for finding animated content. I can help you discover anime, movies, and TV shows. Try asking me things like "Find me some action anime" or "What are the best Studio Ghibli movies?"',
-    timestamp: new Date()
+    timestamp: new Date(),
   }
   messages.value.push(welcomeMessage)
 })
@@ -291,7 +275,9 @@ onMounted(() => {
 }
 
 @keyframes typing {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     transform: translateY(0);
   }
   30% {

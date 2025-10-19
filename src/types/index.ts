@@ -5,7 +5,7 @@ export interface Genre {
 }
 
 export interface WatchlistItem {
-  content: string | Content
+  content: Content
   status: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
   rating?: number
   currentEpisode: number
@@ -79,6 +79,8 @@ export interface TVShow {
   voteCount: number
   numberOfSeasons?: number
   numberOfEpisodes?: number
+  status?: string
+  createdBy?: Array<{ id: number; name: string }>
   isAnimated: boolean
   animationType: string
   ageRating: string

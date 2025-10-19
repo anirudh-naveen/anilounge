@@ -4,7 +4,7 @@
     <div class="container">
       <!-- Page Header -->
       <div class="page-header">
-        <h1 class="page-title">📋 My Watchlist</h1>
+        <h1 class="page-title">My Watchlist</h1>
         <p class="page-subtitle">Track your animated content progress</p>
       </div>
 
@@ -115,7 +115,7 @@
                   </div>
                   <div class="info-item">
                     <span class="info-label">TMDB Rating:</span>
-                    <span class="info-value">⭐ {{ getContentRating(item) }}</span>
+                    <span class="info-value">{{ getContentRating(item) }}</span>
                   </div>
                 </div>
               </div>
@@ -191,7 +191,7 @@
 
       <!-- Empty State -->
       <div v-else class="empty-state">
-        <div class="empty-icon">📋</div>
+        <div class="empty-icon">Watchlist</div>
         <h3>No items in your watchlist</h3>
         <p>Start adding movies and TV shows to track your progress!</p>
         <router-link to="/movies" class="btn btn-primary">Browse Movies</router-link>

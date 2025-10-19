@@ -6,29 +6,24 @@
         <div class="nav-content">
           <div class="logo">
             <router-link to="/" class="logo-link">
-              <h1 class="logo-text">🎬 Find Animation</h1>
+              <h1 class="logo-text">Find Animation</h1>
             </router-link>
           </div>
 
           <nav class="nav-links">
             <router-link to="/" class="nav-link">
-              <span class="nav-icon">🏠</span>
               <span class="nav-text">Home</span>
             </router-link>
             <router-link to="/movies" class="nav-link">
-              <span class="nav-icon">🎬</span>
               <span class="nav-text">Movies</span>
             </router-link>
             <router-link to="/tv" class="nav-link">
-              <span class="nav-icon">📺</span>
               <span class="nav-text">TV Shows</span>
             </router-link>
             <router-link to="/search" class="nav-link">
-              <span class="nav-icon">🔍</span>
               <span class="nav-text">Search</span>
             </router-link>
             <router-link to="/watchlist" class="nav-link" v-if="authStore.isAuthenticated">
-              <span class="nav-icon">📋</span>
               <span class="nav-text">Watchlist</span>
             </router-link>
           </nav>
@@ -61,12 +56,10 @@
             </div>
             <div v-else class="auth-buttons">
               <router-link to="/login" class="btn btn-secondary">
-                <span class="btn-icon">🔑</span>
-                <span class="btn-text">Login</span>
+                Login
               </router-link>
               <router-link to="/register" class="btn btn-primary">
-                <span class="btn-icon">✨</span>
-                <span class="btn-text">Register</span>
+                Register
               </router-link>
             </div>
           </div>

@@ -15,7 +15,7 @@
           </p>
           <div class="hero-actions">
             <router-link to="/search" class="btn btn-primary btn-large">
-              🔍 Search Content
+              Search Content
             </router-link>
           </div>
         </div>
@@ -44,8 +44,10 @@
                 @error="handleImageError"
               />
               <div class="content-overlay">
-                <div class="content-rating">⭐ {{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
-                <div class="content-type">{{ item.contentType === 'movie' ? '🎬' : '📺' }}</div>
+                <div class="content-rating">{{ item.voteAverage?.toFixed(1) || 'N/A' }}</div>
+                <div class="content-type">
+                  {{ item.contentType === 'movie' ? 'Movie' : 'TV Show' }}
+                </div>
                 <div class="content-actions">
                   <button
                     v-if="authStore.isAuthenticated"
@@ -62,8 +64,12 @@
               <h3 class="content-title">{{ item.title }}</h3>
               <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
               <div class="content-genres">
-                <span v-for="genre in item.genres?.slice(0, 2)" :key="genre" class="genre-tag">
-                  {{ genre }}
+                <span
+                  v-for="genre in item.genres?.slice(0, 2)"
+                  :key="typeof genre === 'string' ? genre : genre.name || genre.id"
+                  class="genre-tag"
+                >
+                  {{ typeof genre === 'string' ? genre : genre.name }}
                 </span>
               </div>
             </div>
@@ -80,17 +86,17 @@
       <div class="container">
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-icon">🎬</div>
+            <div class="stat-icon">Movies</div>
             <div class="stat-number">{{ contentStore.pagination.totalResults || '1000+' }}</div>
             <div class="stat-label">Animated Movies</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">🎯</div>
+            <div class="stat-icon">AI</div>
             <div class="stat-number">AI</div>
             <div class="stat-label">Recommendations</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">📺</div>
+            <div class="stat-icon">TV Shows</div>
             <div class="stat-number">500+</div>
             <div class="stat-label">Animated TV Shows</div>
           </div>
@@ -151,9 +157,19 @@ onMounted(async () => {
 })
 
 const viewContentDetails = (content: Content) => {
-  const route =
-    content.contentType === 'movie' ? `/movie/${content.tmdbId}` : `/tv/${content.tmdbId}`
-  router.push(route)
+  if (content.contentType === 'movie') {
+    router.push({
+      name: 'movie-details',
+      params: { id: content._id },
+      query: { from: router.currentRoute.value.fullPath },
+    })
+  } else {
+    router.push({
+      name: 'tv-details',
+      params: { id: content._id },
+      query: { from: router.currentRoute.value.fullPath },
+    })
+  }
 }
 
 const handleWatchlistClick = (contentId: string) => {
