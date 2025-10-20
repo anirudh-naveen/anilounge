@@ -132,9 +132,9 @@
           <div class="content-grid">
             <div
               v-for="sequel in relatedContent.sequels"
-              :key="sequel._id"
+              :key="`sequel-${sequel._id}`"
               class="content-card"
-              @click="viewContentDetails(sequel)"
+              @click="viewContentDetails(sequel, $event)"
             >
               <img
                 v-if="sequel.posterPath"
@@ -165,9 +165,9 @@
           <div class="content-grid">
             <div
               v-for="prequel in relatedContent.prequels"
-              :key="prequel._id"
+              :key="`prequel-${prequel._id}`"
               class="content-card"
-              @click="viewContentDetails(prequel)"
+              @click="viewContentDetails(prequel, $event)"
             >
               <img
                 v-if="prequel.posterPath"
@@ -198,9 +198,9 @@
           <div class="content-grid">
             <div
               v-for="related in relatedContent.related"
-              :key="related._id"
+              :key="`related-${related._id}`"
               class="content-card"
-              @click="viewContentDetails(related)"
+              @click="viewContentDetails(related, $event)"
             >
               <img
                 v-if="related.posterPath"
@@ -421,19 +421,48 @@ const fetchRelatedContent = async (contentId: string) => {
   }
 }
 
-const viewContentDetails = (content: UnifiedContent) => {
-  if (content.contentType === 'movie') {
-    router.push({
-      name: 'MovieDetails',
-      params: { id: content._id },
-      query: { from: route.fullPath },
-    })
-  } else {
-    router.push({
-      name: 'TVShowDetails',
-      params: { id: content._id },
-      query: { from: route.fullPath },
-    })
+const viewContentDetails = async (content: UnifiedContent, event?: Event) => {
+  console.log(
+    'Navigating to content:',
+    content.title,
+    'Type:',
+    content.contentType,
+    'ID:',
+    content._id,
+  )
+
+  // Add visual feedback
+  const clickedElement = event?.target as HTMLElement
+  const card = clickedElement?.closest('.content-card') as HTMLElement
+  if (card) {
+    card.style.opacity = '0.7'
+    card.style.transform = 'scale(0.95)'
+  }
+
+  try {
+    if (content.contentType === 'movie') {
+      console.log('Navigating to MovieDetails with ID:', content._id)
+      await router.push({
+        name: 'MovieDetails',
+        params: { id: content._id },
+        query: { from: route.fullPath },
+      })
+    } else {
+      console.log('Navigating to TVShowDetails with ID:', content._id)
+      await router.push({
+        name: 'TVShowDetails',
+        params: { id: content._id },
+        query: { from: route.fullPath },
+      })
+    }
+    console.log('Navigation completed successfully')
+  } catch (err) {
+    console.error('Navigation error:', err)
+    // Reset visual feedback on error
+    if (card) {
+      card.style.opacity = '1'
+      card.style.transform = 'scale(1)'
+    }
   }
 }
 

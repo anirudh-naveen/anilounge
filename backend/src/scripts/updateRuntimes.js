@@ -18,8 +18,8 @@ async function updateRuntimes() {
       contentType: 'movie',
       $or: [
         { runtime: null },
-        { runtime: { $lt: 60 } } // Update movies with runtime less than 60 minutes
-      ]
+        { runtime: { $lt: 60 } }, // Update movies with runtime less than 60 minutes
+      ],
     })
 
     console.log(`📊 Found ${malMovies.length} MAL movies to update`)
@@ -27,19 +27,23 @@ async function updateRuntimes() {
     let updated = 0
 
     for (const movie of malMovies) {
-      const estimatedRuntime = unifiedContentService.getEstimatedRuntime(movie.title, movie.malEpisodes || 1)
-      
+      const estimatedRuntime = unifiedContentService.getEstimatedRuntime(
+        movie.title,
+        movie.malEpisodes || 1,
+      )
+
       if (estimatedRuntime && estimatedRuntime !== movie.runtime) {
         await Content.findByIdAndUpdate(movie._id, {
-          runtime: estimatedRuntime
+          runtime: estimatedRuntime,
         })
-        console.log(`✅ Updated ${movie.title}: ${movie.runtime || 'null'} → ${estimatedRuntime} minutes`)
+        console.log(
+          `✅ Updated ${movie.title}: ${movie.runtime || 'null'} → ${estimatedRuntime} minutes`,
+        )
         updated++
       }
     }
 
     console.log(`🎉 Updated ${updated} movies with correct runtime information`)
-    
   } catch (error) {
     console.error('❌ Error updating runtimes:', error)
   } finally {

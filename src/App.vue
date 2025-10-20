@@ -8,8 +8,8 @@
             <router-link to="/" class="logo-link">
               <div class="logo-icon">
                 <svg
-                  width="32"
-                  height="32"
+                  width="50"
+                  height="50"
                   viewBox="0 0 32 32"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
@@ -260,7 +260,7 @@ const handleLogout = () => {
 }
 
 .logo-icon {
-  margin-right: 0.75rem;
+  margin-right: 1rem;
   display: flex;
   align-items: center;
   flex-shrink: 0;

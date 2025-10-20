@@ -60,7 +60,7 @@ const router = createRouter({
       component: () => import('@/views/MovieDetails.vue'),
     },
     {
-      path: '/tv/:id',
+      path: '/tv-show/:id',
       name: 'TVShowDetails',
       component: () => import('@/views/TVShowDetails.vue'),
     },

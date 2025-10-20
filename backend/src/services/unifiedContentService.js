@@ -3,6 +3,9 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
+// https://developer.themoviedb.org/docs/getting-started
+// https://myanimelist.net/apiconfig/references/api/v2
+
 class UnifiedContentService {
   constructor() {
     this.tmdbApiKey = process.env.TMDB_API_KEY

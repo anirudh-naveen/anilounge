@@ -43,6 +43,7 @@
 import { ref, nextTick, onMounted } from 'vue'
 import { useContentStore } from '@/stores/content'
 import { aiAPI } from '@/services/api'
+import type { UnifiedContent } from '@/types/content'
 
 interface Message {
   id: string
@@ -57,6 +58,7 @@ defineProps<{
 
 const emit = defineEmits<{
   close: []
+  'search-results': [results: UnifiedContent[]]
 }>()
 
 const contentStore = useContentStore()
@@ -105,6 +107,8 @@ const sendMessage = async () => {
     // If the AI suggests searching for something, trigger a search
     if (data.searchSuggestion) {
       await contentStore.searchContent(data.searchSuggestion)
+      // Emit the search results to the parent component
+      emit('search-results', contentStore.searchResults)
     }
   } catch (error) {
     console.error('Chatbot error:', error)
@@ -137,7 +141,7 @@ onMounted(() => {
   const welcomeMessage: Message = {
     id: 'welcome',
     type: 'bot',
-    text: 'Hi! I\'m your AI assistant for finding animated content. I can help you discover anime, movies, and TV shows. Try asking me things like "Find me some action anime" or "What are the best Studio Ghibli movies?"',
+    text: 'Hi! I\'m your AI assistant for finding animated content. I can help you discover anime, movies, and TV shows from our database. Try asking me things like "Find me some action anime" or "What are the best Studio Ghibli movies?" and I\'ll search our database to show you specific recommendations!',
     timestamp: new Date(),
   }
   messages.value.push(welcomeMessage)
@@ -147,10 +151,13 @@ onMounted(() => {
 <style scoped>
 .chatbot-container {
   position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  width: 400px;
-  height: 500px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80vw;
+  height: 80vh;
+  max-width: 1200px;
+  max-height: 800px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 12px;

@@ -134,9 +134,18 @@
         </div>
       </div>
 
+      <!-- Related Content Loading State -->
+      <div v-if="relatedContentLoading" class="related-content-loading">
+        <h3>Loading Related Content...</h3>
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <p>Finding sequels, prequels, and related content...</p>
+        </div>
+      </div>
+
       <!-- Related Content Section -->
       <div
-        v-if="
+        v-else-if="
           relatedContent &&
           (relatedContent.sequels.length > 0 ||
             relatedContent.prequels.length > 0 ||
@@ -157,9 +166,9 @@
           <div class="content-grid">
             <div
               v-for="sequel in relatedContent.sequels"
-              :key="sequel._id"
+              :key="`sequel-${sequel._id}`"
               class="content-card"
-              @click="viewContentDetails(sequel)"
+              @click="viewContentDetails(sequel, $event)"
             >
               <img
                 v-if="sequel.posterPath"
@@ -190,9 +199,9 @@
           <div class="content-grid">
             <div
               v-for="prequel in relatedContent.prequels"
-              :key="prequel._id"
+              :key="`prequel-${prequel._id}`"
               class="content-card"
-              @click="viewContentDetails(prequel)"
+              @click="viewContentDetails(prequel, $event)"
             >
               <img
                 v-if="prequel.posterPath"
@@ -223,9 +232,9 @@
           <div class="content-grid">
             <div
               v-for="related in relatedContent.related"
-              :key="related._id"
+              :key="`related-${related._id}`"
               class="content-card"
-              @click="viewContentDetails(related)"
+              @click="viewContentDetails(related, $event)"
             >
               <img
                 v-if="related.posterPath"
@@ -286,6 +295,7 @@ const relatedContent = ref<{
   prequels: UnifiedContent[]
   related: UnifiedContent[]
 } | null>(null)
+const relatedContentLoading = ref(false)
 
 const isInWatchlist = computed(() => {
   if (!show.value || !authStore.user?.watchlist) return false
@@ -295,6 +305,10 @@ const isInWatchlist = computed(() => {
 onMounted(async () => {
   // Scroll to top when component mounts
   contentStore.scrollToTop()
+
+  // Clear previous related content to prevent stale data
+  relatedContent.value = null
+  relatedContentLoading.value = false
 
   const showId = route.params.id as string
   if (!showId) {
@@ -308,21 +322,21 @@ onMounted(async () => {
     const existingShow = contentStore.tvShows.find((s) => s._id === showId)
     if (existingShow) {
       show.value = existingShow
-      // Fetch related content
-      await fetchRelatedContent(showId)
       loading.value = false
+      // Fetch related content in parallel (don't await)
+      fetchRelatedContent(showId)
       return
     }
 
     // If not in store, fetch from API
     const response = await contentAPI.getContentById(showId)
     show.value = response.data.data
+    loading.value = false
 
-    // Fetch related content
-    await fetchRelatedContent(showId)
+    // Fetch related content in parallel (don't await)
+    fetchRelatedContent(showId)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load TV show'
-  } finally {
     loading.value = false
   }
 })
@@ -438,27 +452,70 @@ const formatDate = (date: string | Date) => {
 
 const fetchRelatedContent = async (contentId: string) => {
   try {
-    const response = await contentAPI.getRelatedContent(contentId)
+    relatedContentLoading.value = true
+
+    // Add timeout to prevent hanging (reduced from 5s to 2s)
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Related content request timeout')), 2000),
+    )
+
+    const response = (await Promise.race([
+      contentAPI.getRelatedContent(contentId),
+      timeoutPromise,
+    ])) as any
+
     relatedContent.value = response.data.data
   } catch (err) {
     console.error('Failed to fetch related content:', err)
-    // Don't show error to user, just log it
+    // Set empty result on error so UI doesn't show loading forever
+    relatedContent.value = { sequels: [], prequels: [], related: [] }
+  } finally {
+    relatedContentLoading.value = false
   }
 }
 
-const viewContentDetails = (content: UnifiedContent) => {
-  if (content.contentType === 'movie') {
-    router.push({
-      name: 'MovieDetails',
-      params: { id: content._id },
-      query: { from: route.fullPath },
-    })
-  } else {
-    router.push({
-      name: 'TVShowDetails',
-      params: { id: content._id },
-      query: { from: route.fullPath },
-    })
+const viewContentDetails = async (content: UnifiedContent, event?: Event) => {
+  console.log(
+    'Navigating to content:',
+    content.title,
+    'Type:',
+    content.contentType,
+    'ID:',
+    content._id,
+  )
+
+  // Add visual feedback
+  const clickedElement = event?.target as HTMLElement
+  const card = clickedElement?.closest('.content-card') as HTMLElement
+  if (card) {
+    card.style.opacity = '0.7'
+    card.style.transform = 'scale(0.95)'
+  }
+
+  try {
+    if (content.contentType === 'movie') {
+      console.log('Navigating to MovieDetails with ID:', content._id)
+      await router.push({
+        name: 'MovieDetails',
+        params: { id: content._id },
+        query: { from: route.fullPath },
+      })
+    } else {
+      console.log('Navigating to TVShowDetails with ID:', content._id)
+      await router.push({
+        name: 'TVShowDetails',
+        params: { id: content._id },
+        query: { from: route.fullPath },
+      })
+    }
+    console.log('Navigation completed successfully')
+  } catch (err) {
+    console.error('Navigation error:', err)
+    // Reset visual feedback on error
+    if (card) {
+      card.style.opacity = '1'
+      card.style.transform = 'scale(1)'
+    }
   }
 }
 
@@ -750,6 +807,42 @@ const handleImageError = (event: Event) => {
   .show-actions {
     flex-direction: column;
   }
+}
+
+/* Related Content Loading Styles */
+.related-content-loading {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.related-content-loading h3 {
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.loading-spinner .spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--border-color);
+  border-top: 4px solid var(--highlight-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner p {
+  color: var(--text-muted);
+  margin: 0;
 }
 
 /* Related Content Styles */

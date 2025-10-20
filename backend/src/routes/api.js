@@ -2,8 +2,9 @@ import express from 'express'
 import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
 import * as authController from '../controllers/authController.js'
-import authMiddleware from '../middleware/auth.js'
-import upload from '../middleware/upload.js'
+import authMiddleware, { refreshAccessToken, revokeRefreshToken } from '../middleware/auth.js'
+import upload, { handleUploadError } from '../middleware/upload.js'
+import { bruteForceProtection, apiProtection } from '../middleware/antiBot.js'
 
 const router = express.Router()
 
@@ -36,25 +37,37 @@ router.post(
     body('email').isEmail().withMessage('Valid email is required'),
     body('password').notEmpty().withMessage('Password is required'),
   ],
+  bruteForceProtection.prevent,
   authController.login,
 )
 
+// Token refresh routes (public)
+router.post('/auth/refresh', refreshAccessToken)
+router.post('/auth/revoke', revokeRefreshToken)
+
 // Public routes
 router.get('/content', contentController.getContent)
+router.get('/popular', contentController.getPopularContent)
+router.get('/search', contentController.searchContent)
+router.get('/stats', contentController.getDatabaseStats)
 router.get('/content/:id', contentController.getContentById)
 router.get('/content/external/:id', contentController.getContentByExternalId)
-router.get('/search', contentController.searchContent)
-router.get('/popular', contentController.getPopularContent)
 router.get('/content/:id/similar', contentController.getSimilarContent)
 router.get('/content/:contentId/related', contentController.getRelatedContent)
 router.get('/franchise/:franchiseName', contentController.getFranchiseContent)
-router.get('/stats', contentController.getDatabaseStats)
 
 // AI search route
 router.post(
   '/ai-search',
   [body('query').notEmpty().withMessage('Search query is required')],
   contentController.aiSearch,
+)
+
+// AI chat route
+router.post(
+  '/ai/chat',
+  [body('message').notEmpty().withMessage('Message is required')],
+  contentController.aiChat,
 )
 
 // Protected routes (require authentication)
@@ -80,6 +93,7 @@ router.put(
 router.post(
   '/auth/upload-profile-picture',
   upload.single('profilePicture'),
+  handleUploadError,
   authController.uploadProfilePicture,
 )
 
@@ -91,7 +105,9 @@ router.post(
     body('status').optional().isIn(['plan_to_watch', 'watching', 'completed', 'dropped']),
     body('rating').optional().isFloat({ min: 0, max: 10 }),
     body('currentEpisode').optional().isInt({ min: 0 }),
+    body('currentSeason').optional().isInt({ min: 1 }),
     body('totalEpisodes').optional().isInt({ min: 0 }),
+    body('totalSeasons').optional().isInt({ min: 1 }),
     body('notes').optional().isString(),
   ],
   contentController.addToWatchlist,
@@ -105,7 +121,9 @@ router.put(
     body('status').optional().isIn(['plan_to_watch', 'watching', 'completed', 'dropped']),
     body('rating').optional().isFloat({ min: 0, max: 10 }),
     body('currentEpisode').optional().isInt({ min: 0 }),
+    body('currentSeason').optional().isInt({ min: 1 }),
     body('totalEpisodes').optional().isInt({ min: 0 }),
+    body('totalSeasons').optional().isInt({ min: 1 }),
     body('notes').optional().isString(),
   ],
   contentController.updateWatchlistItem,

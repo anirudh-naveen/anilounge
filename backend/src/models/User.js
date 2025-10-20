@@ -23,10 +23,32 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: [true, 'Please enter a password'],
+      minlength: [8, 'Password must be at least 8 characters long'],
+      validate: {
+        validator: function (password) {
+          // Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character
+          const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/
+          return passwordRegex.test(password)
+        },
+        message:
+          'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+      },
     },
     profilePicture: {
       type: String,
       default: null,
+    },
+
+    // Security fields
+    failedLoginAttempts: {
+      type: Number,
+      default: 0,
+    },
+    lockUntil: {
+      type: Date,
+    },
+    lastLogin: {
+      type: Date,
     },
 
     // Watchlist information
@@ -51,6 +73,13 @@ const userSchema = new mongoose.Schema(
           default: 0,
         },
         totalEpisodes: {
+          type: Number,
+        },
+        currentSeason: {
+          type: Number,
+          default: 1,
+        },
+        totalSeasons: {
           type: Number,
         },
         notes: {

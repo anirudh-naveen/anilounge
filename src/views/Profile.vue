@@ -102,6 +102,7 @@ import { computed, defineOptions } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
 import { getRatingColorHSL } from '@/utils/ratingColors'
+import type { WatchlistItem } from '@/types'
 
 defineOptions({ name: 'ProfilePage' })
 
@@ -125,10 +126,31 @@ const hoursWatched = computed(() => {
       const runtime = item.content.runtime || 0
       return total + runtime
     } else if (item.status === 'watching' && item.content && typeof item.content === 'object') {
-      // For watching items, calculate based on episodes watched
+      // For watching items, calculate based on seasons and episodes watched
+      const currentSeason = (item as WatchlistItem & { currentSeason?: number }).currentSeason || 1
       const episodesWatched = item.currentEpisode || 0
       const runtimePerEpisode = item.content.runtime || 0
-      return total + episodesWatched * runtimePerEpisode
+
+      // Calculate total episodes watched across all seasons up to current season
+      let totalEpisodesWatched = 0
+
+      // If we have season/episode data, calculate more accurately
+      const totalSeasons = (item as WatchlistItem & { totalSeasons?: number }).totalSeasons
+      if (totalSeasons && totalSeasons > 1) {
+        // For multi-season shows, assume episodes per season (this could be improved with actual season data)
+        const episodesPerSeason = Math.ceil((item.totalEpisodes || 0) / (totalSeasons || 1))
+
+        // Add full seasons watched
+        totalEpisodesWatched += (currentSeason - 1) * episodesPerSeason
+
+        // Add episodes watched in current season
+        totalEpisodesWatched += episodesWatched
+      } else {
+        // For single season shows or movies, just use episodes watched
+        totalEpisodesWatched = episodesWatched
+      }
+
+      return total + totalEpisodesWatched * runtimePerEpisode
     }
     return total
   }, 0)

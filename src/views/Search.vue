@@ -18,26 +18,27 @@
               class="search-input"
               placeholder="Search for movies or TV shows..."
               @keydown.enter="handleSearch"
+              :disabled="isAIMode"
               required
             />
-            <button type="submit" class="search-btn" :disabled="contentStore.isLoading">
+            <button type="submit" class="search-btn" :disabled="contentStore.isLoading || isAIMode">
               <span v-if="contentStore.isLoading" class="spinner"></span>
               {{ contentStore.isLoading ? 'Searching...' : 'Search' }}
             </button>
             <button
               type="button"
               class="ai-btn"
-              @click="showChatbot = true"
+              @click="toggleAIMode"
               :disabled="!authStore.isAuthenticated"
             >
-              AI Assistant
+              {{ isAIMode ? 'Filters' : 'AI Assistant' }}
             </button>
           </div>
         </form>
       </div>
 
       <!-- Filters Bar -->
-      <div class="filters-container">
+      <div class="filters-container" v-if="!isAIMode">
         <div class="filters-header">
           <h3>Filters & Sorting</h3>
         </div>
@@ -143,7 +144,10 @@
       </div>
 
       <!-- Search Results -->
-      <div v-else-if="hasSearched && filteredResults.length > 0" class="search-results">
+      <div
+        v-else-if="hasSearched && filteredResults.length > 0 && !isAIMode"
+        class="search-results"
+      >
         <div class="results-header">
           <h2>Search Results</h2>
           <p>
@@ -268,10 +272,10 @@
 
       <!-- Chatbot Modal -->
       <Chatbot
-        v-if="showChatbot"
-        :show-chatbot="showChatbot"
-        @close="showChatbot = false"
-        @search="handleAISearch"
+        v-if="isAIMode"
+        :show-chatbot="isAIMode"
+        @close="toggleAIMode"
+        @search-results="handleAISearchResults"
       />
     </div>
   </div>
@@ -285,9 +289,9 @@ import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
+import type { UnifiedContent } from '@/types/content'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import Chatbot from '@/components/Chatbot.vue'
-import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
 const route = useRoute()
@@ -298,7 +302,7 @@ const toast = useToast()
 // State
 const searchQuery = ref('')
 const hasSearched = ref(false)
-const showChatbot = ref(false)
+const isAIMode = ref(false)
 const showStatusDropdown = ref(false)
 const selectedContentId = ref('')
 const currentPage = ref(1)
@@ -495,9 +499,19 @@ const handleSearch = async () => {
   }
 }
 
-const handleAISearch = async (query: string) => {
-  searchQuery.value = query
-  await handleSearch()
+const toggleAIMode = () => {
+  isAIMode.value = !isAIMode.value
+  if (!isAIMode.value) {
+    // Reset search when exiting AI mode
+    hasSearched.value = false
+    searchQuery.value = ''
+  }
+}
+
+const handleAISearchResults = (results: UnifiedContent[]) => {
+  // Handle AI search results - this will be called from the chatbot
+  contentStore.searchResults = results
+  hasSearched.value = true
 }
 
 const applyFilters = async () => {

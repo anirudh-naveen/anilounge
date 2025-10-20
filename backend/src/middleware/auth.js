@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import RefreshToken from '../models/RefreshToken.js'
 
 export const authenticateToken = async (req, res, next) => {
   try {
@@ -52,8 +53,85 @@ export const authenticateToken = async (req, res, next) => {
   }
 }
 
-export const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' })
+// Generate access token (15 minutes)
+export const generateAccessToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '15m' })
+}
+
+// Generate refresh token (7 days)
+export const generateRefreshToken = async (userId) => {
+  const refreshToken = await RefreshToken.createToken(userId)
+  return refreshToken.token
+}
+
+// Legacy function for backward compatibility
+export const generateToken = generateAccessToken
+
+// Refresh token endpoint handler
+export const refreshAccessToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token required',
+      })
+    }
+
+    // Find the refresh token
+    const tokenDoc = await RefreshToken.findOne({
+      token: refreshToken,
+      isRevoked: false,
+    }).populate('userId')
+
+    if (!tokenDoc || tokenDoc.expiresAt < new Date()) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired refresh token',
+      })
+    }
+
+    // Generate new access token
+    const newAccessToken = generateAccessToken(tokenDoc.userId._id)
+
+    res.json({
+      success: true,
+      message: 'Token refreshed successfully',
+      data: {
+        accessToken: newAccessToken,
+        refreshToken: refreshToken, // Keep the same refresh token
+      },
+    })
+  } catch (error) {
+    console.error('Refresh token error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Server error refreshing token',
+    })
+  }
+}
+
+// Revoke refresh token (logout)
+export const revokeRefreshToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body
+
+    if (refreshToken) {
+      await RefreshToken.updateOne({ token: refreshToken }, { isRevoked: true })
+    }
+
+    res.json({
+      success: true,
+      message: 'Token revoked successfully',
+    })
+  } catch (error) {
+    console.error('Revoke token error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Server error revoking token',
+    })
+  }
 }
 
 // Default export for backward compatibility

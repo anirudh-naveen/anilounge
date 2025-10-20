@@ -243,6 +243,7 @@ export const useContentStore = defineStore('content', () => {
     status: 'plan_to_watch' | 'watching' | 'completed' | 'dropped' = 'plan_to_watch',
     rating?: number,
     currentEpisode?: number,
+    currentSeason?: number,
     notes?: string,
   ) => {
     try {
@@ -251,6 +252,7 @@ export const useContentStore = defineStore('content', () => {
         status,
         rating,
         currentEpisode,
+        currentSeason,
         notes,
       })
 

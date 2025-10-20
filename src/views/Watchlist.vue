@@ -168,6 +168,28 @@
                     />
                   </div>
 
+                  <div
+                    v-if="getContentType(item) === 'TV Show' && getTotalSeasons(item) > 1"
+                    class="season-control"
+                  >
+                    <label>Current Season:</label>
+                    <select
+                      :value="getLocalFormData(item).currentSeason || 1"
+                      @change="
+                        updateLocalFormData(
+                          item,
+                          'currentSeason',
+                          parseInt(($event.target as HTMLSelectElement).value) || 1,
+                        )
+                      "
+                      class="season-select"
+                    >
+                      <option v-for="season in getTotalSeasons(item)" :key="season" :value="season">
+                        Season {{ season }}
+                      </option>
+                    </select>
+                  </div>
+
                   <div class="rating-control">
                     <label>Your Rating (1-10):</label>
                     <input
@@ -377,6 +399,16 @@ const getTotalEpisodes = (item: WatchlistItem) => {
     : 0
 }
 
+const getTotalSeasons = (item: WatchlistItem) => {
+  if (typeof item === 'string') return 1
+  if (typeof item.content === 'string') return 1
+  const content = item.content
+  if (!content) return 1
+  return content.contentType === 'tv'
+    ? (content as TVShow).numberOfSeasons || item.totalSeasons || 1
+    : 1
+}
+
 const hasNewEpisodes = (item: WatchlistItem) => {
   if (typeof item === 'string') return false
   if (typeof item.content === 'string') return false
@@ -422,38 +454,64 @@ const initializeFormData = (item: WatchlistItem) => {
 }
 
 // Get local form data for an item
-const getLocalFormData = (item: WatchlistItem) => {
+const getLocalFormData = (item: WatchlistItem): LocalFormData => {
   const itemId = getContentId(item)
-  return (
-    localFormData.value.get(itemId) || {
-      status: item.status || 'plan_to_watch',
-      currentEpisode: item.currentEpisode || 0,
-      rating: item.rating,
-      notes: item.notes || '',
+  const existingData = localFormData.value.get(itemId)
+
+  if (existingData) {
+    // Ensure all required fields exist
+    return {
+      status: existingData.status || item.status || 'plan_to_watch',
+      currentEpisode: existingData.currentEpisode || item.currentEpisode || 0,
+      currentSeason:
+        ((existingData as Record<string, unknown>).currentSeason as number) ||
+        item.currentSeason ||
+        1,
+      rating: existingData.rating || item.rating,
+      notes: existingData.notes || item.notes || '',
     }
-  )
+  }
+
+  return {
+    status: item.status || 'plan_to_watch',
+    currentEpisode: item.currentEpisode || 0,
+    currentSeason: item.currentSeason || 1,
+    rating: item.rating,
+    notes: item.notes || '',
+  }
+}
+
+// Local form data interface
+interface LocalFormData {
+  status: string
+  currentEpisode: number
+  currentSeason: number
+  rating: number | undefined
+  notes: string
 }
 
 // Update local form data
 const updateLocalFormData = (
   item: WatchlistItem,
-  field: keyof {
-    status: string
-    currentEpisode: number
-    rating: number | undefined
-    notes: string
-  },
+  field: keyof LocalFormData,
   value: string | number | undefined,
 ) => {
   const itemId = getContentId(item)
-  const currentData = localFormData.value.get(itemId) || {
-    status: item.status || 'plan_to_watch',
-    currentEpisode: item.currentEpisode || 0,
-    rating: item.rating,
-    notes: item.notes || '',
+  const currentData: LocalFormData = getLocalFormData(item)
+
+  // Type-safe assignment
+  if (field === 'status') {
+    currentData.status = value as string
+  } else if (field === 'currentEpisode') {
+    currentData.currentEpisode = value as number
+  } else if (field === 'currentSeason') {
+    currentData.currentSeason = value as number
+  } else if (field === 'rating') {
+    currentData.rating = value as number | undefined
+  } else if (field === 'notes') {
+    currentData.notes = value as string
   }
 
-  ;(currentData as Record<string, string | number | undefined>)[field] = value
   localFormData.value.set(itemId, currentData)
 }
 

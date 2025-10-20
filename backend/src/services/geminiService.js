@@ -1,24 +1,40 @@
-// import { GoogleGenAI } from '@google/genai' // Temporarily disabled
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import dotenv from 'dotenv'
+
+dotenv.config()
 
 // https://ai.google.dev/gemini-api/docs
 
 class GeminiService {
   constructor() {
     this.client = null
-    this.hasApiKey = false // Temporarily disable all Gemini API calls
-    // if (this.hasApiKey) {
-    //   this.client = new GoogleGenAI({})
-    // }
+    this.hasApiKey = !!process.env.GEMINI_API_KEY
+
+    console.log('Gemini Service initialized:', {
+      hasApiKey: this.hasApiKey,
+      apiKeyLength: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0,
+    })
+
+    if (this.hasApiKey) {
+      this.client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+    }
   }
 
   // Helper method to make API calls with timeout
   async makeApiCall(prompt) {
+    console.log('makeApiCall called with prompt length:', prompt.length)
+
+    if (!this.hasApiKey || !this.client) {
+      console.log('API not available - hasApiKey:', this.hasApiKey, 'client:', !!this.client)
+      throw new Error('Gemini API not available')
+    }
+
+    const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' })
+    console.log('Model created, making API call...')
+
     return Promise.race([
-      this.client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), 3000)),
+      model.generateContent(prompt),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), 10000)),
     ])
   }
 
@@ -46,7 +62,8 @@ Suggest 3-5 better search terms for finding animated content. Focus on:
 Respond as simple comma-separated terms: term1, term2, term3`
 
       const response = await this.makeApiCall(prompt)
-      const suggestions = response.text
+      const suggestions = response.response
+        .text()
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
@@ -114,7 +131,17 @@ Respond as simple comma-separated terms: term1, term2, term3`
   // Chat with user (conversational AI)
   async chatWithUser(userMessage) {
     try {
+      console.log('ChatWithUser called with message:', userMessage)
+
+      // Temporarily disabled - coming soon!
+      return {
+        response:
+          "🚧 AI Assistant is coming soon! For now, you can use the search filters to find animated content. Try searching for genres like 'action', 'comedy', or 'fantasy'.",
+        searchSuggestion: null,
+      }
+
       if (!this.hasApiKey) {
+        console.log('No API key available')
         return {
           response: "I'm sorry, but I'm not available right now. Please try again later.",
           searchSuggestion: null,
@@ -137,7 +164,7 @@ Keep responses conversational and helpful. If you suggest a search, mention it c
 Respond in 1-2 sentences max.`
 
       const response = await this.makeApiCall(prompt)
-      const aiResponse = response.text
+      const aiResponse = response.response.text()
 
       // Extract search suggestion if present
       let searchSuggestion = null
@@ -188,7 +215,7 @@ Respond in JSON format:
 }`
 
       const response = await this.makeApiCall(prompt)
-      const content = response.text
+      const content = response.response.text()
       return JSON.parse(content)
     } catch (error) {
       console.error('Gemini recommendation error:', error)
@@ -215,7 +242,7 @@ Extract and return in JSON format:
 }`
 
       const response = await this.makeApiCall(prompt)
-      const responseContent = response.text
+      const responseContent = response.response.text()
       return JSON.parse(responseContent)
     } catch (error) {
       console.error('Gemini content analysis error:', error)
@@ -247,7 +274,7 @@ Create a personalized description that highlights aspects the user would be inte
 Respond with just the description text.`
 
       const response = await this.makeApiCall(prompt)
-      return response.text
+      return response.response.text()
     } catch (error) {
       console.error('Gemini description generation error:', error)
       return content.overview || 'No description available.'

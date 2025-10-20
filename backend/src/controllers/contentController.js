@@ -23,12 +23,29 @@ export const getContent = async (req, res) => {
 
     const totalPages = Math.ceil(total / limit)
 
-    // Use database-level pagination with proper sorting
-    const content = await Content.find(query)
-      .sort({ unifiedScore: -1, popularity: -1 })
-      .skip(skip)
-      .limit(limit)
-      .exec()
+    // Use aggregation to add TMDB boost for visibility without overshadowing MAL content
+    const content = await Content.aggregate([
+      { $match: query },
+      {
+        $addFields: {
+          // Add a small boost to TMDB content (0.1 points) to improve visibility
+          boostedScore: {
+            $add: [
+              { $ifNull: ['$unifiedScore', 0] },
+              { $cond: [{ $ne: ['$tmdbId', null] }, 0.1, 0] },
+            ],
+          },
+        },
+      },
+      { $sort: { boostedScore: -1, popularity: -1, _id: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $project: {
+          boostedScore: 0, // Remove the temporary field from output
+        },
+      },
+    ])
 
     res.json({
       success: true,
@@ -214,9 +231,28 @@ export const getPopularContent = async (req, res) => {
       query.contentType = type
     }
 
-    const dbContent = await Content.find(query)
-      .sort({ popularity: -1, unifiedScore: -1 })
-      .limit(parseInt(limit))
+    // Use aggregation to add TMDB boost for popular content
+    const dbContent = await Content.aggregate([
+      { $match: query },
+      {
+        $addFields: {
+          // Add a small boost to TMDB content to improve visibility
+          boostedScore: {
+            $add: [
+              { $ifNull: ['$unifiedScore', 0] },
+              { $cond: [{ $ne: ['$tmdbId', null] }, 0.1, 0] },
+            ],
+          },
+        },
+      },
+      { $sort: { boostedScore: -1, popularity: -1, _id: -1 } },
+      { $limit: parseInt(limit) },
+      {
+        $project: {
+          boostedScore: 0, // Remove the temporary field from output
+        },
+      },
+    ])
 
     // If not enough content, get from external APIs
     let externalContent = []
@@ -318,6 +354,41 @@ export const aiSearch = async (req, res) => {
   }
 }
 
+export const aiChat = async (req, res) => {
+  try {
+    console.log('aiChat controller called with body:', req.body)
+    const { message } = req.body
+
+    if (!message) {
+      console.log('No message provided')
+      return res.status(400).json({
+        success: false,
+        message: 'Message is required',
+      })
+    }
+
+    console.log('Calling geminiService.chatWithUser with:', message)
+    // Use Gemini for AI chat
+    const chatResponse = await geminiService.chatWithUser(message)
+    console.log('Received response from Gemini:', chatResponse)
+
+    res.json({
+      success: true,
+      data: {
+        response: chatResponse.response,
+        searchSuggestion: chatResponse.searchSuggestion,
+        timestamp: new Date(),
+      },
+    })
+  } catch (error) {
+    console.error('AI chat error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'AI chat failed',
+    })
+  }
+}
+
 // Add to watchlist
 export const addToWatchlist = async (req, res) => {
   try {
@@ -330,7 +401,7 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
-    const { contentId, status, rating, currentEpisode, notes } = req.body
+    const { contentId, status, rating, currentEpisode, currentSeason, notes } = req.body
     const userId = req.user.id
 
     const user = await User.findById(userId)
@@ -353,11 +424,22 @@ export const addToWatchlist = async (req, res) => {
     const maxEpisodes =
       content.episodeCount || content.malEpisodes || (content.contentType === 'movie' ? 1 : 0)
 
+    // Get max seasons from content (default to 1 if not specified)
+    const maxSeasons = content.seasonCount || 1
+
     // Validate currentEpisode doesn't exceed max episodes
     if (currentEpisode !== undefined && currentEpisode > maxEpisodes) {
       return res.status(400).json({
         success: false,
         message: `Current episode cannot exceed ${maxEpisodes} episodes`,
+      })
+    }
+
+    // Validate currentSeason doesn't exceed max seasons
+    if (currentSeason !== undefined && currentSeason > maxSeasons) {
+      return res.status(400).json({
+        success: false,
+        message: `Current season cannot exceed ${maxSeasons} seasons`,
       })
     }
 
@@ -370,7 +452,10 @@ export const addToWatchlist = async (req, res) => {
       existingItem.rating = rating !== undefined ? rating : existingItem.rating
       existingItem.currentEpisode =
         currentEpisode !== undefined ? currentEpisode : existingItem.currentEpisode
+      existingItem.currentSeason =
+        currentSeason !== undefined ? currentSeason : existingItem.currentSeason
       existingItem.totalEpisodes = maxEpisodes
+      existingItem.totalSeasons = maxSeasons
       existingItem.notes = notes || existingItem.notes
       existingItem.updatedAt = new Date()
     } else {
@@ -380,7 +465,9 @@ export const addToWatchlist = async (req, res) => {
         status: status || 'plan_to_watch',
         rating: rating,
         currentEpisode: currentEpisode || 0,
+        currentSeason: currentSeason || 1,
         totalEpisodes: maxEpisodes,
+        totalSeasons: maxSeasons,
         notes: notes || '',
         addedAt: new Date(),
         updatedAt: new Date(),
@@ -466,7 +553,7 @@ export const removeFromWatchlist = async (req, res) => {
 export const updateWatchlistItem = async (req, res) => {
   try {
     const { contentId } = req.params
-    const { status, rating, currentEpisode, notes } = req.body
+    const { status, rating, currentEpisode, currentSeason, notes } = req.body
     const userId = req.user.id
 
     const user = await User.findById(userId)
@@ -498,6 +585,9 @@ export const updateWatchlistItem = async (req, res) => {
     const maxEpisodes =
       content.episodeCount || content.malEpisodes || (content.contentType === 'movie' ? 1 : 0)
 
+    // Get max seasons from content (default to 1 if not specified)
+    const maxSeasons = content.seasonCount || 1
+
     // Validate currentEpisode doesn't exceed max episodes
     if (currentEpisode !== undefined && currentEpisode > maxEpisodes) {
       return res.status(400).json({
@@ -506,10 +596,23 @@ export const updateWatchlistItem = async (req, res) => {
       })
     }
 
+    // Validate currentSeason doesn't exceed max seasons
+    if (currentSeason !== undefined && currentSeason > maxSeasons) {
+      return res.status(400).json({
+        success: false,
+        message: `Current season cannot exceed ${maxSeasons} seasons`,
+      })
+    }
+
     if (status) watchlistItem.status = status
     if (rating !== undefined) watchlistItem.rating = rating
     if (currentEpisode !== undefined) watchlistItem.currentEpisode = currentEpisode
+    if (currentSeason !== undefined) watchlistItem.currentSeason = currentSeason
     if (notes !== undefined) watchlistItem.notes = notes
+
+    // Update total episodes and seasons if not set
+    if (!watchlistItem.totalEpisodes) watchlistItem.totalEpisodes = maxEpisodes
+    if (!watchlistItem.totalSeasons) watchlistItem.totalSeasons = maxSeasons
 
     watchlistItem.updatedAt = new Date()
 
@@ -639,6 +742,7 @@ export default {
   getPopularContent,
   getSimilarContent,
   aiSearch,
+  aiChat,
   addToWatchlist,
   getWatchlist,
   removeFromWatchlist,

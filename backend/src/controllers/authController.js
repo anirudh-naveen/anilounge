@@ -1,9 +1,11 @@
 import User from '../models/User.js'
-import { generateToken } from '../middleware/auth.js'
+import { generateAccessToken, generateRefreshToken } from '../middleware/auth.js'
 import { validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
 import path from 'path'
 import fs from 'fs'
+import { logLoginAttempt, logAccountLockout, logFileUpload } from '../middleware/securityLogger.js'
+import { banIPForBruteForce, progressiveBan } from '../middleware/ipBan.js'
 
 export const register = async (req, res) => {
   try {
@@ -87,17 +89,56 @@ export const login = async (req, res) => {
       })
     }
 
-    // Check password
+    // Check if account is locked
+    const isLocked = user.lockUntil && user.lockUntil > Date.now()
+    if (isLocked) {
+      const lockTimeRemaining = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60))
+      return res.status(423).json({
+        success: false,
+        message: `Account is temporarily locked due to too many failed login attempts. Please try again in ${lockTimeRemaining} minutes.`,
+      })
+    }
+
+    // Check password FIRST
     const isPasswordValid = await user.comparePassword(password)
+
     if (!isPasswordValid) {
+      // Log failed login attempt
+      logLoginAttempt(email, false, req.ip, req.get('User-Agent'), user._id)
+
+      // Increment failed attempts
+      user.failedLoginAttempts += 1
+
+      // Lock account after 5 attempts
+      if (user.failedLoginAttempts >= 5) {
+        user.lockUntil = Date.now() + 30 * 60 * 1000 // 30 minutes
+        // Log account lockout
+        logAccountLockout(email, req.ip, req.get('User-Agent'), user._id)
+        // Ban IP for brute force
+        banIPForBruteForce(req.ip, req.get('User-Agent')).catch(console.error)
+      }
+
+      // Save the failed attempt
+      await user.save()
+
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials.',
       })
     }
 
-    // Generate token
-    const token = generateToken(user._id)
+    // SUCCESSFUL LOGIN - Reset failed attempts
+    user.failedLoginAttempts = 0
+    user.lockUntil = undefined
+    user.lastLogin = new Date()
+    await user.save()
+
+    // Log successful login
+    logLoginAttempt(email, true, req.ip, req.get('User-Agent'), user._id)
+
+    // Generate tokens
+    const accessToken = generateAccessToken(user._id)
+    const refreshToken = await generateRefreshToken(user._id)
 
     res.json({
       success: true,
@@ -110,7 +151,8 @@ export const login = async (req, res) => {
           watchlist: user.watchlist,
           preferences: user.preferences,
         },
-        token,
+        accessToken,
+        refreshToken,
       },
     })
   } catch (error) {
@@ -300,6 +342,9 @@ export const uploadProfilePicture = async (req, res) => {
     user.profilePicture = profilePicturePath
     await user.save()
 
+    // Log successful file upload
+    logFileUpload(req.file.filename, user._id, req.ip, true)
+
     res.json({
       success: true,
       message: 'Profile picture uploaded successfully.',
@@ -315,6 +360,10 @@ export const uploadProfilePicture = async (req, res) => {
     })
   } catch (error) {
     console.error('Upload profile picture error:', error)
+
+    // Log failed file upload
+    logFileUpload(req.file?.filename || 'unknown', req.user?._id, req.ip, false, error)
+
     res.status(500).json({
       success: false,
       message: 'Server error uploading profile picture.',

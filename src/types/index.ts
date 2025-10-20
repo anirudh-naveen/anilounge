@@ -1,5 +1,38 @@
 import type { UnifiedContent } from './content'
 
+export interface Network {
+  id: number
+  name: string
+  logoPath?: string
+  originCountry?: string
+}
+
+export interface ProductionCompany {
+  id: number
+  name: string
+  logoPath?: string
+  originCountry?: string
+}
+
+export interface ProductionCountry {
+  iso_3166_1: string
+  name: string
+}
+
+export interface SpokenLanguage {
+  iso_639_1: string
+  name: string
+  englishName?: string
+}
+
+export interface UserRating {
+  content: string
+  rating: number
+  review?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Genre {
   id: number
   name: string
@@ -11,7 +44,9 @@ export interface WatchlistItem {
   status: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
   rating?: number
   currentEpisode: number
+  currentSeason?: number
   totalEpisodes?: number
+  totalSeasons?: number
   notes?: string
   addedAt: string
   updatedAt: string
@@ -28,7 +63,7 @@ export interface User {
     favoriteStudios: string[]
   }
   watchlist?: WatchlistItem[]
-  ratings?: any[]
+  ratings?: UserRating[]
 }
 
 export interface Movie {
@@ -54,10 +89,10 @@ export interface Movie {
   ageRating: string
   averageUserRating: number
   totalUserRatings: number
-  networks: any[]
-  productionCompanies: any[]
-  productionCountries: any[]
-  spokenLanguages: any[]
+  networks: Network[]
+  productionCompanies: ProductionCompany[]
+  productionCountries: ProductionCountry[]
+  spokenLanguages: SpokenLanguage[]
   lastUpdated: string
   createdAt: string
   updatedAt: string
@@ -90,10 +125,10 @@ export interface TVShow {
   ageRating: string
   averageUserRating: number
   totalUserRatings: number
-  networks: any[]
-  productionCompanies: any[]
-  productionCountries: any[]
-  spokenLanguages: any[]
+  networks: Network[]
+  productionCompanies: ProductionCompany[]
+  productionCountries: ProductionCountry[]
+  spokenLanguages: SpokenLanguage[]
   lastUpdated: string
   createdAt: string
   updatedAt: string
@@ -129,6 +164,7 @@ export interface WatchlistData {
   status?: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
   rating?: number
   currentEpisode?: number
+  currentSeason?: number
   notes?: string
 }
 
@@ -136,6 +172,7 @@ export interface UpdateWatchlistData {
   status?: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
   rating?: number
   currentEpisode?: number
+  currentSeason?: number
   notes?: string
 }
 

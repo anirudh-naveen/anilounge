@@ -44,7 +44,7 @@
           <textarea
             v-model="selectedNotes"
             class="notes-textarea"
-            placeholder="Optional notes..."
+            placeholder="..."
             rows="3"
           ></textarea>
         </div>
@@ -108,6 +108,7 @@ const addToWatchlist = async () => {
       selectedStatus.value,
       selectedRating.value,
       props.contentType === 'tv' ? selectedEpisodes.value : undefined,
+      undefined, // currentSeason - not used in quick add
       selectedNotes.value || undefined,
     )
 
@@ -213,6 +214,14 @@ const addToWatchlist = async () => {
   color: var(--text-primary);
   font-size: 0.9rem;
   transition: border-color 0.2s ease;
+}
+
+.status-select::placeholder,
+.rating-input::placeholder,
+.episode-input::placeholder,
+.notes-textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
 }
 
 .status-select:focus,

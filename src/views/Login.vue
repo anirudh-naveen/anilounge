@@ -58,6 +58,11 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 
+// Component name for Vue devtools
+defineOptions({
+  name: 'LoginPage',
+})
+
 const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
@@ -72,8 +77,9 @@ const handleLogin = async () => {
     await authStore.login(form.value)
     toast.success('Login successful!')
     router.push('/')
-  } catch (error) {
-    toast.error('Login failed. Please check your credentials.')
+  } catch {
+    // Error is already set in the auth store, just show toast
+    toast.error(authStore.error || 'Login failed. Please check your credentials.')
   }
 }
 </script>
