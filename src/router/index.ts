@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '@/views/Home.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useContentStore } from '@/stores/content'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -68,7 +69,6 @@ const router = createRouter({
 
 // Navigation guard for protected routes
 router.beforeEach((to, from, next) => {
-  const startTime = Date.now()
   console.log(`🧭 [${new Date().toISOString()}] Router navigation: ${from.path} → ${to.path}`)
 
   const authStore = useAuthStore()
@@ -89,10 +89,24 @@ router.beforeEach((to, from, next) => {
 })
 
 router.afterEach((to, from) => {
-  const endTime = Date.now()
   console.log(
     `🏁 [${new Date().toISOString()}] Router navigation completed: ${from.path} → ${to.path}`,
   )
+
+  // Clear scroll positions when navigating to different main sections
+  // This ensures scroll positions are only preserved for back navigation
+  const mainSections = ['/', '/movies', '/tv', '/search', '/watchlist']
+  const isFromMainSection = mainSections.includes(from.path)
+  const isToMainSection = mainSections.includes(to.path)
+
+  if (isFromMainSection && isToMainSection && from.path !== to.path) {
+    // User navigated directly between main sections, clear all scroll positions
+    const contentStore = useContentStore()
+    contentStore.clearAllScrollPositions()
+    console.log(
+      `🧹 [${new Date().toISOString()}] Cleared scroll positions - direct navigation between sections`,
+    )
+  }
 })
 
 export default router

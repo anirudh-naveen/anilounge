@@ -168,10 +168,14 @@ const handleImageError = (event: Event) => {
 }
 
 const viewShowDetails = (show: UnifiedContent) => {
-  router.push({ 
-    name: 'TVDetails', 
+  // Save current scroll position before navigating
+  const scrollKey = `tv-page-${contentStore.tvShowsPagination.currentPage}`
+  contentStore.saveScrollPosition(scrollKey)
+
+  router.push({
+    name: 'TVDetails',
     params: { id: show._id },
-    query: { from: `/tv?page=${contentStore.tvShowsPagination.currentPage}` }
+    query: { from: `/tv?page=${contentStore.tvShowsPagination.currentPage}` },
   })
 }
 

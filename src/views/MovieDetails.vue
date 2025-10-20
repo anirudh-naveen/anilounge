@@ -135,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
@@ -159,6 +159,9 @@ const isInWatchlist = computed(() => {
 })
 
 onMounted(async () => {
+  // Scroll to top when component mounts
+  contentStore.scrollToTop()
+
   const movieId = route.params.id as string
   if (!movieId) {
     error.value = 'No movie ID provided'
@@ -189,10 +192,28 @@ const goBack = () => {
   // Check if we have a previous page in the route state
   const previousPage = route.query.from as string
   if (previousPage) {
-    router.push(previousPage)
+    // Extract the page number from the query string
+    const url = new URL(previousPage, window.location.origin)
+    const page = url.searchParams.get('page') || '1'
+
+    // Restore scroll position for the page we're going back to
+    const scrollKey = `movies-page-${page}`
+    const restored = contentStore.restoreScrollPosition(scrollKey)
+
+    router.push({ path: '/movies', query: { page } })
+
+    // If scroll position wasn't restored, scroll to top after navigation
+    if (!restored) {
+      nextTick(() => {
+        contentStore.scrollToTop()
+      })
+    }
   } else {
     // Default fallback to movies page
     router.push('/movies')
+    nextTick(() => {
+      contentStore.scrollToTop()
+    })
   }
 }
 

@@ -407,6 +407,34 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  // Scroll position management
+  const savedScrollPositions = ref<Record<string, number>>({})
+
+  const saveScrollPosition = (key: string) => {
+    savedScrollPositions.value[key] = window.scrollY
+  }
+
+  const restoreScrollPosition = (key: string) => {
+    const savedPosition = savedScrollPositions.value[key]
+    if (savedPosition !== undefined) {
+      window.scrollTo(0, savedPosition)
+      return true
+    }
+    return false
+  }
+
+  const clearScrollPosition = (key: string) => {
+    delete savedScrollPositions.value[key]
+  }
+
+  const clearAllScrollPositions = () => {
+    savedScrollPositions.value = {}
+  }
+
+  const scrollToTop = () => {
+    window.scrollTo(0, 0)
+  }
+
   // Clear functions
   const clearSearchResults = () => {
     console.log('Clearing search results') // Debug log
@@ -466,6 +494,13 @@ export const useContentStore = defineStore('content', () => {
 
     // Utilities
     getContentDisplayInfo,
+
+    // Scroll position management
+    saveScrollPosition,
+    restoreScrollPosition,
+    clearScrollPosition,
+    clearAllScrollPositions,
+    scrollToTop,
 
     // Clear functions
     clearSearchResults,

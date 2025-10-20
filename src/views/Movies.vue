@@ -165,10 +165,14 @@ const handleImageError = (event: Event) => {
 }
 
 const viewMovieDetails = (movie: UnifiedContent) => {
-  router.push({ 
-    name: 'MovieDetails', 
+  // Save current scroll position before navigating
+  const scrollKey = `movies-page-${contentStore.moviesPagination.currentPage}`
+  contentStore.saveScrollPosition(scrollKey)
+
+  router.push({
+    name: 'MovieDetails',
     params: { id: movie._id },
-    query: { from: `/movies?page=${contentStore.moviesPagination.currentPage}` }
+    query: { from: `/movies?page=${contentStore.moviesPagination.currentPage}` },
   })
 }
 
