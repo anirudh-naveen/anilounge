@@ -124,8 +124,8 @@ A modern web application for discovering and exploring animated content, built w
 ## 🤝 **Contact**
 
 - **GitHub**: [https://github.com/yourusername/Find-Animation](https://github.com/yourusername/Find-Animation)
-- **LinkedIn**: [Your LinkedIn Profile]
-- **Email**: your.email@example.com
+- **LinkedIn**: https://www.linkedin.com/in/anirudhnaveen/
+- **Email**: anirudhnaveen@outlook.com
 
 ---
 
