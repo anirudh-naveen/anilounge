@@ -43,11 +43,11 @@
                 :alt="item.title"
                 @error="handleImageError"
               />
+              <div class="content-type-badge">
+                {{ getContentTypeDisplay(item.contentType) }}
+              </div>
               <div class="content-overlay">
                 <div class="content-rating">{{ getDisplayRating(item) }}</div>
-                <div class="content-type">
-                  {{ getContentTypeDisplay(item.contentType) }}
-                </div>
                 <div class="content-actions">
                   <button
                     v-if="authStore.isAuthenticated"
@@ -151,6 +151,7 @@ const viewContentDetails = (item: UnifiedContent) => {
 }
 
 const handleWatchlistClick = (contentId: string) => {
+  console.log('Watchlist click:', contentId) // Debug log
   if (!authStore.isAuthenticated) {
     toast.error('Please log in to add items to your watchlist')
     return
@@ -161,6 +162,7 @@ const handleWatchlistClick = (contentId: string) => {
     return
   }
 
+  console.log('Opening dropdown for:', contentId) // Debug log
   selectedContentId.value = contentId
   showStatusDropdown.value = true
 }
@@ -175,7 +177,7 @@ onMounted(async () => {
     // Load popular content (which includes both movies and TV shows)
     await contentStore.getPopularContent('all', 20)
 
-    // Load watchlist if user is authenticated
+    // Load watchlist if user is authenticated (now optimized to skip if already loaded)
     if (authStore.isAuthenticated) {
       await contentStore.loadWatchlist()
     }
@@ -305,6 +307,29 @@ onMounted(async () => {
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
+}
+
+.content-type-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 2;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: all 0.3s ease;
+}
+
+.content-card:hover .content-type-badge {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .content-card:hover .content-poster img {

@@ -16,6 +16,10 @@ export const useContentStore = defineStore('content', () => {
 
   // State
   const isLoading = ref(false)
+  const moviesLoading = ref(false)
+  const tvShowsLoading = ref(false)
+  const searchLoading = ref(false)
+  const watchlistLoaded = ref(false)
   const error = ref<string | null>(null)
   const pagination = ref({
     currentPage: 1,
@@ -26,10 +30,44 @@ export const useContentStore = defineStore('content', () => {
     hasPrevPage: false,
   })
 
+  // Separate pagination for movies and TV shows
+  const moviesPagination = ref({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 20,
+    hasNextPage: false,
+    hasPrevPage: false,
+  })
+
+  const tvShowsPagination = ref({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 20,
+    hasNextPage: false,
+    hasPrevPage: false,
+  })
+
   // Get all content with pagination and filtering
   const getContent = async (page = 1, contentType?: 'movie' | 'tv' | 'all', limit = 20) => {
+    const startTime = Date.now()
+    console.log(`🚀 [${new Date().toISOString()}] Frontend getContent called:`, {
+      page,
+      contentType,
+      limit,
+    })
+
     try {
-      isLoading.value = true
+      // Set appropriate loading state
+      if (contentType === 'movie') {
+        moviesLoading.value = true
+        console.log(`🎬 [${new Date().toISOString()}] Setting moviesLoading = true`)
+      } else if (contentType === 'tv') {
+        tvShowsLoading.value = true
+        console.log(`📺 [${new Date().toISOString()}] Setting tvShowsLoading = true`)
+      }
+
       error.value = null
 
       const params: Record<string, string | number> = { page, limit }
@@ -37,24 +75,77 @@ export const useContentStore = defineStore('content', () => {
         params.type = contentType
       }
 
+      console.log(`📡 [${new Date().toISOString()}] Making API call with params:`, params)
+      const apiStart = Date.now()
       const response = await contentAPI.getContent(params)
+      const apiTime = Date.now() - apiStart
+      console.log(`📡 [${new Date().toISOString()}] API call completed in ${apiTime}ms`)
 
       if (response.data.success) {
+        const processStart = Date.now()
         allContent.value = response.data.data
         pagination.value = response.data.pagination
 
-        // Separate movies and TV shows
-        movies.value = allContent.value.filter((item) => item.contentType === 'movie')
-        tvShows.value = allContent.value.filter((item) => item.contentType === 'tv')
+        // Update appropriate pagination state based on content type
+        if (contentType === 'movie') {
+          movies.value = response.data.data
+          moviesPagination.value = response.data.pagination
+          console.log(
+            `🎬 [${new Date().toISOString()}] Updated movies array with ${movies.value.length} items`,
+          )
+        } else if (contentType === 'tv') {
+          tvShows.value = response.data.data
+          tvShowsPagination.value = response.data.pagination
+          console.log(
+            `📺 [${new Date().toISOString()}] Updated tvShows array with ${tvShows.value.length} items`,
+          )
+        } else {
+          // For 'all' content type, separate movies and TV shows efficiently
+          const movieItems: UnifiedContent[] = []
+          const tvItems: UnifiedContent[] = []
+
+          for (const item of allContent.value) {
+            if (item.contentType === 'movie') {
+              movieItems.push(item)
+            } else if (item.contentType === 'tv') {
+              tvItems.push(item)
+            }
+          }
+
+          movies.value = movieItems
+          tvShows.value = tvItems
+          console.log(
+            `🔄 [${new Date().toISOString()}] Separated content: ${movieItems.length} movies, ${tvItems.length} TV shows`,
+          )
+        }
+
+        const processTime = Date.now() - processStart
+        console.log(`⚡ [${new Date().toISOString()}] Data processing took ${processTime}ms`)
       }
+
+      const totalTime = Date.now() - startTime
+      console.log(
+        `✅ [${new Date().toISOString()}] Frontend getContent completed in ${totalTime}ms`,
+      )
 
       return response.data
     } catch (err: unknown) {
-      console.error('Error fetching content:', err)
+      const totalTime = Date.now() - startTime
+      console.error(
+        `❌ [${new Date().toISOString()}] Frontend getContent error after ${totalTime}ms:`,
+        err,
+      )
       error.value = err instanceof Error ? err.message : 'Failed to fetch content'
       throw err
     } finally {
-      isLoading.value = false
+      // Clear appropriate loading state
+      if (contentType === 'movie') {
+        moviesLoading.value = false
+        console.log(`🎬 [${new Date().toISOString()}] Setting moviesLoading = false`)
+      } else if (contentType === 'tv') {
+        tvShowsLoading.value = false
+        console.log(`📺 [${new Date().toISOString()}] Setting tvShowsLoading = false`)
+      }
     }
   }
 
@@ -189,6 +280,8 @@ export const useContentStore = defineStore('content', () => {
     notes?: string,
   ) => {
     try {
+      console.log('Adding to watchlist:', { contentId, status, rating, currentEpisode, notes }) // Debug log
+
       const response = await watchlistAPI.addToWatchlist({
         contentId,
         status,
@@ -197,13 +290,16 @@ export const useContentStore = defineStore('content', () => {
         notes,
       })
 
+      console.log('Watchlist API response:', response.data) // Debug log
+
       if (response.data.success) {
-        // Refresh watchlist
-        await loadWatchlist()
+        // Force refresh watchlist
+        await loadWatchlist(true)
       }
 
       return true
     } catch (err: unknown) {
+      console.error('Error in addToWatchlist:', err) // Debug log
       error.value = err instanceof Error ? err.message : 'Failed to add to watchlist'
       throw err
     }
@@ -214,8 +310,8 @@ export const useContentStore = defineStore('content', () => {
       const response = await watchlistAPI.updateWatchlistItem(contentId, updates)
 
       if (response.data.success) {
-        // Refresh watchlist
-        await loadWatchlist()
+        // Force refresh watchlist
+        await loadWatchlist(true)
       }
 
       return true
@@ -230,8 +326,8 @@ export const useContentStore = defineStore('content', () => {
       const response = await watchlistAPI.removeFromWatchlist(contentId)
 
       if (response.data.success) {
-        // Refresh watchlist
-        await loadWatchlist()
+        // Force refresh watchlist
+        await loadWatchlist(true)
       }
 
       return true
@@ -241,12 +337,21 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  const loadWatchlist = async () => {
+  const loadWatchlist = async (forceReload = false) => {
+    // Skip if already loaded, unless force reload is requested
+    if (watchlistLoaded.value && !forceReload) {
+      return
+    }
+
     try {
       const response = await watchlistAPI.getWatchlist()
 
       if (response.data.success) {
         watchlist.value = response.data.data
+        watchlistLoaded.value = true
+        console.log(
+          `📋 [${new Date().toISOString()}] Watchlist loaded: ${watchlist.value.length} items`,
+        )
       }
     } catch (err: unknown) {
       console.error('Error loading watchlist:', err)
@@ -260,7 +365,7 @@ export const useContentStore = defineStore('content', () => {
       if (typeof item.content === 'string') {
         return item.content === contentId
       }
-      return item.content._id === contentId
+      return item.content?._id === contentId
     })
   })
 
@@ -269,7 +374,7 @@ export const useContentStore = defineStore('content', () => {
       if (typeof item.content === 'string') {
         return item.content === contentId
       }
-      return item.content._id === contentId
+      return item.content?._id === contentId
     })
   })
 
@@ -304,14 +409,17 @@ export const useContentStore = defineStore('content', () => {
 
   // Clear functions
   const clearSearchResults = () => {
+    console.log('Clearing search results') // Debug log
     searchResults.value = []
   }
 
   const clearCurrentContent = () => {
+    console.log('Clearing current content') // Debug log
     currentContent.value = null
   }
 
   const clearAll = () => {
+    console.log('Clearing all content') // Debug log
     allContent.value = []
     movies.value = []
     tvShows.value = []
@@ -319,6 +427,7 @@ export const useContentStore = defineStore('content', () => {
     currentContent.value = null
     recommendations.value = []
     watchlist.value = []
+    watchlistLoaded.value = false
     error.value = null
   }
 
@@ -332,8 +441,13 @@ export const useContentStore = defineStore('content', () => {
     watchlist,
     recommendations,
     isLoading,
+    moviesLoading,
+    tvShowsLoading,
+    searchLoading,
     error,
     pagination,
+    moviesPagination,
+    tvShowsPagination,
 
     // Actions
     getContent,

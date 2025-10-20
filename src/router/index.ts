@@ -68,18 +68,31 @@ const router = createRouter({
 
 // Navigation guard for protected routes
 router.beforeEach((to, from, next) => {
+  const startTime = Date.now()
+  console.log(`🧭 [${new Date().toISOString()}] Router navigation: ${from.path} → ${to.path}`)
+
   const authStore = useAuthStore()
 
   // Initialize auth if not already done
   if (!authStore.user && localStorage.getItem('token')) {
+    console.log(`🔐 [${new Date().toISOString()}] Initializing auth from localStorage`)
     authStore.initAuth()
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    console.log(`🚫 [${new Date().toISOString()}] Route requires auth, redirecting to login`)
     next('/login')
   } else {
+    console.log(`✅ [${new Date().toISOString()}] Route access granted`)
     next()
   }
+})
+
+router.afterEach((to, from) => {
+  const endTime = Date.now()
+  console.log(
+    `🏁 [${new Date().toISOString()}] Router navigation completed: ${from.path} → ${to.path}`,
+  )
 })
 
 export default router

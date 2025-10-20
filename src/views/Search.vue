@@ -111,11 +111,11 @@
                 :alt="item.title"
                 @error="handleImageError"
               />
+              <div class="content-type-badge">
+                {{ getContentTypeDisplay(item.contentType) }}
+              </div>
               <div class="result-overlay">
                 <div class="result-rating">{{ getDisplayRating(item) }}</div>
-                <div class="result-type">
-                  {{ getContentTypeDisplay(item.contentType) }}
-                </div>
                 <div class="result-actions">
                   <button
                     v-if="authStore.isAuthenticated"
@@ -627,6 +627,29 @@ watch(
   font-weight: 600;
   font-size: 0.8rem;
   align-self: flex-start;
+}
+
+.content-type-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 2;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: all 0.3s ease;
+}
+
+.result-card:hover .content-type-badge {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .result-actions {

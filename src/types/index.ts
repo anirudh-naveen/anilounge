@@ -1,3 +1,5 @@
+import type { UnifiedContent } from './content'
+
 export interface Genre {
   id: number
   name: string
@@ -5,7 +7,7 @@ export interface Genre {
 }
 
 export interface WatchlistItem {
-  content: Content
+  content: UnifiedContent
   status: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
   rating?: number
   currentEpisode: number

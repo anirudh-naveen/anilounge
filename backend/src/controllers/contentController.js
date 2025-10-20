@@ -6,6 +6,14 @@ import { validationResult } from 'express-validator'
 
 // Get all content with pagination
 export const getContent = async (req, res) => {
+  const startTime = Date.now()
+  console.log(`🚀 [${new Date().toISOString()}] getContent called:`, {
+    page: req.query.page,
+    limit: req.query.limit,
+    type: req.query.type,
+    userAgent: req.get('User-Agent')?.substring(0, 50),
+  })
+
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 20
@@ -17,17 +25,30 @@ export const getContent = async (req, res) => {
       query.contentType = contentType
     }
 
-    // Sort by unified score (averaged from TMDB and MAL), then popularity
+    console.log(`📊 [${new Date().toISOString()}] Database query:`, { query, skip, limit })
+
+    // Get total count for pagination
+    const countStart = Date.now()
+    const total = await Content.countDocuments(query)
+    const countTime = Date.now() - countStart
+    console.log(`📈 [${new Date().toISOString()}] Count query took ${countTime}ms, total: ${total}`)
+
+    const totalPages = Math.ceil(total / limit)
+
+    // Use database-level pagination with proper sorting
+    const queryStart = Date.now()
     const content = await Content.find(query)
-      .sort({
-        unifiedScore: -1,
-        popularity: -1,
-      })
+      .sort({ unifiedScore: -1, popularity: -1 })
       .skip(skip)
       .limit(limit)
+      .exec()
+    const queryTime = Date.now() - queryStart
+    console.log(
+      `🔍 [${new Date().toISOString()}] Content query took ${queryTime}ms, returned ${content.length} items`,
+    )
 
-    const total = await Content.countDocuments(query)
-    const totalPages = Math.ceil(total / limit)
+    const totalTime = Date.now() - startTime
+    console.log(`✅ [${new Date().toISOString()}] getContent completed in ${totalTime}ms`)
 
     res.json({
       success: true,
@@ -42,7 +63,8 @@ export const getContent = async (req, res) => {
       },
     })
   } catch (error) {
-    console.error('Error fetching content:', error)
+    const totalTime = Date.now() - startTime
+    console.error(`❌ [${new Date().toISOString()}] getContent error after ${totalTime}ms:`, error)
     res.status(500).json({
       success: false,
       message: 'Error fetching content',
@@ -137,7 +159,7 @@ export const searchContent = async (req, res) => {
       ],
       ...(type && type !== 'all' ? { contentType: type } : {}),
     })
-      .sort({ popularity: -1, malScore: -1 })
+      .sort({ popularity: -1, unifiedScore: -1 })
       .skip(skip)
       .limit(parseInt(limit))
 
@@ -213,7 +235,7 @@ export const getPopularContent = async (req, res) => {
     }
 
     const dbContent = await Content.find(query)
-      .sort({ popularity: -1, malScore: -1 })
+      .sort({ popularity: -1, unifiedScore: -1 })
       .limit(parseInt(limit))
 
     // If not enough content, get from external APIs

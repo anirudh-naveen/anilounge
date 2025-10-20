@@ -21,7 +21,7 @@
         <div class="movie-poster">
           <img
             v-if="movie.posterPath"
-            :src="`https://image.tmdb.org/t/p/w500${movie.posterPath}`"
+            :src="getPosterUrl(movie.posterPath)"
             :alt="movie.title"
             @error="handleImageError"
           />
@@ -139,7 +139,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { contentAPI } from '@/services/api'
+import { contentAPI, getPosterUrl } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
 
@@ -155,7 +155,7 @@ const showStatusDropdown = ref(false)
 
 const isInWatchlist = computed(() => {
   if (!movie.value || !authStore.user?.watchlist) return false
-  return authStore.user.watchlist.some((item) => item.content._id === movie.value?._id)
+  return authStore.user.watchlist.some((item) => item.content?._id === movie.value?._id)
 })
 
 onMounted(async () => {

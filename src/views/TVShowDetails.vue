@@ -21,7 +21,7 @@
         <div class="show-poster">
           <img
             v-if="show.posterPath"
-            :src="`https://image.tmdb.org/t/p/w500${show.posterPath}`"
+            :src="getPosterUrl(show.posterPath)"
             :alt="show.title"
             @error="handleImageError"
           />
@@ -151,7 +151,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { contentAPI } from '@/services/api'
+import { contentAPI, getPosterUrl } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
 
@@ -167,7 +167,7 @@ const showStatusDropdown = ref(false)
 
 const isInWatchlist = computed(() => {
   if (!show.value || !authStore.user?.watchlist) return false
-  return authStore.user.watchlist.some((item) => item.content._id === show.value?._id)
+  return authStore.user.watchlist.some((item) => item.content?._id === show.value?._id)
 })
 
 onMounted(async () => {
@@ -201,10 +201,13 @@ const goBack = () => {
   // Check if we have a previous page in the route state
   const previousPage = route.query.from as string
   if (previousPage) {
-    router.push(previousPage)
+    // Extract the page number from the query string
+    const url = new URL(previousPage, window.location.origin)
+    const page = url.searchParams.get('page') || '1'
+    router.push({ path: '/tv', query: { page } })
   } else {
     // Default fallback to TV shows page
-    router.push('/tv-shows')
+    router.push('/tv')
   }
 }
 

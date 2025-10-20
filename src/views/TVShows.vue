@@ -9,7 +9,7 @@
       </div>
 
       <!-- Loading State -->
-      <div v-if="contentStore.isLoading" class="loading-container">
+      <div v-if="contentStore.tvShowsLoading" class="loading-container">
         <div class="spinner"></div>
         <p>Loading amazing TV shows...</p>
       </div>
@@ -36,6 +36,9 @@
               :alt="show.title"
               @error="handleImageError"
             />
+            <div class="content-type-badge">
+              {{ getContentTypeDisplay(show.contentType) }}
+            </div>
             <div class="show-overlay">
               <div class="show-rating">{{ getDisplayRating(show) }}</div>
               <div class="show-actions">
@@ -84,20 +87,21 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="contentStore.pagination.totalPages > 1" class="pagination">
+      <div v-if="contentStore.tvShowsPagination.totalPages > 1" class="pagination">
         <button
-          @click="loadTVShows(contentStore.pagination.currentPage - 1)"
-          :disabled="!contentStore.pagination.hasPrevPage"
+          @click="loadTVShows(contentStore.tvShowsPagination.currentPage - 1)"
+          :disabled="!contentStore.tvShowsPagination.hasPrevPage"
           class="btn btn-secondary"
         >
           Previous
         </button>
         <span class="pagination-info">
-          Page {{ contentStore.pagination.currentPage }} of {{ contentStore.pagination.totalPages }}
+          Page {{ contentStore.tvShowsPagination.currentPage }} of
+          {{ contentStore.tvShowsPagination.totalPages }}
         </span>
         <button
-          @click="loadTVShows(contentStore.pagination.currentPage + 1)"
-          :disabled="!contentStore.pagination.hasNextPage"
+          @click="loadTVShows(contentStore.tvShowsPagination.currentPage + 1)"
+          :disabled="!contentStore.tvShowsPagination.hasNextPage"
           class="btn btn-secondary"
         >
           Next
@@ -120,7 +124,7 @@ import { onMounted, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl, formatGenres } from '@/services/api'
+import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
@@ -164,7 +168,11 @@ const handleImageError = (event: Event) => {
 }
 
 const viewShowDetails = (show: UnifiedContent) => {
-  router.push({ name: 'TVDetails', params: { id: show._id } })
+  router.push({ 
+    name: 'TVDetails', 
+    params: { id: show._id },
+    query: { from: `/tv?page=${contentStore.tvShowsPagination.currentPage}` }
+  })
 }
 
 const handleWatchlistClick = (contentId: string) => {
@@ -197,18 +205,38 @@ const loadTVShows = async (page: number) => {
 }
 
 onMounted(async () => {
+  const startTime = Date.now()
+  console.log(`📺 [${new Date().toISOString()}] TVShows component mounted`)
+
   try {
     // Load TV shows if not already loaded
     if (contentStore.tvShows.length === 0) {
+      console.log(`📺 [${new Date().toISOString()}] TV shows array empty, loading content...`)
       await contentStore.getContent(1, 'tv', 20)
+    } else {
+      console.log(
+        `📺 [${new Date().toISOString()}] TV shows already loaded (${contentStore.tvShows.length} items), skipping API call`,
+      )
     }
 
-    // Load watchlist if user is authenticated
+    // Load watchlist if user is authenticated (now optimized to skip if already loaded)
     if (authStore.isAuthenticated) {
+      console.log(`📺 [${new Date().toISOString()}] User authenticated, loading watchlist...`)
       await contentStore.loadWatchlist()
+    } else {
+      console.log(`📺 [${new Date().toISOString()}] User not authenticated, skipping watchlist`)
     }
+
+    const totalTime = Date.now() - startTime
+    console.log(
+      `✅ [${new Date().toISOString()}] TVShows component mounted successfully in ${totalTime}ms`,
+    )
   } catch (error) {
-    console.error('Error loading TV shows page:', error)
+    const totalTime = Date.now() - startTime
+    console.error(
+      `❌ [${new Date().toISOString()}] TVShows component error after ${totalTime}ms:`,
+      error,
+    )
     toast.error('Failed to load TV shows. Please try again.')
   }
 })
@@ -472,6 +500,29 @@ onMounted(async () => {
 .pagination-info {
   color: white;
   font-weight: 500;
+}
+
+.content-type-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 2;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: all 0.3s ease;
+}
+
+.show-card:hover .content-type-badge {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 @media (max-width: 768px) {

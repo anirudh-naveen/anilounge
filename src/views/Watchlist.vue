@@ -98,8 +98,12 @@
                 <div class="content-genres">
                   <h5>Genres:</h5>
                   <div class="genre-tags">
-                    <span v-for="genre in getContentGenres(item)" :key="genre.id" class="genre-tag">
-                      {{ genre.name }}
+                    <span
+                      v-for="genre in getContentGenres(item)"
+                      :key="typeof genre === 'string' ? genre : genre.id"
+                      class="genre-tag"
+                    >
+                      {{ typeof genre === 'string' ? genre : genre.name }}
                     </span>
                   </div>
                 </div>
@@ -249,37 +253,38 @@ const getStatusClass = (status: string) => {
 
 const getContentId = (item: WatchlistItem) => {
   if (typeof item === 'string') return item
-  return typeof item.content === 'string' ? item.content : item.content._id
+  return typeof item.content === 'string' ? item.content : item.content?._id
 }
 
 const getContentTitle = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'Unknown Title'
   if (typeof item.content === 'string') return 'Unknown Title'
-  return item.content.title || 'Unknown Title'
+  return item.content?.title || 'Unknown Title'
 }
 
 const getContentOverview = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'No description available'
   if (typeof item.content === 'string') return 'No description available'
-  return item.content.overview || 'No description available'
+  return item.content?.overview || 'No description available'
 }
 
 const getContentPosterPath = (item: WatchlistItem) => {
   if (typeof item === 'string') return ''
   if (typeof item.content === 'string') return ''
-  return item.content.posterPath || ''
+  return item.content?.posterPath || ''
 }
 
 const getContentType = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'Unknown'
   if (typeof item.content === 'string') return 'Unknown'
-  return item.content.contentType === 'movie' ? 'Movie' : 'TV Show'
+  return item.content?.contentType === 'movie' ? 'Movie' : 'TV Show'
 }
 
 const getContentYear = (item: WatchlistItem) => {
   if (typeof item === 'string') return ''
   if (typeof item.content === 'string') return ''
   const content = item.content
+  if (!content) return ''
   const date =
     content.contentType === 'movie'
       ? (content as Movie).releaseDate
@@ -290,13 +295,14 @@ const getContentYear = (item: WatchlistItem) => {
 const getContentGenres = (item: WatchlistItem) => {
   if (typeof item === 'string') return []
   if (typeof item.content === 'string') return []
-  return item.content.genres || []
+  return item.content?.genres || []
 }
 
 const getContentReleaseDate = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'Unknown'
   if (typeof item.content === 'string') return 'Unknown'
   const content = item.content
+  if (!content) return 'Unknown'
   const date =
     content.contentType === 'movie'
       ? (content as Movie).releaseDate
@@ -308,13 +314,14 @@ const getContentSeasons = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'Unknown'
   if (typeof item.content === 'string') return 'Unknown'
   const content = item.content
+  if (!content) return 'Unknown'
   return content.contentType === 'tv' ? (content as TVShow).numberOfSeasons || 'Unknown' : 'N/A'
 }
 
 const getContentRating = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'N/A'
   if (typeof item.content === 'string') return 'N/A'
-  return item.content.unifiedScore?.toFixed(1) || 'N/A'
+  return item.content?.unifiedScore?.toFixed(1) || 'N/A'
 }
 
 const getCurrentEpisodes = (item: WatchlistItem) => {
@@ -326,6 +333,7 @@ const getTotalEpisodes = (item: WatchlistItem) => {
   if (typeof item === 'string') return 0
   if (typeof item.content === 'string') return 0
   const content = item.content
+  if (!content) return 0
   return content.contentType === 'tv'
     ? (content as TVShow).numberOfEpisodes || item.totalEpisodes || 0
     : 0
@@ -414,9 +422,9 @@ const viewContentDetails = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return
 
   const route =
-    item.content.contentType === 'movie'
-      ? `/movie/${item.content.tmdbId}`
-      : `/tv/${item.content.tmdbId}`
+    item.content?.contentType === 'movie'
+      ? `/movie/${item.content?.tmdbId}`
+      : `/tv/${item.content?.tmdbId}`
   router.push(route)
 }
 
@@ -442,7 +450,7 @@ const refreshWatchlist = async () => {
 
   try {
     // Use the proper content store method to load watchlist
-    await contentStore.loadWatchlist()
+    await contentStore.loadWatchlist(true) // Force reload
     toast.success('Watchlist refreshed')
   } catch (error: unknown) {
     console.error('Error refreshing watchlist:', error)
@@ -469,23 +477,58 @@ watch(
   },
 )
 
+// Watch for route changes to refresh watchlist when navigating to this page
+watch(
+  () => router.currentRoute.value.path,
+  (newPath) => {
+    if (newPath === '/watchlist' && authStore.isAuthenticated) {
+      console.log(`📋 [${new Date().toISOString()}] Route changed to watchlist, refreshing...`)
+      contentStore.loadWatchlist(true)
+    }
+  },
+  { immediate: true },
+)
+
 onMounted(async () => {
-  if (isLoading.value) return
+  const startTime = Date.now()
+  console.log(`📋 [${new Date().toISOString()}] Watchlist component mounted`)
+
+  if (isLoading.value) {
+    console.log(`📋 [${new Date().toISOString()}] Already loading, skipping`)
+    return
+  }
 
   // Check authentication first
   if (!authStore.isAuthenticated) {
+    console.log(`📋 [${new Date().toISOString()}] User not authenticated, redirecting to login`)
     router.push('/login')
     return
   }
 
+  console.log(`📋 [${new Date().toISOString()}] User authenticated, loading watchlist...`)
+  console.log(
+    `📋 [${new Date().toISOString()}] Current watchlist length: ${contentStore.watchlist.length}`,
+  )
+
   // Use the proper content store method to load watchlist
   try {
-    await contentStore.loadWatchlist()
+    await contentStore.loadWatchlist(true) // Force reload to get latest data
+    console.log(
+      `📋 [${new Date().toISOString()}] Watchlist loaded successfully, length: ${contentStore.watchlist.length}`,
+    )
   } catch (error) {
-    console.error('Error loading watchlist:', error)
+    const totalTime = Date.now() - startTime
+    console.error(
+      `❌ [${new Date().toISOString()}] Watchlist component error after ${totalTime}ms:`,
+      error,
+    )
     toast.error('Failed to load watchlist')
   } finally {
     isLoading.value = false
+    const totalTime = Date.now() - startTime
+    console.log(
+      `✅ [${new Date().toISOString()}] Watchlist component mounted successfully in ${totalTime}ms`,
+    )
   }
 })
 

@@ -125,6 +125,8 @@ const ContentSchema = new mongoose.Schema(
 ContentSchema.index({ contentType: 1, popularity: -1 })
 ContentSchema.index({ contentType: 1, voteAverage: -1 })
 ContentSchema.index({ contentType: 1, malScore: -1 })
+ContentSchema.index({ contentType: 1, unifiedScore: -1 })
+ContentSchema.index({ unifiedScore: -1, popularity: -1 })
 ContentSchema.index({ genres: 1, contentType: 1 })
 ContentSchema.index({ title: 'text', overview: 'text' })
 

@@ -206,6 +206,12 @@ class DatabasePopulator {
 
       const contentData = unifiedContentService.convertTmdbToContent(tmdbData, contentType)
 
+      // Skip if convertTmdbToContent returned null (insufficient votes or null data)
+      if (!contentData) {
+        this.stats.skipped++
+        return
+      }
+
       // Check if content already exists
       const existingContent = await Content.findOne({ tmdbId: tmdbData.id })
 
@@ -245,6 +251,131 @@ class DatabasePopulator {
     }
   }
 
+  // Enhanced deduplication method
+  async findDuplicateContent(contentData, source) {
+    const duplicates = []
+
+    // 1. Check by external ID first
+    if (source === 'tmdb' && contentData.tmdbId) {
+      const byTmdbId = await Content.findOne({ tmdbId: contentData.tmdbId })
+      if (byTmdbId) duplicates.push({ content: byTmdbId, reason: 'tmdb_id' })
+    }
+
+    if (source === 'mal' && contentData.malId) {
+      const byMalId = await Content.findOne({ malId: contentData.malId })
+      if (byMalId) duplicates.push({ content: byMalId, reason: 'mal_id' })
+    }
+
+    // 2. Check by title similarity (fuzzy matching)
+    const titleVariations = this.generateTitleVariations(contentData.title)
+    for (const title of titleVariations) {
+      const byTitle = await Content.findOne({
+        $or: [
+          { title: { $regex: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } },
+          {
+            alternativeTitles: {
+              $regex: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+            },
+          },
+        ],
+        contentType: contentData.contentType,
+      })
+
+      if (byTitle && !duplicates.some((d) => d.content._id.equals(byTitle._id))) {
+        // Additional fact checking
+        if (this.isLikelySameContent(contentData, byTitle)) {
+          duplicates.push({ content: byTitle, reason: 'title_match' })
+        }
+      }
+    }
+
+    return duplicates
+  }
+
+  // Generate title variations for better matching
+  generateTitleVariations(title) {
+    const variations = [title]
+
+    // Remove common suffixes/prefixes
+    const cleaned = title
+      .replace(/\s*\(.*?\)\s*/g, '') // Remove parentheses
+      .replace(/\s*:.*$/g, '') // Remove colons and everything after
+      .replace(/\s*-\s*.*$/g, '') // Remove dashes and everything after
+      .replace(/\s*Season\s*\d+.*$/gi, '') // Remove season info
+      .replace(/\s*Movie.*$/gi, '') // Remove "Movie" suffix
+      .trim()
+
+    if (cleaned !== title) variations.push(cleaned)
+
+    return [...new Set(variations)].filter((v) => v && v.length > 2)
+  }
+
+  // Fact checking to determine if content is likely the same
+  isLikelySameContent(newContent, existingContent) {
+    // Check release year similarity (within 1 year for movies, 2 years for TV shows)
+    if (newContent.releaseDate && existingContent.releaseDate) {
+      const newYear = new Date(newContent.releaseDate).getFullYear()
+      const existingYear = new Date(existingContent.releaseDate).getFullYear()
+      const yearDiff = Math.abs(newYear - existingYear)
+
+      // Movies should be within 1 year, TV shows within 2 years
+      const maxYearDiff = newContent.contentType === 'movie' ? 1 : 2
+      if (yearDiff > maxYearDiff) {
+        console.log(
+          `❌ Year mismatch: ${newContent.title} (${newYear}) vs ${existingContent.title} (${existingYear})`,
+        )
+        return false
+      }
+    }
+
+    // Check content type
+    if (newContent.contentType !== existingContent.contentType) {
+      console.log(
+        `❌ Content type mismatch: ${newContent.title} (${newContent.contentType}) vs ${existingContent.title} (${existingContent.contentType})`,
+      )
+      return false
+    }
+
+    // Check genre overlap (at least 1 common genre)
+    const newGenres = (newContent.genres || []).map((g) => g.name?.toLowerCase() || g.toLowerCase())
+    const existingGenres = (existingContent.genres || []).map(
+      (g) => g.name?.toLowerCase() || g.toLowerCase(),
+    )
+    const commonGenres = newGenres.filter((g) => existingGenres.includes(g))
+
+    if (commonGenres.length === 0) {
+      console.log(`❌ No common genres: ${newContent.title} vs ${existingContent.title}`)
+      return false
+    }
+
+    // Check episode count similarity for TV shows (within 5 episodes)
+    if (newContent.contentType === 'tv') {
+      const newEpisodes = newContent.episodeCount || newContent.malEpisodes
+      const existingEpisodes = existingContent.episodeCount || existingContent.malEpisodes
+      if (newEpisodes && existingEpisodes && Math.abs(newEpisodes - existingEpisodes) > 5) {
+        console.log(
+          `❌ Episode count mismatch: ${newContent.title} (${newEpisodes}) vs ${existingContent.title} (${existingEpisodes})`,
+        )
+        return false
+      }
+    }
+
+    // Check runtime similarity for movies (within 30 minutes)
+    if (newContent.contentType === 'movie') {
+      const newRuntime = newContent.runtime
+      const existingRuntime = existingContent.runtime
+      if (newRuntime && existingRuntime && Math.abs(newRuntime - existingRuntime) > 30) {
+        console.log(
+          `❌ Runtime mismatch: ${newContent.title} (${newRuntime}min) vs ${existingContent.title} (${existingRuntime}min)`,
+        )
+        return false
+      }
+    }
+
+    console.log(`✅ Content match confirmed: ${newContent.title} ≈ ${existingContent.title}`)
+    return true
+  }
+
   async saveMalContent(malData) {
     try {
       this.stats.totalProcessed++
@@ -262,70 +393,117 @@ class DatabasePopulator {
         this.stats.updated++
         console.log(`🔄 Updated MAL content: ${contentData.title}`)
       } else {
-        // Check if same content exists in TMDB by title matching
-        const existingTmdbContent = await Content.findOne({
-          title: {
-            $regex: new RegExp(contentData.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
-          },
-          tmdbId: { $exists: true },
-        })
+        // Use enhanced deduplication
+        const duplicates = await this.findDuplicateContent(contentData, 'mal')
 
-        if (existingTmdbContent) {
-          // Merge MAL data into existing TMDB content
-          existingTmdbContent.malId = contentData.malId
-          existingTmdbContent.malScore = contentData.malScore
-          existingTmdbContent.malScoredBy = contentData.malScoredBy
-          existingTmdbContent.malRank = contentData.malRank
-          existingTmdbContent.malStatus = contentData.malStatus
-          existingTmdbContent.malEpisodes = contentData.malEpisodes
-          existingTmdbContent.malSource = contentData.malSource
-          existingTmdbContent.malRating = contentData.malRating
-          existingTmdbContent.studios = [
-            ...new Set([...(existingTmdbContent.studios || []), ...(contentData.studios || [])]),
-          ]
-          existingTmdbContent.alternativeTitles = [
-            ...new Set([
-              ...(existingTmdbContent.alternativeTitles || []),
-              ...(contentData.alternativeTitles || []),
-            ]),
-          ]
+        if (duplicates.length > 0) {
+          const duplicate = duplicates[0] // Take the first match
+          const existingContent = duplicate.content
 
-          // Create unified score using weighted calculation
-          if (existingTmdbContent.voteAverage && contentData.malScore) {
-            existingTmdbContent.unifiedScore = this.calculateWeightedScore(
-              existingTmdbContent.voteAverage,
-              existingTmdbContent.voteCount,
-              contentData.malScore,
-              contentData.malScoredBy,
-            )
-          } else {
-            existingTmdbContent.unifiedScore =
-              existingTmdbContent.voteAverage || contentData.malScore
+          if (duplicate.reason === 'title_match' || duplicate.reason === 'tmdb_id') {
+            // Merge MAL data into existing content (prioritize MAL for anime)
+            await this.mergeMalIntoExisting(existingContent, contentData)
+            this.stats.merged++
+            console.log(`🔗 Merged MAL data into existing content: ${contentData.title}`)
           }
-
-          existingTmdbContent.dataSources.mal = {
-            hasData: true,
-            lastUpdated: new Date(),
-          }
-          existingTmdbContent.lastUpdated = new Date()
-          await existingTmdbContent.save()
-          this.stats.merged++
-          console.log(`🔗 Merged MAL data into TMDB content: ${contentData.title}`)
         } else {
-          // Create new content with unified score
-          if (contentData.malScore) {
-            contentData.unifiedScore = contentData.malScore
-          }
-          const newContent = new Content(contentData)
+          // Create new content with MAL priority for anime
+          const newContent = new Content({
+            ...contentData,
+            unifiedScore: contentData.malScore || 0,
+            dataSources: {
+              mal: { hasData: true, lastUpdated: new Date() },
+              tmdb: { hasData: false },
+            },
+            lastUpdated: new Date(),
+          })
+
           await newContent.save()
-          this.stats.newAdded++
-          console.log(`➕ Added MAL content: ${contentData.title}`)
+          this.stats.added++
+          console.log(`➕ Added MAL ${contentData.contentType}: ${contentData.title}`)
         }
       }
     } catch (error) {
       console.error(`❌ Error saving MAL content:`, error.message)
       this.stats.errors++
     }
+  }
+
+  // Enhanced merge method that prioritizes MAL for anime
+  async mergeMalIntoExisting(existingContent, malData) {
+    // For anime content, prioritize MAL data
+    const isAnime = this.isAnimeContent(malData)
+
+    if (isAnime) {
+      // MAL priority: Use MAL data as primary, merge TMDB data
+      existingContent.title = malData.title || existingContent.title
+      existingContent.overview = malData.overview || existingContent.overview
+      existingContent.posterPath = malData.posterPath || existingContent.posterPath
+      existingContent.releaseDate = malData.releaseDate || existingContent.releaseDate
+    }
+
+    // Always merge MAL-specific fields
+    existingContent.malId = malData.malId
+    existingContent.malScore = malData.malScore
+    existingContent.malScoredBy = malData.malScoredBy
+    existingContent.malRank = malData.malRank
+    existingContent.malStatus = malData.malStatus
+    existingContent.malEpisodes = malData.malEpisodes
+    existingContent.malSource = malData.malSource
+    existingContent.malRating = malData.malRating
+
+    // Merge arrays
+    existingContent.studios = [
+      ...new Set([...(existingContent.studios || []), ...(malData.studios || [])]),
+    ]
+    existingContent.alternativeTitles = [
+      ...new Set([
+        ...(existingContent.alternativeTitles || []),
+        ...(malData.alternativeTitles || []),
+      ]),
+    ]
+    existingContent.genres = [
+      ...new Set([...(existingContent.genres || []), ...(malData.genres || [])]),
+    ]
+
+    // Calculate unified score with MAL priority
+    if (existingContent.voteAverage && malData.malScore) {
+      existingContent.unifiedScore = this.calculateWeightedScore(
+        existingContent.voteAverage,
+        existingContent.voteCount,
+        malData.malScore,
+        malData.malScoredBy,
+      )
+    } else {
+      existingContent.unifiedScore = malData.malScore || existingContent.voteAverage || 0
+    }
+
+    // Preserve existing dataSources and add MAL data
+    if (!existingContent.dataSources) {
+      existingContent.dataSources = {}
+    }
+    existingContent.dataSources.mal = {
+      hasData: true,
+      lastUpdated: new Date(),
+    }
+    existingContent.lastUpdated = new Date()
+
+    await existingContent.save()
+  }
+
+  // Check if content is anime (Japanese animation)
+  isAnimeContent(contentData) {
+    const animeKeywords = ['anime', 'manga', 'japanese', 'japan']
+    const title = (contentData.title || '').toLowerCase()
+    const overview = (contentData.overview || '').toLowerCase()
+    const studios = (contentData.studios || []).map((s) => s.toLowerCase())
+
+    return animeKeywords.some(
+      (keyword) =>
+        title.includes(keyword) ||
+        overview.includes(keyword) ||
+        studios.some((studio) => studio.includes(keyword)),
+    )
   }
 
   async printFinalStats() {
@@ -371,7 +549,7 @@ class DatabasePopulator {
 // Parse command line arguments
 const parseArgs = () => {
   const args = process.argv.slice(2)
-  const options = { tmdbLimit: 2000, malLimit: 2000 }
+  const options = { tmdbLimit: 100, malLimit: 100 }
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--tmdbLimit' && args[i + 1]) {

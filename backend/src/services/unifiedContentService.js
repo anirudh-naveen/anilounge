@@ -216,6 +216,11 @@ class UnifiedContentService {
 
   // Content Conversion Methods
   convertTmdbToContent(tmdbData, contentType) {
+    // Filter out TMDB content with less than 50 votes or null vote data
+    if (!tmdbData.vote_count || tmdbData.vote_count < 50 || !tmdbData.vote_average) {
+      return null
+    }
+
     const content = {
       title: tmdbData.title || tmdbData.name,
       originalTitle: tmdbData.original_title || tmdbData.original_name,
@@ -252,6 +257,11 @@ class UnifiedContentService {
   convertMalToContent(malData) {
     // Handle MAL API response structure - data might be in malData.node
     const anime = malData.node || malData
+
+    // Filter out music videos
+    if (anime.source === 'music') {
+      return null
+    }
 
     // Determine content type based on episode count and status
     // Single episode + finished airing = movie
@@ -338,10 +348,13 @@ class UnifiedContentService {
       try {
         const malResults = await this.searchMalAnime(query, limit)
         results.push(
-          ...malResults.map((item) => ({
-            ...this.convertMalToContent(item),
-            source: 'mal',
-          })),
+          ...malResults
+            .map((item) => this.convertMalToContent(item))
+            .filter((item) => item !== null) // Filter out null results
+            .map((item) => ({
+              ...item,
+              source: 'mal',
+            })),
         )
       } catch (error) {
         console.error('MAL search error:', error.message)
@@ -371,8 +384,9 @@ class UnifiedContentService {
 
         const movies = movieResponse.data.results
           .filter((movie) => this.isAnimatedContent(movie))
-          .slice(0, searchLimit)
           .map((movie) => this.convertTmdbToContent(movie, 'movie'))
+          .filter((movie) => movie !== null) // Filter out null results
+          .slice(0, searchLimit)
 
         results.push(...movies)
       }
@@ -389,8 +403,9 @@ class UnifiedContentService {
 
         const tvShows = tvResponse.data.results
           .filter((tv) => this.isAnimatedContent(tv))
-          .slice(0, searchLimit)
           .map((tv) => this.convertTmdbToContent(tv, 'tv'))
+          .filter((tv) => tv !== null) // Filter out null results
+          .slice(0, searchLimit)
 
         results.push(...tvShows)
       }
@@ -450,20 +465,26 @@ class UnifiedContentService {
         if (contentType === 'all' || contentType === 'movie') {
           const movies = await this.getTmdbAnimatedMovies(1, Math.ceil(limit / 2))
           results.push(
-            ...movies.map((movie) => ({
-              ...this.convertTmdbToContent(movie, 'movie'),
-              source: 'tmdb',
-            })),
+            ...movies
+              .map((movie) => this.convertTmdbToContent(movie, 'movie'))
+              .filter((movie) => movie !== null) // Filter out null results
+              .map((movie) => ({
+                ...movie,
+                source: 'tmdb',
+              })),
           )
         }
 
         if (contentType === 'all' || contentType === 'tv') {
           const tvShows = await this.getTmdbAnimatedTVShows(1, Math.ceil(limit / 2))
           results.push(
-            ...tvShows.map((tv) => ({
-              ...this.convertTmdbToContent(tv, 'tv'),
-              source: 'tmdb',
-            })),
+            ...tvShows
+              .map((tv) => this.convertTmdbToContent(tv, 'tv'))
+              .filter((tv) => tv !== null) // Filter out null results
+              .map((tv) => ({
+                ...tv,
+                source: 'tmdb',
+              })),
           )
         }
       } catch (error) {
@@ -476,10 +497,13 @@ class UnifiedContentService {
       try {
         const malAnime = await this.getMalTopAnime(Math.ceil(limit / 2))
         results.push(
-          ...malAnime.map((anime) => ({
-            ...this.convertMalToContent(anime),
-            source: 'mal',
-          })),
+          ...malAnime
+            .map((anime) => this.convertMalToContent(anime))
+            .filter((anime) => anime !== null) // Filter out null results
+            .map((anime) => ({
+              ...anime,
+              source: 'mal',
+            })),
         )
       } catch (error) {
         console.error('Error getting MAL popular content:', error.message)

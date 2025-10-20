@@ -4,12 +4,12 @@
     <div class="container">
       <!-- Page Header -->
       <div class="page-header">
-        <h1 class="page-title">Animated Content</h1>
+        <h1 class="page-title">Animated Movies</h1>
         <p class="page-subtitle">Discover amazing animated films from around the world</p>
       </div>
 
       <!-- Loading State -->
-      <div v-if="contentStore.isLoading" class="loading-container">
+      <div v-if="contentStore.moviesLoading" class="loading-container">
         <div class="spinner"></div>
         <p>Loading amazing movies...</p>
       </div>
@@ -36,6 +36,9 @@
               :alt="movie.title"
               @error="handleImageError"
             />
+            <div class="content-type-badge">
+              {{ getContentTypeDisplay(movie.contentType) }}
+            </div>
             <div class="movie-overlay">
               <div class="movie-rating">{{ getDisplayRating(movie) }}</div>
               <div class="movie-actions">
@@ -81,20 +84,21 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="contentStore.pagination.totalPages > 1" class="pagination">
+      <div v-if="contentStore.moviesPagination.totalPages > 1" class="pagination">
         <button
-          @click="loadMovies(contentStore.pagination.currentPage - 1)"
-          :disabled="!contentStore.pagination.hasPrevPage"
+          @click="loadMovies(contentStore.moviesPagination.currentPage - 1)"
+          :disabled="!contentStore.moviesPagination.hasPrevPage"
           class="btn btn-secondary"
         >
           Previous
         </button>
         <span class="pagination-info">
-          Page {{ contentStore.pagination.currentPage }} of {{ contentStore.pagination.totalPages }}
+          Page {{ contentStore.moviesPagination.currentPage }} of
+          {{ contentStore.moviesPagination.totalPages }}
         </span>
         <button
-          @click="loadMovies(contentStore.pagination.currentPage + 1)"
-          :disabled="!contentStore.pagination.hasNextPage"
+          @click="loadMovies(contentStore.moviesPagination.currentPage + 1)"
+          :disabled="!contentStore.moviesPagination.hasNextPage"
           class="btn btn-secondary"
         >
           Next
@@ -117,7 +121,7 @@ import { onMounted, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl, formatGenres } from '@/services/api'
+import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
@@ -161,7 +165,11 @@ const handleImageError = (event: Event) => {
 }
 
 const viewMovieDetails = (movie: UnifiedContent) => {
-  router.push({ name: 'MovieDetails', params: { id: movie._id } })
+  router.push({ 
+    name: 'MovieDetails', 
+    params: { id: movie._id },
+    query: { from: `/movies?page=${contentStore.moviesPagination.currentPage}` }
+  })
 }
 
 const handleWatchlistClick = (contentId: string) => {
@@ -194,18 +202,38 @@ const loadMovies = async (page: number) => {
 }
 
 onMounted(async () => {
+  const startTime = Date.now()
+  console.log(`🎬 [${new Date().toISOString()}] Movies component mounted`)
+
   try {
     // Load movies specifically if not already loaded
     if (contentStore.movies.length === 0) {
+      console.log(`🎬 [${new Date().toISOString()}] Movies array empty, loading content...`)
       await contentStore.getContent(1, 'movie', 20)
+    } else {
+      console.log(
+        `🎬 [${new Date().toISOString()}] Movies already loaded (${contentStore.movies.length} items), skipping API call`,
+      )
     }
 
-    // Load watchlist if user is authenticated
+    // Load watchlist if user is authenticated (now optimized to skip if already loaded)
     if (authStore.isAuthenticated) {
+      console.log(`🎬 [${new Date().toISOString()}] User authenticated, loading watchlist...`)
       await contentStore.loadWatchlist()
+    } else {
+      console.log(`🎬 [${new Date().toISOString()}] User not authenticated, skipping watchlist`)
     }
+
+    const totalTime = Date.now() - startTime
+    console.log(
+      `✅ [${new Date().toISOString()}] Movies component mounted successfully in ${totalTime}ms`,
+    )
   } catch (error) {
-    console.error('Error loading movies page:', error)
+    const totalTime = Date.now() - startTime
+    console.error(
+      `❌ [${new Date().toISOString()}] Movies component error after ${totalTime}ms:`,
+      error,
+    )
     toast.error('Failed to load movies. Please try again.')
   }
 })
@@ -468,6 +496,29 @@ onMounted(async () => {
 .pagination-info {
   color: white;
   font-weight: 500;
+}
+
+.content-type-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 2;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: all 0.3s ease;
+}
+
+.movie-card:hover .content-type-badge {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 @media (max-width: 768px) {
