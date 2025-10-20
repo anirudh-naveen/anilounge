@@ -347,8 +347,8 @@ const getContentYear = (item: WatchlistItem) => {
   if (!content) return ''
   const date =
     content.contentType === 'movie'
-      ? (content as Movie).releaseDate
-      : (content as TVShow).releaseDate
+      ? (content as unknown as Movie).releaseDate
+      : (content as unknown as TVShow).releaseDate
   return date ? new Date(date).getFullYear().toString() : ''
 }
 
@@ -365,8 +365,8 @@ const getContentReleaseDate = (item: WatchlistItem) => {
   if (!content) return 'Unknown'
   const date =
     content.contentType === 'movie'
-      ? (content as Movie).releaseDate
-      : (content as TVShow).releaseDate
+      ? (content as unknown as Movie).releaseDate
+      : (content as unknown as TVShow).releaseDate
   return date ? new Date(date).toLocaleDateString() : 'Unknown'
 }
 
@@ -375,7 +375,7 @@ const getContentSeasons = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 'Unknown'
   const content = item.content
   if (!content) return 'Unknown'
-  return content.contentType === 'tv' ? (content as TVShow).numberOfSeasons || 'Unknown' : 'N/A'
+  return content.contentType === 'tv' ? (content as unknown as TVShow).numberOfSeasons || 'Unknown' : 'N/A'
 }
 
 const getContentRating = (item: WatchlistItem) => {
@@ -395,7 +395,7 @@ const getTotalEpisodes = (item: WatchlistItem) => {
   const content = item.content
   if (!content) return 0
   return content.contentType === 'tv'
-    ? (content as TVShow).numberOfEpisodes || item.totalEpisodes || 0
+    ? (content as unknown as TVShow).numberOfEpisodes || item.totalEpisodes || 0
     : 0
 }
 
@@ -405,7 +405,7 @@ const getTotalSeasons = (item: WatchlistItem) => {
   const content = item.content
   if (!content) return 1
   return content.contentType === 'tv'
-    ? (content as TVShow).numberOfSeasons || item.totalSeasons || 1
+    ? (content as unknown as TVShow).numberOfSeasons || item.totalSeasons || 1
     : 1
 }
 
