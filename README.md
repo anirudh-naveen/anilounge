@@ -9,6 +9,7 @@ This site follows the MEVN stack architecture:
 
 The application also utilizes the Tmdb, MyAnimeList, and Google Gemini APIs in its functionality.
 
+In deployment, the backend is hosted by Railway and the frontend is hosted by Vercel.
 
 Homepage
 <img width="845" height="962" alt="Screenshot 2025-10-20 at 12 17 44 AM" src="https://github.com/user-attachments/assets/0c5b5e19-b728-471a-be9a-d61b98deeb00" />
