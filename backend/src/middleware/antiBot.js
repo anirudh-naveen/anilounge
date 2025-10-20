@@ -18,20 +18,12 @@ export const antiBotProtection = (req, res, next) => {
     return next()
   }
 
-  // Detect suspicious user agents
+  // Detect suspicious user agents (more lenient for production)
   const suspiciousPatterns = [
     /bot/i,
     /crawler/i,
     /spider/i,
     /scraper/i,
-    /curl/i,
-    /wget/i,
-    /python/i,
-    /java/i,
-    /php/i,
-    /go-http/i,
-    /okhttp/i,
-    /axios/i,
     /headless/i,
     /phantom/i,
     /selenium/i,
@@ -40,8 +32,8 @@ export const antiBotProtection = (req, res, next) => {
 
   const isSuspiciousUA = suspiciousPatterns.some((pattern) => pattern.test(userAgent))
 
-  // Detect missing or minimal user agent
-  const isMinimalUA = userAgent.length < 10 || userAgent === 'Mozilla/5.0'
+  // Detect missing or minimal user agent (more lenient)
+  const isMinimalUA = userAgent.length < 5
 
   // Detect rapid requests (more than 10 per second)
   const now = Date.now()
