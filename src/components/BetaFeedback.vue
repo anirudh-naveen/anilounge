@@ -92,13 +92,24 @@ const submitFeedback = async () => {
   submitting.value = true
 
   try {
-    // For now, just show a success message
-    // In production, you'd send this to your backend
-    console.log('Beta Feedback:', feedback)
+    const response = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(feedback),
+    })
 
-    toast.success("Thank you for your feedback! We'll review it soon.")
-    closeFeedback()
+    const result = await response.json()
+
+    if (result.success) {
+      toast.success(result.message)
+      closeFeedback()
+    } else {
+      throw new Error(result.message)
+    }
   } catch (error) {
+    console.error('Failed to submit feedback:', error)
     toast.error('Failed to send feedback. Please try again.')
   } finally {
     submitting.value = false

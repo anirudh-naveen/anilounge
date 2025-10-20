@@ -69,7 +69,7 @@
 4. Set environment variables:
    ```bash
    NODE_ENV=production
-   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/findanimation
+   MONGODB_URI=mongodb+srv://anirudhnaveen_db_user:N5AwGhTzLMglGcTb@animationcluster.b0nj9pd.mongodb.net/?retryWrites=true&w=majority&appName=AnimationCluster
    JWT_SECRET=your-super-secure-jwt-secret-key-for-production-2024
    SESSION_SECRET=your-super-secure-session-secret-key-for-production-2024
    MAL_CLIENT_ID=your_mal_client_id
@@ -93,10 +93,10 @@
 
 ## 💰 **Cost Estimate**
 
-- **MongoDB Atlas**: Free tier (512MB)
+- **MongoDB Atlas**: ✅ Already set up (AnimationCluster)
 - **Railway**: $5/month for backend
 - **Vercel**: Free tier for frontend
-- **Total**: ~$5/month for professional deployment
+- **Total**: $5/month for professional deployment
 
 ## 🎯 **Recruiter Presentation**
 
@@ -123,11 +123,26 @@
 3. **Update GitHub README** with live demo link
 4. **Share with recruiters** - Professional presentation ready!
 
+## 📧 **Beta Feedback Collection**
+
+### **How to Receive Feedback:**
+
+1. **Automatic Collection** - Feedback is stored in your backend
+2. **View Feedback** - Run: `node backend/src/scripts/viewFeedback.js`
+3. **Email Notifications** - Set up EmailJS for instant notifications (optional)
+
+### **Feedback Types:**
+
+- 🐛 **Bug Reports** - Technical issues
+- 💡 **Feature Requests** - New functionality ideas
+- 💬 **General Feedback** - User experience feedback
+
 ## 🔗 **Resources**
 
 - **Live Demo**: [Your deployed URL]
 - **GitHub**: [Your repository]
 - **Technical Docs**: `RECRUITER-README.md`
+- **Feedback Viewer**: `node backend/src/scripts/viewFeedback.js`
 
 ---
 

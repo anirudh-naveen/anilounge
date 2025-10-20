@@ -2,6 +2,7 @@ import express from 'express'
 import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
 import * as authController from '../controllers/authController.js'
+import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, { refreshAccessToken, revokeRefreshToken } from '../middleware/auth.js'
 import upload, { handleUploadError } from '../middleware/upload.js'
 import { bruteForceProtection, apiProtection } from '../middleware/antiBot.js'
@@ -70,6 +71,10 @@ router.post(
   [body('message').notEmpty().withMessage('Message is required')],
   contentController.aiChat,
 )
+
+// Beta feedback routes (public)
+router.post('/feedback', feedbackController.submitFeedback)
+router.get('/feedback', feedbackController.getFeedback)
 
 // Protected routes (require authentication)
 router.use(authMiddleware)
