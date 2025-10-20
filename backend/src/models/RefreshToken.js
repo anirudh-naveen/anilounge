@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import crypto from 'crypto'
 
 const refreshTokenSchema = new mongoose.Schema({
   token: {
@@ -30,8 +31,8 @@ const refreshTokenSchema = new mongoose.Schema({
 refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 
 // Static method to create a new refresh token
-refreshTokenSchema.statics.createToken = async function(userId) {
-  const token = require('crypto').randomBytes(64).toString('hex')
+refreshTokenSchema.statics.createToken = async function (userId) {
+  const token = crypto.randomBytes(64).toString('hex')
   const refreshToken = new this({
     token,
     userId,
@@ -41,7 +42,7 @@ refreshTokenSchema.statics.createToken = async function(userId) {
 }
 
 // Static method to revoke all tokens for a user
-refreshTokenSchema.statics.revokeAllForUser = async function(userId) {
+refreshTokenSchema.statics.revokeAllForUser = async function (userId) {
   return this.updateMany({ userId }, { isRevoked: true })
 }
 

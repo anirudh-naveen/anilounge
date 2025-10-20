@@ -17,7 +17,7 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null
 
       const response = await authAPI.login(credentials)
-      const { user: userData, token: authToken } = response.data.data
+      const { user: userData, accessToken: authToken } = response.data.data
 
       user.value = userData
       token.value = authToken

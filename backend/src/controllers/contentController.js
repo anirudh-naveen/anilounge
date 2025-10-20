@@ -28,21 +28,33 @@ export const getContent = async (req, res) => {
       { $match: query },
       {
         $addFields: {
-          // Add a small boost to TMDB content (0.1 points) to improve visibility
-          boostedScore: {
+          // Keep original scores unchanged for user display
+          boostedScore: { $ifNull: ['$unifiedScore', 0] },
+          // Create a hidden sorting score that boosts TMDB content visibility
+          hiddenSortScore: {
             $add: [
               { $ifNull: ['$unifiedScore', 0] },
-              { $cond: [{ $ne: ['$tmdbId', null] }, 0.1, 0] },
+              // Add significant boost to TMDB content for better visibility (user cannot see this)
+              { $cond: [{ $and: [{ $ne: ['$tmdbId', null] }, { $ne: ['$tmdbId', ''] }] }, 1.0, 0] },
+              // Add popularity boost for TMDB content
+              {
+                $cond: [
+                  { $and: [{ $ne: ['$tmdbId', null] }, { $ne: ['$tmdbId', ''] }] },
+                  { $multiply: [{ $ifNull: ['$popularity', 0] }, 0.05] },
+                  0,
+                ],
+              },
             ],
           },
         },
       },
-      { $sort: { boostedScore: -1, popularity: -1, _id: -1 } },
+      { $sort: { hiddenSortScore: -1, _id: -1 } },
       { $skip: skip },
       { $limit: limit },
       {
         $project: {
           boostedScore: 0, // Remove the temporary field from output
+          hiddenSortScore: 0, // Remove the hidden sorting field from output
         },
       },
     ])
@@ -65,6 +77,7 @@ export const getContent = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching content',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message }),
     })
   }
 }
@@ -236,20 +249,32 @@ export const getPopularContent = async (req, res) => {
       { $match: query },
       {
         $addFields: {
-          // Add a small boost to TMDB content to improve visibility
-          boostedScore: {
+          // Keep original scores unchanged for user display
+          boostedScore: { $ifNull: ['$unifiedScore', 0] },
+          // Create a hidden sorting score that boosts TMDB content visibility
+          hiddenSortScore: {
             $add: [
               { $ifNull: ['$unifiedScore', 0] },
-              { $cond: [{ $ne: ['$tmdbId', null] }, 0.1, 0] },
+              // Add significant boost to TMDB content for better visibility (user cannot see this)
+              { $cond: [{ $and: [{ $ne: ['$tmdbId', null] }, { $ne: ['$tmdbId', ''] }] }, 1.0, 0] },
+              // Add popularity boost for TMDB content
+              {
+                $cond: [
+                  { $and: [{ $ne: ['$tmdbId', null] }, { $ne: ['$tmdbId', ''] }] },
+                  { $multiply: [{ $ifNull: ['$popularity', 0] }, 0.05] },
+                  0,
+                ],
+              },
             ],
           },
         },
       },
-      { $sort: { boostedScore: -1, popularity: -1, _id: -1 } },
+      { $sort: { hiddenSortScore: -1, _id: -1 } },
       { $limit: parseInt(limit) },
       {
         $project: {
           boostedScore: 0, // Remove the temporary field from output
+          hiddenSortScore: 0, // Remove the hidden sorting field from output
         },
       },
     ])

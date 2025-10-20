@@ -1,5 +1,8 @@
 <template>
   <div id="app" class="min-h-screen">
+    <!-- Beta Banner -->
+    <BetaBanner />
+
     <!-- Navigation Header -->
     <header class="header">
       <div class="container">
@@ -150,6 +153,9 @@
       <router-view />
     </main>
 
+    <!-- Beta Feedback Component -->
+    <BetaFeedback />
+
     <!-- Footer -->
     <footer class="footer">
       <div class="container">
@@ -164,6 +170,7 @@ import { onMounted, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+import BetaFeedback from '@/components/BetaFeedback.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

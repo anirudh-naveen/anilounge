@@ -1,5 +1,5 @@
 import User from '../models/User.js'
-import { generateAccessToken, generateRefreshToken } from '../middleware/auth.js'
+import { generateAccessToken, generateRefreshToken, generateToken } from '../middleware/auth.js'
 import { validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
 import path from 'path'

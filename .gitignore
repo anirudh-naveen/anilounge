@@ -23,6 +23,7 @@ coverage
 .idea
 .env
 .md
+.sh
 *.suo
 *.ntvs*
 *.njsproj

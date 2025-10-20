@@ -22,6 +22,27 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 5000
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    version: '1.0.0-beta',
+  })
+})
+
+// Basic API status endpoint
+app.get('/api/status', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Find Animation API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+  })
+})
+
 // Connect to MongoDB
 connectDB()
 
@@ -96,12 +117,20 @@ app.use(
     origin: (origin, callback) => {
       const allowedOrigins =
         process.env.NODE_ENV === 'production'
-          ? ['https://your-frontend-domain.com']
+          ? [
+              'https://your-frontend-domain.com',
+              'https://find-animation.vercel.app',
+              'https://find-animation.netlify.app',
+              'https://find-animation.herokuapp.com',
+            ]
           : [
               'http://localhost:3000',
               'http://localhost:5173',
               'http://localhost:5174',
               'http://localhost:5175',
+              'http://127.0.0.1:5173',
+              'http://127.0.0.1:5174',
+              'http://127.0.0.1:5175',
             ]
 
       // Allow requests with no origin (mobile apps, Postman, etc.)

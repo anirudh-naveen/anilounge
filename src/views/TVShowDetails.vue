@@ -462,7 +462,11 @@ const fetchRelatedContent = async (contentId: string) => {
     const response = (await Promise.race([
       contentAPI.getRelatedContent(contentId),
       timeoutPromise,
-    ])) as any
+    ])) as {
+      data: {
+        data: { sequels: UnifiedContent[]; prequels: UnifiedContent[]; related: UnifiedContent[] }
+      }
+    }
 
     relatedContent.value = response.data.data
   } catch (err) {

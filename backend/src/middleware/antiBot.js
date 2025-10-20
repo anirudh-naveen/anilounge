@@ -111,7 +111,14 @@ export const bruteForceProtection = {
       attempts.resetTime = now + 15 * 60 * 1000
     }
 
-    if (attempts.count >= 5) {
+    // Skip rate limiting entirely for development/beta
+    if (process.env.NODE_ENV !== 'production') {
+      return next()
+    }
+
+    const maxAttempts = 5
+
+    if (attempts.count >= maxAttempts) {
       return res.status(429).json({
         success: false,
         message: 'Too many authentication attempts. Please try again later.',
@@ -204,7 +211,11 @@ export const apiProtection = (req, res, next) => {
 
   // Block requests with suspicious referers (only in production)
   const referer = req.get('referer') || req.get('referrer')
-  if (referer && process.env.NODE_ENV === 'production' && !referer.startsWith(process.env.FRONTEND_URL || 'http://localhost:5174')) {
+  if (
+    referer &&
+    process.env.NODE_ENV === 'production' &&
+    !referer.startsWith(process.env.FRONTEND_URL || 'http://localhost:5174')
+  ) {
     return res.status(403).json({
       success: false,
       message: 'Invalid referer detected.',

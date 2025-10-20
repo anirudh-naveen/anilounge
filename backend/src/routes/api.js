@@ -28,6 +28,7 @@ router.post(
       return true
     }),
   ],
+  bruteForceProtection.prevent,
   authController.register,
 )
 
