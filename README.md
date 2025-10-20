@@ -27,3 +27,6 @@ Settings
 
 <img width="847" height="896" alt="image" src="https://github.com/user-attachments/assets/b48b428e-8070-4a8e-9b46-2a63f5198748" />
 
+
+TODO: Need to add adequate website security before publishing
+
