@@ -70,7 +70,7 @@
 
           <div class="movie-actions">
             <button
-              v-if="!isInWatchlist"
+              v-if="authStore.isAuthenticated && !isInWatchlist"
               @click="showStatusDropdown = true"
               class="btn-primary add-to-watchlist"
             >
@@ -78,7 +78,7 @@
               Add to Watchlist
             </button>
 
-            <button v-else @click="removeFromWatchlist" class="btn-secondary remove-from-watchlist">
+            <button v-if="authStore.isAuthenticated && isInWatchlist" @click="removeFromWatchlist" class="btn-secondary remove-from-watchlist">
               <i class="fas fa-check"></i>
               In Watchlist
             </button>

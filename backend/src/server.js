@@ -136,6 +136,9 @@ app.use(
 
       // Allow requests with no origin (mobile apps, Postman, etc.) or file:// origin
       if (!origin || origin.startsWith('file://')) return callback(null, true)
+      
+      // Temporary: Allow all origins for testing (remove in production)
+      if (process.env.NODE_ENV !== 'production') return callback(null, true)
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true)
