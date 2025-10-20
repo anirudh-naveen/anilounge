@@ -3,36 +3,48 @@
     <div class="container">
       <div class="page-header">
         <h1>Profile</h1>
-        <p>Manage your account information</p>
+        <p>Check out this user's account</p>
       </div>
 
       <div class="profile-content">
         <div class="profile-card">
           <div class="profile-header">
             <div class="avatar">
-              <div class="avatar-placeholder">
+              <img
+                v-if="authStore.user?.profilePicture"
+                :src="getProfilePictureUrl(authStore.user.profilePicture)"
+                alt="Profile Picture"
+                class="profile-picture"
+              />
+              <div v-else class="avatar-placeholder">
                 {{ userInitials }}
               </div>
             </div>
             <div class="profile-info">
               <h2>{{ authStore.user?.username }}</h2>
               <p class="email">{{ authStore.user?.email }}</p>
-              <p class="member-since">Member since {{ formatDate(authStore.user?.id) }}</p>
+              <p class="member-since">Member since {{ formatDate(authStore.user?.createdAt) }}</p>
             </div>
           </div>
 
           <div class="profile-stats">
             <div class="stat-item">
-              <div class="stat-number">{{ watchlistCount }}</div>
-              <div class="stat-label">In Watchlist</div>
+              <div class="stat-number">{{ completedShows }}</div>
+              <div class="stat-label">Completed Shows</div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">{{ completedCount }}</div>
-              <div class="stat-label">Completed</div>
+              <div class="stat-number">{{ completedMovies }}</div>
+              <div class="stat-label">Completed Movies</div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">{{ ratingsCount }}</div>
-              <div class="stat-label">Rated</div>
+              <div class="stat-number">{{ hoursWatched }}h</div>
+              <div class="stat-label">Hours Watched</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-number rating-number" :style="{ color: averageRatingColor }">
+                {{ averageRating }}
+              </div>
+              <div class="stat-label">Avg Rating</div>
             </div>
           </div>
         </div>
@@ -48,10 +60,6 @@
               <div class="info-item">
                 <label>Email</label>
                 <span>{{ authStore.user?.email }}</span>
-              </div>
-              <div class="info-item">
-                <label>Account ID</label>
-                <span class="account-id">{{ authStore.user?.id }}</span>
               </div>
             </div>
           </div>
@@ -90,9 +98,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, defineOptions } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
+import { getRatingColorHSL } from '@/utils/ratingColors'
+
+defineOptions({ name: 'ProfilePage' })
 
 const authStore = useAuthStore()
 const contentStore = useContentStore()
@@ -107,16 +118,54 @@ const userInitials = computed(() => {
     .slice(0, 2)
 })
 
-const watchlistCount = computed(() => {
-  return contentStore.watchlist.length
+const hoursWatched = computed(() => {
+  const totalMinutes = contentStore.watchlist.reduce((total, item) => {
+    if (item.status === 'completed' && item.content && typeof item.content === 'object') {
+      // For completed items, use total runtime
+      const runtime = item.content.runtime || 0
+      return total + runtime
+    } else if (item.status === 'watching' && item.content && typeof item.content === 'object') {
+      // For watching items, calculate based on episodes watched
+      const episodesWatched = item.currentEpisode || 0
+      const runtimePerEpisode = item.content.runtime || 0
+      return total + episodesWatched * runtimePerEpisode
+    }
+    return total
+  }, 0)
+
+  return Math.round(totalMinutes / 60) // Convert minutes to hours
 })
 
-const completedCount = computed(() => {
-  return contentStore.watchlist.filter((item) => item.status === 'completed').length
+const completedShows = computed(() => {
+  return contentStore.watchlist.filter(
+    (item) =>
+      item.status === 'completed' &&
+      item.content &&
+      typeof item.content === 'object' &&
+      item.content.contentType === 'tv',
+  ).length
 })
 
-const ratingsCount = computed(() => {
-  return authStore.user?.ratings?.length || 0
+const completedMovies = computed(() => {
+  return contentStore.watchlist.filter(
+    (item) =>
+      item.status === 'completed' &&
+      item.content &&
+      typeof item.content === 'object' &&
+      item.content.contentType === 'movie',
+  ).length
+})
+
+const averageRating = computed(() => {
+  const ratedItems = contentStore.watchlist.filter((item) => item.rating && item.rating > 0)
+  if (ratedItems.length === 0) return 0
+
+  const totalRating = ratedItems.reduce((sum, item) => sum + (item.rating || 0), 0)
+  return Math.round((totalRating / ratedItems.length) * 10) / 10 // Round to 1 decimal place
+})
+
+const averageRatingColor = computed(() => {
+  return getRatingColorHSL(averageRating.value)
 })
 
 const favoriteGenres = computed(() => {
@@ -127,11 +176,27 @@ const favoriteStudios = computed(() => {
   return authStore.user?.preferences?.favoriteStudios || []
 })
 
-const formatDate = (userId: string | undefined) => {
-  if (!userId) return 'Unknown'
-  // Extract timestamp from ObjectId (first 8 characters are timestamp)
-  const timestamp = parseInt(userId.substring(0, 8), 16) * 1000
-  return new Date(timestamp).toLocaleDateString()
+const formatDate = (dateString: string | undefined) => {
+  if (!dateString) return 'Unknown'
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return 'Unknown'
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  } catch {
+    return 'Unknown'
+  }
+}
+
+const getProfilePictureUrl = (profilePicture: string) => {
+  if (!profilePicture) return ''
+  if (profilePicture.startsWith('http')) {
+    return profilePicture
+  }
+  return `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}${profilePicture}`
 }
 </script>
 
@@ -192,7 +257,7 @@ const formatDate = (userId: string | undefined) => {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -201,45 +266,56 @@ const formatDate = (userId: string | undefined) => {
   color: white;
 }
 
+.profile-picture {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--blend-color);
+}
+
 .profile-info h2 {
   font-size: 1.8rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 0.25rem;
 }
 
 .email {
-  color: #666;
+  color: var(--text-secondary);
   margin-bottom: 0.25rem;
 }
 
 .member-since {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
 .profile-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
 }
 
 .stat-item {
   text-align: center;
   padding: 1rem;
-  background: #f8f9fa;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 8px;
 }
 
 .stat-number {
   font-size: 2rem;
   font-weight: 700;
-  color: #667eea;
+  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin-bottom: 0.25rem;
 }
 
 .stat-label {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
@@ -249,16 +325,17 @@ const formatDate = (userId: string | undefined) => {
 }
 
 .section {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .section h3 {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 1.5rem;
 }
 
@@ -272,17 +349,17 @@ const formatDate = (userId: string | undefined) => {
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  background: #f8f9fa;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 8px;
 }
 
 .info-item label {
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .info-item span {
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .account-id {
@@ -297,14 +374,14 @@ const formatDate = (userId: string | undefined) => {
 
 .preference-item {
   padding: 1rem;
-  background: #f8f9fa;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 8px;
 }
 
 .preference-item label {
   display: block;
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
@@ -317,7 +394,7 @@ const formatDate = (userId: string | undefined) => {
 
 .genre-tag,
 .studio-tag {
-  background: #667eea;
+  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
   color: white;
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
@@ -325,8 +402,15 @@ const formatDate = (userId: string | undefined) => {
 }
 
 .no-preferences {
-  color: #888;
+  color: var(--text-muted);
   font-style: italic;
+}
+
+.rating-number {
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  -webkit-text-fill-color: initial !important;
+  background-clip: initial !important;
 }
 
 @media (max-width: 768px) {
@@ -339,6 +423,10 @@ const formatDate = (userId: string | undefined) => {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
+  }
+
+  .profile-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

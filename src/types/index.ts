@@ -22,6 +22,7 @@ export interface User {
   username: string
   email: string
   profilePicture?: string
+  createdAt?: string
   preferences?: {
     favoriteGenres: string[]
     favoriteStudios: string[]

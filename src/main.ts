@@ -7,6 +7,7 @@ import App from './App.vue'
 import router from './router'
 import './assets/styles/global.css'
 import { useAuthStore } from './stores/auth'
+import { useContentStore } from './stores/content'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -28,8 +29,16 @@ app.use(Toast, {
   rtl: false,
 })
 
-// Initialize authentication after Pinia is set up
+// Initialize authentication and content after Pinia is set up
 const authStore = useAuthStore()
+const contentStore = useContentStore()
+
 authStore.initAuth()
+
+// Load watchlist and refresh user data if user is authenticated
+if (authStore.isAuthenticated) {
+  contentStore.loadWatchlist()
+  authStore.loadUser() // Refresh user data to get updated creation date
+}
 
 app.mount('#app')

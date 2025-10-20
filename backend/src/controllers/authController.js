@@ -138,11 +138,21 @@ export const getProfile = async (req, res) => {
           id: user._id,
           username: user.username,
           email: user.email,
+          profilePicture: user.profilePicture,
+          createdAt: user.createdAt,
           watchlist: user.watchlist,
           ratings: user.ratings,
           preferences: user.preferences,
         },
       },
+    })
+
+    console.log('Sent user data:', {
+      id: user._id,
+      username: user.username,
+      email: user.email,
+      createdAt: user.createdAt,
+      profilePicture: user.profilePicture,
     })
   } catch (error) {
     console.error('Get profile error:', error)
@@ -168,10 +178,7 @@ export const updateProfile = async (req, res) => {
     if (username || email) {
       const existingUser = await User.findOne({
         _id: { $ne: req.user._id },
-        $or: [
-          ...(username ? [{ username }] : []),
-          ...(email ? [{ email }] : []),
-        ],
+        $or: [...(username ? [{ username }] : []), ...(email ? [{ email }] : [])],
       })
 
       if (existingUser) {
@@ -182,11 +189,10 @@ export const updateProfile = async (req, res) => {
       }
     }
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      updateData,
-      { new: true, runValidators: true },
-    ).select('-password')
+    const user = await User.findByIdAndUpdate(req.user._id, updateData, {
+      new: true,
+      runValidators: true,
+    }).select('-password')
 
     res.json({
       success: true,
@@ -278,7 +284,12 @@ export const uploadProfilePicture = async (req, res) => {
 
     // Delete old profile picture if it exists
     if (user.profilePicture) {
-      const oldPicturePath = path.join(process.cwd(), 'uploads', 'profiles', path.basename(user.profilePicture))
+      const oldPicturePath = path.join(
+        process.cwd(),
+        'uploads',
+        'profiles',
+        path.basename(user.profilePicture),
+      )
       if (fs.existsSync(oldPicturePath)) {
         fs.unlinkSync(oldPicturePath)
       }
@@ -292,14 +303,14 @@ export const uploadProfilePicture = async (req, res) => {
     res.json({
       success: true,
       message: 'Profile picture uploaded successfully.',
-      data: { 
+      data: {
         user: {
           _id: user._id,
           username: user.username,
           email: user.email,
           profilePicture: user.profilePicture,
           preferences: user.preferences,
-        }
+        },
       },
     })
   } catch (error) {

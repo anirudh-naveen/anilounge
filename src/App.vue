@@ -217,7 +217,7 @@ const handleLogout = () => {
 .header {
   background: linear-gradient(90deg, var(--navbar-primary), var(--navbar-secondary));
   border-bottom: 1px solid var(--navbar-accent);
-  padding: 0.75rem 0;
+  padding: 1.25rem 0;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -250,7 +250,7 @@ const handleLogout = () => {
 }
 
 .logo-text {
-  font-size: 1.4rem;
+  font-size: 1.6rem;
   font-weight: 800;
   background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
   -webkit-background-clip: text;
@@ -287,7 +287,7 @@ const handleLogout = () => {
   color: var(--text-secondary);
   text-decoration: none;
   font-weight: 500;
-  padding: 0.6rem 0.8rem;
+  padding: 0.75rem 1rem;
   border-radius: 8px;
   transition: all 0.3s ease;
   position: relative;
@@ -327,7 +327,7 @@ const handleLogout = () => {
 }
 
 .nav-text {
-  font-size: 0.95rem;
+  font-size: 1rem;
   white-space: nowrap;
 }
 

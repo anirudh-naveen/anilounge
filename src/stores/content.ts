@@ -272,8 +272,19 @@ export const useContentStore = defineStore('content', () => {
       const response = await watchlistAPI.updateWatchlistItem(contentId, updates)
 
       if (response.data.success) {
-        // Force refresh watchlist
-        await loadWatchlist(true)
+        // Update the specific item in the watchlist array instead of reloading everything
+        const itemIndex = watchlist.value.findIndex((item) => {
+          if (typeof item.content === 'string') {
+            return item.content === contentId
+          }
+          return item.content?._id === contentId
+        })
+
+        if (itemIndex !== -1) {
+          // Update the specific item with the new data
+          const existingItem = watchlist.value[itemIndex]
+          watchlist.value[itemIndex] = { ...existingItem, ...updates } as WatchlistItem
+        }
       }
 
       return true

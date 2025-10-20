@@ -36,7 +36,7 @@
           :class="{ expanded: expandedItems.has(getContentId(item)) }"
         >
           <!-- Collapsed State -->
-          <div class="item-header" @click="toggleExpanded(getContentId(item))">
+          <div class="item-header" @click="toggleExpanded(item)">
             <div class="item-poster">
               <img
                 :src="getPosterUrl(getContentPosterPath(item))"
@@ -73,7 +73,9 @@
               <div class="item-rating">
                 <div v-if="item.rating" class="user-rating">
                   <span class="rating-label">Your Rating:</span>
-                  <span class="rating-value">{{ item.rating }}/10</span>
+                  <span class="rating-value" :style="getRatingStyle(item.rating)"
+                    >{{ item.rating }}/10</span
+                  >
                 </div>
                 <div v-else class="no-rating">
                   <span class="no-rating-text">No rating yet</span>
@@ -131,8 +133,14 @@
                   <div class="status-control">
                     <label>Status:</label>
                     <select
-                      :value="item.status"
-                      @change="updateStatus(item, $event)"
+                      :value="getLocalFormData(item).status"
+                      @change="
+                        updateLocalFormData(
+                          item,
+                          'status',
+                          ($event.target as HTMLSelectElement).value,
+                        )
+                      "
                       class="status-select"
                     >
                       <option value="plan_to_watch">Plan to Watch</option>
@@ -145,8 +153,14 @@
                   <div v-if="getContentType(item) === 'TV Show'" class="episode-control">
                     <label>Episodes Watched:</label>
                     <input
-                      :value="getCurrentEpisodes(item)"
-                      @change="updateEpisodes(item, $event)"
+                      :value="getLocalFormData(item).currentEpisode"
+                      @change="
+                        updateLocalFormData(
+                          item,
+                          'currentEpisode',
+                          parseInt(($event.target as HTMLInputElement).value) || 0,
+                        )
+                      "
                       type="number"
                       min="0"
                       :max="getTotalEpisodes(item)"
@@ -157,8 +171,14 @@
                   <div class="rating-control">
                     <label>Your Rating (1-10):</label>
                     <input
-                      :value="item.rating || ''"
-                      @change="updateRating(item, $event)"
+                      :value="getLocalFormData(item).rating || ''"
+                      @change="
+                        updateLocalFormData(
+                          item,
+                          'rating',
+                          parseInt(($event.target as HTMLInputElement).value) || undefined,
+                        )
+                      "
                       type="number"
                       min="1"
                       max="10"
@@ -170,8 +190,14 @@
                   <div class="notes-control">
                     <label>Your Review:</label>
                     <textarea
-                      :value="item.notes || ''"
-                      @change="updateNotes(item, $event)"
+                      :value="getLocalFormData(item).notes"
+                      @change="
+                        updateLocalFormData(
+                          item,
+                          'notes',
+                          ($event.target as HTMLTextAreaElement).value,
+                        )
+                      "
                       class="notes-textarea"
                       placeholder="Add your thoughts..."
                       rows="3"
@@ -182,6 +208,9 @@
                 <div class="action-buttons">
                   <button @click="viewContentDetails(item)" class="btn btn-secondary">
                     View Details
+                  </button>
+                  <button @click="saveWatchlistItem(item)" class="save-watch-btn">
+                    Save Watch
                   </button>
                   <button @click="removeFromWatchlist(item)" class="btn btn-danger">
                     Remove from Watchlist
@@ -210,6 +239,7 @@ import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl } from '@/services/api'
+import { getRatingColorHSL } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import type { WatchlistItem, Movie, TVShow } from '@/types'
 
@@ -254,6 +284,14 @@ const getStatusClass = (status: string) => {
 const getContentId = (item: WatchlistItem) => {
   if (typeof item === 'string') return item
   return typeof item.content === 'string' ? item.content : item.content?._id
+}
+
+const getRatingStyle = (rating: number | undefined) => {
+  const color = getRatingColorHSL(rating)
+  return {
+    color: color,
+    fontWeight: 'bold',
+  }
 }
 
 const getContentTitle = (item: WatchlistItem) => {
@@ -347,63 +385,99 @@ const hasNewEpisodes = (item: WatchlistItem) => {
   return current < total
 }
 
-const toggleExpanded = (contentId: string) => {
+const toggleExpanded = (item: WatchlistItem) => {
+  const contentId = getContentId(item)
   if (expandedItems.value.has(contentId)) {
     expandedItems.value.delete(contentId)
   } else {
     expandedItems.value.add(contentId)
+    initializeFormData(item)
   }
 }
 
-const updateStatus = async (item: WatchlistItem, event: Event) => {
-  const target = event.target as HTMLSelectElement
-  const newStatus = target.value as 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
+// Local state for form data
+const localFormData = ref<
+  Map<
+    string,
+    {
+      status: string
+      currentEpisode: number
+      rating: number | undefined
+      notes: string
+    }
+  >
+>(new Map())
 
-  try {
-    await contentStore.updateWatchlistItem(getContentId(item), { status: newStatus })
-    toast.success('Status updated')
-  } catch (error) {
-    console.error('Error updating status:', error)
-    toast.error('Failed to update status')
+// Initialize local form data when item is expanded
+const initializeFormData = (item: WatchlistItem) => {
+  const itemId = getContentId(item)
+  if (!localFormData.value.has(itemId)) {
+    localFormData.value.set(itemId, {
+      status: item.status || 'plan_to_watch',
+      currentEpisode: item.currentEpisode || 0,
+      rating: item.rating,
+      notes: item.notes || '',
+    })
   }
 }
 
-const updateEpisodes = async (item: WatchlistItem, event: Event) => {
-  const target = event.target as HTMLInputElement
-  const episodes = parseInt(target.value) || 0
-
-  try {
-    await contentStore.updateWatchlistItem(getContentId(item), { currentEpisode: episodes })
-    toast.success('Episodes updated')
-  } catch (error) {
-    console.error('Error updating episodes:', error)
-    toast.error('Failed to update episodes')
-  }
+// Get local form data for an item
+const getLocalFormData = (item: WatchlistItem) => {
+  const itemId = getContentId(item)
+  return (
+    localFormData.value.get(itemId) || {
+      status: item.status || 'plan_to_watch',
+      currentEpisode: item.currentEpisode || 0,
+      rating: item.rating,
+      notes: item.notes || '',
+    }
+  )
 }
 
-const updateRating = async (item: WatchlistItem, event: Event) => {
-  const target = event.target as HTMLInputElement
-  const rating = parseInt(target.value) || undefined
-
-  try {
-    await contentStore.updateWatchlistItem(getContentId(item), { rating })
-    toast.success('Rating updated')
-  } catch (error) {
-    console.error('Error updating rating:', error)
-    toast.error('Failed to update rating')
+// Update local form data
+const updateLocalFormData = (
+  item: WatchlistItem,
+  field: keyof {
+    status: string
+    currentEpisode: number
+    rating: number | undefined
+    notes: string
+  },
+  value: string | number | undefined,
+) => {
+  const itemId = getContentId(item)
+  const currentData = localFormData.value.get(itemId) || {
+    status: item.status || 'plan_to_watch',
+    currentEpisode: item.currentEpisode || 0,
+    rating: item.rating,
+    notes: item.notes || '',
   }
+
+  ;(currentData as Record<string, string | number | undefined>)[field] = value
+  localFormData.value.set(itemId, currentData)
 }
 
-const updateNotes = async (item: WatchlistItem, event: Event) => {
-  const target = event.target as HTMLTextAreaElement
-  const notes = target.value || undefined
+// Save all changes for an item
+const saveWatchlistItem = async (item: WatchlistItem) => {
+  const itemId = getContentId(item)
+  const formData = localFormData.value.get(itemId)
+
+  if (!formData) {
+    toast.error('No changes to save')
+    return
+  }
 
   try {
-    await contentStore.updateWatchlistItem(getContentId(item), { notes })
-    toast.success('Notes updated')
+    await contentStore.updateWatchlistItem(itemId, {
+      status: formData.status as 'plan_to_watch' | 'watching' | 'completed' | 'dropped',
+      currentEpisode: formData.currentEpisode,
+      rating: formData.rating,
+      notes: formData.notes,
+    })
+    toast.success('Watchlist item saved successfully')
   } catch (error) {
-    console.error('Error updating notes:', error)
-    toast.error('Failed to update notes')
+    console.error('Error saving watchlist item:', error)
+    toast.error('Failed to save watchlist item')
   }
 }
 
@@ -748,7 +822,6 @@ onUnmounted(() => {
 
 .rating-value {
   font-weight: 600;
-  color: var(--highlight-color);
 }
 
 .no-rating {
@@ -895,6 +968,23 @@ onUnmounted(() => {
 .notes-textarea {
   resize: vertical;
   min-height: 80px;
+}
+
+.save-watch-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
+  color: white;
+}
+
+.save-watch-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .action-buttons {

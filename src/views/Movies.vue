@@ -43,7 +43,9 @@
               {{ getContentTypeDisplay(movie.contentType) }}
             </div>
             <div class="movie-overlay">
-              <div class="movie-rating">{{ getDisplayRating(movie) }}</div>
+              <div class="movie-rating" :style="getRatingStyle(movie)">
+                {{ getDisplayRating(movie) }}
+              </div>
               <div class="movie-actions">
                 <button
                   v-if="authStore.isAuthenticated"
@@ -125,6 +127,7 @@ import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
+import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
@@ -146,6 +149,10 @@ const movies = computed(() => {
 const getDisplayRating = (movie: UnifiedContent) => {
   const rating = movie.unifiedScore
   return rating ? rating.toFixed(1) : 'N/A'
+}
+
+const getRatingStyle = (movie: UnifiedContent) => {
+  return getRatingTextStyle(movie.unifiedScore)
 }
 
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
@@ -317,8 +324,6 @@ onMounted(async () => {
 }
 
 .movie-rating {
-  background: rgba(255, 255, 255, 0.9);
-  color: #333;
   padding: 4px 8px;
   border-radius: 4px;
   font-weight: 600;

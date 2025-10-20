@@ -50,7 +50,9 @@
                 {{ getContentTypeDisplay(item.contentType) }}
               </div>
               <div class="content-overlay">
-                <div class="content-rating">{{ getDisplayRating(item) }}</div>
+                <div class="content-rating" :style="getRatingStyle(item)">
+                  {{ getDisplayRating(item) }}
+                </div>
                 <div class="content-actions">
                   <button
                     v-if="authStore.isAuthenticated"
@@ -100,6 +102,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
+import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
@@ -154,6 +157,10 @@ const getDisplayRating = (item: UnifiedContent) => {
   return rating ? rating.toFixed(1) : 'N/A'
 }
 
+const getRatingStyle = (item: UnifiedContent) => {
+  return getRatingTextStyle(item.unifiedScore)
+}
+
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
   return formatGenres(genres)
 }
@@ -187,7 +194,6 @@ const viewContentDetails = (item: UnifiedContent) => {
 }
 
 const handleWatchlistClick = (contentId: string) => {
-  console.log('Watchlist click:', contentId) // Debug log
   if (!authStore.isAuthenticated) {
     toast.error('Please log in to add items to your watchlist')
     return
@@ -198,7 +204,6 @@ const handleWatchlistClick = (contentId: string) => {
     return
   }
 
-  console.log('Opening dropdown for:', contentId) // Debug log
   selectedContentId.value = contentId
   showStatusDropdown.value = true
 }
@@ -441,8 +446,6 @@ onMounted(async () => {
 }
 
 .content-rating {
-  background: rgba(255, 255, 255, 0.9);
-  color: #333;
   padding: 4px 8px;
   border-radius: 4px;
   font-weight: 600;

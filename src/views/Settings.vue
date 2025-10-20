@@ -215,7 +215,39 @@
           <button @click="closeCropModal" class="close-btn">&times;</button>
         </div>
         <div class="crop-container">
-          <img ref="cropImage" :src="cropImageUrl" alt="Crop" />
+          <vue-cropper
+            ref="cropper"
+            :src="cropImageUrl"
+            :aspect-ratio="1"
+            :view-mode="1"
+            :drag-mode="'move'"
+            :auto-crop-area="0.8"
+            :background="false"
+            :responsive="true"
+            :restore="false"
+            :check-cross-origin="false"
+            :check-orientation="false"
+            :modal="true"
+            :guides="true"
+            :center="true"
+            :highlight="true"
+            :crop-box-movable="true"
+            :crop-box-resizable="true"
+            :toggle-drag-mode-on-dblclick="false"
+            :size="1"
+            :min-container-width="200"
+            :min-container-height="200"
+            :min-canvas-width="0"
+            :min-canvas-height="0"
+            :min-crop-box-width="0"
+            :min-crop-box-height="0"
+            :ready="onCropperReady"
+            :cropstart="onCropStart"
+            :cropmove="onCropMove"
+            :cropend="onCropEnd"
+            :crop="onCrop"
+            :zoom="onZoom"
+          />
         </div>
         <div class="crop-controls">
           <button @click="closeCropModal" class="btn btn-secondary">Cancel</button>
@@ -230,6 +262,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+import VueCropper from 'vue-cropperjs'
+import 'vue-cropperjs/node_modules/cropperjs/dist/cropper.css'
 
 // Component name for Vue devtools
 defineOptions({
@@ -253,15 +287,20 @@ const fileInput = ref<HTMLInputElement>()
 // Image cropping
 const showCropModal = ref(false)
 const cropImageUrl = ref('')
-const cropImage = ref<HTMLImageElement>()
-const cropper = ref<any>(null)
+const cropper = ref<{
+  getCroppedCanvas: (options?: {
+    width?: number
+    height?: number
+    imageSmoothingEnabled?: boolean
+    imageSmoothingQuality?: string
+  }) => HTMLCanvasElement | null
+} | null>(null)
 const selectedFile = ref<File | null>(null)
 
 // Available genres
 const availableGenres = [
   'Action',
   'Adventure',
-  'Animation',
   'Comedy',
   'Crime',
   'Documentary',
@@ -415,6 +454,7 @@ const changePassword = async () => {
 }
 
 const getProfilePictureUrl = (profilePicture: string) => {
+  if (!profilePicture) return ''
   if (profilePicture.startsWith('http')) {
     return profilePicture
   }
@@ -424,8 +464,6 @@ const getProfilePictureUrl = (profilePicture: string) => {
 const handleFileSelect = async (event: Event) => {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
-
-  console.log('File selected:', file) // Debug log
 
   if (!file) return
 
@@ -439,8 +477,6 @@ const handleFileSelect = async (event: Event) => {
     'image/svg+xml',
   ]
 
-  console.log('File type:', file.type) // Debug log
-
   if (!allowedTypes.includes(file.type)) {
     toast.error('Please select a valid image file (JPG, PNG, GIF, WebP, or SVG)')
     return
@@ -452,18 +488,8 @@ const handleFileSelect = async (event: Event) => {
     return
   }
 
-  try {
-    console.log('Creating FormData...') // Debug log
-    const formData = new FormData()
-    formData.append('profilePicture', file)
-
-    console.log('Uploading profile picture...') // Debug log
-    await authStore.uploadProfilePicture(formData)
-    toast.success('Profile picture uploaded successfully')
-  } catch (error) {
-    console.error('Upload error:', error) // Debug log
-    toast.error('Failed to upload profile picture')
-  }
+  // Open crop modal
+  openCropModal(file)
 }
 
 const removeProfilePicture = async () => {
@@ -473,6 +499,93 @@ const removeProfilePicture = async () => {
   } catch {
     toast.error('Failed to remove profile picture')
   }
+}
+
+const openCropModal = (file: File) => {
+  selectedFile.value = file
+  cropImageUrl.value = URL.createObjectURL(file)
+  showCropModal.value = true
+}
+
+const closeCropModal = () => {
+  showCropModal.value = false
+  if (cropImageUrl.value) {
+    URL.revokeObjectURL(cropImageUrl.value)
+    cropImageUrl.value = ''
+  }
+  selectedFile.value = null
+}
+
+const cropAndUpload = async () => {
+  if (!selectedFile.value || !cropper.value) return
+
+  try {
+    // Get cropped canvas
+    const canvas = cropper.value.getCroppedCanvas({
+      width: 300,
+      height: 300,
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    })
+
+    if (!canvas) {
+      toast.error('Failed to crop image')
+      return
+    }
+
+    // Convert canvas to blob
+    canvas.toBlob(
+      async (blob: Blob | null) => {
+        if (!blob) {
+          toast.error('Failed to process cropped image')
+          return
+        }
+
+        // Create new file from blob
+        const croppedFile = new File([blob], selectedFile.value!.name, {
+          type: blob.type,
+          lastModified: Date.now(),
+        })
+
+        // Upload the cropped file
+        const formData = new FormData()
+        formData.append('profilePicture', croppedFile)
+
+        await authStore.uploadProfilePicture(formData)
+        toast.success('Profile picture uploaded successfully')
+        closeCropModal()
+      },
+      'image/jpeg',
+      0.9,
+    )
+  } catch {
+    toast.error('Failed to upload profile picture')
+  }
+}
+
+// Cropper event handlers
+const onCropperReady = () => {
+  // Cropper is ready
+}
+
+const onCropStart = () => {
+  // Crop started
+}
+
+const onCropMove = () => {
+  // Crop moved
+}
+
+const onCropEnd = () => {
+  // Crop ended
+}
+
+const onCrop = () => {
+  // Crop completed
+}
+
+const onZoom = () => {
+  // Zoom changed
 }
 
 // Initialize form data

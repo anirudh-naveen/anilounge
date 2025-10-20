@@ -171,7 +171,9 @@
                 {{ getContentTypeDisplay(item.contentType) }}
               </div>
               <div class="result-overlay">
-                <div class="result-rating">{{ getDisplayRating(item) }}</div>
+                <div class="result-rating" :style="getRatingStyle(item)">
+                  {{ getDisplayRating(item) }}
+                </div>
                 <div class="result-actions">
                   <button
                     v-if="authStore.isAuthenticated && !(item as any).source"
@@ -281,6 +283,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
+import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import Chatbot from '@/components/Chatbot.vue'
@@ -416,6 +419,10 @@ const paginatedResults = computed(() => {
 const getDisplayRating = (item: UnifiedContent) => {
   const rating = item.unifiedScore
   return rating ? rating.toFixed(1) : 'N/A'
+}
+
+const getRatingStyle = (item: UnifiedContent) => {
+  return getRatingTextStyle(item.unifiedScore)
 }
 
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
@@ -836,8 +843,6 @@ onMounted(async () => {
 }
 
 .result-rating {
-  background: rgba(255, 255, 255, 0.9);
-  color: #333;
   padding: 4px 8px;
   border-radius: 4px;
   font-weight: 600;
