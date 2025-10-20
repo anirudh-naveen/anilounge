@@ -1,30 +1,36 @@
-/* Global Styles - Dark Theme with Deep Navy/Purple */
+/* Global Styles - Beautiful Gradient Theme with Deep Purple Navbar */
 :root {
-  /* Deep Navy Blue Theme */
-  --primary-color: #1a1a2e;
-  --secondary-color: #16213e;
-  --accent-color: #0f3460;
-  --highlight-color: #533483;
+  /* Main Background Gradient Colors */
+  --primary-color: #8080e6; /* Lavender-blue top */
+  --secondary-color: #6a6ac2; /* Purple-blue bottom */
+  --accent-color: #7a7ad6; /* Middle gradient */
+  --highlight-color: #e68080; /* Coral/orange accent */
 
-  /* Deep Purple Alternative */
-  --purple-primary: #2d1b69;
-  --purple-secondary: #1a0b3d;
-  --purple-accent: #4a148c;
+  /* Deep Purple Navbar Colors */
+  --navbar-primary: #2d1b69; /* Deep purple */
+  --navbar-secondary: #1a0b3d; /* Darker purple */
+  --navbar-accent: #4a148c; /* Purple accent */
+
+  /* Complementary Colors */
+  --coral-primary: #e68080; /* Coral/orange */
+  --coral-light: #e69980; /* Light coral */
+  --teal-primary: #80e6b3; /* Teal/green */
+  --teal-light: #99e6b3; /* Light teal */
 
   /* Text Colors */
-  --text-primary: #ffffff;
-  --text-secondary: #b0b0b0;
-  --text-muted: #808080;
+  --text-primary: #ffffff; /* Pure white */
+  --text-secondary: #e0e0e0; /* Light gray */
+  --text-muted: #b8b8b8; /* Muted gray */
 
   /* Background Colors */
-  --bg-primary: #0f0f23;
-  --bg-secondary: #1a1a2e;
-  --bg-card: #16213e;
-  --bg-hover: #0f3460;
+  --bg-primary: #8080e6; /* Start of gradient */
+  --bg-secondary: #6a6ac2; /* End of gradient */
+  --bg-card: rgba(255, 255, 255, 0.1); /* Semi-transparent white */
+  --bg-hover: rgba(255, 255, 255, 0.2); /* Hover state */
 
   /* Border Colors */
-  --border-color: #2a2a3e;
-  --border-hover: #533483;
+  --border-color: rgba(255, 255, 255, 0.2);
+  --border-hover: rgba(255, 255, 255, 0.4);
 
   /* Status Colors */
   --success-color: #4caf50;
@@ -53,7 +59,7 @@ body {
     'Segoe UI',
     Roboto,
     sans-serif;
-  background: linear-gradient(135deg, var(--bg-primary) 0%, var(--primary-color) 100%);
+  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
@@ -71,16 +77,16 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--highlight-color);
+  background: var(--coral-primary);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--purple-accent);
+  background: var(--teal-primary);
 }
 
 /* Animations */
@@ -177,8 +183,9 @@ html {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--highlight-color), var(--purple-accent));
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
   color: var(--text-primary);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .btn-primary:hover {

@@ -55,12 +55,8 @@
               </div>
             </div>
             <div v-else class="auth-buttons">
-              <router-link to="/login" class="btn btn-secondary">
-                Login
-              </router-link>
-              <router-link to="/register" class="btn btn-primary">
-                Register
-              </router-link>
+              <router-link to="/login" class="btn btn-secondary"> Login </router-link>
+              <router-link to="/register" class="btn btn-primary"> Register </router-link>
             </div>
           </div>
         </div>
@@ -130,14 +126,14 @@ const handleLogout = () => {
 
 <style scoped>
 .header {
-  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(90deg, var(--navbar-primary), var(--navbar-secondary));
+  border-bottom: 1px solid var(--navbar-accent);
   padding: 0.75rem 0;
   position: sticky;
   top: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
 }
 
 .container {
@@ -165,7 +161,7 @@ const handleLogout = () => {
 .logo-text {
   font-size: 1.4rem;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--highlight-color), var(--purple-accent));
+  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -211,8 +207,9 @@ const handleLogout = () => {
 .nav-link:hover,
 .nav-link.router-link-active {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--navbar-accent);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 20, 140, 0.3);
 }
 
 .nav-icon {
@@ -259,8 +256,9 @@ const handleLogout = () => {
 }
 
 .user-trigger:hover {
-  background: var(--bg-hover);
+  background: var(--navbar-accent);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 20, 140, 0.3);
 }
 
 .user-avatar {

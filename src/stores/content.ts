@@ -51,21 +51,12 @@ export const useContentStore = defineStore('content', () => {
 
   // Get all content with pagination and filtering
   const getContent = async (page = 1, contentType?: 'movie' | 'tv' | 'all', limit = 20) => {
-    const startTime = Date.now()
-    console.log(`🚀 [${new Date().toISOString()}] Frontend getContent called:`, {
-      page,
-      contentType,
-      limit,
-    })
-
     try {
       // Set appropriate loading state
       if (contentType === 'movie') {
         moviesLoading.value = true
-        console.log(`🎬 [${new Date().toISOString()}] Setting moviesLoading = true`)
       } else if (contentType === 'tv') {
         tvShowsLoading.value = true
-        console.log(`📺 [${new Date().toISOString()}] Setting tvShowsLoading = true`)
       }
 
       error.value = null
@@ -75,36 +66,28 @@ export const useContentStore = defineStore('content', () => {
         params.type = contentType
       }
 
-      console.log(`📡 [${new Date().toISOString()}] Making API call with params:`, params)
-      const apiStart = Date.now()
       const response = await contentAPI.getContent(params)
-      const apiTime = Date.now() - apiStart
-      console.log(`📡 [${new Date().toISOString()}] API call completed in ${apiTime}ms`)
 
       if (response.data.success) {
-        const processStart = Date.now()
-        allContent.value = response.data.data
-        pagination.value = response.data.pagination
+        // Only update allContent for 'all' content type to avoid conflicts
+        if (contentType === 'all' || !contentType) {
+          allContent.value = response.data.data
+          pagination.value = response.data.pagination
+        }
 
         // Update appropriate pagination state based on content type
         if (contentType === 'movie') {
           movies.value = response.data.data
           moviesPagination.value = response.data.pagination
-          console.log(
-            `🎬 [${new Date().toISOString()}] Updated movies array with ${movies.value.length} items`,
-          )
         } else if (contentType === 'tv') {
           tvShows.value = response.data.data
           tvShowsPagination.value = response.data.pagination
-          console.log(
-            `📺 [${new Date().toISOString()}] Updated tvShows array with ${tvShows.value.length} items`,
-          )
-        } else {
+        } else if (contentType === 'all' || !contentType) {
           // For 'all' content type, separate movies and TV shows efficiently
           const movieItems: UnifiedContent[] = []
           const tvItems: UnifiedContent[] = []
 
-          for (const item of allContent.value) {
+          for (const item of response.data.data) {
             if (item.contentType === 'movie') {
               movieItems.push(item)
             } else if (item.contentType === 'tv') {
@@ -114,37 +97,20 @@ export const useContentStore = defineStore('content', () => {
 
           movies.value = movieItems
           tvShows.value = tvItems
-          console.log(
-            `🔄 [${new Date().toISOString()}] Separated content: ${movieItems.length} movies, ${tvItems.length} TV shows`,
-          )
         }
-
-        const processTime = Date.now() - processStart
-        console.log(`⚡ [${new Date().toISOString()}] Data processing took ${processTime}ms`)
       }
-
-      const totalTime = Date.now() - startTime
-      console.log(
-        `✅ [${new Date().toISOString()}] Frontend getContent completed in ${totalTime}ms`,
-      )
 
       return response.data
     } catch (err: unknown) {
-      const totalTime = Date.now() - startTime
-      console.error(
-        `❌ [${new Date().toISOString()}] Frontend getContent error after ${totalTime}ms:`,
-        err,
-      )
+      console.error('Error fetching content:', err)
       error.value = err instanceof Error ? err.message : 'Failed to fetch content'
       throw err
     } finally {
       // Clear appropriate loading state
       if (contentType === 'movie') {
         moviesLoading.value = false
-        console.log(`🎬 [${new Date().toISOString()}] Setting moviesLoading = false`)
       } else if (contentType === 'tv') {
         tvShowsLoading.value = false
-        console.log(`📺 [${new Date().toISOString()}] Setting tvShowsLoading = false`)
       }
     }
   }
@@ -280,8 +246,6 @@ export const useContentStore = defineStore('content', () => {
     notes?: string,
   ) => {
     try {
-      console.log('Adding to watchlist:', { contentId, status, rating, currentEpisode, notes }) // Debug log
-
       const response = await watchlistAPI.addToWatchlist({
         contentId,
         status,
@@ -289,8 +253,6 @@ export const useContentStore = defineStore('content', () => {
         currentEpisode,
         notes,
       })
-
-      console.log('Watchlist API response:', response.data) // Debug log
 
       if (response.data.success) {
         // Force refresh watchlist
@@ -349,9 +311,6 @@ export const useContentStore = defineStore('content', () => {
       if (response.data.success) {
         watchlist.value = response.data.data
         watchlistLoaded.value = true
-        console.log(
-          `📋 [${new Date().toISOString()}] Watchlist loaded: ${watchlist.value.length} items`,
-        )
       }
     } catch (err: unknown) {
       console.error('Error loading watchlist:', err)
@@ -437,17 +396,14 @@ export const useContentStore = defineStore('content', () => {
 
   // Clear functions
   const clearSearchResults = () => {
-    console.log('Clearing search results') // Debug log
     searchResults.value = []
   }
 
   const clearCurrentContent = () => {
-    console.log('Clearing current content') // Debug log
     currentContent.value = null
   }
 
   const clearAll = () => {
-    console.log('Clearing all content') // Debug log
     allContent.value = []
     movies.value = []
     tvShows.value = []

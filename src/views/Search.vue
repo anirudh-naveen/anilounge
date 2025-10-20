@@ -395,7 +395,7 @@ watch(
 <style scoped>
 .search-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
   padding: 2rem 0;
 }
 
@@ -466,14 +466,15 @@ watch(
 }
 
 .search-btn {
-  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
   color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .ai-btn {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--navbar-accent);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--navbar-primary);
 }
 
 .search-btn:hover,
@@ -633,7 +634,7 @@ watch(
   position: absolute;
   top: 8px;
   right: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
   color: white;
   padding: 4px 8px;
   border-radius: 4px;
@@ -777,8 +778,9 @@ watch(
 }
 
 .btn-primary {
-  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
   color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .btn-secondary {

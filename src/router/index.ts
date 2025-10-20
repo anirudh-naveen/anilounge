@@ -69,29 +69,22 @@ const router = createRouter({
 
 // Navigation guard for protected routes
 router.beforeEach((to, from, next) => {
-  console.log(`🧭 [${new Date().toISOString()}] Router navigation: ${from.path} → ${to.path}`)
 
   const authStore = useAuthStore()
 
   // Initialize auth if not already done
   if (!authStore.user && localStorage.getItem('token')) {
-    console.log(`🔐 [${new Date().toISOString()}] Initializing auth from localStorage`)
     authStore.initAuth()
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    console.log(`🚫 [${new Date().toISOString()}] Route requires auth, redirecting to login`)
     next('/login')
   } else {
-    console.log(`✅ [${new Date().toISOString()}] Route access granted`)
     next()
   }
 })
 
 router.afterEach((to, from) => {
-  console.log(
-    `🏁 [${new Date().toISOString()}] Router navigation completed: ${from.path} → ${to.path}`,
-  )
 
   // Clear scroll positions when navigating to different main sections
   // This ensures scroll positions are only preserved for back navigation
@@ -103,9 +96,6 @@ router.afterEach((to, from) => {
     // User navigated directly between main sections, clear all scroll positions
     const contentStore = useContentStore()
     contentStore.clearAllScrollPositions()
-    console.log(
-      `🧹 [${new Date().toISOString()}] Cleared scroll positions - direct navigation between sections`,
-    )
   }
 })
 

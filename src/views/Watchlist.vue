@@ -482,7 +482,6 @@ watch(
   () => router.currentRoute.value.path,
   (newPath) => {
     if (newPath === '/watchlist' && authStore.isAuthenticated) {
-      console.log(`📋 [${new Date().toISOString()}] Route changed to watchlist, refreshing...`)
       contentStore.loadWatchlist(true)
     }
   },
@@ -490,45 +489,24 @@ watch(
 )
 
 onMounted(async () => {
-  const startTime = Date.now()
-  console.log(`📋 [${new Date().toISOString()}] Watchlist component mounted`)
-
   if (isLoading.value) {
-    console.log(`📋 [${new Date().toISOString()}] Already loading, skipping`)
     return
   }
 
   // Check authentication first
   if (!authStore.isAuthenticated) {
-    console.log(`📋 [${new Date().toISOString()}] User not authenticated, redirecting to login`)
     router.push('/login')
     return
   }
 
-  console.log(`📋 [${new Date().toISOString()}] User authenticated, loading watchlist...`)
-  console.log(
-    `📋 [${new Date().toISOString()}] Current watchlist length: ${contentStore.watchlist.length}`,
-  )
-
   // Use the proper content store method to load watchlist
   try {
     await contentStore.loadWatchlist(true) // Force reload to get latest data
-    console.log(
-      `📋 [${new Date().toISOString()}] Watchlist loaded successfully, length: ${contentStore.watchlist.length}`,
-    )
   } catch (error) {
-    const totalTime = Date.now() - startTime
-    console.error(
-      `❌ [${new Date().toISOString()}] Watchlist component error after ${totalTime}ms:`,
-      error,
-    )
+    console.error('Error loading watchlist:', error)
     toast.error('Failed to load watchlist')
   } finally {
     isLoading.value = false
-    const totalTime = Date.now() - startTime
-    console.log(
-      `✅ [${new Date().toISOString()}] Watchlist component mounted successfully in ${totalTime}ms`,
-    )
   }
 })
 

@@ -22,10 +22,10 @@
       </div>
     </section>
 
-    <!-- Featured Content -->
+    <!-- Trending Content -->
     <section class="featured-section">
       <div class="container">
-        <h2 class="section-title">Featured Content</h2>
+        <h2 class="section-title">Trending Now</h2>
         <div v-if="contentStore.isLoading" class="loading-container">
           <div class="spinner"></div>
           <p>Loading amazing content...</p>
@@ -109,18 +109,42 @@ const toast = useToast()
 const showStatusDropdown = ref(false)
 const selectedContentId = ref('')
 
-// Get featured content from unified store
+// Get trending content from unified store
 const featuredContent = computed(() => {
-  // Use allContent from the unified store, sorted by unified score
+  // Create a trending score that combines multiple factors
   const sorted = [...contentStore.allContent].sort((a, b) => {
-    const aRating = a.unifiedScore || 0
-    const bRating = b.unifiedScore || 0
-    return bRating - aRating
+    // Calculate trending score: unified score + vote count influence + recency bonus
+    const aScore = (a.unifiedScore || 0) * 0.6 // Base rating weight
+    const aVoteWeight = Math.log10((a.voteCount || 1) + 1) * 0.3 // Vote count influence
+    const aRecencyBonus = getRecencyBonus(a.releaseDate) * 0.1 // Recent content bonus
+    const aTrendingScore = aScore + aVoteWeight + aRecencyBonus
+
+    const bScore = (b.unifiedScore || 0) * 0.6
+    const bVoteWeight = Math.log10((b.voteCount || 1) + 1) * 0.3
+    const bRecencyBonus = getRecencyBonus(b.releaseDate) * 0.1
+    const bTrendingScore = bScore + bVoteWeight + bRecencyBonus
+
+    return bTrendingScore - aTrendingScore
   })
-  return sorted.slice(0, 8) // Show only 8 items
+  return sorted.slice(0, 8) // Show only 8 trending items
 })
 
 // Helper functions
+const getRecencyBonus = (releaseDate: string | Date | undefined) => {
+  if (!releaseDate) return 0
+
+  const release = typeof releaseDate === 'string' ? new Date(releaseDate) : releaseDate
+  const now = new Date()
+  const yearsDiff = now.getFullYear() - release.getFullYear()
+
+  // Give bonus for content released in the last 3 years
+  if (yearsDiff <= 3) {
+    return Math.max(0, 3 - yearsDiff) // 3 points for this year, 2 for last year, 1 for 2 years ago
+  }
+
+  return 0
+}
+
 const getDisplayRating = (item: UnifiedContent) => {
   const rating = item.unifiedScore
   return rating ? rating.toFixed(1) : 'N/A'
@@ -191,13 +215,13 @@ onMounted(async () => {
 <style scoped>
 .home-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .hero {
   padding: 120px 0 80px;
   text-align: center;
   color: white;
+  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
 }
 
 .hero-content {
@@ -213,7 +237,7 @@ onMounted(async () => {
 }
 
 .gradient-text {
-  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -222,7 +246,7 @@ onMounted(async () => {
 .hero-subtitle {
   font-size: 1.25rem;
   margin-bottom: 2rem;
-  opacity: 0.9;
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 
@@ -242,8 +266,9 @@ onMounted(async () => {
 }
 
 .btn-primary {
-  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
   color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .btn-large {
@@ -258,7 +283,24 @@ onMounted(async () => {
 
 .featured-section {
   padding: 80px 0;
-  background: rgba(255, 255, 255, 0.95);
+  background: linear-gradient(135deg, var(--navbar-primary) 0%, var(--navbar-secondary) 100%);
+  position: relative;
+}
+
+.featured-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, rgba(45, 27, 105, 0.8), rgba(26, 11, 61, 0.9));
+  z-index: 1;
+}
+
+.featured-section .container {
+  position: relative;
+  z-index: 2;
 }
 
 .container {
@@ -272,7 +314,7 @@ onMounted(async () => {
   font-weight: 700;
   text-align: center;
   margin-bottom: 3rem;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .content-grid {
@@ -283,17 +325,19 @@ onMounted(async () => {
 }
 
 .content-card {
-  background: white;
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
   cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .content-card:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  border-color: var(--coral-primary);
 }
 
 .content-poster {
@@ -435,8 +479,8 @@ onMounted(async () => {
 }
 
 .genre-tag {
-  background: #f0f0f0;
-  color: #666;
+  background: var(--coral-light);
+  color: white;
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -448,11 +492,16 @@ onMounted(async () => {
   padding: 4rem 0;
 }
 
+.loading-container p {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+}
+
 .spinner {
   width: 40px;
   height: 40px;
   border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top: 4px solid #4ecdc4;
+  border-top: 4px solid var(--teal-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 1rem;

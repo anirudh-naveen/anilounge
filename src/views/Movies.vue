@@ -206,38 +206,16 @@ const loadMovies = async (page: number) => {
 }
 
 onMounted(async () => {
-  const startTime = Date.now()
-  console.log(`🎬 [${new Date().toISOString()}] Movies component mounted`)
-
   try {
-    // Load movies specifically if not already loaded
-    if (contentStore.movies.length === 0) {
-      console.log(`🎬 [${new Date().toISOString()}] Movies array empty, loading content...`)
-      await contentStore.getContent(1, 'movie', 20)
-    } else {
-      console.log(
-        `🎬 [${new Date().toISOString()}] Movies already loaded (${contentStore.movies.length} items), skipping API call`,
-      )
-    }
+    // Always load movies when mounting the component to ensure fresh data
+    await contentStore.getContent(1, 'movie', 20)
 
     // Load watchlist if user is authenticated (now optimized to skip if already loaded)
     if (authStore.isAuthenticated) {
-      console.log(`🎬 [${new Date().toISOString()}] User authenticated, loading watchlist...`)
       await contentStore.loadWatchlist()
-    } else {
-      console.log(`🎬 [${new Date().toISOString()}] User not authenticated, skipping watchlist`)
     }
-
-    const totalTime = Date.now() - startTime
-    console.log(
-      `✅ [${new Date().toISOString()}] Movies component mounted successfully in ${totalTime}ms`,
-    )
   } catch (error) {
-    const totalTime = Date.now() - startTime
-    console.error(
-      `❌ [${new Date().toISOString()}] Movies component error after ${totalTime}ms:`,
-      error,
-    )
+    console.error('Error in Movies component:', error)
     toast.error('Failed to load movies. Please try again.')
   }
 })
@@ -246,7 +224,7 @@ onMounted(async () => {
 <style scoped>
 .movies-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
   padding: 2rem 0;
 }
 
@@ -468,8 +446,9 @@ onMounted(async () => {
 }
 
 .btn-primary {
-  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
   color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .btn-secondary {
@@ -506,7 +485,7 @@ onMounted(async () => {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
   color: white;
   padding: 4px 8px;
   border-radius: 4px;
