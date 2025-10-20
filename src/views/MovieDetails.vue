@@ -49,7 +49,7 @@
 
             <div class="release-date">
               <i class="fas fa-calendar"></i>
-              <span>{{ formatDate(movie.releaseDate) }}</span>
+              <span>{{ movie.releaseDate ? formatDate(movie.releaseDate) : 'N/A' }}</span>
             </div>
 
             <div v-if="movie.runtime" class="runtime">
@@ -100,24 +100,11 @@
         <h3>Production Companies</h3>
         <div class="companies">
           <span
-            v-for="company in movie.productionCompanies"
-            :key="`company-${company.id || company._id || company.name}`"
+            v-for="(company, index) in movie.productionCompanies"
+            :key="`company-${index}`"
             class="company-tag"
           >
-            {{ company.name }}
-          </span>
-        </div>
-      </div>
-
-      <div v-if="movie.productionCountries?.length" class="production-info">
-        <h3>Production Countries</h3>
-        <div class="countries">
-          <span
-            v-for="country in movie.productionCountries"
-            :key="country.iso_3166_1"
-            class="country-tag"
-          >
-            {{ country.name }}
+            {{ company }}
           </span>
         </div>
       </div>
