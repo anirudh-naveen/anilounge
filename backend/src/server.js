@@ -131,10 +131,11 @@ app.use(
               'http://127.0.0.1:5173',
               'http://127.0.0.1:5174',
               'http://127.0.0.1:5175',
+              'file://', // Allow local file:// requests for testing
             ]
 
-      // Allow requests with no origin (mobile apps, Postman, etc.)
-      if (!origin) return callback(null, true)
+      // Allow requests with no origin (mobile apps, Postman, etc.) or file:// origin
+      if (!origin || origin.startsWith('file://')) return callback(null, true)
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true)
