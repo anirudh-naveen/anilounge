@@ -52,6 +52,12 @@ export const authAPI = {
   login: (credentials: LoginCredentials) => api.post('/auth/login', credentials),
   getProfile: () => api.get('/auth/profile'),
   updateProfile: (data: UpdateProfileData) => api.put('/auth/profile', data),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.put('/auth/change-password', data),
+  uploadProfilePicture: (formData: FormData) =>
+    api.post('/auth/upload-profile-picture', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 }
 
 // Unified Content API
@@ -81,6 +87,12 @@ export const contentAPI = {
     api.get(`/content/${id}/similar`, {
       params: limit ? { limit } : {},
     }),
+
+  // Get related content (sequels, prequels, related)
+  getRelatedContent: (contentId: string) => api.get(`/content/${contentId}/related`),
+
+  // Get franchise content
+  getFranchiseContent: (franchiseName: string) => api.get(`/franchise/${franchiseName}`),
 
   // Get database statistics
   getDatabaseStats: () => api.get('/stats'),

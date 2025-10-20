@@ -61,7 +61,7 @@ const router = createRouter({
     },
     {
       path: '/tv/:id',
-      name: 'TVDetails',
+      name: 'TVShowDetails',
       component: () => import('@/views/TVShowDetails.vue'),
     },
   ],
@@ -69,7 +69,6 @@ const router = createRouter({
 
 // Navigation guard for protected routes
 router.beforeEach((to, from, next) => {
-
   const authStore = useAuthStore()
 
   // Initialize auth if not already done
@@ -85,7 +84,6 @@ router.beforeEach((to, from, next) => {
 })
 
 router.afterEach((to, from) => {
-
   // Clear scroll positions when navigating to different main sections
   // This ensures scroll positions are only preserved for back navigation
   const mainSections = ['/', '/movies', '/tv', '/search', '/watchlist']

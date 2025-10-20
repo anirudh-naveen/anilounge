@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
 import unifiedContentService from '../services/unifiedContentService.js'
+import relationshipService from '../services/relationshipService.js'
 
 dotenv.config()
 
@@ -70,7 +71,13 @@ class DatabasePopulator {
   }
 
   async populateDatabase(options = {}) {
-    const { tmdbLimit = 50, malLimit = 50, skipTmdb = false, skipMal = false } = options
+    const {
+      tmdbLimit = 50,
+      malLimit = 50,
+      skipTmdb = false,
+      skipMal = false,
+      clear = false,
+    } = options
 
     console.log('🚀 Starting unified database population...')
     console.log(`📊 Target: ${tmdbLimit} TMDB items, ${malLimit} MAL items`)
@@ -78,9 +85,11 @@ class DatabasePopulator {
     try {
       await this.connectDB()
 
-      // Clear existing content
-      await Content.deleteMany({})
-      console.log('🗑️ Cleared existing content')
+      // Clear existing content if requested
+      if (clear) {
+        await Content.deleteMany({})
+        console.log('🗑️ Cleared existing content')
+      }
 
       // Populate TMDB content
       if (!skipTmdb) {
@@ -204,7 +213,18 @@ class DatabasePopulator {
     try {
       this.stats.totalProcessed++
 
-      const contentData = unifiedContentService.convertTmdbToContent(tmdbData, contentType)
+      // Get detailed TMDB information including genres
+      const detailedTmdbData = await unifiedContentService.getTmdbContentDetails(
+        tmdbData.id,
+        contentType,
+      )
+      if (!detailedTmdbData) {
+        console.log(`⚠️ Could not get detailed info for TMDB ${contentType}: ${tmdbData.title}`)
+        this.stats.skipped++
+        return
+      }
+
+      const contentData = unifiedContentService.convertTmdbToContent(detailedTmdbData, contentType)
 
       // Skip if convertTmdbToContent returned null (insufficient votes or null data)
       if (!contentData) {
@@ -212,37 +232,43 @@ class DatabasePopulator {
         return
       }
 
-      // Check if content already exists
-      const existingContent = await Content.findOne({ tmdbId: tmdbData.id })
+      // Use enhanced deduplication (no external ID checking)
+      const duplicates = await this.findDuplicateContent(contentData)
 
-      if (existingContent) {
-        // Update existing content
-        Object.assign(existingContent, contentData)
+      if (duplicates.length > 0) {
+        const duplicate = duplicates[0] // Take the first match
+        const existingContent = duplicate.content
 
-        // Update unified score using weighted calculation
-        if (contentData.voteAverage && existingContent.malScore) {
-          existingContent.unifiedScore = this.calculateWeightedScore(
-            contentData.voteAverage,
-            contentData.voteCount,
-            existingContent.malScore,
-            existingContent.malScoredBy,
-          )
-        } else {
-          existingContent.unifiedScore = contentData.voteAverage || existingContent.malScore
+        if (duplicate.reason === 'title_match') {
+          // Merge TMDB data into existing content
+          await this.mergeTmdbIntoExisting(existingContent, contentData, detailedTmdbData)
+          this.stats.merged++
+          console.log(`🔗 Merged TMDB data into existing content: ${contentData.title}`)
         }
-
-        existingContent.lastUpdated = new Date()
-        await existingContent.save()
-        this.stats.updated++
-        console.log(`🔄 Updated TMDB ${contentType}: ${contentData.title}`)
       } else {
-        // Create new content with unified score
+        // Create new content with unified score and relationships
         if (contentData.voteAverage) {
           contentData.unifiedScore = contentData.voteAverage
         }
+
+        // Process relationships for new content
+        const relationships = await relationshipService.detectRelationshipsFromExternalData(
+          detailedTmdbData,
+          'tmdb',
+        )
+        if (relationships.franchise) {
+          contentData.franchise = relationships.franchise.name
+          contentData.relationships = {
+            sequels: [],
+            prequels: [],
+            related: [],
+            franchise: relationships.franchise.name,
+          }
+        }
+
         const newContent = new Content(contentData)
         await newContent.save()
-        this.stats.newAdded++
+        this.stats.added++
         console.log(`➕ Added TMDB ${contentType}: ${contentData.title}`)
       }
     } catch (error) {
@@ -252,22 +278,13 @@ class DatabasePopulator {
   }
 
   // Enhanced deduplication method
-  async findDuplicateContent(contentData, source) {
+  async findDuplicateContent(contentData) {
     const duplicates = []
 
-    // 1. Check by external ID first
-    if (source === 'tmdb' && contentData.tmdbId) {
-      const byTmdbId = await Content.findOne({ tmdbId: contentData.tmdbId })
-      if (byTmdbId) duplicates.push({ content: byTmdbId, reason: 'tmdb_id' })
-    }
-
-    if (source === 'mal' && contentData.malId) {
-      const byMalId = await Content.findOne({ malId: contentData.malId })
-      if (byMalId) duplicates.push({ content: byMalId, reason: 'mal_id' })
-    }
-
-    // 2. Check by title similarity (fuzzy matching)
+    // Only use title-based matching for deduplication
+    // External IDs are kept for reference but not used for deduplication
     const titleVariations = this.generateTitleVariations(contentData.title)
+
     for (const title of titleVariations) {
       const byTitle = await Content.findOne({
         $or: [
@@ -282,7 +299,7 @@ class DatabasePopulator {
       })
 
       if (byTitle && !duplicates.some((d) => d.content._id.equals(byTitle._id))) {
-        // Additional fact checking
+        // Additional fact checking to ensure it's the same content
         if (this.isLikelySameContent(contentData, byTitle)) {
           duplicates.push({ content: byTitle, reason: 'title_match' })
         }
@@ -336,15 +353,20 @@ class DatabasePopulator {
       return false
     }
 
-    // Check genre overlap (at least 1 common genre)
+    // Check genre overlap (at least 2 common genres for stricter matching)
     const newGenres = (newContent.genres || []).map((g) => g.name?.toLowerCase() || g.toLowerCase())
     const existingGenres = (existingContent.genres || []).map(
       (g) => g.name?.toLowerCase() || g.toLowerCase(),
     )
     const commonGenres = newGenres.filter((g) => existingGenres.includes(g))
 
-    if (commonGenres.length === 0) {
-      console.log(`❌ No common genres: ${newContent.title} vs ${existingContent.title}`)
+    if (commonGenres.length < 2) {
+      console.log(
+        `❌ Insufficient common genres (${commonGenres.length}): ${newContent.title} vs ${existingContent.title}`,
+      )
+      console.log(`   New genres: ${newGenres.join(', ')}`)
+      console.log(`   Existing genres: ${existingGenres.join(', ')}`)
+      console.log(`   Common genres: ${commonGenres.join(', ')}`)
       return false
     }
 
@@ -381,9 +403,10 @@ class DatabasePopulator {
       this.stats.totalProcessed++
 
       const contentData = unifiedContentService.convertMalToContent(malData)
+      const malId = malData.node?.id || malData.id
 
       // Check if content already exists by malId
-      const existingContent = await Content.findOne({ malId: malData.id })
+      const existingContent = await Content.findOne({ malId: malId })
 
       if (existingContent) {
         // Update existing content
@@ -394,21 +417,27 @@ class DatabasePopulator {
         console.log(`🔄 Updated MAL content: ${contentData.title}`)
       } else {
         // Use enhanced deduplication
-        const duplicates = await this.findDuplicateContent(contentData, 'mal')
+        const duplicates = await this.findDuplicateContent(contentData)
 
         if (duplicates.length > 0) {
           const duplicate = duplicates[0] // Take the first match
           const existingContent = duplicate.content
 
-          if (duplicate.reason === 'title_match' || duplicate.reason === 'tmdb_id') {
-            // Merge MAL data into existing content (prioritize MAL for anime)
+          if (duplicate.reason === 'title_match') {
+            // Only merge MAL data into existing content if it's a title match
+            // MAL content should never match by tmdb_id since it doesn't have TMDB IDs
             await this.mergeMalIntoExisting(existingContent, contentData)
             this.stats.merged++
             console.log(`🔗 Merged MAL data into existing content: ${contentData.title}`)
           }
         } else {
-          // Create new content with MAL priority for anime
-          const newContent = new Content({
+          // Create new content with MAL priority for anime and relationships
+          const relationships = await relationshipService.detectRelationshipsFromExternalData(
+            malData,
+            'mal',
+          )
+
+          const contentWithRelationships = {
             ...contentData,
             unifiedScore: contentData.malScore || 0,
             dataSources: {
@@ -416,8 +445,19 @@ class DatabasePopulator {
               tmdb: { hasData: false },
             },
             lastUpdated: new Date(),
-          })
+          }
 
+          if (relationships.franchise) {
+            contentWithRelationships.franchise = relationships.franchise.name
+            contentWithRelationships.relationships = {
+              sequels: [],
+              prequels: [],
+              related: [],
+              franchise: relationships.franchise.name,
+            }
+          }
+
+          const newContent = new Content(contentWithRelationships)
           await newContent.save()
           this.stats.added++
           console.log(`➕ Added MAL ${contentData.contentType}: ${contentData.title}`)
@@ -429,17 +469,83 @@ class DatabasePopulator {
     }
   }
 
+  // Enhanced merge method for TMDB data
+  async mergeTmdbIntoExisting(existingContent, tmdbData, detailedTmdbData) {
+    // Merge TMDB-specific fields
+    existingContent.tmdbId = tmdbData.tmdbId
+    existingContent.voteAverage = tmdbData.voteAverage
+    existingContent.voteCount = tmdbData.voteCount
+    existingContent.popularity = tmdbData.popularity
+
+    // Merge arrays
+    existingContent.studios = [
+      ...new Set([...(existingContent.studios || []), ...(tmdbData.studios || [])]),
+    ]
+    existingContent.alternativeTitles = [
+      ...new Set([
+        ...(existingContent.alternativeTitles || []),
+        ...(tmdbData.alternativeTitles || []),
+      ]),
+    ]
+    existingContent.genres = [
+      ...new Set([...(existingContent.genres || []), ...(tmdbData.genres || [])]),
+    ]
+
+    // Calculate unified score with weighted calculation
+    if (existingContent.malScore && tmdbData.voteAverage) {
+      existingContent.unifiedScore = this.calculateWeightedScore(
+        tmdbData.voteAverage,
+        tmdbData.voteCount,
+        existingContent.malScore,
+        existingContent.malScoredBy,
+      )
+    } else {
+      existingContent.unifiedScore = tmdbData.voteAverage || existingContent.malScore || 0
+    }
+
+    // Process relationships during merge
+    await relationshipService.processRelationshipsDuringMerge(
+      existingContent,
+      detailedTmdbData,
+      'tmdb',
+    )
+
+    // Update data sources
+    existingContent.dataSources.tmdb = {
+      hasData: true,
+      lastUpdated: new Date(),
+    }
+
+    existingContent.lastUpdated = new Date()
+    await existingContent.save()
+  }
+
   // Enhanced merge method that prioritizes MAL for anime
   async mergeMalIntoExisting(existingContent, malData) {
-    // For anime content, prioritize MAL data
+    // For anime content, prioritize MAL data but be conservative about overwriting
     const isAnime = this.isAnimeContent(malData)
 
     if (isAnime) {
-      // MAL priority: Use MAL data as primary, merge TMDB data
-      existingContent.title = malData.title || existingContent.title
-      existingContent.overview = malData.overview || existingContent.overview
-      existingContent.posterPath = malData.posterPath || existingContent.posterPath
-      existingContent.releaseDate = malData.releaseDate || existingContent.releaseDate
+      // Only overwrite title if MAL title is significantly different and more complete
+      // Don't overwrite English titles with Japanese titles unless the English title is missing
+      if (!existingContent.title || existingContent.title.length < malData.title.length) {
+        existingContent.title = malData.title
+      }
+
+      // Only overwrite overview if existing one is empty or much shorter
+      if (!existingContent.overview || existingContent.overview.length < malData.overview.length) {
+        existingContent.overview = malData.overview
+      }
+
+      // Only overwrite poster if existing one is missing
+      if (!existingContent.posterPath) {
+        existingContent.posterPath = malData.posterPath
+      }
+
+      // Only overwrite release date if existing one is missing
+      if (!existingContent.releaseDate) {
+        existingContent.releaseDate = malData.releaseDate
+      }
     }
 
     // Always merge MAL-specific fields
@@ -477,6 +583,9 @@ class DatabasePopulator {
     } else {
       existingContent.unifiedScore = malData.malScore || existingContent.voteAverage || 0
     }
+
+    // Process relationships during merge
+    await relationshipService.processRelationshipsDuringMerge(existingContent, malData, 'mal')
 
     // Preserve existing dataSources and add MAL data
     if (!existingContent.dataSources) {
@@ -549,7 +658,7 @@ class DatabasePopulator {
 // Parse command line arguments
 const parseArgs = () => {
   const args = process.argv.slice(2)
-  const options = { tmdbLimit: 100, malLimit: 100 }
+  const options = { tmdbLimit: 100, malLimit: 100, clear: false }
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--tmdbLimit' && args[i + 1]) {
@@ -558,6 +667,8 @@ const parseArgs = () => {
     } else if (args[i] === '--malLimit' && args[i + 1]) {
       options.malLimit = parseInt(args[i + 1])
       i++
+    } else if (args[i] === '--clear') {
+      options.clear = true
     }
   }
 
@@ -592,3 +703,6 @@ process.on('SIGTERM', async () => {
 
 // Run the population
 runPopulation()
+
+// Export the class for use in other scripts
+export default DatabasePopulator

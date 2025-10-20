@@ -21,6 +21,7 @@ export interface User {
   id: string
   username: string
   email: string
+  profilePicture?: string
   preferences?: {
     favoriteGenres: string[]
     favoriteStudios: string[]
@@ -115,6 +116,7 @@ export interface RegisterData {
 export interface UpdateProfileData {
   username?: string
   email?: string
+  profilePicture?: string | null
   preferences?: {
     favoriteGenres: string[]
     favoriteStudios: string[]

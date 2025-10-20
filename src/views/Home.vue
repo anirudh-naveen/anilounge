@@ -6,7 +6,7 @@
       <div class="container">
         <div class="hero-content fade-in">
           <h1 class="hero-title">
-            Discover Amazing
+            Discover
             <span class="gradient-text">Animated Content</span>
           </h1>
           <p class="hero-subtitle">
@@ -43,7 +43,10 @@
                 :alt="item.title"
                 @error="handleImageError"
               />
-              <div class="content-type-badge">
+              <div
+                class="content-type-badge"
+                :class="item.contentType === 'movie' ? 'movie-badge' : 'tv-badge'"
+              >
                 {{ getContentTypeDisplay(item.contentType) }}
               </div>
               <div class="content-overlay">
@@ -92,8 +95,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, computed, ref, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
@@ -102,6 +105,7 @@ import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
+const route = useRoute()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
@@ -170,8 +174,16 @@ const handleImageError = (event: Event) => {
 }
 
 const viewContentDetails = (item: UnifiedContent) => {
-  const routeName = item.contentType === 'movie' ? 'MovieDetails' : 'TVDetails'
-  router.push({ name: routeName, params: { id: item._id } })
+  // Save current scroll position for home page
+  const scrollKey = 'home-page'
+  contentStore.saveScrollPosition(scrollKey)
+
+  const routeName = item.contentType === 'movie' ? 'MovieDetails' : 'TVShowDetails'
+  router.push({
+    name: routeName,
+    params: { id: item._id },
+    query: { from: route.fullPath },
+  })
 }
 
 const handleWatchlistClick = (contentId: string) => {
@@ -198,6 +210,23 @@ const closeStatusDropdown = () => {
 
 onMounted(async () => {
   try {
+    // Handle scroll position restoration when returning from detail pages
+    const previousPage = route.query.from as string
+    if (previousPage && previousPage.includes('/')) {
+      // We're returning from a detail page, restore scroll position
+      const scrollKey = 'home-page'
+      const restored = contentStore.restoreScrollPosition(scrollKey)
+
+      if (!restored) {
+        nextTick(() => {
+          contentStore.scrollToTop()
+        })
+      }
+    } else {
+      // Normal page load, scroll to top
+      contentStore.scrollToTop()
+    }
+
     // Load popular content (which includes both movies and TV shows)
     await contentStore.getPopularContent('all', 20)
 
@@ -357,7 +386,6 @@ onMounted(async () => {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   padding: 4px 8px;
   border-radius: 4px;
@@ -369,6 +397,14 @@ onMounted(async () => {
   opacity: 0;
   transform: translateY(-5px);
   transition: all 0.3s ease;
+}
+
+.movie-badge {
+  background: var(--teal-primary);
+}
+
+.tv-badge {
+  background: var(--coral-primary);
 }
 
 .content-card:hover .content-type-badge {
@@ -412,6 +448,9 @@ onMounted(async () => {
   font-weight: 600;
   font-size: 0.9rem;
   align-self: flex-start;
+  position: absolute;
+  top: 8px;
+  left: 8px;
 }
 
 .content-type {
@@ -425,7 +464,9 @@ onMounted(async () => {
 }
 
 .content-actions {
-  align-self: flex-end;
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
 }
 
 .action-btn {

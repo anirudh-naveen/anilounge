@@ -155,13 +155,13 @@ const formatDate = (userId: string | undefined) => {
 .page-header h1 {
   font-size: 2.5rem;
   font-weight: 700;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
 .page-header p {
   font-size: 1.1rem;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .profile-content {
@@ -170,10 +170,11 @@ const formatDate = (userId: string | undefined) => {
 }
 
 .profile-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .profile-header {

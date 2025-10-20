@@ -28,6 +28,14 @@ export interface UnifiedContent {
     tmdb?: { hasData?: boolean }
     mal?: { hasData?: boolean }
   }
+  franchise?: string
+  source?: string // 'tmdb' or 'mal' for external search results
+  relationships?: {
+    sequels: string[]
+    prequels: string[]
+    related: string[]
+    franchise: string
+  }
 }
 
 // Extended interface for content with unified score

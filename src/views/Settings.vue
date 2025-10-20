@@ -57,6 +57,54 @@
         </div>
 
         <div class="settings-section">
+          <h2>Profile Picture</h2>
+          <div class="settings-card">
+            <div class="setting-item">
+              <div class="setting-info">
+                <h3>Profile Picture</h3>
+                <p>Upload a profile picture to personalize your account</p>
+              </div>
+              <div class="setting-control">
+                <div class="profile-picture-section">
+                  <div class="current-picture">
+                    <img
+                      v-if="authStore.user?.profilePicture"
+                      :src="getProfilePictureUrl(authStore.user.profilePicture)"
+                      alt="Profile Picture"
+                      class="profile-picture-preview"
+                    />
+                    <div v-else class="profile-picture-placeholder">
+                      <i class="fas fa-user"></i>
+                    </div>
+                  </div>
+                  <div class="upload-controls">
+                    <input
+                      ref="fileInput"
+                      type="file"
+                      accept="image/*"
+                      @change="handleFileSelect"
+                      style="display: none"
+                    />
+                    <button @click="fileInput?.click()" class="btn btn-secondary">
+                      <i class="fas fa-upload"></i>
+                      Choose Picture
+                    </button>
+                    <button
+                      v-if="authStore.user?.profilePicture"
+                      @click="removeProfilePicture"
+                      class="btn btn-danger"
+                    >
+                      <i class="fas fa-trash"></i>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
           <h2>Preferences</h2>
           <div class="settings-card">
             <div class="setting-item">
@@ -158,6 +206,23 @@
         </div>
       </div>
     </div>
+
+    <!-- Image Cropping Modal -->
+    <div v-if="showCropModal" class="crop-modal-overlay" @click="closeCropModal">
+      <div class="crop-modal" @click.stop>
+        <div class="crop-modal-header">
+          <h3>Crop Profile Picture</h3>
+          <button @click="closeCropModal" class="close-btn">&times;</button>
+        </div>
+        <div class="crop-container">
+          <img ref="cropImage" :src="cropImageUrl" alt="Crop" />
+        </div>
+        <div class="crop-controls">
+          <button @click="closeCropModal" class="btn btn-secondary">Cancel</button>
+          <button @click="cropAndUpload" class="btn btn-primary">Apply Crop</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -165,6 +230,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+
+// Component name for Vue devtools
+defineOptions({
+  name: 'SettingsPage',
+})
 
 const authStore = useAuthStore()
 const toast = useToast()
@@ -178,6 +248,14 @@ const newStudio = ref('')
 const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
+const fileInput = ref<HTMLInputElement>()
+
+// Image cropping
+const showCropModal = ref(false)
+const cropImageUrl = ref('')
+const cropImage = ref<HTMLImageElement>()
+const cropper = ref<any>(null)
+const selectedFile = ref<File | null>(null)
 
 // Available genres
 const availableGenres = [
@@ -199,17 +277,45 @@ const availableGenres = [
   'Thriller',
   'War',
   'Western',
+  'Biography',
+  'Film Noir',
+  'Musical',
+  'Sport',
+  'Superhero',
+  'Supernatural',
+  'Psychological',
+  'Slice of Life',
+  'Mecha',
+  'School',
+  'Ecchi',
+  'Harem',
+  'Josei',
+  'Seinen',
+  'Shoujo',
+  'Shounen',
+  'Isekai',
+  'Martial Arts',
+  'Military',
+  'Police',
+  'Samurai',
+  'Space',
+  'Vampire',
+  'Zombie',
 ]
 
 // Computed properties
 const hasGenreChanges = computed(() => {
   const currentGenres = authStore.user?.preferences?.favoriteGenres || []
-  return JSON.stringify(selectedGenres.value.sort()) !== JSON.stringify(currentGenres.sort())
+  return (
+    JSON.stringify([...selectedGenres.value].sort()) !== JSON.stringify([...currentGenres].sort())
+  )
 })
 
 const hasStudioChanges = computed(() => {
   const currentStudios = authStore.user?.preferences?.favoriteStudios || []
-  return JSON.stringify(selectedStudios.value.sort()) !== JSON.stringify(currentStudios.sort())
+  return (
+    JSON.stringify([...selectedStudios.value].sort()) !== JSON.stringify([...currentStudios].sort())
+  )
 })
 
 const canChangePassword = computed(() => {
@@ -250,7 +356,7 @@ const updateUsername = async () => {
   try {
     await authStore.updateProfile({ username: username.value })
     toast.success('Username updated successfully')
-  } catch (error) {
+  } catch {
     toast.error('Failed to update username')
   }
 }
@@ -259,7 +365,7 @@ const updateEmail = async () => {
   try {
     await authStore.updateProfile({ email: email.value })
     toast.success('Email updated successfully')
-  } catch (error) {
+  } catch {
     toast.error('Failed to update email')
   }
 }
@@ -273,7 +379,7 @@ const updateGenres = async () => {
       },
     })
     toast.success('Favorite genres updated successfully')
-  } catch (error) {
+  } catch {
     toast.error('Failed to update favorite genres')
   }
 }
@@ -287,17 +393,85 @@ const updateStudios = async () => {
       },
     })
     toast.success('Favorite studios updated successfully')
-  } catch (error) {
+  } catch {
     toast.error('Failed to update favorite studios')
   }
 }
 
 const changePassword = async () => {
   try {
-    // This would need to be implemented in the backend
-    toast.info('Password change feature coming soon')
-  } catch (error) {
+    await authStore.changePassword({
+      currentPassword: currentPassword.value,
+      newPassword: newPassword.value,
+    })
+    toast.success('Password changed successfully')
+    // Clear password fields
+    currentPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+  } catch {
     toast.error('Failed to change password')
+  }
+}
+
+const getProfilePictureUrl = (profilePicture: string) => {
+  if (profilePicture.startsWith('http')) {
+    return profilePicture
+  }
+  return `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}${profilePicture}`
+}
+
+const handleFileSelect = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+
+  console.log('File selected:', file) // Debug log
+
+  if (!file) return
+
+  // Validate file type
+  const allowedTypes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+  ]
+
+  console.log('File type:', file.type) // Debug log
+
+  if (!allowedTypes.includes(file.type)) {
+    toast.error('Please select a valid image file (JPG, PNG, GIF, WebP, or SVG)')
+    return
+  }
+
+  // Validate file size (5MB limit)
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error('File size must be less than 5MB')
+    return
+  }
+
+  try {
+    console.log('Creating FormData...') // Debug log
+    const formData = new FormData()
+    formData.append('profilePicture', file)
+
+    console.log('Uploading profile picture...') // Debug log
+    await authStore.uploadProfilePicture(formData)
+    toast.success('Profile picture uploaded successfully')
+  } catch (error) {
+    console.error('Upload error:', error) // Debug log
+    toast.error('Failed to upload profile picture')
+  }
+}
+
+const removeProfilePicture = async () => {
+  try {
+    await authStore.updateProfile({ profilePicture: null })
+    toast.success('Profile picture removed successfully')
+  } catch {
+    toast.error('Failed to remove profile picture')
   }
 }
 
@@ -330,13 +504,13 @@ onMounted(() => {
 .page-header h1 {
   font-size: 2.5rem;
   font-weight: 700;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
 .page-header p {
   font-size: 1.1rem;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .settings-content {
@@ -347,15 +521,16 @@ onMounted(() => {
 .settings-section h2 {
   font-size: 1.8rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 1rem;
 }
 
 .settings-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .setting-item {
@@ -373,12 +548,12 @@ onMounted(() => {
 .setting-info h3 {
   font-size: 1.2rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
 .setting-info p {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
@@ -390,39 +565,54 @@ onMounted(() => {
 
 .form-input {
   padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  border: 2px solid var(--text-muted);
+  border-radius: 8px;
   font-size: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  backdrop-filter: blur(10px);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--blend-color);
+  box-shadow: 0 0 0 3px rgba(179, 153, 154, 0.2);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
 }
 
 .btn {
   padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
 .btn-primary {
-  background: #667eea;
+  background: var(--blend-color);
   color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #5a6fd8;
+  background: var(--coral-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .btn-primary:disabled {
-  background: #ccc;
+  background: var(--text-muted);
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .btn-secondary {
@@ -442,22 +632,34 @@ onMounted(() => {
 }
 
 .genre-option {
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--text-muted);
+  border-radius: 8px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
 }
 
 .genre-option:hover {
-  border-color: #667eea;
+  border-color: var(--blend-color);
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
 }
 
 .genre-option.selected {
-  background: #667eea;
+  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
   color: white;
-  border-color: #667eea;
+  border-color: var(--blend-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
 }
 
 .studio-input {
@@ -477,13 +679,16 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: #f8f9fa;
+  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
   padding: 0.5rem 0.75rem;
   border-radius: 20px;
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .remove-btn {
-  background: #dc3545;
+  background: rgba(255, 255, 255, 0.2);
   color: white;
   border: none;
   border-radius: 50%;
@@ -494,6 +699,12 @@ onMounted(() => {
   justify-content: center;
   cursor: pointer;
   font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.remove-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
 }
 
 .password-form {
@@ -510,5 +721,162 @@ onMounted(() => {
   .genre-selection {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   }
+}
+
+/* Profile Picture Styles */
+.profile-picture-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.current-picture {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid var(--blend-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-picture-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-picture-placeholder {
+  width: 100%;
+  height: 100%;
+  background: var(--blend-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+}
+
+.upload-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.upload-controls .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: 140px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.btn-secondary {
+  background: var(--teal-primary);
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--teal-light);
+}
+
+.btn-danger {
+  background: #e74c3c;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #c0392b;
+}
+
+@media (max-width: 768px) {
+  .upload-controls {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .upload-controls .btn {
+    width: 100%;
+  }
+}
+
+/* Image Cropping Modal Styles */
+.crop-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.crop-modal {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  backdrop-filter: blur(10px);
+}
+
+.crop-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.crop-modal-header h3 {
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.crop-container {
+  margin-bottom: 1.5rem;
+  max-height: 400px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.crop-container img {
+  max-width: 100%;
+  max-height: 400px;
+  display: block;
+}
+
+.crop-controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
 }
 </style>

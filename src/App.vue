@@ -6,6 +6,83 @@
         <div class="nav-content">
           <div class="logo">
             <router-link to="/" class="logo-link">
+              <div class="logo-icon">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 32 32"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <!-- TV Screen -->
+                  <rect
+                    x="4"
+                    y="6"
+                    width="24"
+                    height="16"
+                    rx="2"
+                    fill="var(--coral-primary)"
+                    stroke="var(--teal-primary)"
+                    stroke-width="1"
+                  />
+                  <!-- TV Stand -->
+                  <rect x="12" y="22" width="8" height="2" fill="var(--teal-primary)" />
+                  <rect x="14" y="24" width="4" height="1" fill="var(--teal-primary)" />
+                  <!-- Screen Content -->
+                  <rect
+                    x="6"
+                    y="8"
+                    width="20"
+                    height="12"
+                    rx="1"
+                    fill="var(--blend-color)"
+                    opacity="0.8"
+                  />
+                  <!-- Squiggly Animation Lines -->
+                  <path
+                    d="M8 10 Q10 8 12 10 T16 10 T20 10 T24 10"
+                    stroke="var(--coral-primary)"
+                    stroke-width="1.5"
+                    fill="none"
+                    opacity="0.7"
+                  >
+                    <animate
+                      attributeName="d"
+                      dur="2s"
+                      repeatCount="indefinite"
+                      values="M8 10 Q10 8 12 10 T16 10 T20 10 T24 10;M8 10 Q10 12 12 10 T16 10 T20 10 T24 10;M8 10 Q10 8 12 10 T16 10 T20 10 T24 10"
+                    />
+                  </path>
+                  <path
+                    d="M8 14 Q10 12 12 14 T16 14 T20 14 T24 14"
+                    stroke="var(--teal-primary)"
+                    stroke-width="1.5"
+                    fill="none"
+                    opacity="0.7"
+                  >
+                    <animate
+                      attributeName="d"
+                      dur="2.5s"
+                      repeatCount="indefinite"
+                      values="M8 14 Q10 12 12 14 T16 14 T20 14 T24 14;M8 14 Q10 16 12 14 T16 14 T20 14 T24 14;M8 14 Q10 12 12 14 T16 14 T20 14 T24 14"
+                    />
+                  </path>
+                  <path
+                    d="M8 18 Q10 16 12 18 T16 18 T20 18 T24 18"
+                    stroke="var(--coral-primary)"
+                    stroke-width="1.5"
+                    fill="none"
+                    opacity="0.7"
+                  >
+                    <animate
+                      attributeName="d"
+                      dur="3s"
+                      repeatCount="indefinite"
+                      values="M8 18 Q10 16 12 18 T16 18 T20 18 T24 18;M8 18 Q10 20 12 18 T16 18 T20 18 T24 18;M8 18 Q10 16 12 18 T16 18 T20 18 T24 18"
+                    />
+                  </path>
+                </svg>
+              </div>
               <h1 class="logo-text">Find Animation</h1>
             </router-link>
           </div>
@@ -32,23 +109,28 @@
             <div v-if="authStore.isAuthenticated" class="user-menu">
               <div class="user-dropdown" :class="{ active: showDropdown }">
                 <button @click="toggleDropdown" class="user-trigger">
-                  <span class="user-avatar">👤</span>
+                  <div class="user-avatar">
+                    <img
+                      v-if="authStore.user?.profilePicture"
+                      :src="getProfilePictureUrl(authStore.user.profilePicture)"
+                      alt="Profile Picture"
+                      class="profile-picture-nav"
+                    />
+                    <span v-else class="avatar-placeholder">👤</span>
+                  </div>
                   <span class="user-name">{{ authStore.user?.username }}</span>
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
                 </button>
 
                 <div v-if="showDropdown" class="dropdown-menu">
                   <router-link to="/profile" class="dropdown-item" @click="closeDropdown">
-                    <span class="item-icon">👤</span>
                     <span class="item-text">Profile</span>
                   </router-link>
                   <router-link to="/settings" class="dropdown-item" @click="closeDropdown">
-                    <span class="item-icon">⚙️</span>
                     <span class="item-text">Settings</span>
                   </router-link>
                   <div class="dropdown-divider"></div>
                   <button @click="handleLogout" class="dropdown-item logout-item">
-                    <span class="item-icon">🚪</span>
                     <span class="item-text">Logout</span>
                   </button>
                 </div>
@@ -107,6 +189,13 @@ const closeDropdown = () => {
   showDropdown.value = false
 }
 
+const getProfilePictureUrl = (profilePicture: string) => {
+  if (profilePicture.startsWith('http')) {
+    return profilePicture
+  }
+  return `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}${profilePicture}`
+}
+
 const handleClickOutside = (event: Event) => {
   const target = event.target as HTMLElement
   if (!target.closest('.user-dropdown')) {
@@ -150,6 +239,8 @@ const handleLogout = () => {
 }
 
 .logo-link {
+  display: flex;
+  align-items: center;
   text-decoration: none;
   transition: transform 0.3s ease;
 }
@@ -166,6 +257,20 @@ const handleLogout = () => {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin: 0;
+}
+
+.logo-icon {
+  margin-right: 0.75rem;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  transition: transform 0.3s ease;
 }
 
 .nav-links {
@@ -262,7 +367,25 @@ const handleLogout = () => {
 }
 
 .user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--blend-color);
+}
+
+.profile-picture-nav {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
   font-size: 1.2rem;
+  color: white;
 }
 
 .user-name {

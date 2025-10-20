@@ -24,6 +24,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please enter a password'],
     },
+    profilePicture: {
+      type: String,
+      default: null,
+    },
 
     // Watchlist information
     watchlist: [

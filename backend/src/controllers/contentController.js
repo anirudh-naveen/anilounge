@@ -2,6 +2,7 @@ import Content from '../models/Content.js'
 import User from '../models/User.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
+import relationshipService from '../services/relationshipService.js'
 import { validationResult } from 'express-validator'
 
 // Get all content with pagination
@@ -18,13 +19,11 @@ export const getContent = async (req, res) => {
     }
 
     // Get total count for pagination
-    const countStart = Date.now()
     const total = await Content.countDocuments(query)
 
     const totalPages = Math.ceil(total / limit)
 
     // Use database-level pagination with proper sorting
-    const queryStart = Date.now()
     const content = await Content.find(query)
       .sort({ unifiedScore: -1, popularity: -1 })
       .skip(skip)
@@ -571,6 +570,67 @@ export const getDatabaseStats = async (req, res) => {
 }
 
 // Default export for backward compatibility
+// Get related content (sequels, prequels, related)
+export const getRelatedContent = async (req, res) => {
+  try {
+    const { contentId } = req.params
+
+    if (!contentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Content ID is required',
+      })
+    }
+
+    const relationships = await relationshipService.findRelatedContent(contentId)
+
+    res.json({
+      success: true,
+      data: relationships,
+    })
+  } catch (error) {
+    console.error('Error getting related content:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get related content',
+      error: error.message,
+    })
+  }
+}
+
+// Get franchise content
+export const getFranchiseContent = async (req, res) => {
+  try {
+    const { franchiseName } = req.params
+
+    if (!franchiseName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Franchise name is required',
+      })
+    }
+
+    // Find all content in the franchise
+    const franchiseContent = await Content.find({
+      franchise: franchiseName,
+    })
+      .sort({ releaseDate: 1 }) // Sort by release date
+      .exec()
+
+    res.json({
+      success: true,
+      data: franchiseContent,
+    })
+  } catch (error) {
+    console.error('Error getting franchise content:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get franchise content',
+      error: error.message,
+    })
+  }
+}
+
 export default {
   getContent,
   getContentById,
@@ -584,4 +644,6 @@ export default {
   removeFromWatchlist,
   updateWatchlistItem,
   getDatabaseStats,
+  getRelatedContent,
+  getFranchiseContent,
 }

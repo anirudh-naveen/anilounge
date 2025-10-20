@@ -3,6 +3,7 @@ import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
 import * as authController from '../controllers/authController.js'
 import authMiddleware from '../middleware/auth.js'
+import upload from '../middleware/upload.js'
 
 const router = express.Router()
 
@@ -45,6 +46,8 @@ router.get('/content/external/:id', contentController.getContentByExternalId)
 router.get('/search', contentController.searchContent)
 router.get('/popular', contentController.getPopularContent)
 router.get('/content/:id/similar', contentController.getSimilarContent)
+router.get('/content/:contentId/related', contentController.getRelatedContent)
+router.get('/franchise/:franchiseName', contentController.getFranchiseContent)
 router.get('/stats', contentController.getDatabaseStats)
 
 // AI search route
@@ -63,6 +66,21 @@ router.put(
   '/auth/profile',
   [body('preferences').optional().isObject()],
   authController.updateProfile,
+)
+router.put(
+  '/auth/change-password',
+  [
+    body('currentPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword')
+      .isLength({ min: 6 })
+      .withMessage('New password must be at least 6 characters'),
+  ],
+  authController.changePassword,
+)
+router.post(
+  '/auth/upload-profile-picture',
+  upload.single('profilePicture'),
+  authController.uploadProfilePicture,
 )
 
 // Watchlist routes

@@ -108,6 +108,123 @@
           </span>
         </div>
       </div>
+
+      <!-- Related Content Section -->
+      <div
+        v-if="
+          relatedContent &&
+          (relatedContent.sequels.length > 0 ||
+            relatedContent.prequels.length > 0 ||
+            relatedContent.related.length > 0)
+        "
+        class="related-content"
+      >
+        <h3>Related Content</h3>
+
+        <!-- Franchise Info -->
+        <div v-if="movie.franchise" class="franchise-info">
+          <h4>Part of the {{ movie.franchise }} franchise</h4>
+        </div>
+
+        <!-- Sequels -->
+        <div v-if="relatedContent.sequels.length > 0" class="relationship-section">
+          <h4>Sequels</h4>
+          <div class="content-grid">
+            <div
+              v-for="sequel in relatedContent.sequels"
+              :key="sequel._id"
+              class="content-card"
+              @click="viewContentDetails(sequel)"
+            >
+              <img
+                v-if="sequel.posterPath"
+                :src="getPosterUrl(sequel.posterPath)"
+                :alt="sequel.title"
+                @error="handleImageError"
+              />
+              <div v-else class="no-poster">
+                <i class="fas fa-film"></i>
+              </div>
+              <div class="content-info">
+                <h5>{{ sequel.title }}</h5>
+                <p class="content-type">
+                  {{ sequel.contentType === 'movie' ? 'Movie' : 'TV Show' }}
+                </p>
+                <div class="rating">
+                  <i class="fas fa-star"></i>
+                  <span>{{ sequel.unifiedScore?.toFixed(1) || 'N/A' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prequels -->
+        <div v-if="relatedContent.prequels.length > 0" class="relationship-section">
+          <h4>Prequels</h4>
+          <div class="content-grid">
+            <div
+              v-for="prequel in relatedContent.prequels"
+              :key="prequel._id"
+              class="content-card"
+              @click="viewContentDetails(prequel)"
+            >
+              <img
+                v-if="prequel.posterPath"
+                :src="getPosterUrl(prequel.posterPath)"
+                :alt="prequel.title"
+                @error="handleImageError"
+              />
+              <div v-else class="no-poster">
+                <i class="fas fa-film"></i>
+              </div>
+              <div class="content-info">
+                <h5>{{ prequel.title }}</h5>
+                <p class="content-type">
+                  {{ prequel.contentType === 'movie' ? 'Movie' : 'TV Show' }}
+                </p>
+                <div class="rating">
+                  <i class="fas fa-star"></i>
+                  <span>{{ prequel.unifiedScore?.toFixed(1) || 'N/A' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Related -->
+        <div v-if="relatedContent.related.length > 0" class="relationship-section">
+          <h4>Related</h4>
+          <div class="content-grid">
+            <div
+              v-for="related in relatedContent.related"
+              :key="related._id"
+              class="content-card"
+              @click="viewContentDetails(related)"
+            >
+              <img
+                v-if="related.posterPath"
+                :src="getPosterUrl(related.posterPath)"
+                :alt="related.title"
+                @error="handleImageError"
+              />
+              <div v-else class="no-poster">
+                <i class="fas fa-film"></i>
+              </div>
+              <div class="content-info">
+                <h5>{{ related.title }}</h5>
+                <p class="content-type">
+                  {{ related.contentType === 'movie' ? 'Movie' : 'TV Show' }}
+                </p>
+                <div class="rating">
+                  <i class="fas fa-star"></i>
+                  <span>{{ related.unifiedScore?.toFixed(1) || 'N/A' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Status Dropdown -->
@@ -139,6 +256,11 @@ const movie = ref<UnifiedContent | null>(null)
 const loading = ref(true)
 const error = ref('')
 const showStatusDropdown = ref(false)
+const relatedContent = ref<{
+  sequels: UnifiedContent[]
+  prequels: UnifiedContent[]
+  related: UnifiedContent[]
+} | null>(null)
 
 const isInWatchlist = computed(() => {
   if (!movie.value || !authStore.user?.watchlist) return false
@@ -161,6 +283,8 @@ onMounted(async () => {
     const existingMovie = contentStore.movies.find((m) => m._id === movieId)
     if (existingMovie) {
       movie.value = existingMovie
+      // Fetch related content
+      await fetchRelatedContent(movieId)
       loading.value = false
       return
     }
@@ -168,6 +292,9 @@ onMounted(async () => {
     // If not in store, fetch from API
     const response = await contentAPI.getContentById(movieId)
     movie.value = response.data.data
+
+    // Fetch related content
+    await fetchRelatedContent(movieId)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load movie'
   } finally {
@@ -179,25 +306,71 @@ const goBack = () => {
   // Check if we have a previous page in the route state
   const previousPage = route.query.from as string
   if (previousPage) {
-    // Extract the page number from the query string
+    // Parse the previous page URL to determine the source
     const url = new URL(previousPage, window.location.origin)
-    const page = url.searchParams.get('page') || '1'
+    const pathname = url.pathname
 
-    // Restore scroll position for the page we're going back to
-    const scrollKey = `movies-page-${page}`
-    const restored = contentStore.restoreScrollPosition(scrollKey)
+    if (pathname === '/movies') {
+      // Coming from movies page - handle pagination
+      const page = url.searchParams.get('page') || '1'
+      const scrollKey = `movies-page-${page}`
+      const restored = contentStore.restoreScrollPosition(scrollKey)
 
-    router.push({ path: '/movies', query: { page } })
+      router.push({ path: '/movies', query: { page } })
 
-    // If scroll position wasn't restored, scroll to top after navigation
-    if (!restored) {
+      if (!restored) {
+        nextTick(() => {
+          contentStore.scrollToTop()
+        })
+      }
+    } else if (pathname === '/tv-shows') {
+      // Coming from TV shows page - handle pagination
+      const page = url.searchParams.get('page') || '1'
+      const scrollKey = `tv-shows-page-${page}`
+      const restored = contentStore.restoreScrollPosition(scrollKey)
+
+      router.push({ path: '/tv-shows', query: { page } })
+
+      if (!restored) {
+        nextTick(() => {
+          contentStore.scrollToTop()
+        })
+      }
+    } else if (pathname === '/search') {
+      // Coming from search page - handle pagination
+      const page = url.searchParams.get('page') || '1'
+      const scrollKey = `search-page-${page}`
+      const restored = contentStore.restoreScrollPosition(scrollKey)
+
+      router.push({ path: '/search', query: { page } })
+
+      if (!restored) {
+        nextTick(() => {
+          contentStore.scrollToTop()
+        })
+      }
+    } else if (pathname === '/') {
+      // Coming from home page
+      const scrollKey = 'home-page'
+      const restored = contentStore.restoreScrollPosition(scrollKey)
+
+      router.push('/')
+
+      if (!restored) {
+        nextTick(() => {
+          contentStore.scrollToTop()
+        })
+      }
+    } else {
+      // Unknown source - go to home page
+      router.push('/')
       nextTick(() => {
         contentStore.scrollToTop()
       })
     }
   } else {
-    // Default fallback to movies page
-    router.push('/movies')
+    // Default fallback to home page
+    router.push('/')
     nextTick(() => {
       contentStore.scrollToTop()
     })
@@ -236,6 +409,32 @@ const formatDate = (date: string | Date) => {
     month: 'long',
     day: 'numeric',
   })
+}
+
+const fetchRelatedContent = async (contentId: string) => {
+  try {
+    const response = await contentAPI.getRelatedContent(contentId)
+    relatedContent.value = response.data.data
+  } catch (err) {
+    console.error('Failed to fetch related content:', err)
+    // Don't show error to user, just log it
+  }
+}
+
+const viewContentDetails = (content: UnifiedContent) => {
+  if (content.contentType === 'movie') {
+    router.push({
+      name: 'MovieDetails',
+      params: { id: content._id },
+      query: { from: route.fullPath },
+    })
+  } else {
+    router.push({
+      name: 'TVShowDetails',
+      params: { id: content._id },
+      query: { from: route.fullPath },
+    })
+  }
 }
 
 const handleImageError = (event: Event) => {
@@ -393,7 +592,7 @@ const handleImageError = (event: Event) => {
 }
 
 .genre-tag {
-  background: var(--highlight-color);
+  background: var(--blend-color);
   color: white;
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
@@ -421,7 +620,7 @@ const handleImageError = (event: Event) => {
 }
 
 .btn-primary {
-  background: var(--highlight-color);
+  background: var(--blend-color);
   color: white;
   border: none;
 }
@@ -518,5 +717,151 @@ const handleImageError = (event: Event) => {
   .movie-actions {
     flex-direction: column;
   }
+}
+
+/* Related Content Styles */
+.related-content {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.related-content h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.franchise-info {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  border-radius: 8px;
+}
+
+.franchise-info h4 {
+  margin: 0;
+  color: white;
+  font-size: 1.1rem;
+}
+
+.relationship-section {
+  margin-bottom: 2rem;
+}
+
+.relationship-section h4 {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.content-card {
+  background: var(--bg-hover);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid var(--border-color);
+}
+
+.content-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  border-color: var(--coral-primary);
+}
+
+.content-card img {
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+}
+
+.content-card .no-poster {
+  width: 100%;
+  height: 250px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 2rem;
+}
+
+.content-info {
+  padding: 1rem;
+}
+
+.content-info h5 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-type {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.content-info .rating {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.content-info .rating i {
+  color: #ffd700;
+}
+
+/* Fix text readability issues */
+.movie-description p,
+.movie-description h2,
+.movie-description h3,
+.movie-description h4 {
+  color: #ffffff; /* White text for better readability */
+}
+
+.movie-description p {
+  color: #ffd4a3; /* Lighter orange for paragraph text */
+}
+
+.original-title {
+  color: #ffd4a3 !important; /* Lighter orange */
+}
+
+.vote-count {
+  color: #ffffff !important; /* White */
+}
+
+.movie-meta span {
+  color: #ffffff !important; /* White */
+}
+
+.genre-tag {
+  color: #ffffff !important; /* White text */
+}
+
+.company-tag,
+.country-tag {
+  color: #ffffff !important; /* White text */
+}
+
+.content-type {
+  color: #ffd4a3 !important; /* Lighter orange for better readability */
 }
 </style>

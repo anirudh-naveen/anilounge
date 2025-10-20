@@ -28,16 +28,22 @@ const ContentSchema = new mongoose.Schema(
     episodeCount: Number, // For TV shows
     seasonCount: Number, // For TV shows
 
-    // External IDs
+    // Internal ID for unified content management
+    internalId: {
+      type: String,
+      unique: true,
+      required: true,
+      index: true,
+    },
+
+    // External IDs (for reference only, not used for deduplication)
     tmdbId: {
       type: Number,
-      unique: true,
       sparse: true,
       index: true,
     },
     malId: {
       type: Number,
-      unique: true,
       sparse: true,
       index: true,
     },
@@ -94,6 +100,15 @@ const ContentSchema = new mongoose.Schema(
     // Alternative Titles
     alternativeTitles: [String],
 
+    // Relationship Information
+    franchise: String, // Name of the franchise this content belongs to
+    relationships: {
+      sequels: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Content' }],
+      prequels: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Content' }],
+      related: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Content' }],
+      franchise: String, // Franchise name
+    },
+
     // Data Source Tracking
     dataSources: {
       tmdb: {
@@ -129,14 +144,6 @@ ContentSchema.index({ contentType: 1, unifiedScore: -1 })
 ContentSchema.index({ unifiedScore: -1, popularity: -1 })
 ContentSchema.index({ genres: 1, contentType: 1 })
 ContentSchema.index({ title: 'text', overview: 'text' })
-
-// Ensure at least one external ID exists
-ContentSchema.pre('save', function (next) {
-  if (!this.tmdbId && !this.malId) {
-    return next(new Error('Content must have at least one external ID (tmdbId or malId)'))
-  }
-  next()
-})
 
 // Virtual for display title
 ContentSchema.virtual('displayTitle').get(function () {

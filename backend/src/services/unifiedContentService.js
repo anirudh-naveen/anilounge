@@ -29,6 +29,24 @@ class UnifiedContentService {
     this.hasMalKey = !!this.malClientId
   }
 
+  // Generate unique internal ID for content
+  generateInternalId(contentData) {
+    const titleSlug = (contentData.title || contentData.originalTitle || 'unknown')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .substring(0, 50) // Limit length
+    const contentType = contentData.contentType || 'unknown'
+    const tmdbPart = contentData.tmdbId ? `tmdb-${contentData.tmdbId}` : ''
+    const malPart = contentData.malId ? `mal-${contentData.malId}` : ''
+    const externalPart = [tmdbPart, malPart].filter(Boolean).join('-')
+
+    // Use timestamp and random string for uniqueness
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substring(2, 8)
+
+    return `${contentType}-${titleSlug}${externalPart ? `-${externalPart}` : ''}-${timestamp}-${random}`
+  }
+
   // Delay utility for rate limiting
   async delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms))
@@ -251,6 +269,9 @@ class UnifiedContentService {
       content.seasonCount = tmdbData.number_of_seasons
     }
 
+    // Generate internal ID
+    content.internalId = this.generateInternalId(content)
+
     return content
   }
 
@@ -314,12 +335,193 @@ class UnifiedContentService {
 
     // Add runtime/episode info based on determined content type
     if (finalContentType === 'movie') {
-      content.runtime = episodes * 24 // Estimate 24 minutes per episode for movies
+      // Use more accurate runtime estimates for known anime movies
+      content.runtime = this.getEstimatedRuntime(anime.title)
     } else {
       content.episodeCount = episodes
     }
 
+    // Generate internal ID
+    content.internalId = this.generateInternalId(content)
+
     return content
+  }
+
+  // Get estimated runtime for anime movies
+  getEstimatedRuntime(title) {
+    // Known anime movie runtimes (in minutes)
+    const knownRuntimes = {
+      'Gintama: The Final': 104,
+      'Gintama: The Very Final': 104,
+      'Demon Slayer: Kimetsu no Yaiba - The Movie: Mugen Train': 117,
+      'Demon Slayer: Mugen Train': 117,
+      'Your Name': 106,
+      'Kimi no Na wa': 106,
+      'Spirited Away': 125,
+      'Sen to Chihiro no Kamikakushi': 125,
+      'Princess Mononoke': 134,
+      'Mononoke-hime': 134,
+      "Howl's Moving Castle": 119,
+      'Hauru no Ugoku Shiro': 119,
+      'My Neighbor Totoro': 86,
+      'Tonari no Totoro': 86,
+      "Kiki's Delivery Service": 103,
+      'Majo no Takkyuubin': 103,
+      'Castle in the Sky': 125,
+      'Tenkuu no Shiro Laputa': 125,
+      'The Wind Rises': 126,
+      'Kaze Tachinu': 126,
+      Ponyo: 101,
+      'Gake no Ue no Ponyo': 101,
+      'The Tale of Princess Kaguya': 137,
+      'Kaguya-hime no Monogatari': 137,
+      'When Marnie Was There': 103,
+      'Omoide no Marnie': 103,
+      'The Red Turtle': 80,
+      'La Tortue Rouge': 80,
+      'A Silent Voice': 130,
+      'Koe no Katachi': 130,
+      'Weathering with You': 112,
+      'Tenki no Ko': 112,
+      Suzume: 122,
+      'Suzume no Tojimari': 122,
+      'Perfect Blue': 81,
+      'Millennium Actress': 87,
+      'Tokyo Godfathers': 92,
+      Paprika: 90,
+      'Wolf Children': 117,
+      'Ookami Kodomo no Ame to Yuki': 117,
+      'The Boy and the Heron': 124,
+      'Kimitachi wa Dou Ikiru ka': 124,
+      'The Girl Who Leapt Through Time': 98,
+      'Toki wo Kakeru Shoujo': 98,
+      'Summer Wars': 114,
+      'Summer Wars': 114,
+      'The Secret World of Arrietty': 94,
+      'Karigurashi no Arrietty': 94,
+      'From Up on Poppy Hill': 91,
+      'Kokuriko-zaka Kara': 91,
+      'The Wind Rises': 126,
+      'Kaze Tachinu': 126,
+      'The Tale of Princess Kaguya': 137,
+      'Kaguya-hime no Monogatari': 137,
+      'When Marnie Was There': 103,
+      'Omoide no Marnie': 103,
+      'The Red Turtle': 80,
+      'La Tortue Rouge': 80,
+      'A Silent Voice': 130,
+      'Koe no Katachi': 130,
+      'Weathering with You': 112,
+      'Tenki no Ko': 112,
+      Suzume: 122,
+      'Suzume no Tojimari': 122,
+      'Perfect Blue': 81,
+      'Millennium Actress': 87,
+      'Tokyo Godfathers': 92,
+      Paprika: 90,
+      'Wolf Children': 117,
+      'Ookami Kodomo no Ame to Yuki': 117,
+      'The Boy and the Heron': 124,
+      'Kimitachi wa Dou Ikiru ka': 124,
+      'The Girl Who Leapt Through Time': 98,
+      'Toki wo Kakeru Shoujo': 98,
+      'Summer Wars': 114,
+      'Summer Wars': 114,
+      'The Secret World of Arrietty': 94,
+      'Karigurashi no Arrietty': 94,
+      'From Up on Poppy Hill': 91,
+      'Kokuriko-zaka Kara': 91,
+    }
+
+    // Check for exact title match first
+    if (knownRuntimes[title]) {
+      return knownRuntimes[title]
+    }
+
+    // Check for partial matches
+    for (const [knownTitle, runtime] of Object.entries(knownRuntimes)) {
+      if (
+        title.toLowerCase().includes(knownTitle.toLowerCase()) ||
+        knownTitle.toLowerCase().includes(title.toLowerCase())
+      ) {
+        return runtime
+      }
+    }
+
+    // Default estimates based on common patterns
+    const titleLower = title.toLowerCase()
+
+    // Studio Ghibli movies are typically longer
+    if (
+      titleLower.includes('ghibli') ||
+      titleLower.includes('miyazaki') ||
+      titleLower.includes('mononoke') ||
+      titleLower.includes('spirited away') ||
+      titleLower.includes('howl') ||
+      titleLower.includes('totoro') ||
+      titleLower.includes('kiki') ||
+      titleLower.includes('castle in the sky') ||
+      titleLower.includes('ponyo') ||
+      titleLower.includes('arrietty') ||
+      titleLower.includes('poppy hill') ||
+      titleLower.includes('marnie') ||
+      titleLower.includes('kaguya') ||
+      titleLower.includes('red turtle')
+    ) {
+      return 110 // Average Ghibli movie length
+    }
+
+    // Makoto Shinkai movies
+    if (
+      titleLower.includes('your name') ||
+      titleLower.includes('weathering') ||
+      titleLower.includes('suzume') ||
+      titleLower.includes('shinkai')
+    ) {
+      return 110 // Average Shinkai movie length
+    }
+
+    // Satoshi Kon movies
+    if (
+      titleLower.includes('perfect blue') ||
+      titleLower.includes('millennium actress') ||
+      titleLower.includes('tokyo godfathers') ||
+      titleLower.includes('paprika') ||
+      titleLower.includes('kon')
+    ) {
+      return 90 // Average Kon movie length
+    }
+
+    // Mamoru Hosoda movies
+    if (
+      titleLower.includes('wolf children') ||
+      titleLower.includes('summer wars') ||
+      titleLower.includes('girl who leapt') ||
+      titleLower.includes('boy and the heron') ||
+      titleLower.includes('hosoda')
+    ) {
+      return 110 // Average Hosoda movie length
+    }
+
+    // Demon Slayer movies
+    if (
+      titleLower.includes('demon slayer') ||
+      titleLower.includes('kimetsu no yaiba') ||
+      titleLower.includes('mugen train')
+    ) {
+      return 117 // Known Demon Slayer movie length
+    }
+
+    // Gintama movies
+    if (
+      titleLower.includes('gintama') &&
+      (titleLower.includes('final') || titleLower.includes('movie'))
+    ) {
+      return 104 // Known Gintama movie length
+    }
+
+    // Default estimate: 90 minutes for anime movies
+    return 90
   }
 
   // Unified Search Method

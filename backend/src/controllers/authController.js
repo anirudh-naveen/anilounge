@@ -1,6 +1,9 @@
 import User from '../models/User.js'
 import { generateToken } from '../middleware/auth.js'
 import { validationResult } from 'express-validator'
+import bcrypt from 'bcryptjs'
+import path from 'path'
+import fs from 'fs'
 
 export const register = async (req, res) => {
   try {
@@ -153,11 +156,35 @@ export const getProfile = async (req, res) => {
 // Updates user preferences
 export const updateProfile = async (req, res) => {
   try {
-    const { preferences } = req.body
+    const { username, email, preferences } = req.body
+
+    // Build update object
+    const updateData = {}
+    if (username) updateData.username = username
+    if (email) updateData.email = email
+    if (preferences) updateData.preferences = preferences
+
+    // Check if username or email already exists (if being updated)
+    if (username || email) {
+      const existingUser = await User.findOne({
+        _id: { $ne: req.user._id },
+        $or: [
+          ...(username ? [{ username }] : []),
+          ...(email ? [{ email }] : []),
+        ],
+      })
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Username or email already exists.',
+        })
+      }
+    }
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { preferences },
+      updateData,
       { new: true, runValidators: true },
     ).select('-password')
 
@@ -171,6 +198,115 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error updating profile.',
+    })
+  }
+}
+
+// Change user password
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required.',
+      })
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long.',
+      })
+    }
+
+    // Get user with password
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+      })
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password)
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect.',
+      })
+    }
+
+    // Hash new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12)
+
+    // Update password
+    await User.findByIdAndUpdate(req.user._id, { password: hashedNewPassword })
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully.',
+    })
+  } catch (error) {
+    console.error('Change password error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Server error changing password.',
+    })
+  }
+}
+
+// Upload profile picture
+export const uploadProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded.',
+      })
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+      })
+    }
+
+    // Delete old profile picture if it exists
+    if (user.profilePicture) {
+      const oldPicturePath = path.join(process.cwd(), 'uploads', 'profiles', path.basename(user.profilePicture))
+      if (fs.existsSync(oldPicturePath)) {
+        fs.unlinkSync(oldPicturePath)
+      }
+    }
+
+    // Update user with new profile picture path
+    const profilePicturePath = `/uploads/profiles/${req.file.filename}`
+    user.profilePicture = profilePicturePath
+    await user.save()
+
+    res.json({
+      success: true,
+      message: 'Profile picture uploaded successfully.',
+      data: { 
+        user: {
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          profilePicture: user.profilePicture,
+          preferences: user.preferences,
+        }
+      },
+    })
+  } catch (error) {
+    console.error('Upload profile picture error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Server error uploading profile picture.',
     })
   }
 }

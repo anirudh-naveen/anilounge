@@ -37,41 +37,94 @@
       </div>
 
       <!-- Filters Bar -->
-      <div v-if="hasSearched" class="filters-container">
+      <div class="filters-container">
+        <div class="filters-header">
+          <h3>Filters & Sorting</h3>
+        </div>
         <div class="filters-bar">
-          <div class="filter-group">
-            <label>Type:</label>
-            <select v-model="filters.type" @change="applyFilters">
-              <option value="all">All</option>
-              <option value="movie">Movies</option>
-              <option value="tv">TV Shows</option>
-            </select>
+          <!-- Content Filters -->
+          <div class="filter-section">
+            <div class="filter-group">
+              <label>Type:</label>
+              <select v-model="filters.type" @change="applyFilters">
+                <option value="all">All</option>
+                <option value="movie">Movies</option>
+                <option value="tv">TV Shows</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Genre:</label>
+              <select v-model="filters.genre" @change="applyFilters">
+                <option value="all">All Genres</option>
+                <option value="Action">Action</option>
+                <option value="Adventure">Adventure</option>
+                <option value="Comedy">Comedy</option>
+                <option value="Drama">Drama</option>
+                <option value="Fantasy">Fantasy</option>
+                <option value="Mystery">Mystery</option>
+                <option value="Sci-Fi">Sci-Fi</option>
+                <option value="Supernatural">Supernatural</option>
+                <option value="Historical">Historical</option>
+                <option value="Military">Military</option>
+                <option value="Psychological">Psychological</option>
+                <option value="Mecha">Mecha</option>
+                <option value="Samurai">Samurai</option>
+                <option value="Vampire">Vampire</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Language:</label>
+              <select v-model="filters.language" @change="applyFilters">
+                <option value="all">All Languages</option>
+                <option value="Japanese">Japanese</option>
+                <option value="English">English</option>
+                <option value="Korean">Korean</option>
+                <option value="Chinese">Chinese</option>
+              </select>
+            </div>
           </div>
 
-          <div class="filter-group">
-            <label>Rating:</label>
-            <select v-model="filters.rating" @change="applyFilters">
-              <option value="all">All Ratings</option>
-              <option value="8">8+ Stars</option>
-              <option value="7">7+ Stars</option>
-              <option value="6">6+ Stars</option>
-            </select>
+          <!-- Quality Filters -->
+          <div class="filter-section">
+            <div class="filter-group">
+              <label>Rating:</label>
+              <select v-model="filters.rating" @change="applyFilters">
+                <option value="all">All Ratings</option>
+                <option value="8">8+ Stars</option>
+                <option value="7">7+ Stars</option>
+                <option value="6">6+ Stars</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Year:</label>
+              <select v-model="filters.year" @change="applyFilters">
+                <option value="all">All Years</option>
+                <option value="2024">2024</option>
+                <option value="2023">2023</option>
+                <option value="2022">2022</option>
+                <option value="2021">2021</option>
+                <option value="2020">2020</option>
+                <option value="older">Older</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Sort by:</label>
+              <select v-model="filters.sortBy" @change="applySorting">
+                <option value="relevance">Relevance</option>
+                <option value="alphabetical">Alphabetical</option>
+                <option value="rating">Rating</option>
+                <option value="popularity">Popularity</option>
+              </select>
+            </div>
           </div>
 
-          <div class="filter-group">
-            <label>Year:</label>
-            <select v-model="filters.year" @change="applyFilters">
-              <option value="all">All Years</option>
-              <option value="2024">2024</option>
-              <option value="2023">2023</option>
-              <option value="2022">2022</option>
-              <option value="2021">2021</option>
-              <option value="2020">2020</option>
-              <option value="older">Older</option>
-            </select>
+          <!-- Actions -->
+          <div class="filter-actions">
+            <button @click="clearFilters" class="clear-filters-btn">
+              <i class="fas fa-times"></i>
+              Clear All
+            </button>
           </div>
-
-          <button @click="clearFilters" class="clear-filters-btn">Clear Filters</button>
         </div>
       </div>
 
@@ -111,20 +164,30 @@
                 :alt="item.title"
                 @error="handleImageError"
               />
-              <div class="content-type-badge">
+              <div
+                class="content-type-badge"
+                :class="item.contentType === 'movie' ? 'movie-badge' : 'tv-badge'"
+              >
                 {{ getContentTypeDisplay(item.contentType) }}
               </div>
               <div class="result-overlay">
                 <div class="result-rating">{{ getDisplayRating(item) }}</div>
                 <div class="result-actions">
                   <button
-                    v-if="authStore.isAuthenticated"
+                    v-if="authStore.isAuthenticated && !(item as any).source"
                     @click.stop="handleWatchlistClick(item._id)"
                     class="action-btn"
                     :class="{ 'in-watchlist': contentStore.isInWatchlist(item._id) }"
                   >
                     {{ contentStore.isInWatchlist(item._id) ? '✓' : '+' }}
                   </button>
+                  <div
+                    v-if="(item as any).source"
+                    class="external-content-notice"
+                    title="This content is from external search and cannot be added to watchlist"
+                  >
+                    <i class="fas fa-external-link-alt"></i>
+                  </div>
                 </div>
               </div>
             </div>
@@ -213,8 +276,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
@@ -224,6 +287,7 @@ import Chatbot from '@/components/Chatbot.vue'
 import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
+const route = useRoute()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
@@ -241,6 +305,9 @@ const filters = ref({
   type: 'all',
   rating: 'all',
   year: 'all',
+  genre: 'all',
+  language: 'all',
+  sortBy: 'relevance',
 })
 
 // Computed properties
@@ -273,6 +340,62 @@ const filteredResults = computed(() => {
         return year < 2020
       }
       return year === parseInt(filters.value.year)
+    })
+  }
+
+  // Apply genre filter
+  if (filters.value.genre !== 'all') {
+    results = results.filter((item) => {
+      if (!item.genres || !Array.isArray(item.genres)) return false
+      return item.genres.some((genre) => {
+        const genreName = typeof genre === 'string' ? genre : genre.name
+        return genreName === filters.value.genre
+      })
+    })
+  }
+
+  // Apply language filter (this is a simplified implementation)
+  if (filters.value.language !== 'all') {
+    results = results.filter((item) => {
+      // For now, we'll assume Japanese content based on MAL data
+      // This could be enhanced with actual language data from TMDB
+      if (filters.value.language === 'Japanese') {
+        return (
+          item.malId != null ||
+          item.studios?.some(
+            (studio) =>
+              studio.toLowerCase().includes('japan') ||
+              studio.toLowerCase().includes('toei') ||
+              studio.toLowerCase().includes('madhouse') ||
+              studio.toLowerCase().includes('studio ghibli'),
+          )
+        )
+      }
+      // For other languages, we'll need to implement proper language detection
+      return true
+    })
+  }
+
+  // Apply sorting
+  if (filters.value.sortBy !== 'relevance') {
+    results.sort((a, b) => {
+      switch (filters.value.sortBy) {
+        case 'alphabetical':
+          return a.title.localeCompare(b.title)
+
+        case 'rating':
+          const ratingA = a.unifiedScore || 0
+          const ratingB = b.unifiedScore || 0
+          return ratingB - ratingA // Higher ratings first
+
+        case 'popularity':
+          const popularityA = (a.voteCount || 0) + (a.malScoredBy || 0)
+          const popularityB = (b.voteCount || 0) + (b.malScoredBy || 0)
+          return popularityB - popularityA // Higher popularity first
+
+        default:
+          return 0
+      }
     })
   }
 
@@ -320,8 +443,16 @@ const handleImageError = (event: Event) => {
 }
 
 const viewContentDetails = (item: UnifiedContent) => {
-  const routeName = item.contentType === 'movie' ? 'MovieDetails' : 'TVDetails'
-  router.push({ name: routeName, params: { id: item._id } })
+  // Save current scroll position for search page
+  const scrollKey = `search-page-${currentPage.value}`
+  contentStore.saveScrollPosition(scrollKey)
+
+  const routeName = item.contentType === 'movie' ? 'MovieDetails' : 'TVShowDetails'
+  router.push({
+    name: routeName,
+    params: { id: item._id },
+    query: { from: route.fullPath },
+  })
 }
 
 const handleWatchlistClick = (contentId: string) => {
@@ -362,17 +493,34 @@ const handleAISearch = async (query: string) => {
   await handleSearch()
 }
 
-const applyFilters = () => {
+const applyFilters = async () => {
   currentPage.value = 1
+  // Trigger a search with current filters, even if no search query
+  const query = searchQuery.value.trim() || 'animated'
+  const contentType = filters.value.type !== 'all' ? (filters.value.type as 'movie' | 'tv') : 'all'
+  hasSearched.value = true
+  await contentStore.searchContent(query, contentType, 1, 50)
 }
 
-const clearFilters = () => {
+const applySorting = () => {
+  // Sorting is handled by the filteredResults computed property
+  // No need to trigger a new search, just re-sort existing results
+}
+
+const clearFilters = async () => {
   filters.value = {
     type: 'all',
     rating: 'all',
     year: 'all',
+    genre: 'all',
+    language: 'all',
+    sortBy: 'relevance',
   }
   currentPage.value = 1
+  // Trigger a search with cleared filters
+  const query = searchQuery.value.trim() || 'animated'
+  hasSearched.value = true
+  await contentStore.searchContent(query, 'all', 1, 50)
 }
 
 const clearSearch = () => {
@@ -390,6 +538,39 @@ watch(
   },
   { deep: true },
 )
+
+// Handle scroll position restoration when returning from detail pages
+onMounted(async () => {
+  // Check if we're returning from a detail page
+  const previousPage = route.query.from as string
+  if (previousPage && previousPage.includes('/search')) {
+    // Extract page number from the previous URL
+    const url = new URL(previousPage, window.location.origin)
+    const page = url.searchParams.get('page') || '1'
+
+    // Restore scroll position for the page we're returning to
+    const scrollKey = `search-page-${page}`
+    const restored = contentStore.restoreScrollPosition(scrollKey)
+
+    // If scroll position wasn't restored, scroll to top after navigation
+    if (!restored) {
+      nextTick(() => {
+        contentStore.scrollToTop()
+      })
+    }
+  } else {
+    // Scroll to top when component mounts normally
+    contentStore.scrollToTop()
+
+    // Load initial content with filters
+    try {
+      hasSearched.value = true
+      await contentStore.searchContent('animated', 'all', 1, 50)
+    } catch (error) {
+      console.error('Failed to load initial content:', error)
+    }
+  }
+})
 </script>
 
 <style scoped>
@@ -492,49 +673,93 @@ watch(
 
 .filters-container {
   margin-bottom: 2rem;
+  position: relative;
+}
+
+.filters-header {
+  margin-bottom: 1rem;
+}
+
+.filters-header h3 {
+  color: white;
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0;
 }
 
 .filters-bar {
-  display: flex;
-  gap: 2rem;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 1.5rem;
   background: rgba(255, 255, 255, 0.1);
-  padding: 1rem 2rem;
+  padding: 1.5rem;
   border-radius: 12px;
   backdrop-filter: blur(10px);
-  flex-wrap: wrap;
+}
+
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .filter-group {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: white;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .filter-group label {
-  font-weight: 600;
+  color: white;
+  font-weight: 500;
+  font-size: 0.85rem;
 }
 
 .filter-group select {
   padding: 0.5rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.9);
-}
-
-.clear-filters-btn {
-  background: rgba(255, 107, 107, 0.8);
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  cursor: pointer;
+  color: #333;
+  font-size: 0.9rem;
   transition: all 0.3s ease;
 }
 
+.filter-group select:focus {
+  outline: none;
+  background: white;
+  box-shadow: 0 0 0 2px var(--teal-primary);
+}
+
+.filter-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.clear-filters-btn {
+  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.8rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 .clear-filters-btn:hover {
-  background: rgba(255, 107, 107, 1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.clear-filters-btn i {
+  font-size: 0.7rem;
 }
 
 .results-header {
@@ -618,6 +843,9 @@ watch(
   font-weight: 600;
   font-size: 0.9rem;
   align-self: flex-start;
+  position: absolute;
+  top: 8px;
+  left: 8px;
 }
 
 .result-type {
@@ -634,7 +862,6 @@ watch(
   position: absolute;
   top: 8px;
   right: 8px;
-  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
   color: white;
   padding: 4px 8px;
   border-radius: 4px;
@@ -648,13 +875,23 @@ watch(
   transition: all 0.3s ease;
 }
 
+.movie-badge {
+  background: var(--teal-primary);
+}
+
+.tv-badge {
+  background: var(--coral-primary);
+}
+
 .result-card:hover .content-type-badge {
   opacity: 1;
   transform: translateY(0);
 }
 
 .result-actions {
-  align-self: flex-end;
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
 }
 
 .action-btn {
@@ -680,6 +917,25 @@ watch(
 .action-btn.in-watchlist {
   background: #4ecdc4;
   color: white;
+}
+
+.external-content-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  cursor: help;
+  transition: all 0.3s ease;
+}
+
+.external-content-notice:hover {
+  background: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .result-info {
@@ -823,8 +1079,18 @@ watch(
   }
 
   .filters-bar {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .filter-section {
+    gap: 0.5rem;
+  }
+
+  .clear-filters-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.75rem;
   }
 
   .results-grid {

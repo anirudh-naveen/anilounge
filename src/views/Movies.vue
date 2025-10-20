@@ -36,7 +36,10 @@
               :alt="movie.title"
               @error="handleImageError"
             />
-            <div class="content-type-badge">
+            <div
+              class="content-type-badge"
+              :class="movie.contentType === 'movie' ? 'movie-badge' : 'tv-badge'"
+            >
               {{ getContentTypeDisplay(movie.contentType) }}
             </div>
             <div class="movie-overlay">
@@ -324,7 +327,9 @@ onMounted(async () => {
 }
 
 .movie-actions {
-  align-self: flex-end;
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
 }
 
 .action-btn {
@@ -485,7 +490,6 @@ onMounted(async () => {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
   color: white;
   padding: 4px 8px;
   border-radius: 4px;
@@ -497,6 +501,14 @@ onMounted(async () => {
   opacity: 0;
   transform: translateY(-5px);
   transition: all 0.3s ease;
+}
+
+.movie-badge {
+  background: var(--teal-primary);
+}
+
+.tv-badge {
+  background: var(--coral-primary);
 }
 
 .movie-card:hover .content-type-badge {

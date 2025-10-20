@@ -36,7 +36,10 @@
               :alt="show.title"
               @error="handleImageError"
             />
-            <div class="content-type-badge">
+            <div
+              class="content-type-badge"
+              :class="show.contentType === 'movie' ? 'movie-badge' : 'tv-badge'"
+            >
               {{ getContentTypeDisplay(show.contentType) }}
             </div>
             <div class="show-overlay">
@@ -169,13 +172,13 @@ const handleImageError = (event: Event) => {
 
 const viewShowDetails = (show: UnifiedContent) => {
   // Save current scroll position before navigating
-  const scrollKey = `tv-page-${contentStore.tvShowsPagination.currentPage}`
+  const scrollKey = `tv-shows-page-${contentStore.tvShowsPagination.currentPage}`
   contentStore.saveScrollPosition(scrollKey)
 
   router.push({
-    name: 'TVDetails',
+    name: 'TVShowDetails',
     params: { id: show._id },
-    query: { from: `/tv?page=${contentStore.tvShowsPagination.currentPage}` },
+    query: { from: `/tv-shows?page=${contentStore.tvShowsPagination.currentPage}` },
   })
 }
 
@@ -327,7 +330,9 @@ onMounted(async () => {
 }
 
 .show-actions {
-  align-self: flex-end;
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
 }
 
 .action-btn {
@@ -489,7 +494,6 @@ onMounted(async () => {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
   color: white;
   padding: 4px 8px;
   border-radius: 4px;
@@ -501,6 +505,14 @@ onMounted(async () => {
   opacity: 0;
   transform: translateY(-5px);
   transition: all 0.3s ease;
+}
+
+.movie-badge {
+  background: var(--teal-primary);
+}
+
+.tv-badge {
+  background: var(--coral-primary);
 }
 
 .show-card:hover .content-type-badge {

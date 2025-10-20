@@ -104,6 +104,41 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const changePassword = async (data: { currentPassword: string; newPassword: string }) => {
+    try {
+      isLoading.value = true
+      error.value = null
+
+      const response = await authAPI.changePassword(data)
+      return response.data
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string } } }
+      error.value = apiError.response?.data?.message || 'Password change failed'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const uploadProfilePicture = async (formData: FormData) => {
+    try {
+      isLoading.value = true
+      error.value = null
+
+      const response = await authAPI.uploadProfilePicture(formData)
+      user.value = response.data.data.user
+      localStorage.setItem('user', JSON.stringify(user.value))
+
+      return response.data
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string } } }
+      error.value = apiError.response?.data?.message || 'Profile picture upload failed'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   // Initialize user from localStorage
   const initAuth = () => {
     const savedUser = localStorage.getItem('user')
@@ -131,6 +166,8 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     loadUser,
     updateProfile,
+    changePassword,
+    uploadProfilePicture,
     initAuth,
   }
 })
