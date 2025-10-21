@@ -50,21 +50,10 @@ connectDB()
 app.set('trust proxy', 1)
 
 // Enhanced security middleware
+// TEMPORARILY DISABLE CSP FOR DEBUGGING
 app.use(
   helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'"],
-        imgSrc: ["'self'", 'data:', 'blob:'],
-        connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
-        objectSrc: ["'none'"],
-        mediaSrc: ["'self'"],
-        frameSrc: ["'none'"],
-      },
-    },
+    contentSecurityPolicy: false, // DISABLED FOR DEBUGGING
     crossOriginEmbedderPolicy: false,
     hsts: {
       maxAge: 31536000,
@@ -109,7 +98,8 @@ const uploadLimiter = rateLimit({
 })
 
 // Apply general rate limiting
-app.use(generalLimiter)
+// TEMPORARILY DISABLED FOR DEBUGGING
+// app.use(generalLimiter)
 
 // CORS configuration - Simple and permissive for development, restrictive for production
 const corsOptions = {
