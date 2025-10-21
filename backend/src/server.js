@@ -122,6 +122,8 @@ app.use(
               'https://find-animation.vercel.app',
               'https://find-animation.netlify.app',
               'https://find-animation.herokuapp.com',
+              // Allow all Vercel domains
+              /^https:\/\/.*\.vercel\.app$/,
             ]
           : [
               'http://localhost:3000',
@@ -136,11 +138,18 @@ app.use(
 
       // Allow requests with no origin (mobile apps, Postman, etc.) or file:// origin
       if (!origin || origin.startsWith('file://')) return callback(null, true)
-      
-      // Temporary: Allow all origins for testing (remove in production)
-      if (process.env.NODE_ENV !== 'production') return callback(null, true)
 
-      if (allowedOrigins.includes(origin)) {
+      // Check if origin matches any allowed origin (including regex patterns)
+      const isAllowed = allowedOrigins.some(allowedOrigin => {
+        if (typeof allowedOrigin === 'string') {
+          return allowedOrigin === origin
+        } else if (allowedOrigin instanceof RegExp) {
+          return allowedOrigin.test(origin)
+        }
+        return false
+      })
+
+      if (isAllowed) {
         callback(null, true)
       } else {
         callback(new Error('Not allowed by CORS'))
