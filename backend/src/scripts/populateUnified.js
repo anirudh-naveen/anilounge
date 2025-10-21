@@ -353,16 +353,19 @@ class DatabasePopulator {
       return false
     }
 
-    // Check genre overlap (at least 1 common genre for more flexible matching)
+    // Check genre overlap with stricter requirements to prevent false positives
     const newGenres = (newContent.genres || []).map((g) => g.name?.toLowerCase() || g.toLowerCase())
     const existingGenres = (existingContent.genres || []).map(
       (g) => g.name?.toLowerCase() || g.toLowerCase(),
     )
     const commonGenres = newGenres.filter((g) => existingGenres.includes(g))
 
-    if (commonGenres.length < 1) {
+    // Require at least 2 common genres if both have 3+ genres, otherwise at least 1
+    const minCommonGenres = Math.min(newGenres.length, existingGenres.length) >= 3 ? 2 : 1
+
+    if (commonGenres.length < minCommonGenres) {
       console.log(
-        `❌ Insufficient common genres (${commonGenres.length}): ${newContent.title} vs ${existingContent.title}`,
+        `❌ Insufficient common genres (${commonGenres.length}/${minCommonGenres} required): ${newContent.title} vs ${existingContent.title}`,
       )
       console.log(`   New genres: ${newGenres.join(', ')}`)
       console.log(`   Existing genres: ${existingGenres.join(', ')}`)

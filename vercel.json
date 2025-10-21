@@ -4,8 +4,8 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://find-animation-production.up.railway.app/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://find-animation-production.up.railway.app/api/:path*"
     }
   ]
 }

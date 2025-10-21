@@ -201,37 +201,98 @@ export const useContentStore = defineStore('content', () => {
         filteredResults = filteredResults.filter((item) => item.contentType === contentType)
       }
 
-      // Search by title, original title, and genres (if query is provided)
+      // Enhanced search with better title and genre matching
       const searchTerm = query.toLowerCase().trim()
       if (searchTerm) {
         filteredResults = filteredResults.filter((item) => {
           const title = item.title?.toLowerCase() || ''
           const originalTitle = item.originalTitle?.toLowerCase() || ''
+          const alternativeTitles = (item.alternativeTitles || [])
+            .map((t) => t.toLowerCase())
+            .join(' ')
           const genres = (item.genres || [])
             .map((g) => (typeof g === 'string' ? g : g.name || ''))
             .join(' ')
             .toLowerCase()
           const overview = item.overview?.toLowerCase() || ''
+          const studios = (item.studios || []).join(' ').toLowerCase()
 
           return (
             title.includes(searchTerm) ||
             originalTitle.includes(searchTerm) ||
+            alternativeTitles.includes(searchTerm) ||
             genres.includes(searchTerm) ||
-            overview.includes(searchTerm)
+            overview.includes(searchTerm) ||
+            studios.includes(searchTerm)
           )
         })
       }
 
-      // Sort by relevance (title matches first, then genre matches)
+      // Enhanced sorting by relevance with multiple tiers
       if (searchTerm) {
         filteredResults.sort((a, b) => {
-          const aTitle = (a.title?.toLowerCase() || '').includes(searchTerm)
-          const bTitle = (b.title?.toLowerCase() || '').includes(searchTerm)
+          const aTitle = a.title?.toLowerCase() || ''
+          const bTitle = b.title?.toLowerCase() || ''
+          const aOriginalTitle = a.originalTitle?.toLowerCase() || ''
+          const bOriginalTitle = b.originalTitle?.toLowerCase() || ''
+          const aAlternativeTitles = (a.alternativeTitles || [])
+            .map((t) => t.toLowerCase())
+            .join(' ')
+          const bAlternativeTitles = (b.alternativeTitles || [])
+            .map((t) => t.toLowerCase())
+            .join(' ')
+          const aGenres = (a.genres || [])
+            .map((g) => (typeof g === 'string' ? g : g.name || ''))
+            .join(' ')
+            .toLowerCase()
+          const bGenres = (b.genres || [])
+            .map((g) => (typeof g === 'string' ? g : g.name || ''))
+            .join(' ')
+            .toLowerCase()
 
-          if (aTitle && !bTitle) return -1
-          if (!aTitle && bTitle) return 1
+          // Priority 1: Exact title match
+          const aExactTitle = aTitle === searchTerm
+          const bExactTitle = bTitle === searchTerm
+          if (aExactTitle && !bExactTitle) return -1
+          if (!aExactTitle && bExactTitle) return 1
 
-          // If both or neither match title, sort by unified score
+          // Priority 2: Title starts with search term
+          const aTitleStarts = aTitle.startsWith(searchTerm)
+          const bTitleStarts = bTitle.startsWith(searchTerm)
+          if (aTitleStarts && !bTitleStarts) return -1
+          if (!aTitleStarts && bTitleStarts) return 1
+
+          // Priority 3: Title contains search term
+          const aTitleContains = aTitle.includes(searchTerm)
+          const bTitleContains = bTitle.includes(searchTerm)
+          if (aTitleContains && !bTitleContains) return -1
+          if (!aTitleContains && bTitleContains) return 1
+
+          // Priority 4: Original title or alternative titles contain search term
+          const aOtherTitles =
+            aOriginalTitle.includes(searchTerm) || aAlternativeTitles.includes(searchTerm)
+          const bOtherTitles =
+            bOriginalTitle.includes(searchTerm) || bAlternativeTitles.includes(searchTerm)
+          if (aOtherTitles && !bOtherTitles) return -1
+          if (!aOtherTitles && bOtherTitles) return 1
+
+          // Priority 5: Genre exact match
+          const aGenreMatch = aGenres
+            .split(' ')
+            .some((genre) => genre.toLowerCase() === searchTerm)
+          const bGenreMatch = bGenres
+            .split(' ')
+            .some((genre) => genre.toLowerCase() === searchTerm)
+          if (aGenreMatch && !bGenreMatch) return -1
+          if (!aGenreMatch && bGenreMatch) return 1
+
+          // Priority 6: Genre contains search term
+          const aGenreContains = aGenres.includes(searchTerm)
+          const bGenreContains = bGenres.includes(searchTerm)
+          if (aGenreContains && !bGenreContains) return -1
+          if (!aGenreContains && bGenreContains) return 1
+
+          // Final: Sort by unified score
           return (b.unifiedScore || 0) - (a.unifiedScore || 0)
         })
       } else {
