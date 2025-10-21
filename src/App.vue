@@ -171,6 +171,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import BetaFeedback from '@/components/BetaFeedback.vue'
+import BetaBanner from '@/components/BetaBanner.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
