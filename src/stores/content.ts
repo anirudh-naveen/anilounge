@@ -188,19 +188,63 @@ export const useContentStore = defineStore('content', () => {
       isLoading.value = true
       error.value = null
 
-      const params: Record<string, string | number> = { query, page, limit }
+      // Search through local database instead of API call
+      let filteredResults = allContent.value
+
+      // Filter by content type if specified
       if (contentType && contentType !== 'all') {
-        params.type = contentType
+        filteredResults = filteredResults.filter(item => item.contentType === contentType)
       }
 
-      const response = await contentAPI.searchContent(params)
+      // Search by title, original title, and genres
+      const searchTerm = query.toLowerCase().trim()
+      filteredResults = filteredResults.filter(item => {
+        const title = item.title?.toLowerCase() || ''
+        const originalTitle = item.originalTitle?.toLowerCase() || ''
+        const genres = (item.genres || []).map(g => (typeof g === 'string' ? g : g.name || '')).join(' ').toLowerCase()
+        const overview = item.overview?.toLowerCase() || ''
+        
+        return title.includes(searchTerm) || 
+               originalTitle.includes(searchTerm) || 
+               genres.includes(searchTerm) ||
+               overview.includes(searchTerm)
+      })
 
-      if (response.data.success) {
-        searchResults.value = response.data.data.content
-        pagination.value = response.data.data.pagination
+      // Sort by relevance (title matches first, then genre matches)
+      filteredResults.sort((a, b) => {
+        const aTitle = (a.title?.toLowerCase() || '').includes(searchTerm)
+        const bTitle = (b.title?.toLowerCase() || '').includes(searchTerm)
+        
+        if (aTitle && !bTitle) return -1
+        if (!aTitle && bTitle) return 1
+        
+        // If both or neither match title, sort by unified score
+        return (b.unifiedScore || 0) - (a.unifiedScore || 0)
+      })
+
+      // Implement pagination
+      const startIndex = (page - 1) * limit
+      const endIndex = startIndex + limit
+      const paginatedResults = filteredResults.slice(startIndex, endIndex)
+
+      // Set results
+      searchResults.value = paginatedResults
+      pagination.value = {
+        currentPage: page,
+        totalPages: Math.ceil(filteredResults.length / limit),
+        totalItems: filteredResults.length,
+        itemsPerPage: limit,
+        hasNextPage: page < Math.ceil(filteredResults.length / limit),
+        hasPrevPage: page > 1
       }
 
-      return response.data
+      return {
+        success: true,
+        data: {
+          content: paginatedResults,
+          pagination: pagination.value
+        }
+      }
     } catch (err: unknown) {
       console.error('Error searching content:', err)
       error.value = err instanceof Error ? err.message : 'Search failed'
