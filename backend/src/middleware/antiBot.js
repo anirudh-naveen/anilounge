@@ -181,7 +181,7 @@ export const databaseProtection = (req, res, next) => {
 export const apiProtection = (req, res, next) => {
   const origin = req.get('origin')
   const referer = req.get('referer') || req.get('referrer')
-  
+
   // Skip API protection for localhost origins (development)
   if (
     origin?.includes('localhost') ||
