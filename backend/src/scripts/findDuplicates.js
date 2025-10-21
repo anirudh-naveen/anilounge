@@ -58,11 +58,11 @@ async function findDuplicates() {
     })
 
     // Find groups with multiple items
-    const duplicateGroups = Object.entries(titleGroups).filter(([_, items]) => items.length > 1)
+    const duplicateGroups = Object.entries(titleGroups).filter(([, items]) => items.length > 1)
 
     if (duplicateGroups.length > 0) {
       console.log(`\n📋 Found ${duplicateGroups.length} potential duplicate groups:\n`)
-      duplicateGroups.forEach(([normalizedTitle, items]) => {
+      duplicateGroups.forEach(([, items]) => {
         console.log(`\n"${items[0].title}" (${items.length} items):`)
         items.forEach((item) => {
           const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'
