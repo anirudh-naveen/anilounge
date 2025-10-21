@@ -220,12 +220,10 @@ app.use('/api/auth', authLimiter)
 app.use('/api/auth/upload-profile-picture', uploadLimiter)
 
 // API routes with protection
-// TEMPORARILY DISABLED apiProtection FOR DEBUGGING
-app.use('/api', apiRoutes)
+app.use('/api', apiProtection, apiRoutes)
 
 // Admin routes (protected)
-// TEMPORARILY DISABLED apiProtection FOR DEBUGGING
-app.use('/admin', adminRoutes)
+app.use('/admin', apiProtection, adminRoutes)
 
 // 404 handler
 app.use('*', (req, res) => {
