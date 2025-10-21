@@ -164,13 +164,11 @@ app.use(sanitizeHtmlInput)
 app.use(sanitizeXSS)
 
 // Security monitoring and logging
-// TEMPORARILY DISABLED FOR DEBUGGING
-// app.use(securityMonitor)
-// app.use(securityLogger)
+app.use(securityMonitor)
+app.use(securityLogger)
 
 // IP ban checking (must be early in the chain)
-// TEMPORARILY DISABLED FOR DEBUGGING
-// app.use(checkIPBan)
+app.use(checkIPBan)
 
 // Anti-bot and database protection
 // TEMPORARILY DISABLED FOR DEBUGGING
