@@ -179,8 +179,13 @@ export const databaseProtection = (req, res, next) => {
 
 // API endpoint protection
 export const apiProtection = (req, res, next) => {
-  // Skip API protection for localhost/development
+  const origin = req.get('origin')
+  const referer = req.get('referer') || req.get('referrer')
+  
+  // Skip API protection for localhost origins (development)
   if (
+    origin?.includes('localhost') ||
+    referer?.includes('localhost') ||
     req.hostname === 'localhost' ||
     req.hostname?.includes('localhost') ||
     req.ip === '::1' ||
@@ -201,14 +206,9 @@ export const apiProtection = (req, res, next) => {
     })
   }
 
-  // Allow requests without referer (common with Vercel rewrites and proxies)
-  // OR check if referer is from allowed domains
-  const referer = req.get('referer') || req.get('referrer')
-
-  // If there's a referer, validate it. If there's no referer, allow it (for proxied requests)
-  if (referer && process.env.NODE_ENV === 'production') {
+  // Allow requests from known domains or without referer (for proxied requests)
+  if (referer) {
     const isAllowedReferer =
-      referer.startsWith(process.env.FRONTEND_URL || 'http://localhost:5174') ||
       referer.includes('vercel.app') ||
       referer.includes('netlify.app') ||
       referer.includes('github.io') ||
