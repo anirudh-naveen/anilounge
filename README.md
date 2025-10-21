@@ -1,15 +1,36 @@
 # Find-Animation - Beta Release
-Application where users can filter, find, rate, and track all the animated television shows and films they have watched.
+A full-stack web application for discovering, filtering, rating, and tracking animated television shows and films.
 
-This site follows the MEVN stack architecture:
- - MongoDB
- - Express.js
- - Vue.js
- - Node.js
+Beta Release: https://find-animation-pqu0td8uq-anirudh-naveens-projects.vercel.app/
+Test Credentials
+For recruiters and viewers who want to explore the application:
 
-The application also utilizes the Tmdb, MyAnimeList, and Google Gemini APIs in its functionality.
+Email: demo@findanimation.com
+Password: DemoPassword123!
 
-In deployment, the backend is hosted by Railway and the frontend is hosted by Vercel.
+Features --
+Search & Filter: Browse through an extensive collection of animated content
+Watchlist Management: Track shows and movies you want to watch
+Rating System: Rate and review your favorite animations
+User Profiles: Personalized profiles with viewing history and preferences
+Customizable Settings: Tailor your experience to your preferences
+
+MEVN Stack Architecture --
+MongoDB - NoSQL database for flexible data storage
+Express.js - Backend web application framework
+Vue.js - Progressive frontend JavaScript framework
+Node.js - JavaScript runtime environment
+
+APIs & Integrations --
+TMDB API - Movie and TV show database
+MyAnimeList API - Anime-specific content and metadata
+Google Gemini API - AI-powered features and recommendations
+
+Deployment --
+Frontend: Vercel
+Backend: Railway
+
+
 
 Homepage
 <img width="845" height="962" alt="Screenshot 2025-10-20 at 12 17 44 AM" src="https://github.com/user-attachments/assets/0c5b5e19-b728-471a-be9a-d61b98deeb00" />
@@ -27,3 +48,10 @@ Settings
 <img width="848" height="631" alt="image" src="https://github.com/user-attachments/assets/18b5db5f-5e45-4ca2-ad8f-d7cb3bc1e2b0" />
 
 <img width="847" height="896" alt="image" src="https://github.com/user-attachments/assets/b48b428e-8070-4a8e-9b46-2a63f5198748" />
+
+
+
+Author --
+Anirudh Naveen
+
+Note: This is a beta release. Some features may be under active development.
