@@ -302,6 +302,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Find Animation API server running on port ${PORT}`)
   console.log(`📊 Environment: ${process.env.NODE_ENV}`)
   console.log(`🔗 Health check: http://localhost:${PORT}/health`)
+  console.log(`🌐 CORS enabled for all origins in production`)
 })
 
 export default app
