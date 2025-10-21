@@ -40,6 +40,9 @@ app.get('/api/status', (req, res) => {
     message: 'Find Animation API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
+    antiBotDisabled: process.env.NODE_ENV === 'production',
+    corsEnabled: true,
+    version: 'vercel-fix-v2'
   })
 })
 
@@ -303,6 +306,9 @@ app.listen(PORT, () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV}`)
   console.log(`🔗 Health check: http://localhost:${PORT}/health`)
   console.log(`🌐 CORS enabled for all origins in production`)
+  console.log(`🔓 ANTI-BOT PROTECTION DISABLED FOR PRODUCTION`)
+  console.log(`🔓 IP BAN CHECKING DISABLED FOR PRODUCTION`)
+  console.log(`✅ VERCEL DEPLOYMENT FIXES APPLIED - ${new Date().toISOString()}`)
 })
 
 export default app
