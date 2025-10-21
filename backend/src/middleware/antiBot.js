@@ -206,7 +206,9 @@ export const apiProtection = (req, res, next) => {
   if (
     referer &&
     process.env.NODE_ENV === 'production' &&
-    !referer.startsWith(process.env.FRONTEND_URL || 'http://localhost:5174')
+    !referer.startsWith(process.env.FRONTEND_URL || 'http://localhost:5174') &&
+    !referer.includes('vercel.app') &&
+    !referer.includes('netlify.app')
   ) {
     return res.status(403).json({
       success: false,
