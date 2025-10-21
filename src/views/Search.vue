@@ -492,12 +492,12 @@ const handleSearch = async () => {
   try {
     hasSearched.value = true
     currentPage.value = 1
-    
+
     // Ensure content is loaded first
     if (contentStore.allContent.length === 0) {
       await contentStore.getPopularContent('all', 100) // Load more content for better search
     }
-    
+
     await contentStore.searchContent(searchQuery.value, 'all', 1, 50)
   } catch (error) {
     console.error('Search error:', error)
@@ -522,12 +522,12 @@ const handleAISearchResults = (results: UnifiedContent[]) => {
 
 const applyFilters = async () => {
   currentPage.value = 1
-  
+
   // Ensure content is loaded first
   if (contentStore.allContent.length === 0) {
     await contentStore.getPopularContent('all', 100) // Load more content for better search
   }
-  
+
   // Trigger a search with current filters, even if no search query
   const query = searchQuery.value.trim() || 'animated'
   const contentType = filters.value.type !== 'all' ? (filters.value.type as 'movie' | 'tv') : 'all'
@@ -601,7 +601,7 @@ onMounted(async () => {
       if (contentStore.allContent.length === 0) {
         await contentStore.getPopularContent('all', 100) // Load more content for better search
       }
-      
+
       hasSearched.value = true
       await contentStore.searchContent('animated', 'all', 1, 50)
     } catch (error) {

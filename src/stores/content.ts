@@ -193,31 +193,36 @@ export const useContentStore = defineStore('content', () => {
 
       // Filter by content type if specified
       if (contentType && contentType !== 'all') {
-        filteredResults = filteredResults.filter(item => item.contentType === contentType)
+        filteredResults = filteredResults.filter((item) => item.contentType === contentType)
       }
 
       // Search by title, original title, and genres
       const searchTerm = query.toLowerCase().trim()
-      filteredResults = filteredResults.filter(item => {
+      filteredResults = filteredResults.filter((item) => {
         const title = item.title?.toLowerCase() || ''
         const originalTitle = item.originalTitle?.toLowerCase() || ''
-        const genres = (item.genres || []).map(g => (typeof g === 'string' ? g : g.name || '')).join(' ').toLowerCase()
+        const genres = (item.genres || [])
+          .map((g) => (typeof g === 'string' ? g : g.name || ''))
+          .join(' ')
+          .toLowerCase()
         const overview = item.overview?.toLowerCase() || ''
-        
-        return title.includes(searchTerm) || 
-               originalTitle.includes(searchTerm) || 
-               genres.includes(searchTerm) ||
-               overview.includes(searchTerm)
+
+        return (
+          title.includes(searchTerm) ||
+          originalTitle.includes(searchTerm) ||
+          genres.includes(searchTerm) ||
+          overview.includes(searchTerm)
+        )
       })
 
       // Sort by relevance (title matches first, then genre matches)
       filteredResults.sort((a, b) => {
         const aTitle = (a.title?.toLowerCase() || '').includes(searchTerm)
         const bTitle = (b.title?.toLowerCase() || '').includes(searchTerm)
-        
+
         if (aTitle && !bTitle) return -1
         if (!aTitle && bTitle) return 1
-        
+
         // If both or neither match title, sort by unified score
         return (b.unifiedScore || 0) - (a.unifiedScore || 0)
       })
@@ -235,15 +240,15 @@ export const useContentStore = defineStore('content', () => {
         totalItems: filteredResults.length,
         itemsPerPage: limit,
         hasNextPage: page < Math.ceil(filteredResults.length / limit),
-        hasPrevPage: page > 1
+        hasPrevPage: page > 1,
       }
 
       return {
         success: true,
         data: {
           content: paginatedResults,
-          pagination: pagination.value
-        }
+          pagination: pagination.value,
+        },
       }
     } catch (err: unknown) {
       console.error('Error searching content:', err)
