@@ -8,7 +8,7 @@ import type {
   ContentParams,
 } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
+const API_BASE_URL = 'https://find-animation-production.up.railway.app/api'
 
 // Create axios instance
 const api = axios.create({

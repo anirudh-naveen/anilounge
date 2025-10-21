@@ -3,11 +3,6 @@ import { banIPForBot, banIPForSuspiciousActivity } from './ipBan.js'
 
 // Anti-bot protection middleware
 export const antiBotProtection = (req, res, next) => {
-  // Temporarily disable anti-bot protection for production to fix Vercel deployment
-  if (process.env.NODE_ENV === 'production') {
-    return next()
-  }
-
   const userAgent = req.get('User-Agent') || ''
   const ip = req.ip
 
