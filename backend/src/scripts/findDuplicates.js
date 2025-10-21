@@ -8,36 +8,37 @@ async function findDuplicates() {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
     console.log('📡 Database connected')
-    
+
     // Find potential duplicates for Ne Zha
-    const nezhaItems = await Content.find({ 
-      $or: [
-        { title: { $regex: /nezha/i } },
-        { title: { $regex: /ne zha/i } }
-      ]
+    const nezhaItems = await Content.find({
+      $or: [{ title: { $regex: /nezha/i } }, { title: { $regex: /ne zha/i } }],
     }).lean()
-    
+
     console.log('\n🔍 Ne Zha items:')
-    nezhaItems.forEach(item => {
+    nezhaItems.forEach((item) => {
       const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'
-      console.log(`- ${item.title} (${year}) - ${item.contentType} - Genres: ${(item.genres || []).map(g => g.name || g).join(', ')} - ID: ${item._id}`)
+      console.log(
+        `- ${item.title} (${year}) - ${item.contentType} - Genres: ${(item.genres || []).map((g) => g.name || g).join(', ')} - ID: ${item._id}`,
+      )
     })
-    
+
     // Find potential duplicates for A Silent Voice
-    const silentVoiceItems = await Content.find({ 
+    const silentVoiceItems = await Content.find({
       $or: [
         { title: { $regex: /silent voice/i } },
         { title: { $regex: /koe no katachi/i } },
-        { title: { $regex: /a silent voice/i } }
-      ]
+        { title: { $regex: /a silent voice/i } },
+      ],
     }).lean()
-    
+
     console.log('\n🔍 A Silent Voice items:')
-    silentVoiceItems.forEach(item => {
+    silentVoiceItems.forEach((item) => {
       const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'
-      console.log(`- ${item.title} (${year}) - ${item.contentType} - Genres: ${(item.genres || []).map(g => g.name || g).join(', ')} - ID: ${item._id}`)
+      console.log(
+        `- ${item.title} (${year}) - ${item.contentType} - Genres: ${(item.genres || []).map((g) => g.name || g).join(', ')} - ID: ${item._id}`,
+      )
     })
-    
+
     await mongoose.disconnect()
     console.log('🔌 Database disconnected')
   } catch (error) {
