@@ -152,7 +152,7 @@ export const useContentStore = defineStore('content', () => {
           allContent.value = data
           const movieList: UnifiedContent[] = []
           const tvList: UnifiedContent[] = []
-          
+
           // Single pass filtering for better performance
           data.forEach((item: UnifiedContent) => {
             if (item.contentType === 'movie') {
@@ -161,7 +161,7 @@ export const useContentStore = defineStore('content', () => {
               tvList.push(item)
             }
           })
-          
+
           movies.value = movieList
           tvShows.value = tvList
         }
