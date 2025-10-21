@@ -204,6 +204,10 @@ export const useContentStore = defineStore('content', () => {
       // Enhanced search with better title and genre matching
       const searchTerm = query.toLowerCase().trim()
       if (searchTerm) {
+        // Normalize search term for better matching (remove special chars, extra spaces)
+        const normalizedSearchTerm = searchTerm.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
+        const searchWords = normalizedSearchTerm.split(' ')
+
         filteredResults = filteredResults.filter((item) => {
           const title = item.title?.toLowerCase() || ''
           const originalTitle = item.originalTitle?.toLowerCase() || ''
@@ -217,14 +221,25 @@ export const useContentStore = defineStore('content', () => {
           const overview = item.overview?.toLowerCase() || ''
           const studios = (item.studios || []).join(' ').toLowerCase()
 
-          return (
+          // Normalize titles for comparison
+          const normalizedTitle = title.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
+          const normalizedOriginalTitle = originalTitle.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
+
+          // Check if search term appears anywhere
+          const directMatch =
             title.includes(searchTerm) ||
             originalTitle.includes(searchTerm) ||
             alternativeTitles.includes(searchTerm) ||
             genres.includes(searchTerm) ||
             overview.includes(searchTerm) ||
             studios.includes(searchTerm)
+
+          // Check if all search words appear in normalized title (for "spider man" matching "Spider-Man")
+          const allWordsInTitle = searchWords.every((word) => 
+            normalizedTitle.includes(word) || normalizedOriginalTitle.includes(word)
           )
+
+          return directMatch || allWordsInTitle
         })
       }
 

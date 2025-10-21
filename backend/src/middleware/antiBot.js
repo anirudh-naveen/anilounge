@@ -201,21 +201,26 @@ export const apiProtection = (req, res, next) => {
     })
   }
 
-  // Block requests with suspicious referers (only in production)
+  // Allow requests without referer (common with Vercel rewrites and proxies)
+  // OR check if referer is from allowed domains
   const referer = req.get('referer') || req.get('referrer')
-  if (
-    referer &&
-    process.env.NODE_ENV === 'production' &&
-    !referer.startsWith(process.env.FRONTEND_URL || 'http://localhost:5174') &&
-    !referer.includes('vercel.app') &&
-    !referer.includes('netlify.app') &&
-    !referer.includes('github.io') &&
-    !referer.includes('herokuapp.com')
-  ) {
-    return res.status(403).json({
-      success: false,
-      message: 'Invalid referer detected.',
-    })
+  
+  // If there's a referer, validate it. If there's no referer, allow it (for proxied requests)
+  if (referer && process.env.NODE_ENV === 'production') {
+    const isAllowedReferer =
+      referer.startsWith(process.env.FRONTEND_URL || 'http://localhost:5174') ||
+      referer.includes('vercel.app') ||
+      referer.includes('netlify.app') ||
+      referer.includes('github.io') ||
+      referer.includes('herokuapp.com') ||
+      referer.includes('railway.app')
+
+    if (!isAllowedReferer) {
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid referer detected.',
+      })
+    }
   }
 
   next()
