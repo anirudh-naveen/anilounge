@@ -223,6 +223,10 @@ textarea.form-control {
   min-height: 120px;
 }
 
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
 .btn-submit {
   padding: 1rem;
   background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
