@@ -1,8 +1,8 @@
 # Find-Animation - Beta Release
 A full-stack web application for discovering, filtering, rating, and tracking animated television shows and films.
 
-Beta Release: [https://find-animation-pqu0td8uq-anirudh-naveens-projects.vercel.app/](https://find-animation-cuqnl3hgb-anirudh-naveens-projects.vercel.app/)
-
+Beta Release: [[https://find-animation-pqu0td8uq-anirudh-naveens-projects.vercel.app/](https://find-animation-cuqnl3hgb-anirudh-naveens-projects.vercel.app/)
+](https://find-animation-git-main-anirudh-naveens-projects.vercel.app?_vercel_share=qS4cPumUdFNNXgX7n9XhKHmW1voDrNkm)
 For recruiters and viewers who want to explore the application:
  - Email: demo@findanimation.com
  - Password: DemoPassword123!
