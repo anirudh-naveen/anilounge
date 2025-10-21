@@ -1,0 +1,2 @@
+Railway Deploy Trigger - $(date)
+This file forces Railway to redeploy with the latest CORS and anti-bot fixes.
