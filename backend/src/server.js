@@ -98,8 +98,7 @@ const uploadLimiter = rateLimit({
 })
 
 // Apply general rate limiting
-// TEMPORARILY DISABLED FOR DEBUGGING
-// app.use(generalLimiter)
+app.use(generalLimiter)
 
 // CORS configuration - Simple and permissive for development, restrictive for production
 const corsOptions = {
