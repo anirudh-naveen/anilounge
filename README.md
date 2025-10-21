@@ -2,33 +2,32 @@
 A full-stack web application for discovering, filtering, rating, and tracking animated television shows and films.
 
 Beta Release: https://find-animation-pqu0td8uq-anirudh-naveens-projects.vercel.app/
-Test Credentials
-For recruiters and viewers who want to explore the application:
 
-Email: demo@findanimation.com
-Password: DemoPassword123!
+For recruiters and viewers who want to explore the application:
+ - Email: demo@findanimation.com
+ - Password: DemoPassword123!
 
 Features --
-Search & Filter: Browse through an extensive collection of animated content
-Watchlist Management: Track shows and movies you want to watch
-Rating System: Rate and review your favorite animations
-User Profiles: Personalized profiles with viewing history and preferences
+ - Search & Filter: Browse through an extensive collection of animated content
+ - Watchlist Management: Track shows and movies you want to watch
+ - Rating System: Rate and review your favorite animations
+ - User Profiles: Personalized profiles with viewing history and preferences
 Customizable Settings: Tailor your experience to your preferences
 
 MEVN Stack Architecture --
-MongoDB - NoSQL database for flexible data storage
-Express.js - Backend web application framework
-Vue.js - Progressive frontend JavaScript framework
-Node.js - JavaScript runtime environment
+ - MongoDB - NoSQL database for flexible data storage
+ - Express.js - Backend web application framework
+ - Vue.js - Progressive frontend JavaScript framework
+ - Node.js - JavaScript runtime environment
 
 APIs & Integrations --
-TMDB API - Movie and TV show database
-MyAnimeList API - Anime-specific content and metadata
-Google Gemini API - AI-powered features and recommendations
+ - TMDB API - Movie and TV show database
+ - MyAnimeList API - Anime-specific content and metadata
+ - Google Gemini API - AI-powered features and recommendations
 
 Deployment --
-Frontend: Vercel
-Backend: Railway
+ - Frontend: Vercel
+ - Backend: Railway
 
 
 
@@ -52,6 +51,6 @@ Settings
 
 
 Author --
-Anirudh Naveen
+- Anirudh Naveen
 
 Note: This is a beta release. Some features may be under active development.
