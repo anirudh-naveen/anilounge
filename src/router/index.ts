@@ -76,16 +76,7 @@ router.beforeEach((to, from, next) => {
     authStore.initAuth()
   }
 
-  console.log('Router guard:', {
-    to: to.path,
-    requiresAuth: to.meta.requiresAuth,
-    isAuthenticated: authStore.isAuthenticated,
-    hasToken: !!localStorage.getItem('token'),
-    hasUser: !!authStore.user,
-  })
-
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    console.log('Redirecting to login - not authenticated')
     next('/login')
   } else {
     next()

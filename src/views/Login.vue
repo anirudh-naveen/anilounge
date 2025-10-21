@@ -76,13 +76,12 @@ const handleLogin = async () => {
   try {
     await authStore.login(form.value)
     toast.success('Login successful!')
-
+    
     // Wait for next tick to ensure auth state is updated
     await new Promise((resolve) => setTimeout(resolve, 100))
 
     router.push('/')
-  } catch (error) {
-    console.error('Login error:', error)
+  } catch {
     // Error is already set in the auth store, just show toast
     toast.error(authStore.error || 'Login failed. Please check your credentials.')
   }
