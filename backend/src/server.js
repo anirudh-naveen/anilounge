@@ -50,11 +50,11 @@ connectDB()
 app.set('trust proxy', 1)
 
 // Enhanced security middleware
-// TEMPORARILY DISABLE CSP FOR DEBUGGING
 app.use(
   helmet({
-    contentSecurityPolicy: false, // DISABLED FOR DEBUGGING
+    contentSecurityPolicy: false, // Disabled to allow cross-origin API requests
     crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false, // Allow cross-origin resources
     hsts: {
       maxAge: 31536000,
       includeSubDomains: true,
