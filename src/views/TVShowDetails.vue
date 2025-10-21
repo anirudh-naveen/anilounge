@@ -465,7 +465,13 @@ const fetchRelatedContent = async (contentId: string) => {
 
     const response = await Promise.race([contentAPI.getRelatedContent(contentId), timeoutPromise])
 
-    relatedContent.value = (response as { data: { data: { sequels: UnifiedContent[]; prequels: UnifiedContent[]; related: UnifiedContent[] } } }).data.data
+    relatedContent.value = (
+      response as {
+        data: {
+          data: { sequels: UnifiedContent[]; prequels: UnifiedContent[]; related: UnifiedContent[] }
+        }
+      }
+    ).data.data
   } catch (err) {
     console.error('Failed to fetch related content:', err)
     relatedContent.value = { sequels: [], prequels: [], related: [] }

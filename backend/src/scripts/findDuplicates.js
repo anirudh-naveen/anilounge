@@ -69,7 +69,9 @@ async function findDuplicates() {
           const sources = []
           if (item.tmdbId) sources.push('TMDB')
           if (item.malId) sources.push('MAL')
-          console.log(`  - ${item.title} (${year}) [${sources.join(' + ')}] - ${item.contentType} - ID: ${item._id}`)
+          console.log(
+            `  - ${item.title} (${year}) [${sources.join(' + ')}] - ${item.contentType} - ID: ${item._id}`,
+          )
         })
       })
     } else {
@@ -85,4 +87,3 @@ async function findDuplicates() {
 }
 
 findDuplicates()
-
