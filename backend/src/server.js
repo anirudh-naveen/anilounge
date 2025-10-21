@@ -111,64 +111,48 @@ const uploadLimiter = rateLimit({
 // Apply general rate limiting
 app.use(generalLimiter)
 
-// CORS configuration with enhanced security
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      const allowedOrigins =
-        process.env.NODE_ENV === 'production'
-          ? [
-              'https://your-frontend-domain.com',
-              'https://find-animation.vercel.app',
-              'https://find-animation.netlify.app',
-              'https://find-animation.herokuapp.com',
-              // Allow all Vercel domains
-              /^https:\/\/.*\.vercel\.app$/,
-              // Allow localhost for development testing with production backend
-              'http://localhost:5173',
-              'http://localhost:5174',
-              'http://127.0.0.1:5173',
-              'http://127.0.0.1:5174',
-            ]
-          : [
-              'http://localhost:3000',
-              'http://localhost:5173',
-              'http://localhost:5174',
-              'http://localhost:5175',
-              'http://localhost:5176',
-              'http://127.0.0.1:5173',
-              'http://127.0.0.1:5174',
-              'http://127.0.0.1:5175',
-              'http://127.0.0.1:5176',
-              'file://', // Allow local file:// requests for testing
-            ]
+// CORS configuration - Simple and permissive for development, restrictive for production
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, curl)
+    if (!origin) {
+      return callback(null, true)
+    }
 
-      // Allow requests with no origin (mobile apps, Postman, etc.) or file:// origin
-      if (!origin || origin.startsWith('file://')) return callback(null, true)
+    // List of allowed origins
+    const allowedOrigins = [
+      // Production domains
+      'https://find-animation.vercel.app',
+      'https://find-animation.netlify.app',
+      // Development
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:5175',
+      'http://localhost:5176',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:5174',
+    ]
 
-      // Check if origin matches any allowed origin (including regex patterns)
-      const isAllowed = allowedOrigins.some((allowedOrigin) => {
-        if (typeof allowedOrigin === 'string') {
-          return allowedOrigin === origin
-        } else if (allowedOrigin instanceof RegExp) {
-          return allowedOrigin.test(origin)
-        }
-        return false
-      })
+    // Check if origin is in allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true)
+    } else if (origin.match(/^https:\/\/.*\.vercel\.app$/)) {
+      // Allow all Vercel preview deployments
+      callback(null, true)
+    } else {
+      console.log('CORS blocked origin:', origin)
+      callback(null, false)
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Length', 'X-Request-Id'],
+  maxAge: 86400, // 24 hours
+  optionsSuccessStatus: 200, // Some legacy browsers choke on 204
+}
 
-      if (isAllowed) {
-        callback(null, true)
-      } else {
-        console.log('CORS blocked origin:', origin)
-        callback(new Error('Not allowed by CORS'))
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    maxAge: 86400, // 24 hours
-  }),
-)
+app.use(cors(corsOptions))
 
 // Body parsing middleware with size limits
 app.use(
