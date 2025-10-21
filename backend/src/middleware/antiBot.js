@@ -204,7 +204,7 @@ export const apiProtection = (req, res, next) => {
   // Allow requests without referer (common with Vercel rewrites and proxies)
   // OR check if referer is from allowed domains
   const referer = req.get('referer') || req.get('referrer')
-  
+
   // If there's a referer, validate it. If there's no referer, allow it (for proxied requests)
   if (referer && process.env.NODE_ENV === 'production') {
     const isAllowedReferer =

@@ -205,7 +205,10 @@ export const useContentStore = defineStore('content', () => {
       const searchTerm = query.toLowerCase().trim()
       if (searchTerm) {
         // Normalize search term for better matching (remove special chars, extra spaces)
-        const normalizedSearchTerm = searchTerm.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
+        const normalizedSearchTerm = searchTerm
+          .replace(/[^\w\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
         const searchWords = normalizedSearchTerm.split(' ')
 
         filteredResults = filteredResults.filter((item) => {
@@ -222,8 +225,14 @@ export const useContentStore = defineStore('content', () => {
           const studios = (item.studios || []).join(' ').toLowerCase()
 
           // Normalize titles for comparison
-          const normalizedTitle = title.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
-          const normalizedOriginalTitle = originalTitle.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
+          const normalizedTitle = title
+            .replace(/[^\w\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+          const normalizedOriginalTitle = originalTitle
+            .replace(/[^\w\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
 
           // Check if search term appears anywhere
           const directMatch =
@@ -235,8 +244,8 @@ export const useContentStore = defineStore('content', () => {
             studios.includes(searchTerm)
 
           // Check if all search words appear in normalized title (for "spider man" matching "Spider-Man")
-          const allWordsInTitle = searchWords.every((word) => 
-            normalizedTitle.includes(word) || normalizedOriginalTitle.includes(word)
+          const allWordsInTitle = searchWords.every(
+            (word) => normalizedTitle.includes(word) || normalizedOriginalTitle.includes(word),
           )
 
           return directMatch || allWordsInTitle
