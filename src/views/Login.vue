@@ -76,7 +76,7 @@ const handleLogin = async () => {
   try {
     await authStore.login(form.value)
     toast.success('Login successful!')
-    
+
     // Wait for next tick to ensure auth state is updated
     await new Promise((resolve) => setTimeout(resolve, 100))
 
