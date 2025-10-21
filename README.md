@@ -1,4 +1,4 @@
-# Find-Animation - Beta Release
+# Find-Animation - CURRENTLY BROKEN | WORKING ON FIX
 A full-stack web application for discovering, filtering, rating, and tracking animated television shows and films.
 
 Beta Release: https://find-animation-git-main-anirudh-naveens-projects.vercel.app?_vercel_share=qS4cPumUdFNNXgX7n9XhKHmW1voDrNkm
