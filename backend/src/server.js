@@ -175,10 +175,9 @@ app.use(sanitizeXSS)
 // app.use(checkIPBan)
 
 // Anti-bot and database protection
-// TEMPORARILY DISABLED FOR DEBUGGING
-// app.use(antiBotProtection)
-// app.use(databaseProtection)
-// app.use(progressiveSlowdown)
+app.use(antiBotProtection)
+app.use(databaseProtection)
+app.use(progressiveSlowdown)
 
 // Serve static files from uploads directory with enhanced security
 app.use(
