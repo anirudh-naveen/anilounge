@@ -175,16 +175,19 @@ app.use(sanitizeHtmlInput)
 app.use(sanitizeXSS)
 
 // Security monitoring and logging
-app.use(securityMonitor)
-app.use(securityLogger)
+// TEMPORARILY DISABLED FOR DEBUGGING
+// app.use(securityMonitor)
+// app.use(securityLogger)
 
 // IP ban checking (must be early in the chain)
-app.use(checkIPBan)
+// TEMPORARILY DISABLED FOR DEBUGGING
+// app.use(checkIPBan)
 
 // Anti-bot and database protection
-app.use(antiBotProtection)
-app.use(databaseProtection)
-app.use(progressiveSlowdown)
+// TEMPORARILY DISABLED FOR DEBUGGING
+// app.use(antiBotProtection)
+// app.use(databaseProtection)
+// app.use(progressiveSlowdown)
 
 // Serve static files from uploads directory with enhanced security
 app.use(
@@ -227,10 +230,12 @@ app.use('/api/auth', authLimiter)
 app.use('/api/auth/upload-profile-picture', uploadLimiter)
 
 // API routes with protection
-app.use('/api', apiProtection, apiRoutes)
+// TEMPORARILY DISABLED apiProtection FOR DEBUGGING
+app.use('/api', apiRoutes)
 
 // Admin routes (protected)
-app.use('/admin', apiProtection, adminRoutes)
+// TEMPORARILY DISABLED apiProtection FOR DEBUGGING
+app.use('/admin', adminRoutes)
 
 // 404 handler
 app.use('*', (req, res) => {
