@@ -1,7 +1,7 @@
 declare module 'vue-cropperjs' {
   import { DefineComponent } from 'vue'
 
-  interface CropperOptions {
+  export interface CropperOptions {
     aspectRatio?: number
     viewMode?: number
     dragMode?: string
@@ -27,7 +27,7 @@ declare module 'vue-cropperjs' {
     minCropBoxHeight?: number
   }
 
-  interface CropperInstance {
+  export interface CropperInstance {
     getCroppedCanvas(options?: {
       width?: number
       height?: number

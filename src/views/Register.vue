@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="register-page">
     <div class="container">
@@ -123,7 +124,7 @@ const handleRegister = async () => {
     await authStore.register(form.value)
     toast.success('Account created successfully!')
     router.push('/')
-  } catch (error) {
+  } catch {
     toast.error('Registration failed. Please try again.')
   }
 }

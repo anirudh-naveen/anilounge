@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs'
 import path from 'path'
 import fs from 'fs'
 import { logLoginAttempt, logAccountLockout, logFileUpload } from '../middleware/securityLogger.js'
-import { banIPForBruteForce, progressiveBan } from '../middleware/ipBan.js'
+import { banIPForBruteForce } from '../middleware/ipBan.js'
 
 export const register = async (req, res) => {
   try {

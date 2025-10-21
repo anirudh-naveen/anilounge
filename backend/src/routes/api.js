@@ -5,7 +5,7 @@ import * as authController from '../controllers/authController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, { refreshAccessToken, revokeRefreshToken } from '../middleware/auth.js'
 import upload, { handleUploadError } from '../middleware/upload.js'
-import { bruteForceProtection, apiProtection } from '../middleware/antiBot.js'
+import { bruteForceProtection } from '../middleware/antiBot.js'
 
 const router = express.Router()
 
