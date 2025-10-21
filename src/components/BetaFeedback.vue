@@ -7,7 +7,7 @@
       <div v-if="showModal" class="modal-overlay" @click="closeModal">
         <div class="modal-content" @click.stop>
           <div class="modal-header">
-            <h2>📢 Beta Feedback</h2>
+            <h2>Beta Feedback</h2>
             <button @click="closeModal" class="close-btn">&times;</button>
           </div>
 
@@ -15,10 +15,10 @@
             <div class="form-group">
               <label for="feedbackType">Feedback Type</label>
               <select id="feedbackType" v-model="form.type" required class="form-control">
-                <option value="bug">🐛 Bug Report</option>
-                <option value="feature">💡 Feature Request</option>
-                <option value="improvement">✨ Improvement</option>
-                <option value="other">💬 Other</option>
+                <option value="bug">Bug Report</option>
+                <option value="feature">Feature Request</option>
+                <option value="improvement">Improvement</option>
+                <option value="other">Other</option>
               </select>
             </div>
 
@@ -97,9 +97,8 @@ const submitFeedback = async () => {
       message: '',
       email: '',
     }
-
     closeModal()
-  } catch (error) {
+  } catch {
     toast.error('Failed to send feedback. Please try again.')
   } finally {
     isSubmitting.value = false
