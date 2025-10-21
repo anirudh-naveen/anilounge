@@ -35,11 +35,11 @@ export const getContent = async (req, res) => {
             $add: [
               { $ifNull: ['$unifiedScore', 0] },
               // Add significant boost to TMDB content for better visibility (user cannot see this)
-              { $cond: [{ $and: [{ $ne: ['$tmdbId', null] }, { $ne: ['$tmdbId', ''] }] }, 1.0, 0] },
+              { $cond: [{ $ne: ['$tmdbId', null] }, 1.0, 0] },
               // Add popularity boost for TMDB content
               {
                 $cond: [
-                  { $and: [{ $ne: ['$tmdbId', null] }, { $ne: ['$tmdbId', ''] }] },
+                  { $ne: ['$tmdbId', null] },
                   { $multiply: [{ $ifNull: ['$popularity', 0] }, 0.05] },
                   0,
                 ],
@@ -256,11 +256,11 @@ export const getPopularContent = async (req, res) => {
             $add: [
               { $ifNull: ['$unifiedScore', 0] },
               // Add significant boost to TMDB content for better visibility (user cannot see this)
-              { $cond: [{ $and: [{ $ne: ['$tmdbId', null] }, { $ne: ['$tmdbId', ''] }] }, 1.0, 0] },
+              { $cond: [{ $ne: ['$tmdbId', null] }, 1.0, 0] },
               // Add popularity boost for TMDB content
               {
                 $cond: [
-                  { $and: [{ $ne: ['$tmdbId', null] }, { $ne: ['$tmdbId', ''] }] },
+                  { $ne: ['$tmdbId', null] },
                   { $multiply: [{ $ifNull: ['$popularity', 0] }, 0.05] },
                   0,
                 ],

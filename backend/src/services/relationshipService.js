@@ -147,11 +147,10 @@ class RelationshipService {
    */
   async findRelatedContent(contentId) {
     try {
-      // Check cache first
-      const cacheKey = `related-${contentId}`
+      // Check cache first with optimized key
+      const cacheKey = `rel_${contentId}`
       const cached = this.cache.get(cacheKey)
       if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-        console.log(`Cache hit for content ${contentId}`)
         return cached.data
       }
 

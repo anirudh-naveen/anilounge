@@ -148,10 +148,22 @@ export const useContentStore = defineStore('content', () => {
             ...data,
           ]
         } else {
-          // For 'all', set allContent and filter from it
+          // For 'all', set allContent and filter from it efficiently
           allContent.value = data
-          movies.value = data.filter((item: UnifiedContent) => item.contentType === 'movie')
-          tvShows.value = data.filter((item: UnifiedContent) => item.contentType === 'tv')
+          const movieList: UnifiedContent[] = []
+          const tvList: UnifiedContent[] = []
+          
+          // Single pass filtering for better performance
+          data.forEach((item: UnifiedContent) => {
+            if (item.contentType === 'movie') {
+              movieList.push(item)
+            } else if (item.contentType === 'tv') {
+              tvList.push(item)
+            }
+          })
+          
+          movies.value = movieList
+          tvShows.value = tvList
         }
       }
 

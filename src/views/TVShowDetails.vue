@@ -458,24 +458,16 @@ const fetchRelatedContent = async (contentId: string) => {
   try {
     relatedContentLoading.value = true
 
-    // Add timeout to prevent hanging (reduced from 5s to 2s)
-    const timeoutPromise = new Promise((_, reject) =>
+    // Optimized timeout and request handling
+    const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Related content request timeout')), 2000),
     )
 
-    const response = (await Promise.race([
-      contentAPI.getRelatedContent(contentId),
-      timeoutPromise,
-    ])) as {
-      data: {
-        data: { sequels: UnifiedContent[]; prequels: UnifiedContent[]; related: UnifiedContent[] }
-      }
-    }
+    const response = await Promise.race([contentAPI.getRelatedContent(contentId), timeoutPromise])
 
-    relatedContent.value = response.data.data
+    relatedContent.value = (response as any).data.data
   } catch (err) {
     console.error('Failed to fetch related content:', err)
-    // Set empty result on error so UI doesn't show loading forever
     relatedContent.value = { sequels: [], prequels: [], related: [] }
   } finally {
     relatedContentLoading.value = false
