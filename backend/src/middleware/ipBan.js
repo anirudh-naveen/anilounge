@@ -12,6 +12,11 @@ const BAN_DURATIONS = {
 // Check if IP is banned
 export const checkIPBan = async (req, res, next) => {
   try {
+    // Temporarily disable IP ban checking for production to fix Vercel deployment
+    if (process.env.NODE_ENV === 'production') {
+      return next()
+    }
+
     const ip = req.ip
 
     // Skip IP ban check for localhost/development
