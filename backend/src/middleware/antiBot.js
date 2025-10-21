@@ -183,7 +183,7 @@ export const apiProtection = (req, res, next) => {
   if (process.env.NODE_ENV === 'production') {
     return next()
   }
-  
+
   // Skip API protection for localhost/development
   if (
     req.hostname === 'localhost' ||
