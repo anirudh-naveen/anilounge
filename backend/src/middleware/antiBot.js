@@ -179,11 +179,6 @@ export const databaseProtection = (req, res, next) => {
 
 // API endpoint protection
 export const apiProtection = (req, res, next) => {
-  // Temporarily disable API protection for production to fix Vercel deployment
-  if (process.env.NODE_ENV === 'production') {
-    return next()
-  }
-
   // Skip API protection for localhost/development
   if (
     req.hostname === 'localhost' ||
@@ -213,7 +208,9 @@ export const apiProtection = (req, res, next) => {
     process.env.NODE_ENV === 'production' &&
     !referer.startsWith(process.env.FRONTEND_URL || 'http://localhost:5174') &&
     !referer.includes('vercel.app') &&
-    !referer.includes('netlify.app')
+    !referer.includes('netlify.app') &&
+    !referer.includes('github.io') &&
+    !referer.includes('herokuapp.com')
   ) {
     return res.status(403).json({
       success: false,
