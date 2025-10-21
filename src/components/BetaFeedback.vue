@@ -1,9 +1,7 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="beta-feedback">
-    <button @click="showModal = true" class="feedback-trigger" title="Send Feedback">
-      💬
-    </button>
+    <button @click="showModal = true" class="feedback-trigger" title="Send Feedback">💬</button>
 
     <transition name="modal">
       <div v-if="showModal" class="modal-overlay" @click="closeModal">
@@ -80,8 +78,8 @@ const submitFeedback = async () => {
     isSubmitting.value = true
 
     // Send feedback to backend
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 
-      (import.meta.env.DEV ? 'http://localhost:5001/api' : '/api')
+    const API_BASE_URL =
+      import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5001/api' : '/api')
 
     await fetch(`${API_BASE_URL}/feedback`, {
       method: 'POST',
@@ -92,14 +90,14 @@ const submitFeedback = async () => {
     })
 
     toast.success('Thank you for your feedback! 🙏')
-    
+
     // Reset form
     form.value = {
       type: 'bug',
       message: '',
       email: '',
     }
-    
+
     closeModal()
   } catch (error) {
     toast.error('Failed to send feedback. Please try again.')
@@ -275,4 +273,3 @@ textarea.form-control {
   }
 }
 </style>
-
