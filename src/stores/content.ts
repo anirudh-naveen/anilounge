@@ -188,6 +188,11 @@ export const useContentStore = defineStore('content', () => {
       isLoading.value = true
       error.value = null
 
+      // Ensure we have content loaded - if not, load more content
+      if (allContent.value.length < 100) {
+        await getPopularContent('all', 500) // Load up to 500 items for comprehensive search
+      }
+
       // Search through local database instead of API call
       let filteredResults = allContent.value
 
@@ -196,36 +201,43 @@ export const useContentStore = defineStore('content', () => {
         filteredResults = filteredResults.filter((item) => item.contentType === contentType)
       }
 
-      // Search by title, original title, and genres
+      // Search by title, original title, and genres (if query is provided)
       const searchTerm = query.toLowerCase().trim()
-      filteredResults = filteredResults.filter((item) => {
-        const title = item.title?.toLowerCase() || ''
-        const originalTitle = item.originalTitle?.toLowerCase() || ''
-        const genres = (item.genres || [])
-          .map((g) => (typeof g === 'string' ? g : g.name || ''))
-          .join(' ')
-          .toLowerCase()
-        const overview = item.overview?.toLowerCase() || ''
+      if (searchTerm) {
+        filteredResults = filteredResults.filter((item) => {
+          const title = item.title?.toLowerCase() || ''
+          const originalTitle = item.originalTitle?.toLowerCase() || ''
+          const genres = (item.genres || [])
+            .map((g) => (typeof g === 'string' ? g : g.name || ''))
+            .join(' ')
+            .toLowerCase()
+          const overview = item.overview?.toLowerCase() || ''
 
-        return (
-          title.includes(searchTerm) ||
-          originalTitle.includes(searchTerm) ||
-          genres.includes(searchTerm) ||
-          overview.includes(searchTerm)
-        )
-      })
+          return (
+            title.includes(searchTerm) ||
+            originalTitle.includes(searchTerm) ||
+            genres.includes(searchTerm) ||
+            overview.includes(searchTerm)
+          )
+        })
+      }
 
       // Sort by relevance (title matches first, then genre matches)
-      filteredResults.sort((a, b) => {
-        const aTitle = (a.title?.toLowerCase() || '').includes(searchTerm)
-        const bTitle = (b.title?.toLowerCase() || '').includes(searchTerm)
+      if (searchTerm) {
+        filteredResults.sort((a, b) => {
+          const aTitle = (a.title?.toLowerCase() || '').includes(searchTerm)
+          const bTitle = (b.title?.toLowerCase() || '').includes(searchTerm)
 
-        if (aTitle && !bTitle) return -1
-        if (!aTitle && bTitle) return 1
+          if (aTitle && !bTitle) return -1
+          if (!aTitle && bTitle) return 1
 
-        // If both or neither match title, sort by unified score
-        return (b.unifiedScore || 0) - (a.unifiedScore || 0)
-      })
+          // If both or neither match title, sort by unified score
+          return (b.unifiedScore || 0) - (a.unifiedScore || 0)
+        })
+      } else {
+        // If no search term, just sort by unified score
+        filteredResults.sort((a, b) => (b.unifiedScore || 0) - (a.unifiedScore || 0))
+      }
 
       // Implement pagination
       const startIndex = (page - 1) * limit

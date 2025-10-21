@@ -603,7 +603,7 @@ onMounted(async () => {
       }
 
       hasSearched.value = true
-      await contentStore.searchContent('animated', 'all', 1, 50)
+      await contentStore.searchContent('', 'all', 1, 50) // Show all content initially instead of searching for "animated"
     } catch (error) {
       console.error('Failed to load initial content:', error)
     }
