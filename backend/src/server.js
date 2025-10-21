@@ -138,12 +138,12 @@ app.use(
 
       // Allow requests with no origin (mobile apps, Postman, etc.) or file:// origin
       if (!origin || origin.startsWith('file://')) return callback(null, true)
-      
+
       // Temporary: Allow all origins for testing (remove after deployment)
       if (process.env.NODE_ENV === 'production') return callback(null, true)
 
       // Check if origin matches any allowed origin (including regex patterns)
-      const isAllowed = allowedOrigins.some(allowedOrigin => {
+      const isAllowed = allowedOrigins.some((allowedOrigin) => {
         if (typeof allowedOrigin === 'string') {
           return allowedOrigin === origin
         } else if (allowedOrigin instanceof RegExp) {
