@@ -277,12 +277,8 @@ export const useContentStore = defineStore('content', () => {
           if (!aOtherTitles && bOtherTitles) return 1
 
           // Priority 5: Genre exact match
-          const aGenreMatch = aGenres
-            .split(' ')
-            .some((genre) => genre.toLowerCase() === searchTerm)
-          const bGenreMatch = bGenres
-            .split(' ')
-            .some((genre) => genre.toLowerCase() === searchTerm)
+          const aGenreMatch = aGenres.split(' ').some((genre) => genre.toLowerCase() === searchTerm)
+          const bGenreMatch = bGenres.split(' ').some((genre) => genre.toLowerCase() === searchTerm)
           if (aGenreMatch && !bGenreMatch) return -1
           if (!aGenreMatch && bGenreMatch) return 1
 
