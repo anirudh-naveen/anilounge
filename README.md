@@ -51,4 +51,5 @@ Settings
 
 
 Author: Anirudh Naveen
+
 Note: This is a beta release. Some features may be under active development.
