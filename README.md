@@ -6,6 +6,7 @@ Beta Release: https://find-animation-git-main-anirudh-naveens-projects.vercel.ap
 For recruiters and viewers who want to explore the application:
  - Email: demo@findanimation.com
  - Password: DemoPassword123!
+Please do not change this password!
 
 Features --
  - Search & Filter: Browse through an extensive collection of animated content
