@@ -7,6 +7,7 @@ Additions and Major Changes -
 
 Bug Fixes -
 
+0. Fix IP security protocol.
 1. Fix the genres displaying triple the times in certain Tmdb content.
 2. Fix the loading time when clicking on relationship content.
 3. Fix the vote count and update the vote count/vote average on user watchlist input.
