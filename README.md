@@ -3,7 +3,7 @@ A full-stack web application for discovering, filtering, rating, and tracking an
 
 Beta Release: https://find-animation.vercel.app
 
-For recruiters and viewers who want to explore the application:
+For recruiters who want to explore the application:
  - Email: demo@findanimation.com
  - Password: DemoPassword123!
    
