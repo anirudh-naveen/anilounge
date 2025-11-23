@@ -21,7 +21,7 @@ dotenv.config()
 
 // Validate required environment variables (only in production)
 if (process.env.NODE_ENV === 'production') {
-  const requiredEnvVars = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'MONGODB_URI']
+  const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI']
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
 
   if (missingVars.length > 0) {
@@ -31,7 +31,7 @@ if (process.env.NODE_ENV === 'production') {
   }
 } else {
   // In development, warn but don't exit
-  const requiredEnvVars = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'MONGODB_URI']
+  const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI']
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
   if (missingVars.length > 0) {
     console.warn('⚠️  Missing environment variables (development mode):', missingVars.join(', '))
@@ -345,20 +345,22 @@ app.use((err, req, res, next) => {
 })
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Find Animation API server running on port ${PORT}`)
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`)
-}).on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use.`)
-    console.error(`   Try: lsof -ti:${PORT} | xargs kill -9`)
-    console.error(`   Or change the PORT in your .env file`)
-    process.exit(1)
-  } else {
-    console.error('❌ Server error:', err)
-    process.exit(1)
-  }
-})
+app
+  .listen(PORT, () => {
+    console.log(`🚀 Find Animation API server running on port ${PORT}`)
+    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
+    console.log(`🔗 Health check: http://localhost:${PORT}/health`)
+  })
+  .on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use.`)
+      console.error(`   Try: lsof -ti:${PORT} | xargs kill -9`)
+      console.error(`   Or change the PORT in your .env file`)
+      process.exit(1)
+    } else {
+      console.error('❌ Server error:', err)
+      process.exit(1)
+    }
+  })
 
 export default app
