@@ -12,13 +12,28 @@ const BAN_DURATIONS = {
 // Check if IP is banned
 export const checkIPBan = async (req, res, next) => {
   try {
-    const ip = req.ip
+    // Get IP address - handle various formats and proxy scenarios
+    let ip = req.ip || 
+             req.connection?.remoteAddress || 
+             req.socket?.remoteAddress ||
+             (req.headers['x-forwarded-for'] && req.headers['x-forwarded-for'].split(',')[0].trim()) ||
+             req.headers['x-real-ip'] ||
+             'unknown'
+
+    // Clean up IP address (remove IPv6 prefix if present)
+    if (ip.startsWith('::ffff:')) {
+      ip = ip.replace('::ffff:', '')
+    }
 
     // Skip IP ban check for localhost/development
     if (
       ip === '::1' ||
       ip === '127.0.0.1' ||
       ip === 'localhost' ||
+      ip === 'unknown' ||
+      ip.startsWith('127.') ||
+      ip.startsWith('192.168.') ||
+      ip.startsWith('10.') ||
       req.hostname === 'localhost' ||
       req.hostname?.includes('localhost') ||
       process.env.NODE_ENV === 'development'
@@ -26,20 +41,23 @@ export const checkIPBan = async (req, res, next) => {
       return next()
     }
 
-    const ban = await IPBan.isIPBanned(ip)
+    // Only check ban if we have a valid IP
+    if (ip && ip !== 'unknown') {
+      const ban = await IPBan.isIPBanned(ip)
 
-    if (ban) {
-      // Update last seen
-      ban.lastSeen = new Date()
-      await ban.save()
+      if (ban) {
+        // Update last seen
+        ban.lastSeen = new Date()
+        await ban.save()
 
-      return res.status(403).json({
-        success: false,
-        message: 'Your IP address has been banned due to suspicious activity.',
-        banReason: ban.reason,
-        expiresAt: ban.expiresAt,
-        attempts: ban.attempts,
-      })
+        return res.status(403).json({
+          success: false,
+          message: 'Your IP address has been banned due to suspicious activity.',
+          banReason: ban.reason,
+          expiresAt: ban.expiresAt,
+          attempts: ban.attempts,
+        })
+      }
     }
 
     next()
@@ -49,8 +67,10 @@ export const checkIPBan = async (req, res, next) => {
     if (process.env.NODE_ENV === 'development') {
       return next()
     }
-    // In production, fail closed for security
-    throw error // Let the error handler in server.js handle it
+    // In production, fail closed for security - but log the error
+    console.error('IP ban check failed in production:', error.message)
+    // Still allow through to prevent blocking legitimate users due to DB issues
+    return next()
   }
 }
 

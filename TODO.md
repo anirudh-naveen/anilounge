@@ -2,8 +2,9 @@ Additions and Major Changes -
 
 1. Refine the search feature.
 2. Rework Gemini chatbot functionality.
-3. Add review system and discussion features for users.
-4. Curate my own database of content.
+3. Have an automatically updating database.
+4. Add review system and discussion features for users.
+5. Curate my own database of content.
 
 Bug Fixes -
 

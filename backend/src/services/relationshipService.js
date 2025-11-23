@@ -419,7 +419,7 @@ class RelationshipService {
 
     if (!baseTitle) return related
 
-    // Find content with similar base titles
+    // Find content with similar base titles - use lean() for faster queries
     const similarContent = await Content.find({
       _id: { $ne: content._id },
       contentType: content.contentType,
@@ -427,7 +427,9 @@ class RelationshipService {
         { title: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
         { originalTitle: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
       ],
-    }).limit(10)
+    })
+      .lean() // Use lean() for faster queries
+      .limit(10)
 
     return similarContent
   }
@@ -440,33 +442,30 @@ class RelationshipService {
 
     for (const [, franchiseData] of Object.entries(this.franchiseMap)) {
       if (this.isInFranchise(content.title, franchiseData.titles)) {
-        // Search by titles
-        const titleMatches = await Content.find({
+        // Optimize: Combine all searches into a single query using $or
+        const allMatches = await Content.find({
           _id: { $ne: content._id },
           contentType: content.contentType,
-          $or: franchiseData.titles.map((title) => ({
-            $or: [
-              { title: { $regex: this.escapeRegex(title), $options: 'i' } },
-              { originalTitle: { $regex: this.escapeRegex(title), $options: 'i' } },
-            ],
-          })),
-        }).limit(10)
+          $or: [
+            // Search by titles
+            ...franchiseData.titles.map((title) => ({
+              $or: [
+                { title: { $regex: this.escapeRegex(title), $options: 'i' } },
+                { originalTitle: { $regex: this.escapeRegex(title), $options: 'i' } },
+              ],
+            })),
+            // Search by TMDB IDs (only if there are any)
+            ...(franchiseData.tmdbIds.length > 0
+              ? [{ tmdbId: { $in: franchiseData.tmdbIds } }]
+              : []),
+            // Search by MAL IDs (only if there are any)
+            ...(franchiseData.malIds.length > 0 ? [{ malId: { $in: franchiseData.malIds } }] : []),
+          ],
+        })
+          .lean() // Use lean() for faster queries
+          .limit(20) // Increased limit since we're combining queries
 
-        // Search by TMDB IDs
-        const tmdbMatches = await Content.find({
-          _id: { $ne: content._id },
-          contentType: content.contentType,
-          tmdbId: { $in: franchiseData.tmdbIds },
-        }).limit(10)
-
-        // Search by MAL IDs
-        const malMatches = await Content.find({
-          _id: { $ne: content._id },
-          contentType: content.contentType,
-          malId: { $in: franchiseData.malIds },
-        }).limit(10)
-
-        related.push(...titleMatches, ...tmdbMatches, ...malMatches)
+        related.push(...allMatches)
       }
     }
 

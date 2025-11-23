@@ -144,6 +144,11 @@ ContentSchema.index({ contentType: 1, unifiedScore: -1 })
 ContentSchema.index({ unifiedScore: -1, popularity: -1 })
 ContentSchema.index({ genres: 1, contentType: 1 })
 ContentSchema.index({ title: 'text', overview: 'text' })
+// Indexes for relationship queries
+ContentSchema.index({ contentType: 1, tmdbId: 1 })
+ContentSchema.index({ contentType: 1, malId: 1 })
+ContentSchema.index({ contentType: 1, title: 1 })
+ContentSchema.index({ contentType: 1, originalTitle: 1 })
 
 // Virtual for display title
 ContentSchema.virtual('displayTitle').get(function () {

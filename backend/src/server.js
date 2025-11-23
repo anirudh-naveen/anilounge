@@ -347,8 +347,18 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Find Animation API server running on port ${PORT}`)
-  console.log(`📊 Environment: ${process.env.NODE_ENV}`)
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
   console.log(`🔗 Health check: http://localhost:${PORT}/health`)
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use.`)
+    console.error(`   Try: lsof -ti:${PORT} | xargs kill -9`)
+    console.error(`   Or change the PORT in your .env file`)
+    process.exit(1)
+  } else {
+    console.error('❌ Server error:', err)
+    process.exit(1)
+  }
 })
 
 export default app

@@ -266,6 +266,11 @@ class DatabasePopulator {
           }
         }
 
+        // Deduplicate genres before saving new content
+        if (contentData.genres) {
+          contentData.genres = this.deduplicateGenres(contentData.genres)
+        }
+
         const newContent = new Content(contentData)
         await newContent.save()
         this.stats.added++
@@ -414,6 +419,10 @@ class DatabasePopulator {
       if (existingContent) {
         // Update existing content
         Object.assign(existingContent, contentData)
+        // Deduplicate genres when updating
+        if (existingContent.genres) {
+          existingContent.genres = this.deduplicateGenres(existingContent.genres)
+        }
         existingContent.lastUpdated = new Date()
         await existingContent.save()
         this.stats.updated++
@@ -460,6 +469,11 @@ class DatabasePopulator {
             }
           }
 
+          // Deduplicate genres before saving new content
+          if (contentWithRelationships.genres) {
+            contentWithRelationships.genres = this.deduplicateGenres(contentWithRelationships.genres)
+          }
+
           const newContent = new Content(contentWithRelationships)
           await newContent.save()
           this.stats.added++
@@ -473,6 +487,32 @@ class DatabasePopulator {
   }
 
   // Enhanced merge method for TMDB data
+  // Helper function to deduplicate genres by id or name
+  deduplicateGenres(genres) {
+    if (!genres || !Array.isArray(genres)) return []
+    
+    const genreMap = new Map()
+    
+    genres.forEach((genre) => {
+      if (!genre) return
+      
+      // Handle both object format {id, name} and string format
+      const genreId = typeof genre === 'object' ? genre.id : null
+      const genreName = typeof genre === 'object' ? genre.name : genre
+      
+      if (!genreName) return
+      
+      // Use id as primary key if available, otherwise use name
+      const key = genreId ? `id:${genreId}` : `name:${genreName.toLowerCase()}`
+      
+      if (!genreMap.has(key)) {
+        genreMap.set(key, typeof genre === 'object' ? genre : { name: genre })
+      }
+    })
+    
+    return Array.from(genreMap.values())
+  }
+
   async mergeTmdbIntoExisting(existingContent, tmdbData, detailedTmdbData) {
     // Merge TMDB-specific fields
     existingContent.tmdbId = tmdbData.tmdbId
@@ -490,9 +530,11 @@ class DatabasePopulator {
         ...(tmdbData.alternativeTitles || []),
       ]),
     ]
-    existingContent.genres = [
-      ...new Set([...(existingContent.genres || []), ...(tmdbData.genres || [])]),
-    ]
+    // Properly deduplicate genres by id or name
+    existingContent.genres = this.deduplicateGenres([
+      ...(existingContent.genres || []),
+      ...(tmdbData.genres || []),
+    ])
 
     // Calculate unified score with weighted calculation
     if (existingContent.malScore && tmdbData.voteAverage) {
@@ -571,9 +613,11 @@ class DatabasePopulator {
         ...(malData.alternativeTitles || []),
       ]),
     ]
-    existingContent.genres = [
-      ...new Set([...(existingContent.genres || []), ...(malData.genres || [])]),
-    ]
+    // Properly deduplicate genres by id or name
+    existingContent.genres = this.deduplicateGenres([
+      ...(existingContent.genres || []),
+      ...(malData.genres || []),
+    ])
 
     // Calculate unified score with MAL priority
     if (existingContent.voteAverage && malData.malScore) {

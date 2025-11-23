@@ -109,9 +109,18 @@
         </div>
       </div>
 
+      <!-- Related Content Loading State -->
+      <div v-if="relatedContentLoading" class="related-content-loading">
+        <h3>Loading Related Content...</h3>
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <p>Finding sequels, prequels, and related content...</p>
+        </div>
+      </div>
+
       <!-- Related Content Section -->
       <div
-        v-if="
+        v-else-if="
           relatedContent &&
           (relatedContent.sequels.length > 0 ||
             relatedContent.prequels.length > 0 ||
@@ -261,6 +270,7 @@ const relatedContent = ref<{
   prequels: UnifiedContent[]
   related: UnifiedContent[]
 } | null>(null)
+const relatedContentLoading = ref(false)
 
 const isInWatchlist = computed(() => {
   if (!movie.value || !authStore.user?.watchlist) return false
@@ -283,21 +293,21 @@ onMounted(async () => {
     const existingMovie = contentStore.movies.find((m) => m._id === movieId)
     if (existingMovie) {
       movie.value = existingMovie
-      // Fetch related content
-      await fetchRelatedContent(movieId)
       loading.value = false
+      // Fetch related content in parallel (don't await)
+      fetchRelatedContent(movieId)
       return
     }
 
     // If not in store, fetch from API
     const response = await contentAPI.getContentById(movieId)
     movie.value = response.data.data
+    loading.value = false
 
-    // Fetch related content
-    await fetchRelatedContent(movieId)
+    // Fetch related content in parallel (don't await)
+    fetchRelatedContent(movieId)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load movie'
-  } finally {
     loading.value = false
   }
 })
@@ -412,12 +422,27 @@ const formatDate = (date: string | Date) => {
 }
 
 const fetchRelatedContent = async (contentId: string) => {
+  relatedContentLoading.value = true
   try {
-    const response = await contentAPI.getRelatedContent(contentId)
-    relatedContent.value = response.data.data
+    // Optimized timeout and request handling
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Related content request timeout')), 2000),
+    )
+
+    const response = await Promise.race([contentAPI.getRelatedContent(contentId), timeoutPromise])
+
+    relatedContent.value = (
+      response as {
+        data: {
+          data: { sequels: UnifiedContent[]; prequels: UnifiedContent[]; related: UnifiedContent[] }
+        }
+      }
+    ).data.data
   } catch (err) {
     console.error('Failed to fetch related content:', err)
-    // Don't show error to user, just log it
+    relatedContent.value = { sequels: [], prequels: [], related: [] }
+  } finally {
+    relatedContentLoading.value = false
   }
 }
 
@@ -745,6 +770,51 @@ const handleImageError = (event: Event) => {
 
   .movie-actions {
     flex-direction: column;
+  }
+}
+
+/* Related Content Loading Styles */
+.related-content-loading {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.related-content-loading h3 {
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.loading-spinner .spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--border-color);
+  border-top: 4px solid var(--highlight-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner p {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
   }
 }
 
