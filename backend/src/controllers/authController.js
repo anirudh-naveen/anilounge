@@ -262,10 +262,13 @@ export const changePassword = async (req, res) => {
       })
     }
 
-    if (newPassword.length < 6) {
+    // Use same validation as registration
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/
+    if (!passwordRegex.test(newPassword) || newPassword.length < 8) {
       return res.status(400).json({
         success: false,
-        message: 'New password must be at least 6 characters long.',
+        message:
+          'Password must be at least 8 characters and contain uppercase, lowercase, number, and special character.',
       })
     }
 

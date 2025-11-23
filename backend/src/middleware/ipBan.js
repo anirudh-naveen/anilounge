@@ -45,7 +45,12 @@ export const checkIPBan = async (req, res, next) => {
     next()
   } catch (error) {
     console.error('Error checking IP ban:', error)
-    next() // Continue if there's an error
+    // In development, allow requests through even if check fails
+    if (process.env.NODE_ENV === 'development') {
+      return next()
+    }
+    // In production, fail closed for security
+    throw error // Let the error handler in server.js handle it
   }
 }
 

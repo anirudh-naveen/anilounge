@@ -13,3 +13,4 @@ Bug Fixes -
 3. Fix the vote count and update the vote count/vote average on user watchlist input.
 4. Fix the duplication of content (is it Tmdb?)
 5. Fix the accidental deletion of content (in merge or original filtering?)
+6. Fix duplication email login

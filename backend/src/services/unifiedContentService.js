@@ -15,6 +15,10 @@ class UnifiedContentService {
     this.tmdbBaseURL = 'https://api.themoviedb.org/3'
     this.malBaseURL = 'https://api.myanimelist.net/v2'
 
+    // Configurable delays for rate limiting
+    this.tmdbDelay = parseInt(process.env.TMDB_DELAY_MS) || 200
+    this.malDelay = parseInt(process.env.MAL_DELAY_MS) || 300
+
     this.tmdbClient = axios.create({
       baseURL: this.tmdbBaseURL,
       timeout: 30000,
@@ -63,7 +67,7 @@ class UnifiedContentService {
     }
 
     try {
-      await this.delay(200)
+      await this.delay(this.tmdbDelay)
       const response = await this.tmdbClient.get('/discover/movie', {
         params: {
           api_key: this.tmdbApiKey,
@@ -88,7 +92,7 @@ class UnifiedContentService {
     }
 
     try {
-      await this.delay(200)
+      await this.delay(this.tmdbDelay)
       const response = await this.tmdbClient.get('/discover/tv', {
         params: {
           api_key: this.tmdbApiKey,
@@ -110,7 +114,7 @@ class UnifiedContentService {
     if (!this.hasTmdbKey) return null
 
     try {
-      await this.delay(200)
+      await this.delay(this.tmdbDelay)
       const endpoint = contentType === 'movie' ? '/movie' : '/tv'
       const response = await this.tmdbClient.get(`${endpoint}/${tmdbId}`, {
         params: {
@@ -133,7 +137,7 @@ class UnifiedContentService {
     }
 
     try {
-      await this.delay(300)
+      await this.delay(this.malDelay)
       const response = await this.malClient.get('/anime/ranking', {
         params: {
           ranking_type: 'all',
@@ -177,7 +181,7 @@ class UnifiedContentService {
     }
 
     try {
-      await this.delay(300)
+      await this.delay(this.malDelay)
       const response = await this.malClient.get('/anime/ranking', {
         params: {
           ranking_type: 'all',
@@ -199,7 +203,7 @@ class UnifiedContentService {
     if (!this.hasMalKey) return null
 
     try {
-      await this.delay(300)
+      await this.delay(this.malDelay)
       const response = await this.malClient.get(`/anime/${malId}`, {
         params: {
           fields:
@@ -218,7 +222,7 @@ class UnifiedContentService {
     if (!this.hasMalKey) return []
 
     try {
-      await this.delay(300)
+      await this.delay(this.malDelay)
       const response = await this.malClient.get('/anime', {
         params: {
           q: query,
@@ -578,7 +582,7 @@ class UnifiedContentService {
 
     try {
       if (contentType === 'all' || contentType === 'movie') {
-        await this.delay(200)
+        await this.delay(this.tmdbDelay)
         const movieResponse = await this.tmdbClient.get('/search/movie', {
           params: {
             api_key: this.tmdbApiKey,
@@ -597,7 +601,7 @@ class UnifiedContentService {
       }
 
       if (contentType === 'all' || contentType === 'tv') {
-        await this.delay(200)
+        await this.delay(this.tmdbDelay)
         const tvResponse = await this.tmdbClient.get('/search/tv', {
           params: {
             api_key: this.tmdbApiKey,

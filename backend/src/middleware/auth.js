@@ -16,6 +16,12 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     // Verify the token
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error',
+      })
+    }
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
 
     // Find user by ID from token
@@ -92,15 +98,20 @@ export const refreshAccessToken = async (req, res) => {
       })
     }
 
-    // Generate new access token
+    // Revoke old token
+    tokenDoc.isRevoked = true
+    await tokenDoc.save()
+
+    // Generate new tokens
     const newAccessToken = generateAccessToken(tokenDoc.userId._id)
+    const newRefreshToken = await generateRefreshToken(tokenDoc.userId._id)
 
     res.json({
       success: true,
       message: 'Token refreshed successfully',
       data: {
         accessToken: newAccessToken,
-        refreshToken: refreshToken, // Keep the same refresh token
+        refreshToken: newRefreshToken.token, // New refresh token
       },
     })
   } catch (error) {

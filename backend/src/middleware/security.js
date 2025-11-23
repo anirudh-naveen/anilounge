@@ -56,9 +56,10 @@ export const sanitizeXSS = (req, res, next) => {
 
 // Validate MongoDB ObjectId
 export const validateObjectId = (req, res, next) => {
-  const { id } = req.params
+  const { id, contentId } = req.params
+  const idToCheck = id || contentId
 
-  if (id && !/^[0-9a-fA-F]{24}$/.test(id)) {
+  if (idToCheck && !/^[0-9a-fA-F]{24}$/.test(idToCheck)) {
     return res.status(400).json({
       success: false,
       message: 'Invalid ID format',

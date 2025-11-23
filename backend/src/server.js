@@ -19,8 +19,28 @@ import { checkIPBan } from './middleware/ipBan.js'
 // Load environment variables
 dotenv.config()
 
+// Validate required environment variables (only in production)
+if (process.env.NODE_ENV === 'production') {
+  const requiredEnvVars = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'MONGODB_URI']
+  const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
+
+  if (missingVars.length > 0) {
+    console.error('❌ Missing required environment variables:', missingVars.join(', '))
+    console.error('Please set these variables in your .env file or environment')
+    process.exit(1)
+  }
+} else {
+  // In development, warn but don't exit
+  const requiredEnvVars = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'MONGODB_URI']
+  const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
+  if (missingVars.length > 0) {
+    console.warn('⚠️  Missing environment variables (development mode):', missingVars.join(', '))
+    console.warn('Server will start but authentication features may not work')
+  }
+}
+
 const app = express()
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 5001
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -43,8 +63,15 @@ app.get('/api/status', (req, res) => {
   })
 })
 
-// Connect to MongoDB
-connectDB()
+// Connect to MongoDB (non-blocking - server will start even if DB connection fails in dev)
+connectDB().catch((error) => {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('❌ Failed to connect to database. Exiting...')
+    process.exit(1)
+  } else {
+    console.warn('⚠️  Database connection failed, but continuing in development mode')
+  }
+})
 
 // Trust proxy for accurate IP addresses (important for rate limiting)
 app.set('trust proxy', 1)
@@ -163,16 +190,52 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(sanitizeHtmlInput)
 app.use(sanitizeXSS)
 
-// Security monitoring and logging
-// ⚠️ DISABLED - CAUSES ERRORS IN PRODUCTION
-// TODO: Debug why these cause issues
-// app.use(securityMonitor)
-// app.use(securityLogger)
+// Security monitoring and logging with error handling
+app.use((req, res, next) => {
+  try {
+    if (securityMonitor) {
+      securityMonitor(req, res, next)
+    } else {
+      next()
+    }
+  } catch (error) {
+    console.error('Security monitor error:', error)
+    next() // Continue on error, but log it
+  }
+})
 
-// IP ban checking (must be early in the chain)
-// ⚠️ DISABLED - CAUSES ERRORS IN PRODUCTION
-// TODO: Debug why this causes issues
-// app.use(checkIPBan)
+app.use((req, res, next) => {
+  try {
+    if (securityLogger) {
+      securityLogger(req, res, next)
+    } else {
+      next()
+    }
+  } catch (error) {
+    console.error('Security logger error:', error)
+    next()
+  }
+})
+
+// IP ban checking (must be early in the chain) with error handling
+app.use(async (req, res, next) => {
+  try {
+    await checkIPBan(req, res, next)
+  } catch (error) {
+    console.error('IP ban check error:', error)
+    // In development, allow requests through
+    if (process.env.NODE_ENV === 'development') {
+      return next()
+    }
+    // In production, fail closed for security
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: 'Security check failed. Please try again later.',
+      })
+    }
+  }
+})
 
 // Anti-bot and database protection
 app.use(antiBotProtection)
@@ -234,7 +297,7 @@ app.use('*', (req, res) => {
 })
 
 // Global error handler
-app.use((err, req, res) => {
+app.use((err, req, res, next) => {
   console.error('Global error handler:', err)
 
   // Mongoose validation error
@@ -272,11 +335,13 @@ app.use((err, req, res) => {
   }
 
   // Default error
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  })
+  if (!res.headersSent) {
+    res.status(err.status || 500).json({
+      success: false,
+      message: err.message || 'Internal server error',
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    })
+  }
 })
 
 // Start server

@@ -23,7 +23,10 @@ const storage = multer.diskStorage({
     // Ensure extension is safe
     const safeExt = ext.match(/^\.(jpg|jpeg|png|gif|webp)$/) ? ext : '.jpg'
 
-    cb(null, `profile-${req.user._id}-${timestamp}-${randomBytes}${safeExt}`)
+    // Sanitize user ID (should already be ObjectId, but be safe)
+    const userId = String(req.user._id).replace(/[^a-f0-9]/gi, '')
+
+    cb(null, `profile-${userId}-${timestamp}-${randomBytes}${safeExt}`)
   },
 })
 

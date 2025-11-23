@@ -6,6 +6,7 @@ import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, { refreshAccessToken, revokeRefreshToken } from '../middleware/auth.js'
 import upload, { handleUploadError } from '../middleware/upload.js'
 import { bruteForceProtection } from '../middleware/antiBot.js'
+import { validateObjectId } from '../middleware/security.js'
 
 const router = express.Router()
 
@@ -52,10 +53,10 @@ router.get('/content', contentController.getContent)
 router.get('/popular', contentController.getPopularContent)
 router.get('/search', contentController.searchContent)
 router.get('/stats', contentController.getDatabaseStats)
-router.get('/content/:id', contentController.getContentById)
+router.get('/content/:id', validateObjectId, contentController.getContentById)
 router.get('/content/external/:id', contentController.getContentByExternalId)
-router.get('/content/:id/similar', contentController.getSimilarContent)
-router.get('/content/:contentId/related', contentController.getRelatedContent)
+router.get('/content/:id/similar', validateObjectId, contentController.getSimilarContent)
+router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
 router.get('/franchise/:franchiseName', contentController.getFranchiseContent)
 
 // AI search route
@@ -120,10 +121,11 @@ router.post(
 )
 
 router.get('/watchlist', contentController.getWatchlist)
-router.delete('/watchlist/:contentId', contentController.removeFromWatchlist)
+router.delete('/watchlist/:contentId', validateObjectId, contentController.removeFromWatchlist)
 router.put(
   '/watchlist/:contentId',
   [
+    validateObjectId,
     body('status').optional().isIn(['plan_to_watch', 'watching', 'completed', 'dropped']),
     body('rating').optional().isFloat({ min: 0, max: 10 }),
     body('currentEpisode').optional().isInt({ min: 0 }),

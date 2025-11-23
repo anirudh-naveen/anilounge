@@ -4,9 +4,11 @@ import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
 import relationshipService from '../services/relationshipService.js'
 import { validationResult } from 'express-validator'
+import mongoose from 'mongoose'
 
 // Get all content with pagination
 export const getContent = async (req, res) => {
+  const startTime = Date.now()
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 20
@@ -114,15 +116,24 @@ export const getContentByExternalId = async (req, res) => {
     const { id } = req.params
     const { source } = req.query
 
+    // Validate ID is a number
+    const parsedId = parseInt(id)
+    if (isNaN(parsedId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid ID format. ID must be a number.',
+      })
+    }
+
     let content
     if (source === 'tmdb') {
-      content = await Content.findOne({ tmdbId: parseInt(id) })
+      content = await Content.findOne({ tmdbId: parsedId })
     } else if (source === 'mal') {
-      content = await Content.findOne({ malId: parseInt(id) })
+      content = await Content.findOne({ malId: parsedId })
     } else {
       // Try both sources
       content = await Content.findOne({
-        $or: [{ tmdbId: parseInt(id) }, { malId: parseInt(id) }],
+        $or: [{ tmdbId: parsedId }, { malId: parsedId }],
       })
     }
 
@@ -173,15 +184,6 @@ export const searchContent = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit))
 
-    const total = await Content.countDocuments({
-      $or: [
-        { title: { $regex: query, $options: 'i' } },
-        { overview: { $regex: query, $options: 'i' } },
-        { alternativeTitles: { $regex: query, $options: 'i' } },
-      ],
-      ...(type && type !== 'all' ? { contentType: type } : {}),
-    })
-
     // If not enough results, search external APIs
     let externalResults = []
     if (dbResults.length < limit) {
@@ -195,29 +197,39 @@ export const searchContent = async (req, res) => {
       }
     }
 
-    // Combine and deduplicate results
+    // Combine and deduplicate results with improved logic
     const allResults = [...dbResults, ...externalResults]
     const uniqueResults = []
-    const seen = new Set()
+    const seen = new Map()
 
     for (const result of allResults) {
-      const key = `${result.title}-${result.contentType}`
-      if (!seen.has(key)) {
-        seen.add(key)
+      // Check multiple identifiers for better deduplication
+      const keys = [
+        result.internalId,
+        result.tmdbId ? `tmdb-${result.tmdbId}` : null,
+        result.malId ? `mal-${result.malId}` : null,
+        `${result.title?.toLowerCase()}-${result.contentType}`,
+      ].filter(Boolean)
+
+      const isDuplicate = keys.some((key) => seen.has(key))
+      if (!isDuplicate) {
+        keys.forEach((key) => seen.set(key, true))
         uniqueResults.push(result)
       }
     }
 
+    // Recalculate total after deduplication
+    const total = uniqueResults.length
     const totalPages = Math.ceil(total / limit)
 
     res.json({
       success: true,
       data: {
-        content: uniqueResults.slice(0, limit),
+        content: uniqueResults.slice(skip, skip + parseInt(limit)),
         pagination: {
           currentPage: parseInt(page),
           totalPages,
-          totalItems: total,
+          totalItems: total, // Use actual unique count
           itemsPerPage: parseInt(limit),
           hasNextPage: parseInt(page) < totalPages,
           hasPrevPage: parseInt(page) > 1,
@@ -292,15 +304,23 @@ export const getPopularContent = async (req, res) => {
       }
     }
 
-    // Combine results
+    // Combine results with improved deduplication
     const allContent = [...dbContent, ...externalContent]
     const uniqueContent = []
-    const seen = new Set()
+    const seen = new Map()
 
     for (const content of allContent) {
-      const key = `${content.title}-${content.contentType}`
-      if (!seen.has(key)) {
-        seen.add(key)
+      // Check multiple identifiers for better deduplication
+      const keys = [
+        content.internalId,
+        content.tmdbId ? `tmdb-${content.tmdbId}` : null,
+        content.malId ? `mal-${content.malId}` : null,
+        `${content.title?.toLowerCase()}-${content.contentType}`,
+      ].filter(Boolean)
+
+      const isDuplicate = keys.some((key) => seen.has(key))
+      if (!isDuplicate) {
+        keys.forEach((key) => seen.set(key, true))
         uniqueContent.push(content)
       }
     }
@@ -416,9 +436,13 @@ export const aiChat = async (req, res) => {
 
 // Add to watchlist
 export const addToWatchlist = async (req, res) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
   try {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
+      await session.abortTransaction()
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
@@ -427,18 +451,20 @@ export const addToWatchlist = async (req, res) => {
     }
 
     const { contentId, status, rating, currentEpisode, currentSeason, notes } = req.body
-    const userId = req.user.id
+    const userId = req.user._id
 
-    const user = await User.findById(userId)
+    const user = await User.findById(userId).session(session)
     if (!user) {
+      await session.abortTransaction()
       return res.status(404).json({
         success: false,
         message: 'User not found',
       })
     }
 
-    const content = await Content.findById(contentId)
+    const content = await Content.findById(contentId).session(session)
     if (!content) {
+      await session.abortTransaction()
       return res.status(404).json({
         success: false,
         message: 'Content not found',
@@ -454,6 +480,7 @@ export const addToWatchlist = async (req, res) => {
 
     // Validate currentEpisode doesn't exceed max episodes
     if (currentEpisode !== undefined && currentEpisode > maxEpisodes) {
+      await session.abortTransaction()
       return res.status(400).json({
         success: false,
         message: `Current episode cannot exceed ${maxEpisodes} episodes`,
@@ -462,6 +489,7 @@ export const addToWatchlist = async (req, res) => {
 
     // Validate currentSeason doesn't exceed max seasons
     if (currentSeason !== undefined && currentSeason > maxSeasons) {
+      await session.abortTransaction()
       return res.status(400).json({
         success: false,
         message: `Current season cannot exceed ${maxSeasons} seasons`,
@@ -499,7 +527,8 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
-    await user.save()
+    await user.save({ session })
+    await session.commitTransaction()
 
     res.json({
       success: true,
@@ -510,19 +539,29 @@ export const addToWatchlist = async (req, res) => {
       },
     })
   } catch (error) {
+    await session.abortTransaction()
     console.error('Error adding to watchlist:', error)
     res.status(500).json({
       success: false,
       message: 'Error adding to watchlist',
     })
+  } finally {
+    session.endSession()
   }
 }
 
 // Get user watchlist
 export const getWatchlist = async (req, res) => {
   try {
-    const userId = req.user.id
-    const user = await User.findById(userId).populate('watchlist.content')
+    const userId = req.user._id
+    const user = await User.findById(userId)
+      .populate({
+        path: 'watchlist.content',
+        model: 'Content',
+        // Add select to limit fields for better performance
+        select: 'title posterPath contentType releaseDate unifiedScore',
+      })
+      .lean() // Use lean() for better performance if not modifying
 
     if (!user) {
       return res.status(404).json({
@@ -548,7 +587,7 @@ export const getWatchlist = async (req, res) => {
 export const removeFromWatchlist = async (req, res) => {
   try {
     const { contentId } = req.params
-    const userId = req.user.id
+    const userId = req.user._id
 
     const user = await User.findById(userId)
     if (!user) {
@@ -576,13 +615,17 @@ export const removeFromWatchlist = async (req, res) => {
 
 // Update watchlist item
 export const updateWatchlistItem = async (req, res) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
   try {
     const { contentId } = req.params
     const { status, rating, currentEpisode, currentSeason, notes } = req.body
-    const userId = req.user.id
+    const userId = req.user._id
 
-    const user = await User.findById(userId)
+    const user = await User.findById(userId).session(session)
     if (!user) {
+      await session.abortTransaction()
       return res.status(404).json({
         success: false,
         message: 'User not found',
@@ -591,6 +634,7 @@ export const updateWatchlistItem = async (req, res) => {
 
     const watchlistItem = user.watchlist.find((item) => item.content.toString() === contentId)
     if (!watchlistItem) {
+      await session.abortTransaction()
       return res.status(404).json({
         success: false,
         message: 'Watchlist item not found',
@@ -598,8 +642,9 @@ export const updateWatchlistItem = async (req, res) => {
     }
 
     // Get the content to validate episode count
-    const content = await Content.findById(contentId)
+    const content = await Content.findById(contentId).session(session)
     if (!content) {
+      await session.abortTransaction()
       return res.status(404).json({
         success: false,
         message: 'Content not found',
@@ -615,6 +660,7 @@ export const updateWatchlistItem = async (req, res) => {
 
     // Validate currentEpisode doesn't exceed max episodes
     if (currentEpisode !== undefined && currentEpisode > maxEpisodes) {
+      await session.abortTransaction()
       return res.status(400).json({
         success: false,
         message: `Current episode cannot exceed ${maxEpisodes} episodes`,
@@ -623,6 +669,7 @@ export const updateWatchlistItem = async (req, res) => {
 
     // Validate currentSeason doesn't exceed max seasons
     if (currentSeason !== undefined && currentSeason > maxSeasons) {
+      await session.abortTransaction()
       return res.status(400).json({
         success: false,
         message: `Current season cannot exceed ${maxSeasons} seasons`,
@@ -641,7 +688,8 @@ export const updateWatchlistItem = async (req, res) => {
 
     watchlistItem.updatedAt = new Date()
 
-    await user.save()
+    await user.save({ session })
+    await session.commitTransaction()
 
     res.json({
       success: true,
@@ -649,11 +697,14 @@ export const updateWatchlistItem = async (req, res) => {
       data: watchlistItem,
     })
   } catch (error) {
+    await session.abortTransaction()
     console.error('Error updating watchlist item:', error)
     res.status(500).json({
       success: false,
       message: 'Error updating watchlist item',
     })
+  } finally {
+    session.endSession()
   }
 }
 
