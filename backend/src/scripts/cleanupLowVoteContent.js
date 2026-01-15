@@ -7,16 +7,16 @@ dotenv.config()
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
-    console.log('📡 Database connected')
+    console.log('Database connected')
   } catch (error) {
-    console.error('❌ Database connection failed:', error.message)
+    console.error('Database connection failed:', error.message)
     process.exit(1)
   }
 }
 
 const cleanupLowVoteContent = async () => {
   await connectDB()
-  console.log('🧹 Cleaning up low-vote content...')
+  console.log('Cleaning up low-vote content...')
 
   try {
     // Find content with low vote counts
@@ -37,7 +37,7 @@ const cleanupLowVoteContent = async () => {
         $or: [{ voteCount: { $lt: 100 } }, { voteCount: { $exists: false } }],
       })
 
-      console.log(`\n🗑️ Deleted ${result.deletedCount} low-vote content items`)
+      console.log(`\nDeleted ${result.deletedCount} low-vote content items`)
 
       // Show remaining counts
       const remainingCounts = await Content.aggregate([
@@ -49,18 +49,18 @@ const cleanupLowVoteContent = async () => {
         },
       ])
 
-      console.log('\n📊 Remaining content by type:')
+      console.log('\nRemaining content by type:')
       remainingCounts.forEach((item) => {
         console.log(`- ${item._id}: ${item.count} items`)
       })
     } else {
-      console.log('✅ No low-vote content found to clean up')
+      console.log('No low-vote content found to clean up')
     }
   } catch (error) {
-    console.error('❌ Error cleaning up content:', error)
+    console.error('Error cleaning up content:', error)
   } finally {
     await mongoose.disconnect()
-    console.log('🔌 Database disconnected')
+    console.log('Database disconnected')
   }
 }
 

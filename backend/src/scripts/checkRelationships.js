@@ -7,17 +7,17 @@ dotenv.config()
 async function checkRelationships() {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
-    console.log('📡 Database connected')
+    console.log('Database connected')
 
     // Get all content with relationships
     const contentWithRelationships = await Content.find({
       'relationships.sequels': { $exists: true, $ne: [] },
     }).lean()
 
-    console.log(`\n📊 Found ${contentWithRelationships.length} items with sequel relationships`)
+    console.log(`\nFound ${contentWithRelationships.length} items with sequel relationships`)
 
     if (contentWithRelationships.length > 0) {
-      console.log('\n🔗 Content with Sequels:\n')
+      console.log('\nContent with Sequels:\n')
       for (const item of contentWithRelationships) {
         console.log(`\n"${item.title}" (${item.contentType})`)
         if (item.relationships?.sequels?.length > 0) {
@@ -41,10 +41,10 @@ async function checkRelationships() {
       'relationships.prequels': { $exists: true, $ne: [] },
     }).lean()
 
-    console.log(`\n\n📊 Found ${contentWithPrequels.length} items with prequel relationships`)
+    console.log(`\n\nFound ${contentWithPrequels.length} items with prequel relationships`)
 
     if (contentWithPrequels.length > 0) {
-      console.log('\n🔗 Content with Prequels:\n')
+      console.log('\nContent with Prequels:\n')
       for (const item of contentWithPrequels) {
         console.log(`\n"${item.title}" (${item.contentType})`)
         if (item.relationships?.prequels?.length > 0) {
@@ -64,7 +64,7 @@ async function checkRelationships() {
     }
 
     // Check for broken relationships (sequels/prequels that don't exist in DB)
-    console.log('\n\n🔍 Checking for broken relationships...\n')
+    console.log('\n\nChecking for broken relationships...\n')
     let brokenCount = 0
 
     for (const item of [...contentWithRelationships, ...contentWithPrequels]) {
@@ -93,7 +93,7 @@ async function checkRelationships() {
       }
 
       if (brokenLinks.length > 0) {
-        console.log(`❌ "${item.title}" has ${brokenLinks.length} broken link(s):`)
+        console.log(`"${item.title}" has ${brokenLinks.length} broken link(s):`)
         brokenLinks.forEach((link) => {
           console.log(`   - ${link.type}: ${link.id}`)
         })
@@ -102,15 +102,15 @@ async function checkRelationships() {
     }
 
     if (brokenCount === 0) {
-      console.log('✅ No broken relationships found!')
+      console.log('No broken relationships found!')
     } else {
-      console.log(`\n⚠️ Found ${brokenCount} broken relationship(s)`)
+      console.log(`\nFound ${brokenCount} broken relationship(s)`)
     }
 
     await mongoose.disconnect()
-    console.log('\n🔌 Database disconnected')
+    console.log('\nDatabase disconnected')
   } catch (error) {
-    console.error('❌ Error:', error)
+    console.error('Error:', error)
     process.exit(1)
   }
 }

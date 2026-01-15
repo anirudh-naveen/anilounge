@@ -33,7 +33,7 @@ export const submitFeedback = async (req, res) => {
     // Send email notification (optional)
     await sendFeedbackEmail(feedback)
 
-    console.log('📧 Beta Feedback Received:', feedback)
+    console.log('Beta Feedback Received:', feedback)
 
     res.json({
       success: true,
@@ -70,7 +70,7 @@ const sendFeedbackEmail = async (feedback) => {
   try {
     // You can set up nodemailer here if you want email notifications
     // For now, just log it
-    console.log('📧 Email notification for feedback:', {
+    console.log('Email notification for feedback:', {
       subject: `Beta Feedback: ${feedback.type}`,
       from: feedback.email,
       message: feedback.message,

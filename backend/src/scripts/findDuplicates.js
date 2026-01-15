@@ -7,14 +7,14 @@ dotenv.config()
 async function findDuplicates() {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
-    console.log('📡 Database connected')
+    console.log('Database connected')
 
     // Find potential duplicates for Ne Zha
     const nezhaItems = await Content.find({
       $or: [{ title: { $regex: /nezha/i } }, { title: { $regex: /ne zha/i } }],
     }).lean()
 
-    console.log('\n🔍 Ne Zha items:')
+    console.log('\nNe Zha items:')
     nezhaItems.forEach((item) => {
       const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'
       console.log(
@@ -31,7 +31,7 @@ async function findDuplicates() {
       ],
     }).lean()
 
-    console.log('\n🔍 A Silent Voice items:')
+    console.log('\nA Silent Voice items:')
     silentVoiceItems.forEach((item) => {
       const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'
       console.log(
@@ -40,7 +40,7 @@ async function findDuplicates() {
     })
 
     // Find all potential duplicates based on similar titles
-    console.log('\n🔍 Searching for potential duplicates across all content...')
+    console.log('\nSearching for potential duplicates across all content...')
     const allContent = await Content.find({}).lean()
     const titleGroups = {}
 
@@ -75,13 +75,13 @@ async function findDuplicates() {
         })
       })
     } else {
-      console.log('\n✅ No duplicate titles found!')
+      console.log('\nNo duplicate titles found!')
     }
 
     await mongoose.disconnect()
-    console.log('\n🔌 Database disconnected')
+    console.log('\nDatabase disconnected')
   } catch (error) {
-    console.error('❌ Error:', error)
+    console.error('Error:', error)
     process.exit(1)
   }
 }

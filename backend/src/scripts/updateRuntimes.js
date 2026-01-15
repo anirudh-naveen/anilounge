@@ -10,7 +10,7 @@ async function updateRuntimes() {
   try {
     // Connect to database
     await mongoose.connect(process.env.MONGODB_URI)
-    console.log('📡 Database connected')
+    console.log('Database connected')
 
     // Get all MAL content that are movies
     const malMovies = await Content.find({
@@ -22,7 +22,7 @@ async function updateRuntimes() {
       ],
     })
 
-    console.log(`📊 Found ${malMovies.length} MAL movies to update`)
+    console.log(`Found ${malMovies.length} MAL movies to update`)
 
     let updated = 0
 
@@ -37,18 +37,18 @@ async function updateRuntimes() {
           runtime: estimatedRuntime,
         })
         console.log(
-          `✅ Updated ${movie.title}: ${movie.runtime || 'null'} → ${estimatedRuntime} minutes`,
+          `Updated ${movie.title}: ${movie.runtime || 'null'} → ${estimatedRuntime} minutes`,
         )
         updated++
       }
     }
 
-    console.log(`🎉 Updated ${updated} movies with correct runtime information`)
+    console.log(`Updated ${updated} movies with correct runtime information`)
   } catch (error) {
-    console.error('❌ Error updating runtimes:', error)
+    console.error('Error updating runtimes:', error)
   } finally {
     await mongoose.disconnect()
-    console.log('🔌 Database disconnected')
+    console.log('Database disconnected')
   }
 }
 

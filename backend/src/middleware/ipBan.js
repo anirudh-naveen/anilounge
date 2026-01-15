@@ -79,7 +79,7 @@ export const banIPForBot = async (ip, userAgent, reason = 'bot_detection') => {
   try {
     const ban = await IPBan.banIP(ip, reason, BAN_DURATIONS[reason], userAgent)
 
-    console.log(`🚫 IP ${ip} banned for ${reason}. Expires: ${ban.expiresAt}`)
+    console.log(`IP ${ip} banned for ${reason}. Expires: ${ban.expiresAt}`)
     return ban
   } catch (error) {
     console.error('Error banning IP for bot:', error)
@@ -92,7 +92,7 @@ export const banIPForBruteForce = async (ip, userAgent) => {
   try {
     const ban = await IPBan.banIP(ip, 'brute_force', BAN_DURATIONS.brute_force, userAgent)
 
-    console.log(`🚫 IP ${ip} banned for brute force. Expires: ${ban.expiresAt}`)
+    console.log(`IP ${ip} banned for brute force. Expires: ${ban.expiresAt}`)
     return ban
   } catch (error) {
     console.error('Error banning IP for brute force:', error)
@@ -111,7 +111,7 @@ export const banIPForSuspiciousActivity = async (ip, userAgent, activity) => {
     )
 
     console.log(
-      `🚫 IP ${ip} banned for suspicious activity: ${activity}. Expires: ${ban.expiresAt}`,
+      `IP ${ip} banned for suspicious activity: ${activity}. Expires: ${ban.expiresAt}`,
     )
     return ban
   } catch (error) {
@@ -130,7 +130,7 @@ export const banIPForRateLimit = async (ip, userAgent) => {
       userAgent,
     )
 
-    console.log(`🚫 IP ${ip} banned for rate limit exceeded. Expires: ${ban.expiresAt}`)
+    console.log(`IP ${ip} banned for rate limit exceeded. Expires: ${ban.expiresAt}`)
     return ban
   } catch (error) {
     console.error('Error banning IP for rate limit:', error)
@@ -143,7 +143,7 @@ export const manuallyBanIP = async (ip, reason = 'manual', duration = BAN_DURATI
   try {
     const ban = await IPBan.banIP(ip, reason, duration)
 
-    console.log(`🚫 IP ${ip} manually banned. Expires: ${ban.expiresAt}`)
+    console.log(`IP ${ip} manually banned. Expires: ${ban.expiresAt}`)
     return ban
   } catch (error) {
     console.error('Error manually banning IP:', error)
@@ -156,7 +156,7 @@ export const unbanIP = async (ip) => {
   try {
     const result = await IPBan.unbanIP(ip)
 
-    console.log(`✅ IP ${ip} unbanned`)
+    console.log(`IP ${ip} unbanned`)
     return result
   } catch (error) {
     console.error('Error unbanning IP:', error)

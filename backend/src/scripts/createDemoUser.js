@@ -38,12 +38,12 @@ const createDemoUser = async () => {
     })
 
     await demoUser.save()
-    console.log('✅ Demo user created successfully!')
-    console.log('📧 Email: demo@findanimation.com')
-    console.log('🔑 Password: DemoPassword123!')
-    console.log('🎯 This account is perfect for recruiters to explore the app')
+    console.log('Demo user created successfully!')
+    console.log('Email: demo@findanimation.com')
+    console.log('Password: DemoPassword123!')
+    console.log('This account is perfect for recruiters to explore the app')
   } catch (error) {
-    console.error('❌ Error creating demo user:', error)
+    console.error('Error creating demo user:', error)
   } finally {
     await mongoose.disconnect()
     console.log('Disconnected from MongoDB')

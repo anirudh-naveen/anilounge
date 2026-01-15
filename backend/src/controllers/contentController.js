@@ -75,7 +75,7 @@ export const getContent = async (req, res) => {
     })
   } catch (error) {
     const totalTime = Date.now() - startTime
-    console.error(`❌ [${new Date().toISOString()}] getContent error after ${totalTime}ms:`, error)
+    console.error(`[${new Date().toISOString()}] getContent error after ${totalTime}ms:`, error)
     res.status(500).json({
       success: false,
       message: 'Error fetching content',

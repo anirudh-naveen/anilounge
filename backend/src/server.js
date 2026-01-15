@@ -25,7 +25,7 @@ if (process.env.NODE_ENV === 'production') {
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
 
   if (missingVars.length > 0) {
-    console.error('❌ Missing required environment variables:', missingVars.join(', '))
+    console.error('Missing required environment variables:', missingVars.join(', '))
     console.error('Please set these variables in your .env file or environment')
     process.exit(1)
   }
@@ -34,7 +34,7 @@ if (process.env.NODE_ENV === 'production') {
   const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI']
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
   if (missingVars.length > 0) {
-    console.warn('⚠️  Missing environment variables (development mode):', missingVars.join(', '))
+    console.warn('Missing environment variables (development mode):', missingVars.join(', '))
     console.warn('Server will start but authentication features may not work')
   }
 }
@@ -66,10 +66,10 @@ app.get('/api/status', (req, res) => {
 // Connect to MongoDB (non-blocking - server will start even if DB connection fails in dev)
 connectDB().catch((error) => {
   if (process.env.NODE_ENV === 'production') {
-    console.error('❌ Failed to connect to database. Exiting...')
+    console.error('Failed to connect to database. Exiting...')
     process.exit(1)
   } else {
-    console.warn('⚠️  Database connection failed, but continuing in development mode')
+    console.warn('Database connection failed, but continuing in development mode')
   }
 })
 
@@ -347,18 +347,18 @@ app.use((err, req, res, next) => {
 // Start server
 app
   .listen(PORT, () => {
-    console.log(`🚀 Find Animation API server running on port ${PORT}`)
-    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
-    console.log(`🔗 Health check: http://localhost:${PORT}/health`)
+    console.log(`Find Animation API server running on port ${PORT}`)
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
+    console.log(`Health check: http://localhost:${PORT}/health`)
   })
   .on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use.`)
+      console.error(`Port ${PORT} is already in use.`)
       console.error(`   Try: lsof -ti:${PORT} | xargs kill -9`)
       console.error(`   Or change the PORT in your .env file`)
       process.exit(1)
     } else {
-      console.error('❌ Server error:', err)
+      console.error('Server error:', err)
       process.exit(1)
     }
   })

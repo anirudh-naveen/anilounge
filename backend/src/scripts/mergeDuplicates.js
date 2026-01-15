@@ -7,10 +7,10 @@ dotenv.config()
 async function mergeDuplicates() {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
-    console.log('📡 Database connected')
+    console.log('Database connected')
 
     // Merge Ne Zha duplicates
-    console.log('\n🔧 Merging Ne Zha duplicates...')
+    console.log('\nMerging Ne Zha duplicates...')
     const nezhaItems = await Content.find({
       $or: [{ title: { $regex: /^nezha$/i } }, { title: { $regex: /^ne zha$/i } }],
     }).lean()
@@ -38,16 +38,16 @@ async function mergeDuplicates() {
         }
 
         await primary.save()
-        console.log(`✅ Merged Ne Zha data into: ${primary.title}`)
+        console.log(`Merged Ne Zha data into: ${primary.title}`)
 
         // Delete the duplicate
         await Content.findByIdAndDelete(secondary._id)
-        console.log(`🗑️ Deleted duplicate: ${secondary.title}`)
+        console.log(`Deleted duplicate: ${secondary.title}`)
       }
     }
 
     // Merge A Silent Voice duplicates
-    console.log('\n🔧 Merging A Silent Voice duplicates...')
+    console.log('\nMerging A Silent Voice duplicates...')
     const silentVoiceItems = await Content.find({
       $or: [{ title: { $regex: /silent voice/i } }, { title: { $regex: /koe no katachi/i } }],
     }).lean()
@@ -81,18 +81,18 @@ async function mergeDuplicates() {
         }
 
         await primary.save()
-        console.log(`✅ Merged A Silent Voice data into: ${primary.title}`)
+        console.log(`Merged A Silent Voice data into: ${primary.title}`)
 
         // Delete the duplicate
         await Content.findByIdAndDelete(secondary._id)
-        console.log(`🗑️ Deleted duplicate: ${secondary.title}`)
+        console.log(`Deleted duplicate: ${secondary.title}`)
       }
     }
 
     await mongoose.disconnect()
-    console.log('🔌 Database disconnected')
+    console.log('Database disconnected')
   } catch (error) {
-    console.error('❌ Error:', error)
+    console.error('Error:', error)
     process.exit(1)
   }
 }

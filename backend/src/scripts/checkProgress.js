@@ -23,24 +23,24 @@ async function checkProgress() {
     const stats = await mongoose.connection.db.stats()
     const sizeInMB = (stats.dataSize / (1024 * 1024)).toFixed(2)
 
-    console.log('\n📊 Database Progress Report')
+    console.log('\nDatabase Progress Report')
     console.log('='.repeat(50))
-    console.log(`📦 Total Content: ${totalContent}`)
-    console.log(`🎬 Movies: ${movies}`)
-    console.log(`📺 TV Shows: ${tvShows}`)
-    console.log(`\n🔗 Data Sources:`)
+    console.log(`Total Content: ${totalContent}`)
+    console.log(`Movies: ${movies}`)
+    console.log(`TV Shows: ${tvShows}`)
+    console.log(`\nData Sources:`)
     console.log(`   TMDB Only: ${tmdbContent - bothContent}`)
     console.log(`   MAL Only: ${malContent - bothContent}`)
     console.log(`   Both TMDB & MAL: ${bothContent}`)
     console.log(
-      `\n💾 Database Size: ${sizeInMB} MB / 250 MB (${((sizeInMB / 250) * 100).toFixed(1)}% of free tier)`,
+      `\nDatabase Size: ${sizeInMB} MB / 250 MB (${((sizeInMB / 250) * 100).toFixed(1)}% of free tier)`,
     )
     console.log('='.repeat(50))
 
     // Show latest 5 items added
     const latestItems = await Content.find({}).sort({ _id: -1 }).limit(5).lean()
 
-    console.log('\n🆕 Latest 5 Items Added:')
+    console.log('\nLatest 5 Items Added:')
     latestItems.forEach((item, index) => {
       const sources = []
       if (item.tmdbId) sources.push('TMDB')
@@ -50,7 +50,7 @@ async function checkProgress() {
 
     await mongoose.disconnect()
   } catch (error) {
-    console.error('❌ Error:', error)
+    console.error('Error:', error)
     process.exit(1)
   }
 }

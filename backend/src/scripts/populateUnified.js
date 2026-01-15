@@ -27,9 +27,9 @@ class DatabasePopulator {
   async connectDB() {
     try {
       await mongoose.connect(process.env.MONGODB_URI)
-      console.log('📡 Database connected')
+      console.log('Database connected')
     } catch (error) {
-      console.error('❌ Database connection error:', error)
+      console.error('Database connection error:', error)
       throw error
     }
   }
@@ -37,9 +37,9 @@ class DatabasePopulator {
   async disconnectDB() {
     try {
       await mongoose.disconnect()
-      console.log('🔌 Database disconnected')
+      console.log('Database disconnected')
     } catch (error) {
-      console.error('❌ Database disconnection error:', error)
+      console.error('Database disconnection error:', error)
     }
   }
 
@@ -79,8 +79,8 @@ class DatabasePopulator {
       clear = false,
     } = options
 
-    console.log('🚀 Starting unified database population...')
-    console.log(`📊 Target: ${tmdbLimit} TMDB items, ${malLimit} MAL items`)
+    console.log('Starting unified database population...')
+    console.log(`Target: ${tmdbLimit} TMDB items, ${malLimit} MAL items`)
 
     try {
       await this.connectDB()
@@ -88,7 +88,7 @@ class DatabasePopulator {
       // Clear existing content if requested
       if (clear) {
         await Content.deleteMany({})
-        console.log('🗑️ Cleared existing content')
+        console.log('Cleared existing content')
       }
 
       // Populate TMDB content
@@ -104,9 +104,9 @@ class DatabasePopulator {
       // Get final statistics
       await this.printFinalStats()
 
-      console.log('🎉 Database population completed successfully!')
+      console.log('Database population completed successfully!')
     } catch (error) {
-      console.error('❌ Database population failed:', error)
+      console.error('Database population failed:', error)
       throw error
     } finally {
       await this.disconnectDB()
@@ -114,14 +114,14 @@ class DatabasePopulator {
   }
 
   async populateTmdbContent(limit) {
-    console.log('🎬 Populating TMDB animated content...')
+    console.log('Populating TMDB animated content...')
 
     let processed = 0
     const pages = Math.ceil(limit / 20) // TMDB returns 20 per page
 
     for (let page = 1; page <= pages && processed < limit; page++) {
       try {
-        console.log(`📄 Processing TMDB page ${page}/${pages}`)
+        console.log(`Processing TMDB page ${page}/${pages}`)
 
         // Get movies
         const movies = await unifiedContentService.getTmdbAnimatedMovies(page, 10)
@@ -141,30 +141,30 @@ class DatabasePopulator {
 
         await this.delay(500) // Rate limiting
       } catch (error) {
-        console.error(`❌ Error processing TMDB page ${page}:`, error.message)
+        console.error(`Error processing TMDB page ${page}:`, error.message)
         this.stats.errors++
       }
     }
 
-    console.log(`✅ TMDB population completed: ${processed} items processed`)
+    console.log(`TMDB population completed: ${processed} items processed`)
   }
 
   async populateMalContent(limit) {
-    console.log('🎌 Populating MAL content (movies + TV shows)...')
+    console.log('Populating MAL content (movies + TV shows)...')
 
     let processed = 0
     const movieLimit = Math.floor(limit / 2) // Half for movies
     const tvLimit = limit - movieLimit // Half for TV shows
 
     // Fetch MAL movies
-    console.log(`🎬 Fetching ${movieLimit} MAL movies...`)
+    console.log(`Fetching ${movieLimit} MAL movies...`)
     const batches = Math.ceil(movieLimit / this.batchSize)
     for (let batch = 0; batch < batches && processed < movieLimit; batch++) {
       try {
         const offset = batch * this.batchSize
         const batchLimit = Math.min(this.batchSize, movieLimit - processed)
 
-        console.log(`📦 Processing MAL movies batch ${batch + 1}/${batches} (${batchLimit} items)`)
+        console.log(`Processing MAL movies batch ${batch + 1}/${batches} (${batchLimit} items)`)
 
         const movies = await unifiedContentService.getMalTopAnimeMovies(batchLimit, offset)
 
@@ -176,20 +176,20 @@ class DatabasePopulator {
 
         await this.delay(this.delayBetweenBatches)
       } catch (error) {
-        console.error(`❌ Error processing MAL movies batch ${batch + 1}:`, error.message)
+        console.error(`Error processing MAL movies batch ${batch + 1}:`, error.message)
         this.stats.errors++
       }
     }
 
     // Fetch MAL TV shows
-    console.log(`📺 Fetching ${tvLimit} MAL TV shows...`)
+    console.log(`Fetching ${tvLimit} MAL TV shows...`)
     const tvBatches = Math.ceil(tvLimit / this.batchSize)
     for (let batch = 0; batch < tvBatches && processed < limit; batch++) {
       try {
         const offset = batch * this.batchSize
         const batchLimit = Math.min(this.batchSize, tvLimit - (processed - movieLimit))
 
-        console.log(`📦 Processing MAL TV batch ${batch + 1}/${tvBatches} (${batchLimit} items)`)
+        console.log(`Processing MAL TV batch ${batch + 1}/${tvBatches} (${batchLimit} items)`)
 
         const tvShows = await unifiedContentService.getMalTopAnime(batchLimit, offset)
 
@@ -201,12 +201,12 @@ class DatabasePopulator {
 
         await this.delay(this.delayBetweenBatches)
       } catch (error) {
-        console.error(`❌ Error processing MAL TV batch ${batch + 1}:`, error.message)
+        console.error(`Error processing MAL TV batch ${batch + 1}:`, error.message)
         this.stats.errors++
       }
     }
 
-    console.log(`✅ MAL population completed: ${processed} items processed`)
+    console.log(`MAL population completed: ${processed} items processed`)
   }
 
   async saveTmdbContent(tmdbData, contentType) {
@@ -219,7 +219,7 @@ class DatabasePopulator {
         contentType,
       )
       if (!detailedTmdbData) {
-        console.log(`⚠️ Could not get detailed info for TMDB ${contentType}: ${tmdbData.title}`)
+        console.log(`Could not get detailed info for TMDB ${contentType}: ${tmdbData.title}`)
         this.stats.skipped++
         return
       }
@@ -243,7 +243,7 @@ class DatabasePopulator {
           // Merge TMDB data into existing content
           await this.mergeTmdbIntoExisting(existingContent, contentData, detailedTmdbData)
           this.stats.merged++
-          console.log(`🔗 Merged TMDB data into existing content: ${contentData.title}`)
+          console.log(`Merged TMDB data into existing content: ${contentData.title}`)
         }
       } else {
         // Create new content with unified score and relationships
@@ -274,10 +274,10 @@ class DatabasePopulator {
         const newContent = new Content(contentData)
         await newContent.save()
         this.stats.added++
-        console.log(`➕ Added TMDB ${contentType}: ${contentData.title}`)
+        console.log(`Added TMDB ${contentType}: ${contentData.title}`)
       }
     } catch (error) {
-      console.error(`❌ Error saving TMDB content:`, error.message)
+      console.error(`Error saving TMDB content:`, error.message)
       this.stats.errors++
     }
   }
@@ -344,7 +344,7 @@ class DatabasePopulator {
       const maxYearDiff = newContent.contentType === 'movie' ? 1 : 2
       if (yearDiff > maxYearDiff) {
         console.log(
-          `❌ Year mismatch: ${newContent.title} (${newYear}) vs ${existingContent.title} (${existingYear})`,
+          `Year mismatch: ${newContent.title} (${newYear}) vs ${existingContent.title} (${existingYear})`,
         )
         return false
       }
@@ -352,9 +352,9 @@ class DatabasePopulator {
 
     // Check content type
     if (newContent.contentType !== existingContent.contentType) {
-      console.log(
-        `❌ Content type mismatch: ${newContent.title} (${newContent.contentType}) vs ${existingContent.title} (${existingContent.contentType})`,
-      )
+        console.log(
+          `Content type mismatch: ${newContent.title} (${newContent.contentType}) vs ${existingContent.title} (${existingContent.contentType})`,
+        )
       return false
     }
 
@@ -370,7 +370,7 @@ class DatabasePopulator {
 
     if (commonGenres.length < minCommonGenres) {
       console.log(
-        `❌ Insufficient common genres (${commonGenres.length}/${minCommonGenres} required): ${newContent.title} vs ${existingContent.title}`,
+        `Insufficient common genres (${commonGenres.length}/${minCommonGenres} required): ${newContent.title} vs ${existingContent.title}`,
       )
       console.log(`   New genres: ${newGenres.join(', ')}`)
       console.log(`   Existing genres: ${existingGenres.join(', ')}`)
@@ -384,7 +384,7 @@ class DatabasePopulator {
       const existingEpisodes = existingContent.episodeCount || existingContent.malEpisodes
       if (newEpisodes && existingEpisodes && Math.abs(newEpisodes - existingEpisodes) > 5) {
         console.log(
-          `❌ Episode count mismatch: ${newContent.title} (${newEpisodes}) vs ${existingContent.title} (${existingEpisodes})`,
+          `Episode count mismatch: ${newContent.title} (${newEpisodes}) vs ${existingContent.title} (${existingEpisodes})`,
         )
         return false
       }
@@ -396,13 +396,13 @@ class DatabasePopulator {
       const existingRuntime = existingContent.runtime
       if (newRuntime && existingRuntime && Math.abs(newRuntime - existingRuntime) > 30) {
         console.log(
-          `❌ Runtime mismatch: ${newContent.title} (${newRuntime}min) vs ${existingContent.title} (${existingRuntime}min)`,
+          `Runtime mismatch: ${newContent.title} (${newRuntime}min) vs ${existingContent.title} (${existingRuntime}min)`,
         )
         return false
       }
     }
 
-    console.log(`✅ Content match confirmed: ${newContent.title} ≈ ${existingContent.title}`)
+    console.log(`Content match confirmed: ${newContent.title} ≈ ${existingContent.title}`)
     return true
   }
 
@@ -426,7 +426,7 @@ class DatabasePopulator {
         existingContent.lastUpdated = new Date()
         await existingContent.save()
         this.stats.updated++
-        console.log(`🔄 Updated MAL content: ${contentData.title}`)
+        console.log(`Updated MAL content: ${contentData.title}`)
       } else {
         // Use enhanced deduplication
         const duplicates = await this.findDuplicateContent(contentData)
@@ -440,7 +440,7 @@ class DatabasePopulator {
             // MAL content should never match by tmdb_id since it doesn't have TMDB IDs
             await this.mergeMalIntoExisting(existingContent, contentData)
             this.stats.merged++
-            console.log(`🔗 Merged MAL data into existing content: ${contentData.title}`)
+            console.log(`Merged MAL data into existing content: ${contentData.title}`)
           }
         } else {
           // Create new content with MAL priority for anime and relationships
@@ -477,11 +477,11 @@ class DatabasePopulator {
           const newContent = new Content(contentWithRelationships)
           await newContent.save()
           this.stats.added++
-          console.log(`➕ Added MAL ${contentData.contentType}: ${contentData.title}`)
+          console.log(`Added MAL ${contentData.contentType}: ${contentData.title}`)
         }
       }
     } catch (error) {
-      console.error(`❌ Error saving MAL content:`, error.message)
+      console.error(`Error saving MAL content:`, error.message)
       this.stats.errors++
     }
   }
@@ -663,7 +663,7 @@ class DatabasePopulator {
   }
 
   async printFinalStats() {
-    console.log('\n📊 Population Statistics:')
+    console.log('\nPopulation Statistics:')
     console.log(`   Total processed: ${this.stats.totalProcessed}`)
     console.log(`   New content added: ${this.stats.newAdded}`)
     console.log(`   Content updated: ${this.stats.updated}`)
@@ -686,7 +686,7 @@ class DatabasePopulator {
       malId: { $exists: true },
     })
 
-    console.log('\n📈 Database Statistics:')
+    console.log('\nDatabase Statistics:')
     console.log(`   Total content: ${totalContent}`)
     console.log(`   TMDB-only content: ${tmdbOnlyContent}`)
     console.log(`   MAL-only content: ${malOnlyContent}`)
@@ -696,7 +696,7 @@ class DatabasePopulator {
     const movies = await Content.countDocuments({ contentType: 'movie' })
     const tvShows = await Content.countDocuments({ contentType: 'tv' })
 
-    console.log('\n🎭 Content Type Breakdown:')
+    console.log('\nContent Type Breakdown:')
     console.log(`   Movies: ${movies}`)
     console.log(`   TV Shows: ${tvShows}`)
   }
@@ -730,7 +730,7 @@ const runPopulation = async () => {
   try {
     await populator.populateDatabase(options)
   } catch (error) {
-    console.error('❌ Population failed:', error)
+    console.error('Population failed:', error)
     process.exit(1)
   } finally {
     process.exit(0)
@@ -739,12 +739,12 @@ const runPopulation = async () => {
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Received SIGINT, shutting down gracefully...')
+  console.log('\nReceived SIGINT, shutting down gracefully...')
   process.exit(0)
 })
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 Received SIGTERM, shutting down gracefully...')
+  console.log('\nReceived SIGTERM, shutting down gracefully...')
   process.exit(0)
 })
 

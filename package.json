@@ -20,6 +20,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.6.1",
     "cropperjs": "^2.1.0",
     "mongodb": "^6.20.0",
     "pinia": "^3.0.3",

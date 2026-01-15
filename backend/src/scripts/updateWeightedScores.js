@@ -7,9 +7,9 @@ dotenv.config()
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
-    console.log('📡 Database connected')
+    console.log('Database connected')
   } catch (error) {
-    console.error('❌ Database connection failed:', error.message)
+    console.error('Database connection failed:', error.message)
     process.exit(1)
   }
 }
@@ -43,7 +43,7 @@ const calculateWeightedScore = (tmdbScore, tmdbVotes, malScore, malVotes) => {
 
 const updateWeightedScores = async () => {
   try {
-    console.log('🔄 Updating weighted scores for existing content...')
+    console.log('Updating weighted scores for existing content...')
     const contentItems = await Content.find({})
     let updatedCount = 0
 
@@ -60,13 +60,13 @@ const updateWeightedScores = async () => {
         await item.save()
         updatedCount++
         console.log(
-          `✅ Updated ${item.title}: ${newUnifiedScore?.toFixed(2)} (TMDB: ${item.voteAverage}, MAL: ${item.malScore})`,
+          `Updated ${item.title}: ${newUnifiedScore?.toFixed(2)} (TMDB: ${item.voteAverage}, MAL: ${item.malScore})`,
         )
       }
     }
-    console.log(`🎉 Updated ${updatedCount} content items with weighted scores`)
+    console.log(`Updated ${updatedCount} content items with weighted scores`)
   } catch (error) {
-    console.error('❌ Error updating weighted scores:', error.message)
+    console.error('Error updating weighted scores:', error.message)
   }
 }
 
@@ -75,10 +75,10 @@ const main = async () => {
     await connectDB()
     await updateWeightedScores()
   } catch (error) {
-    console.error('❌ Script failed:', error.message)
+    console.error('Script failed:', error.message)
   } finally {
     await mongoose.disconnect()
-    console.log('🔌 Database disconnected')
+    console.log('Database disconnected')
   }
 }
 

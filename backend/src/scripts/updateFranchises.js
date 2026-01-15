@@ -10,11 +10,11 @@ async function updateFranchises() {
   try {
     // Connect to database
     await mongoose.connect(process.env.MONGODB_URI)
-    console.log('📡 Database connected')
+    console.log('Database connected')
 
     // Get all content
     const allContent = await Content.find({})
-    console.log(`📊 Found ${allContent.length} content items to process`)
+    console.log(`Found ${allContent.length} content items to process`)
 
     let updated = 0
 
@@ -52,17 +52,17 @@ async function updateFranchises() {
           franchise: franchiseName,
           'relationships.franchise': franchiseName,
         })
-        console.log(`✅ Updated ${content.title} with franchise: ${franchiseName}`)
+        console.log(`Updated ${content.title} with franchise: ${franchiseName}`)
         updated++
       }
     }
 
-    console.log(`🎉 Updated ${updated} content items with franchise information`)
+    console.log(`Updated ${updated} content items with franchise information`)
   } catch (error) {
-    console.error('❌ Error updating franchises:', error)
+    console.error('Error updating franchises:', error)
   } finally {
     await mongoose.disconnect()
-    console.log('🔌 Database disconnected')
+    console.log('Database disconnected')
   }
 }
 

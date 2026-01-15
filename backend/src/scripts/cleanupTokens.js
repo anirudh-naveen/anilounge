@@ -19,10 +19,10 @@ const cleanupTokens = async () => {
       ],
     })
 
-    console.log(`✅ Cleaned up ${result.deletedCount} expired/revoked tokens`)
+    console.log(`Cleaned up ${result.deletedCount} expired/revoked tokens`)
     process.exit(0)
   } catch (error) {
-    console.error('❌ Error cleaning up tokens:', error)
+    console.error('Error cleaning up tokens:', error)
     process.exit(1)
   }
 }

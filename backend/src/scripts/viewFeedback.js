@@ -7,7 +7,7 @@ const API_BASE_URL = process.env.API_URL || 'http://localhost:5001/api'
 
 async function viewFeedback() {
   try {
-    console.log('📧 Fetching beta feedback...\n')
+    console.log('Fetching beta feedback...\n')
 
     const response = await fetch(`${API_BASE_URL}/feedback`)
     const result = await response.json()
@@ -20,16 +20,16 @@ async function viewFeedback() {
         return
       }
 
-      console.log(`📊 Total feedback entries: ${feedback.length}\n`)
+      console.log(`Total feedback entries: ${feedback.length}\n`)
 
       feedback.forEach((item, index) => {
         console.log(`--- Feedback #${index + 1} ---`)
-        console.log(`📝 Type: ${item.type}`)
-        console.log(`📧 Email: ${item.email}`)
-        console.log(`💬 Message: ${item.message}`)
-        console.log(`🕒 Timestamp: ${item.timestamp}`)
-        console.log(`🌐 URL: ${item.url}`)
-        console.log(`📱 User Agent: ${item.userAgent}`)
+        console.log(`Type: ${item.type}`)
+        console.log(`Email: ${item.email}`)
+        console.log(`Message: ${item.message}`)
+        console.log(`Timestamp: ${item.timestamp}`)
+        console.log(`URL: ${item.url}`)
+        console.log(`User Agent: ${item.userAgent}`)
         console.log('')
       })
     } else {
