@@ -43,31 +43,63 @@ class DatabasePopulator {
     }
   }
 
-  // Calculate weighted unified score based on user votes
+  // Calculate unified score including user ratings
+  calculateUnifiedScoreWithUserRatings(
+    tmdbScore,
+    tmdbVotes,
+    malScore,
+    malVotes,
+    userRatingAverage,
+    userRatingCount,
+  ) {
+    const scores = []
+    const weights = []
+
+    // Determine if we have multiple sources (for threshold flexibility)
+    const hasMultipleSources =
+      (tmdbScore && malScore) || (tmdbScore && userRatingAverage) || (malScore && userRatingAverage)
+
+    // Add TMDB score if available
+    // For single-source: use any votes. For multi-source: require > 10 votes for quality
+    if (tmdbScore && tmdbVotes && (hasMultipleSources ? tmdbVotes > 10 : tmdbVotes > 0)) {
+      scores.push(tmdbScore)
+      weights.push(Math.log10(Math.max(tmdbVotes, 1)))
+    }
+
+    // Add MAL score if available
+    // For single-source: use any votes. For multi-source: require > 100 votes for quality
+    if (malScore && malVotes && (hasMultipleSources ? malVotes > 100 : malVotes > 0)) {
+      scores.push(malScore)
+      weights.push(Math.log10(Math.max(malVotes, 1)))
+    }
+
+    // Add user rating if available (require at least 5 user ratings)
+    if (userRatingAverage && userRatingCount >= 5) {
+      scores.push(userRatingAverage)
+      // Give user ratings moderate weight (less than external sources initially)
+      weights.push(Math.log10(Math.max(userRatingCount, 1)) * 0.8)
+    }
+
+    if (scores.length === 0) return null
+
+    // Calculate weighted average
+    const totalWeight = weights.reduce((sum, w) => sum + w, 0)
+    if (totalWeight === 0) return scores.reduce((sum, s) => sum + s, 0) / scores.length
+
+    const weightedSum = scores.reduce((sum, score, i) => sum + score * weights[i], 0)
+    return weightedSum / totalWeight
+  }
+
+  // Legacy method for backward compatibility (only uses TMDB and MAL)
   calculateWeightedScore(tmdbScore, tmdbVotes, malScore, malVotes) {
-    if (!tmdbScore && !malScore) return null
-    if (!tmdbScore) return malScore
-    if (!malScore) return tmdbScore
-
-    // Ensure we have valid numbers
-    const tmdb = Number(tmdbScore) || 0
-    const mal = Number(malScore) || 0
-    const tmdbVotesNum = Number(tmdbVotes) || 0
-    const malVotesNum = Number(malVotes) || 0
-
-    if (tmdb === 0 && mal === 0) return null
-
-    // Weight scores by the number of votes (logarithmic scaling to prevent extreme weighting)
-    const tmdbWeight = Math.log10(Math.max(tmdbVotesNum, 1))
-    const malWeight = Math.log10(Math.max(malVotesNum, 1))
-    const totalWeight = tmdbWeight + malWeight
-
-    if (totalWeight === 0) return (tmdb + mal) / 2
-
-    const weightedScore = (tmdb * tmdbWeight + mal * malWeight) / totalWeight
-
-    // Ensure we return a valid number
-    return isNaN(weightedScore) ? null : weightedScore
+    return this.calculateUnifiedScoreWithUserRatings(
+      tmdbScore,
+      tmdbVotes,
+      malScore,
+      malVotes,
+      null,
+      0,
+    )
   }
 
   async populateDatabase(options = {}) {
@@ -247,9 +279,22 @@ class DatabasePopulator {
         }
       } else {
         // Create new content with unified score and relationships
-        if (contentData.voteAverage) {
+        contentData.unifiedScore = this.calculateUnifiedScoreWithUserRatings(
+          contentData.voteAverage,
+          contentData.voteCount,
+          null,
+          null,
+          null,
+          0,
+        )
+        // If calculation returns null, fallback to voteAverage
+        if (!contentData.unifiedScore && contentData.voteAverage) {
           contentData.unifiedScore = contentData.voteAverage
         }
+
+        // Initialize user rating fields
+        contentData.userRatingAverage = null
+        contentData.userRatingCount = 0
 
         // Process relationships for new content
         const relationships = await relationshipService.detectRelationshipsFromExternalData(
@@ -273,7 +318,7 @@ class DatabasePopulator {
 
         const newContent = new Content(contentData)
         await newContent.save()
-        this.stats.added++
+        this.stats.newAdded++
         console.log(`Added TMDB ${contentType}: ${contentData.title}`)
       }
     } catch (error) {
@@ -352,9 +397,9 @@ class DatabasePopulator {
 
     // Check content type
     if (newContent.contentType !== existingContent.contentType) {
-        console.log(
-          `Content type mismatch: ${newContent.title} (${newContent.contentType}) vs ${existingContent.title} (${existingContent.contentType})`,
-        )
+      console.log(
+        `Content type mismatch: ${newContent.title} (${newContent.contentType}) vs ${existingContent.title} (${existingContent.contentType})`,
+      )
       return false
     }
 
@@ -451,7 +496,19 @@ class DatabasePopulator {
 
           const contentWithRelationships = {
             ...contentData,
-            unifiedScore: contentData.malScore || 0,
+            unifiedScore:
+              this.calculateUnifiedScoreWithUserRatings(
+                null,
+                null,
+                contentData.malScore,
+                contentData.malScoredBy,
+                null,
+                0,
+              ) ||
+              contentData.malScore ||
+              0,
+            userRatingAverage: null,
+            userRatingCount: 0,
             dataSources: {
               mal: { hasData: true, lastUpdated: new Date() },
               tmdb: { hasData: false },
@@ -471,12 +528,14 @@ class DatabasePopulator {
 
           // Deduplicate genres before saving new content
           if (contentWithRelationships.genres) {
-            contentWithRelationships.genres = this.deduplicateGenres(contentWithRelationships.genres)
+            contentWithRelationships.genres = this.deduplicateGenres(
+              contentWithRelationships.genres,
+            )
           }
 
           const newContent = new Content(contentWithRelationships)
           await newContent.save()
-          this.stats.added++
+          this.stats.newAdded++
           console.log(`Added MAL ${contentData.contentType}: ${contentData.title}`)
         }
       }
@@ -490,26 +549,26 @@ class DatabasePopulator {
   // Helper function to deduplicate genres by id or name
   deduplicateGenres(genres) {
     if (!genres || !Array.isArray(genres)) return []
-    
+
     const genreMap = new Map()
-    
+
     genres.forEach((genre) => {
       if (!genre) return
-      
+
       // Handle both object format {id, name} and string format
       const genreId = typeof genre === 'object' ? genre.id : null
       const genreName = typeof genre === 'object' ? genre.name : genre
-      
+
       if (!genreName) return
-      
+
       // Use id as primary key if available, otherwise use name
       const key = genreId ? `id:${genreId}` : `name:${genreName.toLowerCase()}`
-      
+
       if (!genreMap.has(key)) {
         genreMap.set(key, typeof genre === 'object' ? genre : { name: genre })
       }
     })
-    
+
     return Array.from(genreMap.values())
   }
 
@@ -536,13 +595,15 @@ class DatabasePopulator {
       ...(tmdbData.genres || []),
     ])
 
-    // Calculate unified score with weighted calculation
+    // Calculate unified score with weighted calculation (including user ratings)
     if (existingContent.malScore && tmdbData.voteAverage) {
-      existingContent.unifiedScore = this.calculateWeightedScore(
+      existingContent.unifiedScore = this.calculateUnifiedScoreWithUserRatings(
         tmdbData.voteAverage,
         tmdbData.voteCount,
         existingContent.malScore,
         existingContent.malScoredBy,
+        existingContent.userRatingAverage,
+        existingContent.userRatingCount,
       )
     } else {
       existingContent.unifiedScore = tmdbData.voteAverage || existingContent.malScore || 0
@@ -619,13 +680,15 @@ class DatabasePopulator {
       ...(malData.genres || []),
     ])
 
-    // Calculate unified score with MAL priority
+    // Calculate unified score with MAL priority (including user ratings)
     if (existingContent.voteAverage && malData.malScore) {
-      existingContent.unifiedScore = this.calculateWeightedScore(
+      existingContent.unifiedScore = this.calculateUnifiedScoreWithUserRatings(
         existingContent.voteAverage,
         existingContent.voteCount,
         malData.malScore,
         malData.malScoredBy,
+        existingContent.userRatingAverage,
+        existingContent.userRatingCount,
       )
     } else {
       existingContent.unifiedScore = malData.malScore || existingContent.voteAverage || 0

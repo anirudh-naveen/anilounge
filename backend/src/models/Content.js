@@ -54,6 +54,16 @@ const ContentSchema = new mongoose.Schema(
     popularity: Number,
     unifiedScore: Number, // Combined score from TMDB and MAL
 
+    // User-generated ratings (from your app users)
+    userRatingAverage: {
+      type: Number,
+      default: null,
+    },
+    userRatingCount: {
+      type: Number,
+      default: 0,
+    },
+
     // MAL Specific Fields
     malScore: Number,
     malScoredBy: Number,

@@ -355,6 +355,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "populate-unified": "node src/scripts/populateUnified.js",
+    "calculate-user-ratings": "node src/scripts/calculateInitialUserRatings.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

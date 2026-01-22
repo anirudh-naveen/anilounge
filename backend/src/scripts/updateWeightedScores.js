@@ -14,31 +14,51 @@ const connectDB = async () => {
   }
 }
 
-// Calculate weighted unified score based on user votes
-const calculateWeightedScore = (tmdbScore, tmdbVotes, malScore, malVotes) => {
-  if (!tmdbScore && !malScore) return null
-  if (!tmdbScore) return malScore
-  if (!malScore) return tmdbScore
+// Calculate unified score including user ratings
+const calculateUnifiedScoreWithUserRatings = (
+  tmdbScore,
+  tmdbVotes,
+  malScore,
+  malVotes,
+  userRatingAverage,
+  userRatingCount,
+) => {
+  const scores = []
+  const weights = []
 
-  // Ensure we have valid numbers
-  const tmdb = Number(tmdbScore) || 0
-  const mal = Number(malScore) || 0
-  const tmdbVotesNum = Number(tmdbVotes) || 0
-  const malVotesNum = Number(malVotes) || 0
+  // Determine if we have multiple sources (for threshold flexibility)
+  const hasMultipleSources =
+    (tmdbScore && malScore) || (tmdbScore && userRatingAverage) || (malScore && userRatingAverage)
 
-  if (tmdb === 0 && mal === 0) return null
+  // Add TMDB score if available
+  // For single-source: use any votes. For multi-source: require > 10 votes for quality
+  if (tmdbScore && tmdbVotes && (hasMultipleSources ? tmdbVotes > 10 : tmdbVotes > 0)) {
+    scores.push(tmdbScore)
+    weights.push(Math.log10(Math.max(tmdbVotes, 1)))
+  }
 
-  // Weight scores by the number of votes (logarithmic scaling to prevent extreme weighting)
-  const tmdbWeight = Math.log10(Math.max(tmdbVotesNum, 1))
-  const malWeight = Math.log10(Math.max(malVotesNum, 1))
-  const totalWeight = tmdbWeight + malWeight
+  // Add MAL score if available
+  // For single-source: use any votes. For multi-source: require > 100 votes for quality
+  if (malScore && malVotes && (hasMultipleSources ? malVotes > 100 : malVotes > 0)) {
+    scores.push(malScore)
+    weights.push(Math.log10(Math.max(malVotes, 1)))
+  }
 
-  if (totalWeight === 0) return (tmdb + mal) / 2
+  // Add user rating if available (require at least 5 user ratings)
+  if (userRatingAverage && userRatingCount >= 5) {
+    scores.push(userRatingAverage)
+    // Give user ratings moderate weight (less than external sources initially)
+    weights.push(Math.log10(Math.max(userRatingCount, 1)) * 0.8)
+  }
 
-  const weightedScore = (tmdb * tmdbWeight + mal * malWeight) / totalWeight
+  if (scores.length === 0) return null
 
-  // Ensure we return a valid number
-  return isNaN(weightedScore) ? null : weightedScore
+  // Calculate weighted average
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0)
+  if (totalWeight === 0) return scores.reduce((sum, s) => sum + s, 0) / scores.length
+
+  const weightedSum = scores.reduce((sum, score, i) => sum + score * weights[i], 0)
+  return weightedSum / totalWeight
 }
 
 const updateWeightedScores = async () => {
@@ -48,11 +68,13 @@ const updateWeightedScores = async () => {
     let updatedCount = 0
 
     for (const item of contentItems) {
-      const newUnifiedScore = calculateWeightedScore(
+      const newUnifiedScore = calculateUnifiedScoreWithUserRatings(
         item.voteAverage,
         item.voteCount,
         item.malScore,
         item.malScoredBy,
+        item.userRatingAverage,
+        item.userRatingCount,
       )
 
       if (item.unifiedScore !== newUnifiedScore) {

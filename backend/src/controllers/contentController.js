@@ -708,6 +708,217 @@ export const updateWatchlistItem = async (req, res) => {
   }
 }
 
+// Calculate unified score including user ratings
+function calculateUnifiedScoreWithUserRatings(
+  tmdbScore,
+  tmdbVotes,
+  malScore,
+  malVotes,
+  userRatingAverage,
+  userRatingCount,
+) {
+  const scores = []
+  const weights = []
+
+  // Determine if we have multiple sources (for threshold flexibility)
+  const hasMultipleSources = (tmdbScore && malScore) || (tmdbScore && userRatingAverage) || (malScore && userRatingAverage)
+
+  // Add TMDB score if available
+  // For single-source: use any votes. For multi-source: require > 10 votes for quality
+  if (tmdbScore && tmdbVotes && (hasMultipleSources ? tmdbVotes > 10 : tmdbVotes > 0)) {
+    scores.push(tmdbScore)
+    weights.push(Math.log10(Math.max(tmdbVotes, 1)))
+  }
+
+  // Add MAL score if available
+  // For single-source: use any votes. For multi-source: require > 100 votes for quality
+  if (malScore && malVotes && (hasMultipleSources ? malVotes > 100 : malVotes > 0)) {
+    scores.push(malScore)
+    weights.push(Math.log10(Math.max(malVotes, 1)))
+  }
+
+  // Add user rating if available (require at least 5 user ratings)
+  if (userRatingAverage && userRatingCount >= 5) {
+    scores.push(userRatingAverage)
+    // Give user ratings moderate weight (less than external sources initially)
+    weights.push(Math.log10(Math.max(userRatingCount, 1)) * 0.8)
+  }
+
+  if (scores.length === 0) return null
+
+  // Calculate weighted average
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0)
+  if (totalWeight === 0) return scores.reduce((sum, s) => sum + s, 0) / scores.length
+
+  const weightedSum = scores.reduce((sum, score, i) => sum + score * weights[i], 0)
+  return weightedSum / totalWeight
+}
+
+// Helper function to update content's user rating statistics
+async function updateContentUserRatings(content, oldRating, newRating, isUpdate, session) {
+  if (!content.userRatingCount) {
+    content.userRatingCount = 0
+  }
+  if (!content.userRatingAverage) {
+    content.userRatingAverage = 0
+  }
+
+  if (isUpdate) {
+    // Updating existing rating
+    // Recalculate average: remove old rating, add new rating
+    const totalSum = content.userRatingAverage * content.userRatingCount
+    const newSum = totalSum - oldRating + newRating
+    content.userRatingAverage = newSum / content.userRatingCount
+  } else {
+    // Adding new rating
+    const totalSum = content.userRatingAverage * content.userRatingCount
+    const newSum = totalSum + newRating
+    content.userRatingCount += 1
+    content.userRatingAverage = newSum / content.userRatingCount
+  }
+
+  // Recalculate unifiedScore to include user ratings
+  content.unifiedScore = calculateUnifiedScoreWithUserRatings(
+    content.voteAverage,
+    content.voteCount,
+    content.malScore,
+    content.malScoredBy,
+    content.userRatingAverage,
+    content.userRatingCount,
+  )
+
+  await content.save({ session })
+}
+
+// Submit a vote/rating for content
+export const voteContent = async (req, res) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
+  try {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      await session.abortTransaction()
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array(),
+      })
+    }
+
+    const { contentId } = req.params
+    const { rating } = req.body
+    const userId = req.user._id
+
+    // Validate rating
+    if (!rating || rating < 1 || rating > 10) {
+      await session.abortTransaction()
+      return res.status(400).json({
+        success: false,
+        message: 'Rating must be between 1 and 10',
+      })
+    }
+
+    // Get user and content
+    const user = await User.findById(userId).session(session)
+    const content = await Content.findById(contentId).session(session)
+
+    if (!user || !content) {
+      await session.abortTransaction()
+      return res.status(404).json({
+        success: false,
+        message: 'User or content not found',
+      })
+    }
+
+    // Check if user already rated this content
+    const existingRatingIndex = user.ratings.findIndex(
+      (r) => r.content.toString() === contentId,
+    )
+
+    let oldRating = null
+    if (existingRatingIndex !== -1) {
+      // Update existing rating
+      oldRating = user.ratings[existingRatingIndex].rating
+      user.ratings[existingRatingIndex].rating = rating
+      user.ratings[existingRatingIndex].watchedAt = new Date()
+    } else {
+      // Add new rating
+      user.ratings.push({
+        content: contentId,
+        rating: rating,
+        watchedAt: new Date(),
+      })
+    }
+
+    // Update content's user rating statistics
+    await updateContentUserRatings(content, oldRating, rating, existingRatingIndex !== -1, session)
+
+    // Save user
+    await user.save({ session })
+    await session.commitTransaction()
+
+    // Get updated content
+    const updatedContent = await Content.findById(contentId)
+
+    res.json({
+      success: true,
+      message:
+        existingRatingIndex !== -1 ? 'Rating updated successfully' : 'Rating submitted successfully',
+      data: {
+        contentId,
+        rating,
+        userRatingAverage: updatedContent.userRatingAverage,
+        userRatingCount: updatedContent.userRatingCount,
+        unifiedScore: updatedContent.unifiedScore,
+      },
+    })
+  } catch (error) {
+    await session.abortTransaction()
+    console.error('Error voting on content:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error submitting vote',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message }),
+    })
+  } finally {
+    session.endSession()
+  }
+}
+
+// Get current user's rating for a specific content
+export const getMyRating = async (req, res) => {
+  try {
+    const { contentId } = req.params
+    const userId = req.user._id
+
+    const user = await User.findById(userId)
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      })
+    }
+
+    const myRating = user.ratings.find((r) => r.content.toString() === contentId)
+
+    res.json({
+      success: true,
+      data: {
+        hasRated: !!myRating,
+        rating: myRating ? myRating.rating : null,
+        watchedAt: myRating ? myRating.watchedAt : null,
+      },
+    })
+  } catch (error) {
+    console.error('Error getting user rating:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error getting rating',
+    })
+  }
+}
+
 // Get database statistics
 export const getDatabaseStats = async (req, res) => {
   try {
@@ -826,4 +1037,6 @@ export default {
   getDatabaseStats,
   getRelatedContent,
   getFranchiseContent,
+  voteContent,
+  getMyRating,
 }

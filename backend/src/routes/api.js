@@ -137,4 +137,19 @@ router.put(
   contentController.updateWatchlistItem,
 )
 
+// Vote/rate content
+router.post(
+  '/content/:contentId/vote',
+  [
+    validateObjectId,
+    body('rating')
+      .isFloat({ min: 1, max: 10 })
+      .withMessage('Rating must be between 1 and 10'),
+  ],
+  contentController.voteContent,
+)
+
+// Get user's rating for specific content
+router.get('/content/:contentId/my-rating', validateObjectId, contentController.getMyRating)
+
 export default router
