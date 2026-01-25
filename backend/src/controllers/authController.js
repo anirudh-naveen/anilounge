@@ -21,9 +21,12 @@ export const register = async (req, res) => {
 
     const { username, email, password } = req.body
 
+    // Normalize email to lowercase for consistent lookup
+    const normalizedEmail = email.toLowerCase().trim()
+
     // Check if user already exists
     const existingUser = await User.findOne({
-      $or: [{ email }, { username }],
+      $or: [{ email: normalizedEmail }, { username }],
     })
 
     if (existingUser) {
@@ -33,10 +36,10 @@ export const register = async (req, res) => {
       })
     }
 
-    // Create new user
+    // Create new user with normalized email
     const user = new User({
       username,
-      email,
+      email: normalizedEmail,
       password,
     })
 
@@ -80,8 +83,11 @@ export const login = async (req, res) => {
 
     const { email, password } = req.body
 
+    // Normalize email to lowercase for consistent lookup
+    const normalizedEmail = email.toLowerCase().trim()
+
     // Find user by email
-    const user = await User.findOne({ email })
+    const user = await User.findOne({ email: normalizedEmail })
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -104,7 +110,7 @@ export const login = async (req, res) => {
 
     if (!isPasswordValid) {
       // Log failed login attempt
-      logLoginAttempt(email, false, req.ip, req.get('User-Agent'), user._id)
+      logLoginAttempt(normalizedEmail, false, req.ip, req.get('User-Agent'), user._id)
 
       // Increment failed attempts
       user.failedLoginAttempts += 1
@@ -113,7 +119,7 @@ export const login = async (req, res) => {
       if (user.failedLoginAttempts >= 5) {
         user.lockUntil = Date.now() + 30 * 60 * 1000 // 30 minutes
         // Log account lockout
-        logAccountLockout(email, req.ip, req.get('User-Agent'), user._id)
+        logAccountLockout(normalizedEmail, req.ip, req.get('User-Agent'), user._id)
         // Ban IP for brute force
         banIPForBruteForce(req.ip, req.get('User-Agent')).catch(console.error)
       }
@@ -134,7 +140,7 @@ export const login = async (req, res) => {
     await user.save()
 
     // Log successful login
-    logLoginAttempt(email, true, req.ip, req.get('User-Agent'), user._id)
+    logLoginAttempt(normalizedEmail, true, req.ip, req.get('User-Agent'), user._id)
 
     // Generate tokens
     const accessToken = generateAccessToken(user._id)
@@ -213,14 +219,19 @@ export const updateProfile = async (req, res) => {
     // Build update object
     const updateData = {}
     if (username) updateData.username = username
-    if (email) updateData.email = email
+    if (email) updateData.email = email.toLowerCase().trim()
     if (preferences) updateData.preferences = preferences
 
     // Check if username or email already exists (if being updated)
     if (username || email) {
+      // Normalize email to lowercase if being updated
+      const normalizedEmail = email ? email.toLowerCase().trim() : null
       const existingUser = await User.findOne({
         _id: { $ne: req.user._id },
-        $or: [...(username ? [{ username }] : []), ...(email ? [{ email }] : [])],
+        $or: [
+          ...(username ? [{ username }] : []),
+          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ],
       })
 
       if (existingUser) {
