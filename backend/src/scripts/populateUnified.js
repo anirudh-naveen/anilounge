@@ -363,30 +363,50 @@ class DatabasePopulator {
   generateTitleVariations(title) {
     const variations = [title]
 
+    // Normalize title (remove special chars, lowercase for comparison)
+    const normalized = title.toLowerCase().trim()
+    variations.push(normalized)
+
     // Remove common suffixes/prefixes
-    const cleaned = title
+    const cleaned = normalized
       .replace(/\s*\(.*?\)\s*/g, '') // Remove parentheses
       .replace(/\s*:.*$/g, '') // Remove colons and everything after
       .replace(/\s*-\s*.*$/g, '') // Remove dashes and everything after
-      .replace(/\s*Season\s*\d+.*$/gi, '') // Remove season info
-      .replace(/\s*Movie.*$/gi, '') // Remove "Movie" suffix
+      .replace(/\s*season\s*\d+.*$/gi, '') // Remove season info
+      .replace(/\s*movie.*$/gi, '') // Remove "Movie" suffix
+      .replace(/\s*the\s+/gi, '') // Remove "The" prefix
+      .replace(/[^\w\s]/g, '') // Remove special characters
       .trim()
 
-    if (cleaned !== title) variations.push(cleaned)
+    if (cleaned !== normalized && cleaned.length > 2) {
+      variations.push(cleaned)
+    }
+
+    // Also try with original title (in case it's in alternativeTitles)
+    const originalCleaned = title
+      .replace(/\s*\(.*?\)\s*/g, '')
+      .replace(/\s*:.*$/g, '')
+      .replace(/\s*-\s*.*$/g, '')
+      .trim()
+
+    if (originalCleaned !== title && originalCleaned.length > 2) {
+      variations.push(originalCleaned.toLowerCase())
+    }
 
     return [...new Set(variations)].filter((v) => v && v.length > 2)
   }
 
   // Fact checking to determine if content is likely the same
+  // Made more lenient to catch TMDB/MAL duplicates
   isLikelySameContent(newContent, existingContent) {
-    // Check release year similarity (within 1 year for movies, 2 years for TV shows)
+    // If either content is missing release date, skip year check (more lenient)
     if (newContent.releaseDate && existingContent.releaseDate) {
       const newYear = new Date(newContent.releaseDate).getFullYear()
       const existingYear = new Date(existingContent.releaseDate).getFullYear()
       const yearDiff = Math.abs(newYear - existingYear)
 
-      // Movies should be within 1 year, TV shows within 2 years
-      const maxYearDiff = newContent.contentType === 'movie' ? 1 : 2
+      // More lenient: Movies within 2 years, TV shows within 3 years
+      const maxYearDiff = newContent.contentType === 'movie' ? 2 : 3
       if (yearDiff > maxYearDiff) {
         console.log(
           `Year mismatch: ${newContent.title} (${newYear}) vs ${existingContent.title} (${existingYear})`,
@@ -394,6 +414,7 @@ class DatabasePopulator {
         return false
       }
     }
+    // If one is missing release date, continue (don't reject match)
 
     // Check content type
     if (newContent.contentType !== existingContent.contentType) {
@@ -403,49 +424,52 @@ class DatabasePopulator {
       return false
     }
 
-    // Check genre overlap with stricter requirements to prevent false positives
+    // More lenient genre checking - if genres exist, check overlap, but don't require strict match
     const newGenres = (newContent.genres || []).map((g) => g.name?.toLowerCase() || g.toLowerCase())
     const existingGenres = (existingContent.genres || []).map(
       (g) => g.name?.toLowerCase() || g.toLowerCase(),
     )
-    const commonGenres = newGenres.filter((g) => existingGenres.includes(g))
-
-    // Require at least 2 common genres if both have 3+ genres, otherwise at least 1
-    const minCommonGenres = Math.min(newGenres.length, existingGenres.length) >= 3 ? 2 : 1
-
-    if (commonGenres.length < minCommonGenres) {
-      console.log(
-        `Insufficient common genres (${commonGenres.length}/${minCommonGenres} required): ${newContent.title} vs ${existingContent.title}`,
-      )
-      console.log(`   New genres: ${newGenres.join(', ')}`)
-      console.log(`   Existing genres: ${existingGenres.join(', ')}`)
-      console.log(`   Common genres: ${commonGenres.join(', ')}`)
-      return false
+    
+    // If both have genres, check for overlap (more lenient)
+    if (newGenres.length > 0 && existingGenres.length > 0) {
+      const commonGenres = newGenres.filter((g) => existingGenres.includes(g))
+      // Require at least 1 common genre (more lenient than before)
+      if (commonGenres.length === 0) {
+        console.log(
+          `No common genres: ${newContent.title} vs ${existingContent.title}`,
+        )
+        console.log(`   New genres: ${newGenres.join(', ')}`)
+        console.log(`   Existing genres: ${existingGenres.join(', ')}`)
+        return false
+      }
     }
+    // If one has no genres, continue (don't reject match)
 
-    // Check episode count similarity for TV shows (within 5 episodes)
+    // More lenient episode count check for TV shows (within 10 episodes instead of 5)
     if (newContent.contentType === 'tv') {
       const newEpisodes = newContent.episodeCount || newContent.malEpisodes
       const existingEpisodes = existingContent.episodeCount || existingContent.malEpisodes
-      if (newEpisodes && existingEpisodes && Math.abs(newEpisodes - existingEpisodes) > 5) {
+      if (newEpisodes && existingEpisodes && Math.abs(newEpisodes - existingEpisodes) > 10) {
         console.log(
           `Episode count mismatch: ${newContent.title} (${newEpisodes}) vs ${existingContent.title} (${existingEpisodes})`,
         )
         return false
       }
     }
+    // If one is missing episode count, continue (don't reject match)
 
-    // Check runtime similarity for movies (within 30 minutes)
+    // More lenient runtime check for movies (within 45 minutes instead of 30)
     if (newContent.contentType === 'movie') {
       const newRuntime = newContent.runtime
       const existingRuntime = existingContent.runtime
-      if (newRuntime && existingRuntime && Math.abs(newRuntime - existingRuntime) > 30) {
+      if (newRuntime && existingRuntime && Math.abs(newRuntime - existingRuntime) > 45) {
         console.log(
           `Runtime mismatch: ${newContent.title} (${newRuntime}min) vs ${existingContent.title} (${existingRuntime}min)`,
         )
         return false
       }
     }
+    // If one is missing runtime, continue (don't reject match)
 
     console.log(`Content match confirmed: ${newContent.title} ≈ ${existingContent.title}`)
     return true
