@@ -282,6 +282,12 @@ app.use('/api/auth', authLimiter)
 // Apply upload rate limiting to upload routes
 app.use('/api/auth/upload-profile-picture', uploadLimiter)
 
+// Add API version header to all /api responses (optional for clients)
+app.use('/api', (req, res, next) => {
+  res.setHeader('X-API-Version', '1.0.0-beta')
+  next()
+})
+
 // API routes with protection
 app.use('/api', apiProtection, apiRoutes)
 
