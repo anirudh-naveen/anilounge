@@ -88,27 +88,11 @@
         <button @click="loadMovies(1)" class="btn btn-primary">Refresh</button>
       </div>
 
-      <!-- Pagination -->
-      <div v-if="contentStore.moviesPagination.totalPages > 1" class="pagination">
-        <button
-          @click="loadMovies(contentStore.moviesPagination.currentPage - 1)"
-          :disabled="!contentStore.moviesPagination.hasPrevPage"
-          class="btn btn-secondary"
-        >
-          Previous
-        </button>
-        <span class="pagination-info">
-          Page {{ contentStore.moviesPagination.currentPage }} of
-          {{ contentStore.moviesPagination.totalPages }}
-        </span>
-        <button
-          @click="loadMovies(contentStore.moviesPagination.currentPage + 1)"
-          :disabled="!contentStore.moviesPagination.hasNextPage"
-          class="btn btn-secondary"
-        >
-          Next
-        </button>
-      </div>
+      <PaginationNav
+        :current-page="contentStore.moviesPagination.currentPage"
+        :total-pages="contentStore.moviesPagination.totalPages"
+        @change="loadMovies"
+      />
 
       <!-- Status Dropdown -->
       <StatusDropdown
@@ -130,6 +114,7 @@ import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/ap
 import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
+import PaginationNav from '@/components/PaginationNav.vue'
 import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
@@ -209,6 +194,7 @@ const closeStatusDropdown = () => {
 const loadMovies = async (page: number) => {
   try {
     await contentStore.getContent(page, 'movie', 20)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (error) {
     console.error('Error loading movies:', error)
     toast.error('Failed to load movies. Please try again.')
@@ -483,19 +469,6 @@ onMounted(async () => {
   transform: none;
 }
 
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.pagination-info {
-  color: white;
-  font-weight: 500;
-}
-
 .content-type-badge {
   position: absolute;
   top: 6px;
@@ -534,11 +507,6 @@ onMounted(async () => {
   .movies-grid {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
     gap: 0.75rem;
-  }
-
-  .pagination {
-    flex-direction: column;
-    gap: 0.5rem;
   }
 }
 </style>

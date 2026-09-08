@@ -89,27 +89,11 @@
         <button @click="loadTVShows(1)" class="btn btn-primary">Refresh</button>
       </div>
 
-      <!-- Pagination -->
-      <div v-if="contentStore.tvShowsPagination.totalPages > 1" class="pagination">
-        <button
-          @click="loadTVShows(contentStore.tvShowsPagination.currentPage - 1)"
-          :disabled="!contentStore.tvShowsPagination.hasPrevPage"
-          class="btn btn-secondary"
-        >
-          Previous
-        </button>
-        <span class="pagination-info">
-          Page {{ contentStore.tvShowsPagination.currentPage }} of
-          {{ contentStore.tvShowsPagination.totalPages }}
-        </span>
-        <button
-          @click="loadTVShows(contentStore.tvShowsPagination.currentPage + 1)"
-          :disabled="!contentStore.tvShowsPagination.hasNextPage"
-          class="btn btn-secondary"
-        >
-          Next
-        </button>
-      </div>
+      <PaginationNav
+        :current-page="contentStore.tvShowsPagination.currentPage"
+        :total-pages="contentStore.tvShowsPagination.totalPages"
+        @change="loadTVShows"
+      />
 
       <!-- Status Dropdown -->
       <StatusDropdown
@@ -130,6 +114,7 @@ import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
+import PaginationNav from '@/components/PaginationNav.vue'
 import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
@@ -205,6 +190,7 @@ const closeStatusDropdown = () => {
 const loadTVShows = async (page: number) => {
   try {
     await contentStore.getContent(page, 'tv', 20)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (error) {
     console.error('Error loading TV shows:', error)
     toast.error('Failed to load TV shows. Please try again.')
@@ -483,19 +469,6 @@ onMounted(async () => {
   transform: none;
 }
 
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.pagination-info {
-  color: white;
-  font-weight: 500;
-}
-
 .content-type-badge {
   position: absolute;
   top: 6px;
@@ -534,11 +507,6 @@ onMounted(async () => {
   .tvshows-grid {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
     gap: 0.75rem;
-  }
-
-  .pagination {
-    flex-direction: column;
-    gap: 0.5rem;
   }
 }
 </style>
