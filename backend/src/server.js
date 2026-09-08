@@ -66,10 +66,10 @@ app.get('/api/status', (req, res) => {
 // Connect to MongoDB (non-blocking - server will start even if DB connection fails in dev)
 connectDB().catch((error) => {
   if (process.env.NODE_ENV === 'production') {
-    console.error('Failed to connect to database. Exiting...')
+    console.error('Failed to connect to database. Exiting...', error)
     process.exit(1)
   } else {
-    console.warn('Database connection failed, but continuing in development mode')
+    console.warn('Database connection failed, but continuing in development mode', error)
   }
 })
 
@@ -304,6 +304,7 @@ app.use('*', (req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
+  void next // Express requires 4 args to treat this as error middleware
   console.error('Global error handler:', err)
 
   // Mongoose validation error
