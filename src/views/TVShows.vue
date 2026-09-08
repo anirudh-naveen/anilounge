@@ -259,14 +259,14 @@ onMounted(async () => {
 
 .tvshows-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
   margin-bottom: 3rem;
 }
 
 .show-card {
   background: white;
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
@@ -274,8 +274,8 @@ onMounted(async () => {
 }
 
 .show-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .show-poster {
@@ -310,7 +310,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 1rem;
+  padding: 0.5rem;
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -322,10 +322,10 @@ onMounted(async () => {
 .show-rating {
   background: rgba(255, 255, 255, 0.9);
   color: #333;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   align-self: flex-start;
 }
 
@@ -339,12 +339,12 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.9);
   border: none;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -361,44 +361,50 @@ onMounted(async () => {
 }
 
 .show-info {
-  padding: 1.5rem;
+  padding: 0.6rem 0.7rem 0.75rem;
 }
 
 .show-title {
-  font-size: 1.25rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
   color: #333;
-  line-height: 1.3;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .show-overview {
-  color: #666;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  margin-bottom: 1rem;
+  display: none;
 }
 
 .show-genres {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.25rem;
+  margin-bottom: 0.4rem;
 }
 
 .genre-tag {
   background: #f0f0f0;
   color: #666;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.65rem;
   font-weight: 500;
+}
+
+.genre-tag:nth-child(n + 2) {
+  display: none;
 }
 
 .show-meta {
   display: flex;
-  gap: 1rem;
-  font-size: 0.8rem;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.7rem;
   color: #999;
 }
 
@@ -492,12 +498,12 @@ onMounted(async () => {
 
 .content-type-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
   color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.65rem;
   font-weight: 600;
   z-index: 2;
   text-transform: uppercase;
@@ -526,8 +532,8 @@ onMounted(async () => {
   }
 
   .tvshows-grid {
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 0.75rem;
   }
 
   .pagination {
