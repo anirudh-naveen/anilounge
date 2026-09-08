@@ -49,6 +49,9 @@ export const useContentStore = defineStore('content', () => {
     hasPrevPage: false,
   })
 
+  const lastSearchQuery = ref('')
+  const catalogSize = ref(0)
+
   // Get all content with pagination and filtering
   const getContent = async (page = 1, contentType?: 'movie' | 'tv' | 'all', limit = 20) => {
     try {
@@ -177,21 +180,29 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  const ensureFullCatalog = async () => {
+    if (catalogSize.value > 0 && allContent.value.length >= catalogSize.value) return
+
+    const response = await contentAPI.getContent({ page: 1, limit: 10000 })
+    if (response.data.success) {
+      allContent.value = response.data.data
+      catalogSize.value = response.data.pagination?.totalItems ?? response.data.data.length
+    }
+  }
+
   // Search content
   const searchContent = async (
     query: string,
     contentType?: 'movie' | 'tv' | 'all',
     page = 1,
-    limit = 20,
+    limit?: number,
   ) => {
     try {
       isLoading.value = true
       error.value = null
+      lastSearchQuery.value = query
 
-      // Ensure we have content loaded - if not, load more content
-      if (allContent.value.length < 100) {
-        await getPopularContent('all', 500) // Load up to 500 items for comprehensive search
-      }
+      await ensureFullCatalog()
 
       // Search through local database instead of API call
       let filteredResults = allContent.value
@@ -320,26 +331,26 @@ export const useContentStore = defineStore('content', () => {
         filteredResults.sort((a, b) => (b.unifiedScore || 0) - (a.unifiedScore || 0))
       }
 
-      // Implement pagination
-      const startIndex = (page - 1) * limit
-      const endIndex = startIndex + limit
-      const paginatedResults = filteredResults.slice(startIndex, endIndex)
+      const totalItems = filteredResults.length
+      const pageSize = limit && limit > 0 ? limit : totalItems
+      const startIndex = limit && limit > 0 ? (page - 1) * limit : 0
+      const pagedResults =
+        limit && limit > 0 ? filteredResults.slice(startIndex, startIndex + limit) : filteredResults
 
-      // Set results
-      searchResults.value = paginatedResults
+      searchResults.value = pagedResults
       pagination.value = {
         currentPage: page,
-        totalPages: Math.ceil(filteredResults.length / limit),
-        totalItems: filteredResults.length,
-        itemsPerPage: limit,
-        hasNextPage: page < Math.ceil(filteredResults.length / limit),
+        totalPages: pageSize > 0 ? Math.ceil(totalItems / pageSize) : 1,
+        totalItems,
+        itemsPerPage: pageSize || totalItems,
+        hasNextPage: Boolean(limit && limit > 0 && page * limit < totalItems),
         hasPrevPage: page > 1,
       }
 
       return {
         success: true,
         data: {
-          content: paginatedResults,
+          content: pagedResults,
           pagination: pagination.value,
         },
       }
@@ -564,6 +575,7 @@ export const useContentStore = defineStore('content', () => {
   // Clear functions
   const clearSearchResults = () => {
     searchResults.value = []
+    lastSearchQuery.value = ''
   }
 
   const clearCurrentContent = () => {
@@ -579,6 +591,8 @@ export const useContentStore = defineStore('content', () => {
     recommendations.value = []
     watchlist.value = []
     watchlistLoaded.value = false
+    lastSearchQuery.value = ''
+    catalogSize.value = 0
     error.value = null
   }
 
@@ -599,6 +613,7 @@ export const useContentStore = defineStore('content', () => {
     pagination,
     moviesPagination,
     tvShowsPagination,
+    lastSearchQuery,
 
     // Actions
     getContent,
