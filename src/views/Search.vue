@@ -228,23 +228,7 @@
         </div>
 
         <!-- Pagination -->
-        <div v-if="totalPages > 1" class="pagination">
-          <button
-            @click="currentPage = Math.max(1, currentPage - 1)"
-            :disabled="currentPage === 1"
-            class="btn btn-secondary"
-          >
-            Previous
-          </button>
-          <span class="pagination-info"> Page {{ currentPage }} of {{ totalPages }} </span>
-          <button
-            @click="currentPage = Math.min(totalPages, currentPage + 1)"
-            :disabled="currentPage === totalPages"
-            class="btn btn-secondary"
-          >
-            Next
-          </button>
-        </div>
+        <PaginationNav :current-page="currentPage" :total-pages="totalPages" @change="goToPage" />
       </div>
 
       <!-- No Results -->
@@ -282,7 +266,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
@@ -292,6 +276,7 @@ import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import Chatbot from '@/components/Chatbot.vue'
+import PaginationNav from '@/components/PaginationNav.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -306,7 +291,7 @@ const isAIMode = ref(false)
 const showStatusDropdown = ref(false)
 const selectedContentId = ref('')
 const currentPage = ref(1)
-const itemsPerPage = 12
+const itemsPerPage = 20
 
 const filters = ref({
   type: 'all',
@@ -492,13 +477,7 @@ const handleSearch = async () => {
   try {
     hasSearched.value = true
     currentPage.value = 1
-
-    // Ensure content is loaded first
-    if (contentStore.allContent.length === 0) {
-      await contentStore.getPopularContent('all', 100) // Load more content for better search
-    }
-
-    await contentStore.searchContent(searchQuery.value, 'all', 1, 50)
+    await contentStore.searchContent(searchQuery.value, 'all')
   } catch (error) {
     console.error('Search error:', error)
     toast.error('Search failed. Please try again.')
@@ -515,32 +494,19 @@ const toggleAIMode = () => {
 }
 
 const handleAISearchResults = (results: UnifiedContent[]) => {
-  // Handle AI search results - this will be called from the chatbot
   contentStore.searchResults = results
   hasSearched.value = true
 }
 
-const applyFilters = async () => {
+const applyFilters = () => {
   currentPage.value = 1
-
-  // Ensure content is loaded first
-  if (contentStore.allContent.length === 0) {
-    await contentStore.getPopularContent('all', 100) // Load more content for better search
-  }
-
-  // Trigger a search with current filters, even if no search query
-  const query = searchQuery.value.trim() || 'animated'
-  const contentType = filters.value.type !== 'all' ? (filters.value.type as 'movie' | 'tv') : 'all'
-  hasSearched.value = true
-  await contentStore.searchContent(query, contentType, 1, 50)
 }
 
 const applySorting = () => {
-  // Sorting is handled by the filteredResults computed property
-  // No need to trigger a new search, just re-sort existing results
+  currentPage.value = 1
 }
 
-const clearFilters = async () => {
+const clearFilters = () => {
   filters.value = {
     type: 'all',
     rating: 'all',
@@ -550,10 +516,6 @@ const clearFilters = async () => {
     sortBy: 'relevance',
   }
   currentPage.value = 1
-  // Trigger a search with cleared filters
-  const query = searchQuery.value.trim() || 'animated'
-  hasSearched.value = true
-  await contentStore.searchContent(query, 'all', 1, 50)
 }
 
 const clearSearch = () => {
@@ -563,50 +525,36 @@ const clearSearch = () => {
   contentStore.clearSearchResults()
 }
 
-// Watch for filter changes
-watch(
-  filters,
-  () => {
-    applyFilters()
-  },
-  { deep: true },
-)
+const goToPage = (page: number) => {
+  currentPage.value = page
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 
 // Handle scroll position restoration when returning from detail pages
-onMounted(async () => {
-  // Check if we're returning from a detail page
+onMounted(() => {
+  if (contentStore.searchResults.length > 0) {
+    hasSearched.value = true
+    if (contentStore.lastSearchQuery) {
+      searchQuery.value = contentStore.lastSearchQuery
+    }
+  }
+
   const previousPage = route.query.from as string
   if (previousPage && previousPage.includes('/search')) {
-    // Extract page number from the previous URL
     const url = new URL(previousPage, window.location.origin)
     const page = url.searchParams.get('page') || '1'
+    currentPage.value = parseInt(page, 10) || 1
 
-    // Restore scroll position for the page we're returning to
     const scrollKey = `search-page-${page}`
     const restored = contentStore.restoreScrollPosition(scrollKey)
 
-    // If scroll position wasn't restored, scroll to top after navigation
     if (!restored) {
       nextTick(() => {
         contentStore.scrollToTop()
       })
     }
   } else {
-    // Scroll to top when component mounts normally
     contentStore.scrollToTop()
-
-    // Load initial content first, then search
-    try {
-      // Ensure content is loaded first
-      if (contentStore.allContent.length === 0) {
-        await contentStore.getPopularContent('all', 100) // Load more content for better search
-      }
-
-      hasSearched.value = true
-      await contentStore.searchContent('', 'all', 1, 50) // Show all content initially instead of searching for "animated"
-    } catch (error) {
-      console.error('Failed to load initial content:', error)
-    }
   }
 })
 </script>
@@ -813,14 +761,14 @@ onMounted(async () => {
 
 .results-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
   margin-bottom: 3rem;
 }
 
 .result-card {
   background: white;
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
@@ -828,8 +776,8 @@ onMounted(async () => {
 }
 
 .result-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .result-poster {
@@ -864,7 +812,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 1rem;
+  padding: 0.5rem;
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -874,10 +822,10 @@ onMounted(async () => {
 }
 
 .result-rating {
-  padding: 4px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   align-self: flex-start;
   position: absolute;
   top: 8px;
@@ -896,12 +844,12 @@ onMounted(async () => {
 
 .content-type-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
   color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.65rem;
   font-weight: 600;
   z-index: 2;
   text-transform: uppercase;
@@ -934,12 +882,12 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.9);
   border: none;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -959,8 +907,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   color: rgba(255, 255, 255, 0.6);
@@ -975,44 +923,50 @@ onMounted(async () => {
 }
 
 .result-info {
-  padding: 1.5rem;
+  padding: 0.6rem 0.7rem 0.75rem;
 }
 
 .result-title {
-  font-size: 1.25rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
   color: #333;
-  line-height: 1.3;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .result-overview {
-  color: #666;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  margin-bottom: 1rem;
+  display: none;
 }
 
 .result-genres {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.25rem;
+  margin-bottom: 0.4rem;
 }
 
 .genre-tag {
   background: #f0f0f0;
   color: #666;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.65rem;
   font-weight: 500;
+}
+
+.genre-tag:nth-child(n + 2) {
+  display: none;
 }
 
 .result-meta {
   display: flex;
-  gap: 1rem;
-  font-size: 0.8rem;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.7rem;
   color: #999;
 }
 
@@ -1130,13 +1084,8 @@ onMounted(async () => {
   }
 
   .results-grid {
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
-  }
-
-  .pagination {
-    flex-direction: column;
-    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 0.75rem;
   }
 }
 </style>
