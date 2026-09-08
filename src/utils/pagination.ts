@@ -51,10 +51,14 @@ export function getPaginationItems(
   const items: PaginationItem[] = []
 
   for (let i = 0; i < pages.length; i++) {
-    if (i > 0 && pages[i] - pages[i - 1] > 1) {
+    const page = pages[i]
+    const previousPage = pages[i - 1]
+    if (page === undefined) continue
+
+    if (i > 0 && previousPage !== undefined && page - previousPage > 1) {
       items.push('ellipsis')
     }
-    items.push(pages[i])
+    items.push(page)
   }
 
   return items
