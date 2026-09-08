@@ -15,6 +15,10 @@ import {
   apiProtection,
 } from './middleware/antiBot.js'
 import { checkIPBan } from './middleware/ipBan.js'
+import {
+  startContentSyncScheduler,
+  getContentSyncStatus,
+} from './services/contentSyncScheduler.js'
 
 // Load environment variables
 dotenv.config()
@@ -50,6 +54,7 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
     version: '1.0.0-beta',
+    contentSync: getContentSyncStatus(),
   })
 })
 
@@ -357,6 +362,7 @@ app
     console.log(`Find Animation API server running on port ${PORT}`)
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
     console.log(`Health check: http://localhost:${PORT}/health`)
+    startContentSyncScheduler()
   })
   .on('error', (err) => {
     if (err.code === 'EADDRINUSE') {

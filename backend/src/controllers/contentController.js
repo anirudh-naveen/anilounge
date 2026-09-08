@@ -1,4 +1,5 @@
 import Content from '../models/Content.js'
+import { getContentSyncStatus } from '../services/contentSyncScheduler.js'
 import User from '../models/User.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
@@ -938,6 +939,8 @@ export const getDatabaseStats = async (req, res) => {
     const movies = await Content.countDocuments({ contentType: 'movie' })
     const tvShows = await Content.countDocuments({ contentType: 'tv' })
 
+    const syncStatus = getContentSyncStatus()
+
     res.json({
       success: true,
       data: {
@@ -947,7 +950,8 @@ export const getDatabaseStats = async (req, res) => {
         mergedContent,
         movies,
         tvShows,
-        lastUpdated: new Date(),
+        lastUpdated: syncStatus.lastSync?.finishedAt || null,
+        contentSync: syncStatus,
       },
     })
   } catch (error) {

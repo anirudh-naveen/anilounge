@@ -2,7 +2,7 @@ Additions and Major Changes -
 
 1. Refine the search feature.
 2. Rework Gemini chatbot functionality.
-3. Have an automatically updating database.
+3. Have an automatically updating database. ✅
 4. Add review system and discussion features for users.
 
 
