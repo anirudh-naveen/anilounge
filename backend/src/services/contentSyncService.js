@@ -731,8 +731,13 @@ class DatabasePopulator {
     existingContent.malRank = malData.malRank
     existingContent.malStatus = malData.malStatus
     existingContent.malEpisodes = malData.malEpisodes
+    existingContent.malMediaType = malData.malMediaType || existingContent.malMediaType
     existingContent.malSource = malData.malSource
     existingContent.malRating = malData.malRating
+
+    if (malData.contentType === 'special') {
+      existingContent.contentType = 'special'
+    }
 
     // Merge arrays
     existingContent.studios = [
@@ -828,10 +833,12 @@ class DatabasePopulator {
     // Content type breakdown
     const movies = await Content.countDocuments({ contentType: 'movie' })
     const tvShows = await Content.countDocuments({ contentType: 'tv' })
+    const specials = await Content.countDocuments({ contentType: 'special' })
 
     console.log('\nContent Type Breakdown:')
     console.log(`   Movies: ${movies}`)
     console.log(`   TV Shows: ${tvShows}`)
+    console.log(`   Specials: ${specials}`)
   }
 }
 

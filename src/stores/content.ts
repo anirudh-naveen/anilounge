@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { contentAPI, watchlistAPI, formatGenres, getContentTypeDisplay } from '@/services/api'
+import {
+  contentAPI,
+  watchlistAPI,
+  formatGenres,
+  getContentTypeDisplay,
+  matchesContentTypeFilter,
+} from '@/services/api'
 import type { WatchlistItem } from '@/types'
 import type { UnifiedContent } from '@/types/content'
 
@@ -86,15 +92,14 @@ export const useContentStore = defineStore('content', () => {
           tvShows.value = response.data.data
           tvShowsPagination.value = response.data.pagination
         } else if (contentType === 'all' || !contentType) {
-          // For 'all' content type, separate movies and TV shows efficiently
           const movieItems: UnifiedContent[] = []
           const tvItems: UnifiedContent[] = []
 
           for (const item of response.data.data) {
-            if (item.contentType === 'movie') {
-              movieItems.push(item)
-            } else if (item.contentType === 'tv') {
+            if (item.contentType === 'tv') {
               tvItems.push(item)
+            } else {
+              movieItems.push(item)
             }
           }
 
@@ -109,7 +114,6 @@ export const useContentStore = defineStore('content', () => {
       error.value = err instanceof Error ? err.message : 'Failed to fetch content'
       throw err
     } finally {
-      // Clear appropriate loading state
       if (contentType === 'movie') {
         moviesLoading.value = false
       } else if (contentType === 'tv') {
@@ -135,33 +139,27 @@ export const useContentStore = defineStore('content', () => {
         const data = response.data.data
 
         if (contentType === 'movie') {
-          // For movies, set movies array directly
           movies.value = data
-          // Update allContent to include these movies
           allContent.value = [
-            ...allContent.value.filter((item: UnifiedContent) => item.contentType !== 'movie'),
+            ...allContent.value.filter((item: UnifiedContent) => item.contentType === 'tv'),
             ...data,
           ]
         } else if (contentType === 'tv') {
-          // For TV shows, set tvShows array directly
           tvShows.value = data
-          // Update allContent to include these TV shows
           allContent.value = [
             ...allContent.value.filter((item: UnifiedContent) => item.contentType !== 'tv'),
             ...data,
           ]
         } else {
-          // For 'all', set allContent and filter from it efficiently
           allContent.value = data
           const movieList: UnifiedContent[] = []
           const tvList: UnifiedContent[] = []
 
-          // Single pass filtering for better performance
           data.forEach((item: UnifiedContent) => {
-            if (item.contentType === 'movie') {
-              movieList.push(item)
-            } else if (item.contentType === 'tv') {
+            if (item.contentType === 'tv') {
               tvList.push(item)
+            } else {
+              movieList.push(item)
             }
           })
 
@@ -207,9 +205,10 @@ export const useContentStore = defineStore('content', () => {
       // Search through local database instead of API call
       let filteredResults = allContent.value
 
-      // Filter by content type if specified
       if (contentType && contentType !== 'all') {
-        filteredResults = filteredResults.filter((item) => item.contentType === contentType)
+        filteredResults = filteredResults.filter((item) =>
+          matchesContentTypeFilter(item.contentType, contentType),
+        )
       }
 
       // Enhanced search with better title and genre matching

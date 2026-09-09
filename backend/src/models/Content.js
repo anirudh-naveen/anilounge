@@ -15,7 +15,7 @@ const ContentSchema = new mongoose.Schema(
     // Content Type
     contentType: {
       type: String,
-      enum: ['movie', 'tv'],
+      enum: ['movie', 'tv', 'special'],
       required: true,
       index: true,
     },
@@ -73,6 +73,10 @@ const ContentSchema = new mongoose.Schema(
       enum: ['finished_airing', 'currently_airing', 'not_yet_aired'],
     },
     malEpisodes: Number,
+    malMediaType: {
+      type: String,
+      enum: ['unknown', 'tv', 'ova', 'movie', 'special', 'ona', 'music'],
+    },
     malSource: {
       type: String,
       enum: [

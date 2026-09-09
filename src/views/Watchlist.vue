@@ -71,7 +71,7 @@
             </div>
 
             <div class="item-progress">
-              <div v-if="getContentType(item) === 'TV Show'" class="episode-progress">
+              <div v-if="tracksItemEpisodes(item)" class="episode-progress">
                 <span class="episodes-watched">{{ getCurrentEpisodes(item) }}</span>
                 <span class="episode-separator">/</span>
                 <span class="total-episodes">{{ getTotalEpisodes(item) }}</span>
@@ -143,7 +143,7 @@
                     <span class="info-label">Release Date:</span>
                     <span class="info-value">{{ getContentReleaseDate(item) }}</span>
                   </div>
-                  <div v-if="getContentType(item) === 'TV Show'" class="info-item">
+                  <div v-if="isTvContent(item)" class="info-item">
                     <span class="info-label">Seasons:</span>
                     <span class="info-value">{{ getContentSeasons(item) }}</span>
                   </div>
@@ -178,7 +178,7 @@
                     </select>
                   </div>
 
-                  <div v-if="getContentType(item) === 'TV Show'" class="episode-control">
+                  <div v-if="tracksItemEpisodes(item)" class="episode-control">
                     <label>Episodes Watched:</label>
                     <input
                       :value="getLocalFormData(item).currentEpisode"
@@ -197,7 +197,7 @@
                   </div>
 
                   <div
-                    v-if="getContentType(item) === 'TV Show' && getTotalSeasons(item) > 1"
+                    v-if="isTvContent(item) && getTotalSeasons(item) > 1"
                     class="season-control"
                   >
                     <label>Current Season:</label>
@@ -288,10 +288,15 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl } from '@/services/api'
+import {
+  getPosterUrl,
+  getCardContentTypeDisplay,
+  getDetailsRouteName,
+  tracksEpisodes,
+} from '@/services/api'
 import { getRatingColorHSL } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
-import type { WatchlistItem, Movie, TVShow } from '@/types'
+import type { WatchlistItem, TVShow } from '@/types'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
 
@@ -362,7 +367,18 @@ const getContentPosterPath = (item: WatchlistItem) => {
 const getContentType = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'Unknown'
   if (typeof item.content === 'string') return 'Unknown'
-  return item.content?.contentType === 'movie' ? 'Movie' : 'TV Show'
+  if (!item.content?.contentType) return 'Unknown'
+  return getCardContentTypeDisplay(item.content.contentType)
+}
+
+const tracksItemEpisodes = (item: WatchlistItem) => {
+  if (typeof item === 'string' || typeof item.content === 'string' || !item.content) return false
+  return tracksEpisodes(item.content)
+}
+
+const isTvContent = (item: WatchlistItem) => {
+  if (typeof item === 'string' || typeof item.content === 'string') return false
+  return item.content?.contentType === 'tv'
 }
 
 const getContentYear = (item: WatchlistItem) => {
@@ -370,10 +386,7 @@ const getContentYear = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return ''
   const content = item.content
   if (!content) return ''
-  const date =
-    content.contentType === 'movie'
-      ? (content as unknown as Movie).releaseDate
-      : (content as unknown as TVShow).releaseDate
+  const date = content.releaseDate
   return date ? new Date(date).getFullYear().toString() : ''
 }
 
@@ -388,10 +401,7 @@ const getContentReleaseDate = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 'Unknown'
   const content = item.content
   if (!content) return 'Unknown'
-  const date =
-    content.contentType === 'movie'
-      ? (content as unknown as Movie).releaseDate
-      : (content as unknown as TVShow).releaseDate
+  const date = content.releaseDate
   return date ? new Date(date).toLocaleDateString() : 'Unknown'
 }
 
@@ -445,7 +455,7 @@ const hasNewEpisodes = (item: WatchlistItem) => {
 }
 
 const getProgressPercent = (item: WatchlistItem) => {
-  if (getContentType(item) === 'TV Show') {
+  if (tracksItemEpisodes(item)) {
     const total = getTotalEpisodes(item)
     if (!total) return 0
     return Math.min(100, Math.round((getCurrentEpisodes(item) / total) * 100))
@@ -619,13 +629,12 @@ const removeFromWatchlist = async (item: WatchlistItem) => {
 
 const viewContentDetails = (item: WatchlistItem) => {
   if (typeof item === 'string') return
-  if (typeof item.content === 'string') return
+  if (typeof item.content === 'string' || !item.content) return
 
-  const route =
-    item.content?.contentType === 'movie'
-      ? `/movie/${item.content?.tmdbId}`
-      : `/tv/${item.content?.tmdbId}`
-  router.push(route)
+  router.push({
+    name: getDetailsRouteName(item.content),
+    params: { id: item.content._id },
+  })
 }
 
 const handleImageError = (event: Event) => {

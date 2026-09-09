@@ -4,7 +4,7 @@ export interface UnifiedContent {
   title: string
   originalTitle?: string
   overview: string
-  contentType: 'movie' | 'tv'
+  contentType: 'movie' | 'tv' | 'special'
   posterPath?: string
   backdropPath?: string
   releaseDate?: string | Date
@@ -18,6 +18,7 @@ export interface UnifiedContent {
   runtime?: number
   episodeCount?: number
   malEpisodes?: number
+  malMediaType?: string
   seasonCount?: number
   studios?: string[]
   productionCompanies?: string[]

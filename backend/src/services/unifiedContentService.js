@@ -6,6 +6,17 @@ dotenv.config()
 // https://developer.themoviedb.org/docs/getting-started
 // https://myanimelist.net/apiconfig/references/api/v2
 
+const MAL_ANIME_FIELDS =
+  'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users,media_type'
+
+const MAL_SPECIAL_TYPES = new Set(['ova', 'special'])
+
+const matchesRequestedType = (item, contentType) => {
+  if (!contentType || contentType === 'all') return true
+  if (contentType === 'movie') return item.contentType === 'movie' || item.contentType === 'special'
+  return item.contentType === contentType
+}
+
 class UnifiedContentService {
   constructor() {
     this.tmdbApiKey = process.env.TMDB_API_KEY
@@ -143,8 +154,7 @@ class UnifiedContentService {
           ranking_type: 'all',
           limit: Math.min(limit * 3, 300), // Get more to filter for movies
           offset,
-          fields:
-            'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users',
+          fields: MAL_ANIME_FIELDS,
         },
       })
 
@@ -187,8 +197,7 @@ class UnifiedContentService {
           ranking_type: 'all',
           limit: Math.min(limit, 100),
           offset,
-          fields:
-            'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users',
+          fields: MAL_ANIME_FIELDS,
         },
       })
 
@@ -206,8 +215,7 @@ class UnifiedContentService {
       await this.delay(this.malDelay)
       const response = await this.malClient.get(`/anime/${malId}`, {
         params: {
-          fields:
-            'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users',
+          fields: MAL_ANIME_FIELDS,
         },
       })
 
@@ -227,8 +235,7 @@ class UnifiedContentService {
         params: {
           q: query,
           limit: Math.min(limit, 100),
-          fields:
-            'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users',
+          fields: MAL_ANIME_FIELDS,
         },
       })
 
@@ -282,28 +289,39 @@ class UnifiedContentService {
     return content
   }
 
+  isMalSpecialType(mediaType) {
+    return MAL_SPECIAL_TYPES.has(String(mediaType || '').toLowerCase())
+  }
+
+  resolveMalContentType(anime) {
+    const mediaType = String(anime.media_type || '').toLowerCase()
+    if (this.isMalSpecialType(mediaType)) return 'special'
+    if (mediaType === 'movie') return 'movie'
+    if (mediaType === 'tv') return 'tv'
+
+    const episodes = anime.num_episodes || 0
+    const isMovie = episodes === 1 && anime.status === 'finished_airing'
+    return isMovie ? 'movie' : 'tv'
+  }
+
   convertMalToContent(malData) {
     // Handle MAL API response structure - data might be in malData.node
     const anime = malData.node || malData
 
     // Filter out music videos
-    if (anime.source === 'music') {
+    if (anime.source === 'music' || String(anime.media_type || '').toLowerCase() === 'music') {
       return null
     }
 
-    // Determine content type based on episode count and status
-    // Single episode + finished airing = movie
-    // Multiple episodes or currently airing = TV show
     const episodes = anime.num_episodes || 0
-    const status = anime.status
-    const isMovie = episodes === 1 && status === 'finished_airing'
-    const finalContentType = isMovie ? 'movie' : 'tv'
+    const finalContentType = this.resolveMalContentType(anime)
+    const malMediaType = String(anime.media_type || '').toLowerCase() || undefined
 
     const content = {
       title: anime.title || 'Unknown Title',
       originalTitle: anime.alternative_titles?.en || anime.title || 'Unknown Title',
       overview: anime.synopsis || '',
-      contentType: finalContentType, // Use determined content type
+      contentType: finalContentType,
       posterPath: anime.main_picture?.medium || anime.main_picture?.large,
       malId: anime.id,
       malScore: anime.mean,
@@ -311,6 +329,11 @@ class UnifiedContentService {
       malRank: anime.rank,
       malStatus: anime.status,
       malEpisodes: anime.num_episodes,
+      malMediaType: ['unknown', 'tv', 'ova', 'movie', 'special', 'ona', 'music'].includes(
+        malMediaType,
+      )
+        ? malMediaType
+        : undefined,
       malSource: anime.source,
       malRating: anime.rating,
       genres: anime.genres?.map((genre) => ({ id: genre.id, name: genre.name })) || [],
@@ -559,7 +582,8 @@ class UnifiedContentService {
         results.push(
           ...malResults
             .map((item) => this.convertMalToContent(item))
-            .filter((item) => item !== null) // Filter out null results
+            .filter((item) => item !== null)
+            .filter((item) => matchesRequestedType(item, contentType))
             .map((item) => ({
               ...item,
               source: 'mal',
@@ -708,7 +732,8 @@ class UnifiedContentService {
         results.push(
           ...malAnime
             .map((anime) => this.convertMalToContent(anime))
-            .filter((anime) => anime !== null) // Filter out null results
+            .filter((anime) => anime !== null)
+            .filter((anime) => matchesRequestedType(anime, contentType))
             .map((anime) => ({
               ...anime,
               source: 'mal',

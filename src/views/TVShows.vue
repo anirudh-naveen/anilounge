@@ -36,12 +36,7 @@
               :alt="show.title"
               @error="handleImageError"
             />
-            <div
-              class="content-type-badge"
-              :class="show.contentType === 'movie' ? 'movie-badge' : 'tv-badge'"
-            >
-              {{ getContentTypeDisplay(show.contentType) }}
-            </div>
+            <div class="content-type-badge tv-badge">TV Show</div>
           </div>
           <div class="show-info">
             <h3 class="show-title">{{ show.title }}</h3>
@@ -95,7 +90,7 @@ import { onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
+import { getPosterUrl, formatGenres } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'

@@ -186,7 +186,7 @@
               <div class="content-info">
                 <h5>{{ sequel.title }}</h5>
                 <p class="content-type">
-                  {{ sequel.contentType === 'movie' ? 'Movie' : 'TV Show' }}
+                  {{ getCardContentTypeDisplay(sequel.contentType) }}
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -219,7 +219,7 @@
               <div class="content-info">
                 <h5>{{ prequel.title }}</h5>
                 <p class="content-type">
-                  {{ prequel.contentType === 'movie' ? 'Movie' : 'TV Show' }}
+                  {{ getCardContentTypeDisplay(prequel.contentType) }}
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -252,7 +252,7 @@
               <div class="content-info">
                 <h5>{{ related.title }}</h5>
                 <p class="content-type">
-                  {{ related.contentType === 'movie' ? 'Movie' : 'TV Show' }}
+                  {{ getCardContentTypeDisplay(related.contentType) }}
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -281,7 +281,12 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { contentAPI, getPosterUrl } from '@/services/api'
+import {
+  contentAPI,
+  getPosterUrl,
+  getCardContentTypeDisplay,
+  getDetailsRouteName,
+} from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
 
@@ -499,21 +504,11 @@ const viewContentDetails = async (content: UnifiedContent, event?: Event) => {
   }
 
   try {
-    if (content.contentType === 'movie') {
-      console.log('Navigating to MovieDetails with ID:', content._id)
-      await router.push({
-        name: 'MovieDetails',
-        params: { id: content._id },
-        query: { from: route.fullPath },
-      })
-    } else {
-      console.log('Navigating to TVShowDetails with ID:', content._id)
-      await router.push({
-        name: 'TVShowDetails',
-        params: { id: content._id },
-        query: { from: route.fullPath },
-      })
-    }
+    await router.push({
+      name: getDetailsRouteName(content),
+      params: { id: content._id },
+      query: { from: route.fullPath },
+    })
     console.log('Navigation completed successfully')
   } catch (err) {
     console.error('Navigation error:', err)

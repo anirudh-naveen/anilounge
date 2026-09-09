@@ -20,11 +20,11 @@
         <p v-if="overview" class="hover-preview-overview">{{ overview }}</p>
         <div class="hover-preview-meta">
           <span v-if="releaseYear" class="meta-chip">{{ releaseYear }}</span>
-          <span v-if="item.contentType === 'movie' && item.runtime" class="meta-chip">
+          <span v-if="isMovieLike(item.contentType) && item.runtime" class="meta-chip">
             {{ item.runtime }} min
           </span>
           <span
-            v-if="item.contentType === 'tv' && (item.episodeCount || item.malEpisodes)"
+            v-if="tracksEpisodes(item) && (item.episodeCount || item.malEpisodes)"
             class="meta-chip"
           >
             {{ item.episodeCount || item.malEpisodes }} episodes
@@ -69,7 +69,7 @@
             placeholder="Optional"
           />
         </label>
-        <label v-if="item.contentType === 'tv'" class="form-field">
+        <label v-if="tracksEpisodes(item)" class="form-field">
           <span>Episodes watched</span>
           <input
             v-model.number="selectedEpisodes"
@@ -102,7 +102,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
+import {
+  getPosterUrl,
+  formatGenres,
+  getContentTypeDisplay,
+  isMovieLike,
+  tracksEpisodes,
+} from '@/services/api'
 import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
@@ -197,7 +203,7 @@ const submitWatchlist = async () => {
       props.item._id,
       selectedStatus.value,
       selectedRating.value,
-      props.item.contentType === 'tv' ? selectedEpisodes.value : undefined,
+      tracksEpisodes(props.item) ? selectedEpisodes.value : undefined,
       undefined,
       selectedNotes.value || undefined,
     )
