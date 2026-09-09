@@ -145,7 +145,7 @@
               v-for="sequel in relatedContent.sequels"
               :key="`sequel-${sequel._id}`"
               class="content-card"
-              @click="viewContentDetails(sequel, $event)"
+              @click="viewContentDetails(sequel)"
             >
               <img
                 v-if="sequel.posterPath"
@@ -178,7 +178,7 @@
               v-for="prequel in relatedContent.prequels"
               :key="`prequel-${prequel._id}`"
               class="content-card"
-              @click="viewContentDetails(prequel, $event)"
+              @click="viewContentDetails(prequel)"
             >
               <img
                 v-if="prequel.posterPath"
@@ -211,7 +211,7 @@
               v-for="related in relatedContent.related"
               :key="`related-${related._id}`"
               class="content-card"
-              @click="viewContentDetails(related, $event)"
+              @click="viewContentDetails(related)"
             >
               <img
                 v-if="related.posterPath"
@@ -250,7 +250,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
@@ -279,6 +279,8 @@ const relatedContent = ref<{
   related: UnifiedContent[]
 } | null>(null)
 const relatedContentLoading = ref(false)
+let detailsRequestId = 0
+let relatedRequestId = 0
 
 const isInWatchlist = computed(() => {
   if (!movie.value || !authStore.user?.watchlist) return false
@@ -292,40 +294,45 @@ const getDisplayScore = (content: UnifiedContent) => {
 
 const getDisplayVoteCount = (content: UnifiedContent) => getTotalVoteCount(content)
 
-onMounted(async () => {
-  // Scroll to top when component mounts
-  contentStore.scrollToTop()
+const loadMovie = async (movieId: string) => {
+  const requestId = ++detailsRequestId
 
-  const movieId = route.params.id as string
   if (!movieId) {
     error.value = 'No movie ID provided'
     loading.value = false
     return
   }
 
-  try {
-    // Try to get movie from store first
-    const existingMovie = contentStore.movies.find((m) => m._id === movieId)
-    if (existingMovie) {
-      movie.value = existingMovie
-      loading.value = false
-      // Fetch related content in parallel (don't await)
-      fetchRelatedContent(movieId)
-      return
-    }
+  error.value = ''
+  relatedContent.value = null
+  relatedContentLoading.value = false
+  contentStore.scrollToTop()
 
-    // If not in store, fetch from API
-    const response = await contentAPI.getContentById(movieId)
-    movie.value = response.data.data
+  const cached = contentStore.findContentById(movieId)
+  if (cached) {
+    movie.value = cached
+    contentStore.cacheContent(cached, true)
     loading.value = false
+    fetchRelatedContent(movieId)
+    return
+  }
 
-    // Fetch related content in parallel (don't await)
+  loading.value = true
+  movie.value = null
+
+  try {
+    const response = await contentAPI.getContentById(movieId)
+    if (requestId !== detailsRequestId) return
+    movie.value = response.data.data
+    contentStore.cacheContent(movie.value, true)
+    loading.value = false
     fetchRelatedContent(movieId)
   } catch (err) {
+    if (requestId !== detailsRequestId) return
     error.value = err instanceof Error ? err.message : 'Failed to load movie'
     loading.value = false
   }
-})
+}
 
 const goBack = () => {
   // Check if we have a previous page in the route state
@@ -386,6 +393,11 @@ const goBack = () => {
           contentStore.scrollToTop()
         })
       }
+    } else if (pathname.startsWith('/movie/') || pathname.startsWith('/tv-show/')) {
+      router.push(previousPage)
+      nextTick(() => {
+        contentStore.scrollToTop()
+      })
     } else {
       // Unknown source - go to home page
       router.push('/')
@@ -437,14 +449,15 @@ const formatDate = (date: string | Date) => {
 }
 
 const fetchRelatedContent = async (contentId: string) => {
+  const requestId = ++relatedRequestId
   relatedContentLoading.value = true
   try {
-    // Optimized timeout and request handling
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Related content request timeout')), 2000),
     )
 
     const response = await Promise.race([contentAPI.getRelatedContent(contentId), timeoutPromise])
+    if (requestId !== relatedRequestId) return
 
     relatedContent.value = (
       response as {
@@ -453,31 +466,22 @@ const fetchRelatedContent = async (contentId: string) => {
         }
       }
     ).data.data
+    relatedContent.value?.sequels?.forEach((item) => contentStore.cacheContent(item))
+    relatedContent.value?.prequels?.forEach((item) => contentStore.cacheContent(item))
+    relatedContent.value?.related?.forEach((item) => contentStore.cacheContent(item))
   } catch (err) {
+    if (requestId !== relatedRequestId) return
     console.error('Failed to fetch related content:', err)
     relatedContent.value = { sequels: [], prequels: [], related: [] }
   } finally {
-    relatedContentLoading.value = false
+    if (requestId === relatedRequestId) {
+      relatedContentLoading.value = false
+    }
   }
 }
 
-const viewContentDetails = async (content: UnifiedContent, event?: Event) => {
-  console.log(
-    'Navigating to content:',
-    content.title,
-    'Type:',
-    content.contentType,
-    'ID:',
-    content._id,
-  )
-
-  // Add visual feedback
-  const clickedElement = event?.target as HTMLElement
-  const card = clickedElement?.closest('.content-card') as HTMLElement
-  if (card) {
-    card.style.opacity = '0.7'
-    card.style.transform = 'scale(0.95)'
-  }
+const viewContentDetails = async (content: UnifiedContent) => {
+  contentStore.cacheContent(content, true)
 
   try {
     await router.push({
@@ -485,16 +489,18 @@ const viewContentDetails = async (content: UnifiedContent, event?: Event) => {
       params: { id: content._id },
       query: { from: route.fullPath },
     })
-    console.log('Navigation completed successfully')
   } catch (err) {
     console.error('Navigation error:', err)
-    // Reset visual feedback on error
-    if (card) {
-      card.style.opacity = '1'
-      card.style.transform = 'scale(1)'
-    }
   }
 }
+
+watch(
+  () => route.params.id as string,
+  (movieId) => {
+    void loadMovie(movieId)
+  },
+  { immediate: true },
+)
 
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement

@@ -204,7 +204,7 @@
 
     <!-- Main Content -->
     <main class="main-content">
-      <router-view />
+      <router-view :key="route.path" />
     </main>
 
     <!-- Beta Feedback Component -->
@@ -221,13 +221,14 @@
 
 <script setup lang="ts">
 import { onMounted, ref, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import BetaFeedback from '@/components/BetaFeedback.vue'
 import BetaBanner from '@/components/BetaBanner.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const toast = useToast()
 
