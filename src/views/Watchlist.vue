@@ -20,6 +20,10 @@
         </button>
       </div>
 
+      <div class="watchlist-toolbar">
+        <SortByControls v-model:sort-by="sortBy" v-model:sort-direction="sortDirection" />
+      </div>
+
       <!-- Loading State -->
       <div v-if="isLoading" class="loading-container">
         <div class="spinner"></div>
@@ -288,6 +292,8 @@ import { getPosterUrl } from '@/services/api'
 import { getRatingColorHSL } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import type { WatchlistItem, Movie, TVShow } from '@/types'
+import SortByControls from '@/components/SortByControls.vue'
+import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -297,6 +303,8 @@ const toast = useToast()
 const selectedStatus = ref('all')
 const isLoading = ref(false)
 const expandedItems = ref(new Set<string>())
+const sortBy = ref<SortByOption>('relevance')
+const sortDirection = ref<SortDirection>('desc')
 
 const statusOptions = [
   { value: 'all', label: 'All' },
@@ -305,13 +313,6 @@ const statusOptions = [
   { value: 'completed', label: 'Completed' },
   { value: 'dropped', label: 'Dropped' },
 ]
-
-const filteredWatchlist = computed(() => {
-  if (selectedStatus.value === 'all') {
-    return contentStore.watchlist
-  }
-  return contentStore.watchlist.filter((item) => item.status === selectedStatus.value)
-})
 
 const getStatusCount = (status: string) => {
   if (status === 'all') return contentStore.watchlist.length
@@ -451,6 +452,38 @@ const getProgressPercent = (item: WatchlistItem) => {
   }
   return item.status === 'completed' ? 100 : 0
 }
+
+const getWatchlistRatingValue = (item: WatchlistItem) => {
+  if (item.rating) return item.rating
+  if (typeof item.content === 'string' || !item.content) return 0
+  return item.content.unifiedScore || 0
+}
+
+const getWatchlistPopularity = (item: WatchlistItem) => {
+  if (typeof item.content === 'string' || !item.content) return 0
+  return (item.content.voteCount || 0) + (item.content.malScoredBy || 0)
+}
+
+const getWatchlistAddedAt = (item: WatchlistItem) => {
+  return item.addedAt ? new Date(item.addedAt).getTime() : 0
+}
+
+const filteredWatchlist = computed(() => {
+  const items =
+    selectedStatus.value === 'all'
+      ? contentStore.watchlist
+      : contentStore.watchlist.filter((item) => item.status === selectedStatus.value)
+
+  return applySort(
+    items,
+    sortBy.value,
+    sortDirection.value,
+    getContentTitle,
+    getWatchlistRatingValue,
+    getWatchlistPopularity,
+    getWatchlistAddedAt,
+  )
+})
 
 const toggleExpanded = (item: WatchlistItem) => {
   const contentId = getContentId(item)
@@ -714,7 +747,7 @@ onUnmounted(() => {
 .filter-tabs {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -739,6 +772,16 @@ onUnmounted(() => {
   background: var(--highlight-color);
   color: white;
   border-color: var(--highlight-color);
+}
+
+.watchlist-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1.25rem;
+}
+
+.watchlist-toolbar :deep(.sort-by-controls) {
+  min-width: 240px;
 }
 
 .loading-container {
@@ -1220,6 +1263,15 @@ onUnmounted(() => {
   .details-content {
     grid-template-columns: 1fr;
     gap: 1.5rem;
+  }
+
+  .watchlist-toolbar {
+    justify-content: stretch;
+  }
+
+  .watchlist-toolbar :deep(.sort-by-controls) {
+    width: 100%;
+    min-width: 0;
   }
 
   .list-column-header {
