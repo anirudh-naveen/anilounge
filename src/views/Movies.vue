@@ -66,7 +66,6 @@
             :item="movie"
             :is-authenticated="authStore.isAuthenticated"
             :in-watchlist="contentStore.isInWatchlist(movie._id)"
-            @watchlist="handleWatchlistClick(movie._id)"
           />
         </div>
       </div>
@@ -84,26 +83,17 @@
         :total-pages="contentStore.moviesPagination.totalPages"
         @change="loadMovies"
       />
-
-      <!-- Status Dropdown -->
-      <StatusDropdown
-        :show-dropdown="showStatusDropdown"
-        :content-id="selectedContentId"
-        content-type="movie"
-        @close="closeStatusDropdown"
-      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { useToast } from 'vue-toastification'
-import StatusDropdown from '@/components/StatusDropdown.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
@@ -112,9 +102,6 @@ const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
-
-const showStatusDropdown = ref(false)
-const selectedContentId = ref('')
 
 // Get movies from unified store
 const movies = computed(() => {
@@ -151,26 +138,6 @@ const viewMovieDetails = (movie: UnifiedContent) => {
     params: { id: movie._id },
     query: { from: `/movies?page=${contentStore.moviesPagination.currentPage}` },
   })
-}
-
-const handleWatchlistClick = (contentId: string) => {
-  if (!authStore.isAuthenticated) {
-    toast.error('Please log in to add items to your watchlist')
-    return
-  }
-
-  if (contentStore.isInWatchlist(contentId)) {
-    toast.info('Already in your watchlist!')
-    return
-  }
-
-  selectedContentId.value = contentId
-  showStatusDropdown.value = true
-}
-
-const closeStatusDropdown = () => {
-  showStatusDropdown.value = false
-  selectedContentId.value = ''
 }
 
 const loadMovies = async (page: number) => {

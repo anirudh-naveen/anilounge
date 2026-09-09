@@ -207,7 +207,6 @@
               :is-authenticated="authStore.isAuthenticated"
               :in-watchlist="contentStore.isInWatchlist(item._id)"
               :show-watchlist="!(item as any).source"
-              @watchlist="handleWatchlistClick(item._id)"
             />
           </div>
         </div>
@@ -231,14 +230,6 @@
         <p>Enter a movie or TV show title to get started.</p>
       </div>
 
-      <!-- Status Dropdown -->
-      <StatusDropdown
-        :show-dropdown="showStatusDropdown"
-        :content-id="selectedContentId"
-        :content-type="getContentType(selectedContentId)"
-        @close="closeStatusDropdown"
-      />
-
       <!-- Chatbot Modal -->
       <Chatbot
         v-if="isAIMode"
@@ -258,7 +249,6 @@ import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
-import StatusDropdown from '@/components/StatusDropdown.vue'
 import Chatbot from '@/components/Chatbot.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
@@ -273,8 +263,6 @@ const toast = useToast()
 const searchQuery = ref('')
 const hasSearched = ref(false)
 const isAIMode = ref(false)
-const showStatusDropdown = ref(false)
-const selectedContentId = ref('')
 const currentPage = ref(1)
 const itemsPerPage = 20
 
@@ -399,11 +387,6 @@ const getReleaseYear = (dateString: string | Date) => {
   return date.getFullYear()
 }
 
-const getContentType = (contentId: string) => {
-  const content = searchResults.value.find((item: UnifiedContent) => item._id === contentId)
-  return content?.contentType || 'movie'
-}
-
 const truncateText = (text: string, maxLength: number) => {
   if (!text) return ''
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
@@ -425,26 +408,6 @@ const viewContentDetails = (item: UnifiedContent) => {
     params: { id: item._id },
     query: { from: route.fullPath },
   })
-}
-
-const handleWatchlistClick = (contentId: string) => {
-  if (!authStore.isAuthenticated) {
-    toast.error('Please log in to add items to your watchlist')
-    return
-  }
-
-  if (contentStore.isInWatchlist(contentId)) {
-    toast.info('Already in your watchlist!')
-    return
-  }
-
-  selectedContentId.value = contentId
-  showStatusDropdown.value = true
-}
-
-const closeStatusDropdown = () => {
-  showStatusDropdown.value = false
-  selectedContentId.value = ''
 }
 
 const handleSearch = async () => {
