@@ -245,7 +245,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
 import { useContentStore, defaultSearchFilters } from '@/stores/content'
@@ -285,17 +285,6 @@ const itemsPerPage = 20
 
 const { searchFilters: filters, searchAppliedFilters: appliedFilters, searchPage: currentPage } =
   storeToRefs(contentStore)
-
-watch(
-  filters,
-  (value) => {
-    appliedFilters.value = { ...value }
-    if (hasSearched.value) {
-      currentPage.value = 1
-    }
-  },
-  { deep: true },
-)
 
 // Computed properties
 const searchResults = computed(() => contentStore.searchResults)

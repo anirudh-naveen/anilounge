@@ -606,6 +606,28 @@ export const useContentStore = defineStore('content', () => {
     searchPage.value = 1
   }
 
+  const contentDetailsCache = new Map<string, UnifiedContent>()
+
+  const cacheContent = (item?: UnifiedContent | null, setAsCurrent = false) => {
+    if (item?._id) {
+      contentDetailsCache.set(item._id, item)
+      if (setAsCurrent) {
+        currentContent.value = item
+      }
+    }
+  }
+
+  const findContentById = (id: string): UnifiedContent | undefined => {
+    if (currentContent.value?._id === id) return currentContent.value
+    return (
+      contentDetailsCache.get(id) ||
+      movies.value.find((item) => item._id === id) ||
+      tvShows.value.find((item) => item._id === id) ||
+      searchResults.value.find((item) => item._id === id) ||
+      allContent.value.find((item) => item._id === id)
+    )
+  }
+
   const clearCurrentContent = () => {
     currentContent.value = null
   }
@@ -666,6 +688,8 @@ export const useContentStore = defineStore('content', () => {
 
     // Utilities
     getContentDisplayInfo,
+    findContentById,
+    cacheContent,
 
     // Scroll position management
     saveScrollPosition,
