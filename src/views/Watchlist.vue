@@ -29,13 +29,22 @@
 
       <!-- Watchlist Items -->
       <div v-else-if="filteredWatchlist.length > 0" class="watchlist-container">
+        <div class="list-column-header">
+          <span class="col-poster"></span>
+          <span class="col-title">Title</span>
+          <span class="col-progress">Progress</span>
+          <span class="col-score">Score</span>
+          <span class="col-status">Status</span>
+          <span class="col-expand"></span>
+        </div>
+
         <div
           v-for="item in filteredWatchlist"
           :key="getContentId(item)"
           class="watchlist-item"
           :class="{ expanded: expandedItems.has(getContentId(item)) }"
         >
-          <!-- Collapsed State -->
+          <!-- Compact list bar -->
           <div class="item-header" @click="toggleExpanded(item)">
             <div class="item-poster">
               <img
@@ -45,48 +54,63 @@
               />
             </div>
 
-            <div class="item-info">
-              <div class="item-title-section">
-                <h3 class="item-title">{{ getContentTitle(item) }}</h3>
-                <div class="item-meta">
-                  <span class="item-type">{{ getContentType(item) }}</span>
-                  <span class="item-year">{{ getContentYear(item) }}</span>
-                  <span class="item-status" :class="getStatusClass(item.status)">
-                    {{ getStatusLabel(item.status) }}
-                  </span>
-                </div>
-              </div>
-
-              <div class="item-progress">
-                <div v-if="getContentType(item) === 'TV Show'" class="episode-progress">
-                  <span class="episodes-watched">{{ getCurrentEpisodes(item) }}</span>
-                  <span class="episode-separator">/</span>
-                  <span class="total-episodes">{{ getTotalEpisodes(item) }}</span>
-                  <span class="episode-label">episodes</span>
-                  <span v-if="hasNewEpisodes(item)" class="new-episodes-indicator">🆕</span>
-                </div>
-                <div v-else class="movie-progress">
-                  <span class="movie-status">{{ getContentType(item) }}</span>
-                </div>
-              </div>
-
-              <div class="item-rating">
-                <div v-if="item.rating" class="user-rating">
-                  <span class="rating-label">Your Rating:</span>
-                  <span class="rating-value" :style="getRatingStyle(item.rating)"
-                    >{{ item.rating }}/10</span
-                  >
-                </div>
-                <div v-else class="no-rating">
-                  <span class="no-rating-text">No rating yet</span>
-                </div>
+            <div class="item-title-section">
+              <h3 class="item-title" @click.stop="viewContentDetails(item)">
+                {{ getContentTitle(item) }}
+              </h3>
+              <div class="item-meta">
+                <span class="item-type">{{ getContentType(item) }}</span>
+                <span v-if="getContentYear(item)" class="item-year">{{
+                  getContentYear(item)
+                }}</span>
               </div>
             </div>
 
+            <div class="item-progress">
+              <div v-if="getContentType(item) === 'TV Show'" class="episode-progress">
+                <span class="episodes-watched">{{ getCurrentEpisodes(item) }}</span>
+                <span class="episode-separator">/</span>
+                <span class="total-episodes">{{ getTotalEpisodes(item) }}</span>
+                <span
+                  v-if="hasNewEpisodes(item)"
+                  class="new-episodes-indicator"
+                  title="New episodes available"
+                  >🆕</span
+                >
+              </div>
+              <div v-else class="movie-progress">—</div>
+            </div>
+
+            <div class="item-rating">
+              <span v-if="item.rating" class="rating-value" :style="getRatingStyle(item.rating)">{{
+                item.rating
+              }}</span>
+              <span v-else class="no-rating-text">—</span>
+            </div>
+
+            <div class="item-status" :class="getStatusClass(item.status)">
+              {{ getStatusLabel(item.status) }}
+            </div>
+
             <div class="item-actions">
-              <button class="expand-btn">
+              <button
+                class="expand-btn"
+                type="button"
+                :aria-expanded="expandedItems.has(getContentId(item))"
+                :aria-label="
+                  expandedItems.has(getContentId(item)) ? 'Collapse details' : 'Expand details'
+                "
+              >
                 {{ expandedItems.has(getContentId(item)) ? '▼' : '▶' }}
               </button>
+            </div>
+
+            <div class="item-progress-track">
+              <div
+                class="item-progress-bar"
+                :class="getStatusClass(item.status)"
+                :style="{ width: getProgressPercent(item) + '%' }"
+              ></div>
             </div>
           </div>
 
@@ -300,7 +324,7 @@ const getStatusLabel = (status: string) => {
 }
 
 const getStatusClass = (status: string) => {
-  return `status-${status.replace('_', '-')}`
+  return `status-${status.replace(/_/g, '-')}`
 }
 
 const getContentId = (item: WatchlistItem) => {
@@ -375,7 +399,9 @@ const getContentSeasons = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 'Unknown'
   const content = item.content
   if (!content) return 'Unknown'
-  return content.contentType === 'tv' ? (content as unknown as TVShow).numberOfSeasons || 'Unknown' : 'N/A'
+  return content.contentType === 'tv'
+    ? (content as unknown as TVShow).numberOfSeasons || 'Unknown'
+    : 'N/A'
 }
 
 const getContentRating = (item: WatchlistItem) => {
@@ -415,6 +441,15 @@ const hasNewEpisodes = (item: WatchlistItem) => {
   const current = getCurrentEpisodes(item)
   const total = getTotalEpisodes(item)
   return current < total
+}
+
+const getProgressPercent = (item: WatchlistItem) => {
+  if (getContentType(item) === 'TV Show') {
+    const total = getTotalEpisodes(item)
+    if (!total) return 0
+    return Math.min(100, Math.round((getCurrentEpisodes(item) / total) * 100))
+  }
+  return item.status === 'completed' ? 100 : 0
 }
 
 const toggleExpanded = (item: WatchlistItem) => {
@@ -653,6 +688,12 @@ onUnmounted(() => {
   min-height: calc(100vh - 140px);
 }
 
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
 .page-header {
   text-align: center;
   margin-bottom: 2rem;
@@ -713,68 +754,105 @@ onUnmounted(() => {
 .watchlist-container {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.35rem;
+}
+
+.list-column-header,
+.item-header {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 5.5rem 3.5rem 7.5rem 2rem;
+  align-items: center;
+  column-gap: 0.25rem;
+}
+
+.list-column-header {
+  padding: 0.25rem 0.5rem 0.4rem 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.col-title {
+  padding: 0 0.75rem;
+}
+
+.col-progress,
+.col-score,
+.col-status {
+  text-align: center;
 }
 
 .watchlist-item {
   background: var(--bg-card);
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid var(--border-color);
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
 }
 
 .watchlist-item:hover {
   border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
+  background: var(--bg-hover);
 }
 
 .item-header {
-  display: flex;
-  align-items: center;
-  padding: 1rem;
+  position: relative;
+  grid-template-rows: 68px;
+  min-height: 68px;
+  padding: 0 0.5rem 0 0;
   cursor: pointer;
-  gap: 1rem;
 }
 
 .item-poster {
-  flex-shrink: 0;
-  width: 80px;
-  height: 120px;
-  border-radius: 8px;
+  width: 48px;
+  height: 68px;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .item-poster img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.item-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: block;
 }
 
 .item-title-section {
+  min-width: 0;
+  padding: 0 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.1rem;
 }
 
 .item-title {
-  font-size: 1.25rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.item-title:hover {
+  color: var(--highlight-color);
+  text-decoration: underline;
 }
 
 .item-meta {
   display: flex;
-  gap: 1rem;
-  font-size: 0.9rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
 }
 
@@ -786,11 +864,21 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 
+.item-year::before {
+  content: '·';
+  margin-right: 0.5rem;
+  color: var(--text-muted);
+}
+
 .item-status {
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 500;
+  justify-self: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1.3;
 }
 
 .status-plan-to-watch {
@@ -813,22 +901,25 @@ onUnmounted(() => {
   color: white;
 }
 
-.item-progress {
+.item-progress,
+.item-rating {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .episode-progress {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.15rem;
   font-size: 0.9rem;
   color: var(--text-secondary);
 }
 
 .episodes-watched {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -836,13 +927,8 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 
-.episode-label {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-}
-
 .new-episodes-indicator {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   animation: pulse 2s infinite;
 }
 
@@ -858,53 +944,73 @@ onUnmounted(() => {
 
 .movie-progress {
   font-size: 0.9rem;
-  color: var(--text-secondary);
-}
-
-.item-rating {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.user-rating {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.rating-label {
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .rating-value {
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
-.no-rating {
+.no-rating-text {
   font-size: 0.9rem;
   color: var(--text-muted);
 }
 
 .item-actions {
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .expand-btn {
   background: none;
   border: none;
-  font-size: 1.2rem;
+  font-size: 0.7rem;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 50%;
+  padding: 0.35rem;
+  border-radius: 4px;
+  line-height: 1;
   transition: all 0.2s ease;
 }
 
 .expand-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.item-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.item-progress-bar {
+  height: 100%;
+  width: 0;
+  transition: width 0.3s ease;
+}
+
+.item-progress-bar.status-plan-to-watch {
+  background: var(--text-muted);
+}
+
+.item-progress-bar.status-watching {
+  background: var(--highlight-color);
+}
+
+.item-progress-bar.status-completed {
+  background: var(--success-color);
+}
+
+.item-progress-bar.status-dropped {
+  background: var(--error-color);
 }
 
 .item-details {
@@ -1116,15 +1222,31 @@ onUnmounted(() => {
     gap: 1.5rem;
   }
 
+  .list-column-header {
+    display: none;
+  }
+
   .item-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
+    grid-template-columns: 40px minmax(0, 1fr) auto auto 1.75rem;
+    grid-template-rows: 56px;
+    min-height: 56px;
   }
 
   .item-poster {
-    width: 100%;
-    height: 200px;
+    width: 40px;
+    height: 56px;
+  }
+
+  .item-title-section {
+    padding: 0 0.5rem;
+  }
+
+  .item-title {
+    font-size: 0.85rem;
+  }
+
+  .item-status {
+    display: none;
   }
 
   .action-buttons {

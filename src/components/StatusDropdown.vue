@@ -12,6 +12,7 @@
           <label>Status:</label>
           <select v-model="selectedStatus" class="status-select">
             <option value="plan_to_watch">Plan to Watch</option>
+            <option value="watching">Watching</option>
             <option value="completed">Completed</option>
           </select>
         </div>
@@ -79,7 +80,7 @@ const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
 
-const selectedStatus = ref<'plan_to_watch' | 'completed'>('plan_to_watch')
+const selectedStatus = ref<'plan_to_watch' | 'watching' | 'completed'>('plan_to_watch')
 const selectedRating = ref<number | undefined>(undefined)
 const selectedEpisodes = ref<number>(0)
 const selectedNotes = ref<string>('')

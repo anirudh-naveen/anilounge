@@ -91,19 +91,68 @@
           </div>
 
           <nav class="nav-links">
-            <router-link to="/" class="nav-link">
+            <router-link to="/" class="nav-link" aria-label="Home" title="Home">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3 10.5 12 3l9 7.5V20a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H4.5A1.5 1.5 0 0 1 3 20V10.5Z"
+                  />
+                </svg>
+              </span>
               <span class="nav-text">Home</span>
             </router-link>
-            <router-link to="/movies" class="nav-link">
+            <router-link to="/movies" class="nav-link" aria-label="Movies" title="Movies">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <path
+                    stroke-linecap="round"
+                    d="M8 5v14M16 5v14M3 9.5h5M3 14.5h5M16 9.5h5M16 14.5h5"
+                  />
+                </svg>
+              </span>
               <span class="nav-text">Movies</span>
             </router-link>
-            <router-link to="/tv" class="nav-link">
+            <router-link to="/tv" class="nav-link" aria-label="TV Shows" title="TV Shows">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <rect x="2.5" y="6.5" width="19" height="12.5" rx="2" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M8 3.5 12 6.5 16 3.5M8 22.5h8"
+                  />
+                </svg>
+              </span>
               <span class="nav-text">TV Shows</span>
             </router-link>
-            <router-link to="/search" class="nav-link">
+            <router-link to="/search" class="nav-link" aria-label="Search" title="Search">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <circle cx="11" cy="11" r="6.25" />
+                  <path stroke-linecap="round" d="m16 16 4.25 4.25" />
+                </svg>
+              </span>
               <span class="nav-text">Search</span>
             </router-link>
-            <router-link to="/watchlist" class="nav-link" v-if="authStore.isAuthenticated">
+            <router-link
+              to="/watchlist"
+              class="nav-link"
+              v-if="authStore.isAuthenticated"
+              aria-label="Watchlist"
+              title="Watchlist"
+            >
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M7 3.75h10A1.75 1.75 0 0 1 18.75 5.5v15.1L12 16.75 5.25 20.6V5.5A1.75 1.75 0 0 1 7 3.75Z"
+                  />
+                </svg>
+              </span>
               <span class="nav-text">Watchlist</span>
             </router-link>
           </nav>
@@ -119,7 +168,12 @@
                       alt="Profile Picture"
                       class="profile-picture-nav"
                     />
-                    <span v-else class="avatar-placeholder">👤</span>
+                    <span v-else class="avatar-placeholder" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="8" r="4" />
+                        <path d="M4.5 20.25c0-3.6 3.36-6.25 7.5-6.25s7.5 2.65 7.5 6.25" />
+                      </svg>
+                    </span>
                   </div>
                   <span class="user-name">{{ authStore.user?.username }}</span>
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
@@ -318,7 +372,7 @@ const handleLogout = () => {
 }
 
 .nav-link:hover,
-.nav-link.router-link-active {
+.nav-link.router-link-exact-active {
   color: var(--text-primary);
   background: var(--navbar-accent);
   transform: translateY(-1px);
@@ -326,12 +380,25 @@ const handleLogout = () => {
 }
 
 .nav-icon {
-  font-size: 1.1rem;
-  transition: transform 0.3s ease;
+  display: none;
+  width: 22px;
+  height: 22px;
+  color: #b8b8c2;
+  transition:
+    transform 0.3s ease,
+    color 0.3s ease;
 }
 
-.nav-link:hover .nav-icon {
-  transform: scale(1.1);
+.nav-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.nav-link:hover .nav-icon,
+.nav-link.router-link-exact-active .nav-icon {
+  color: #e8e8e8;
+  transform: scale(1.08);
 }
 
 .nav-text {
@@ -392,8 +459,17 @@ const handleLogout = () => {
 }
 
 .avatar-placeholder {
-  font-size: 1.2rem;
-  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #d4d4d8;
+}
+
+.avatar-placeholder svg {
+  width: 18px;
+  height: 18px;
 }
 
 .user-name {
@@ -586,14 +662,21 @@ const handleLogout = () => {
 
   .nav-links {
     order: 2;
-    gap: 0.25rem;
-    flex-wrap: wrap;
-    justify-content: center;
+    gap: 0.15rem;
+    flex-wrap: nowrap;
+    justify-content: space-around;
+    width: 100%;
   }
 
   .nav-link {
-    padding: 0.5rem 0.75rem;
+    flex: 1;
+    justify-content: center;
+    padding: 0.5rem 0.35rem;
     font-size: 0.85rem;
+  }
+
+  .nav-icon {
+    display: block;
   }
 
   .nav-text {
