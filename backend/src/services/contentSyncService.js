@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Content from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import relationshipService from './relationshipService.js'
+import { calculateUnifiedScore } from '../utils/ratings.js'
 
 /**
  * Syncs animation catalog content from TMDB and MyAnimeList into MongoDB.
@@ -44,7 +45,7 @@ class DatabasePopulator {
     }
   }
 
-  // Calculate unified score including user ratings
+  // Vote-count weighted average of TMDB, MAL, and Find Animation ratings
   calculateUnifiedScoreWithUserRatings(
     tmdbScore,
     tmdbVotes,
@@ -53,42 +54,14 @@ class DatabasePopulator {
     userRatingAverage,
     userRatingCount,
   ) {
-    const scores = []
-    const weights = []
-
-    // Determine if we have multiple sources (for threshold flexibility)
-    const hasMultipleSources =
-      (tmdbScore && malScore) || (tmdbScore && userRatingAverage) || (malScore && userRatingAverage)
-
-    // Add TMDB score if available
-    // For single-source: use any votes. For multi-source: require > 10 votes for quality
-    if (tmdbScore && tmdbVotes && (hasMultipleSources ? tmdbVotes > 10 : tmdbVotes > 0)) {
-      scores.push(tmdbScore)
-      weights.push(Math.log10(Math.max(tmdbVotes, 1)))
-    }
-
-    // Add MAL score if available
-    // For single-source: use any votes. For multi-source: require > 100 votes for quality
-    if (malScore && malVotes && (hasMultipleSources ? malVotes > 100 : malVotes > 0)) {
-      scores.push(malScore)
-      weights.push(Math.log10(Math.max(malVotes, 1)))
-    }
-
-    // Add user rating if available (require at least 5 user ratings)
-    if (userRatingAverage && userRatingCount >= 5) {
-      scores.push(userRatingAverage)
-      // Give user ratings moderate weight (less than external sources initially)
-      weights.push(Math.log10(Math.max(userRatingCount, 1)) * 0.8)
-    }
-
-    if (scores.length === 0) return null
-
-    // Calculate weighted average
-    const totalWeight = weights.reduce((sum, w) => sum + w, 0)
-    if (totalWeight === 0) return scores.reduce((sum, s) => sum + s, 0) / scores.length
-
-    const weightedSum = scores.reduce((sum, score, i) => sum + score * weights[i], 0)
-    return weightedSum / totalWeight
+    return calculateUnifiedScore(
+      tmdbScore,
+      tmdbVotes,
+      malScore,
+      malVotes,
+      userRatingAverage,
+      userRatingCount,
+    )
   }
 
   // Legacy method for backward compatibility (only uses TMDB and MAL)
@@ -319,6 +292,7 @@ class DatabasePopulator {
         // Initialize user rating fields
         contentData.userRatingAverage = null
         contentData.userRatingCount = 0
+        contentData.userRatingSum = 0
 
         // Process relationships for new content
         const relationships = await relationshipService.detectRelationshipsFromExternalData(
@@ -554,6 +528,7 @@ class DatabasePopulator {
               0,
             userRatingAverage: null,
             userRatingCount: 0,
+            userRatingSum: 0,
             dataSources: {
               mal: { hasData: true, lastUpdated: new Date() },
               tmdb: { hasData: false },
@@ -755,19 +730,18 @@ class DatabasePopulator {
       ...(malData.genres || []),
     ])
 
-    // Calculate unified score with MAL priority (including user ratings)
-    if (existingContent.voteAverage && malData.malScore) {
-      existingContent.unifiedScore = this.calculateUnifiedScoreWithUserRatings(
+    existingContent.unifiedScore =
+      this.calculateUnifiedScoreWithUserRatings(
         existingContent.voteAverage,
         existingContent.voteCount,
         malData.malScore,
         malData.malScoredBy,
         existingContent.userRatingAverage,
         existingContent.userRatingCount,
-      )
-    } else {
-      existingContent.unifiedScore = malData.malScore || existingContent.voteAverage || 0
-    }
+      ) ||
+      malData.malScore ||
+      existingContent.voteAverage ||
+      0
 
     // Process relationships during merge
     await relationshipService.processRelationshipsDuringMerge(existingContent, malData, 'mal')

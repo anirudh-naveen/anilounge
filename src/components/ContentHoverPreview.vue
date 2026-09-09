@@ -11,7 +11,7 @@
     <div class="hover-preview-body">
       <div class="hover-preview-header">
         <h3 class="hover-preview-title">{{ item.title }}</h3>
-        <div class="hover-preview-rating" :style="getRatingTextStyle(item.unifiedScore)">
+        <div class="hover-preview-rating" :style="getRatingTextStyle(averageRating)">
           {{ displayRating }}
         </div>
       </div>
@@ -110,6 +110,7 @@ import {
   tracksEpisodes,
 } from '@/services/api'
 import { getRatingTextStyle } from '@/utils/ratingColors'
+import { getWeightedAverage } from '@/utils/ratings'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
@@ -144,8 +145,9 @@ const selectedRating = ref<number | undefined>(undefined)
 const selectedEpisodes = ref<number>(0)
 const selectedNotes = ref('')
 
+const averageRating = computed(() => getWeightedAverage(props.item))
 const displayRating = computed(() =>
-  props.item.unifiedScore ? props.item.unifiedScore.toFixed(1) : 'N/A',
+  averageRating.value != null ? averageRating.value.toFixed(1) : 'N/A',
 )
 
 const overview = computed(() => {

@@ -2,54 +2,18 @@ import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import User from '../models/User.js'
 import Content from '../models/Content.js'
+import { calculateUnifiedScore, isValidUserRating } from '../utils/ratings.js'
 
 dotenv.config()
 
-// Calculate unified score including user ratings (same function as in controller)
-function calculateUnifiedScoreWithUserRatings(
-  tmdbScore,
-  tmdbVotes,
-  malScore,
-  malVotes,
-  userRatingAverage,
-  userRatingCount,
-) {
-  const scores = []
-  const weights = []
-
-  // Determine if we have multiple sources (for threshold flexibility)
-  const hasMultipleSources =
-    (tmdbScore && malScore) || (tmdbScore && userRatingAverage) || (malScore && userRatingAverage)
-
-  // Add TMDB score if available
-  // For single-source: use any votes. For multi-source: require > 10 votes for quality
-  if (tmdbScore && tmdbVotes && (hasMultipleSources ? tmdbVotes > 10 : tmdbVotes > 0)) {
-    scores.push(tmdbScore)
-    weights.push(Math.log10(Math.max(tmdbVotes, 1)))
+function getEffectiveUserRating(user, contentId) {
+  const watchlistItem = user.watchlist?.find((item) => item.content?.toString() === contentId)
+  if (watchlistItem) {
+    return isValidUserRating(watchlistItem.rating) ? watchlistItem.rating : null
   }
 
-  // Add MAL score if available
-  // For single-source: use any votes. For multi-source: require > 100 votes for quality
-  if (malScore && malVotes && (hasMultipleSources ? malVotes > 100 : malVotes > 0)) {
-    scores.push(malScore)
-    weights.push(Math.log10(Math.max(malVotes, 1)))
-  }
-
-  // Add user rating if available (require at least 5 user ratings)
-  if (userRatingAverage && userRatingCount >= 5) {
-    scores.push(userRatingAverage)
-    // Give user ratings moderate weight (less than external sources initially)
-    weights.push(Math.log10(Math.max(userRatingCount, 1)) * 0.8)
-  }
-
-  if (scores.length === 0) return null
-
-  // Calculate weighted average
-  const totalWeight = weights.reduce((sum, w) => sum + w, 0)
-  if (totalWeight === 0) return scores.reduce((sum, s) => sum + s, 0) / scores.length
-
-  const weightedSum = scores.reduce((sum, score, i) => sum + score * weights[i], 0)
-  return weightedSum / totalWeight
+  const legacyRating = user.ratings?.find((item) => item.content?.toString() === contentId)
+  return isValidUserRating(legacyRating?.rating) ? legacyRating.rating : null
 }
 
 async function calculateInitialUserRatings() {
@@ -57,32 +21,43 @@ async function calculateInitialUserRatings() {
     await mongoose.connect(process.env.MONGODB_URI)
     console.log('Database connected')
 
-    // Get all users with ratings
-    const users = await User.find({ 'ratings.0': { $exists: true } })
+    const users = await User.find({
+      $or: [{ 'watchlist.rating': { $exists: true } }, { 'ratings.0': { $exists: true } }],
+    })
 
     console.log(`Processing ${users.length} users with ratings...`)
 
-    // Aggregate ratings by content
     const contentRatings = {}
 
     for (const user of users) {
-      for (const rating of user.ratings) {
-        const contentId = rating.content.toString()
-        if (!contentRatings[contentId]) {
-          contentRatings[contentId] = []
-        }
+      const seen = new Set()
+
+      for (const item of user.watchlist || []) {
+        const contentId = item.content?.toString()
+        if (!contentId || !isValidUserRating(item.rating)) continue
+        seen.add(contentId)
+        if (!contentRatings[contentId]) contentRatings[contentId] = []
+        contentRatings[contentId].push(item.rating)
+      }
+
+      for (const rating of user.ratings || []) {
+        const contentId = rating.content?.toString()
+        if (!contentId || seen.has(contentId) || !isValidUserRating(rating.rating)) continue
+        if (!contentRatings[contentId]) contentRatings[contentId] = []
         contentRatings[contentId].push(rating.rating)
       }
     }
 
     console.log(`Found ratings for ${Object.keys(contentRatings).length} content items`)
 
-    // Update each content with aggregated ratings
+    await Content.updateMany({}, { $set: { userRatingAverage: null, userRatingCount: 0, userRatingSum: 0 } })
+
     let updated = 0
     for (const [contentId, ratings] of Object.entries(contentRatings)) {
       try {
-        const average = ratings.reduce((sum, r) => sum + r, 0) / ratings.length
+        const sum = ratings.reduce((total, value) => total + value, 0)
         const count = ratings.length
+        const average = sum / count
 
         const content = await Content.findById(contentId)
         if (!content) {
@@ -90,12 +65,10 @@ async function calculateInitialUserRatings() {
           continue
         }
 
-        // Update user rating fields
         content.userRatingAverage = average
         content.userRatingCount = count
-
-        // Recalculate unifiedScore to include user ratings
-        content.unifiedScore = calculateUnifiedScoreWithUserRatings(
+        content.userRatingSum = sum
+        content.unifiedScore = calculateUnifiedScore(
           content.voteAverage,
           content.voteCount,
           content.malScore,
@@ -116,9 +89,15 @@ async function calculateInitialUserRatings() {
     }
 
     console.log(`\nCompleted! Updated ${updated} content items with user ratings`)
-    console.log(
-      `Average ratings per content: ${(Object.values(contentRatings).reduce((sum, ratings) => sum + ratings.length, 0) / Object.keys(contentRatings).length).toFixed(2)}`,
-    )
+    if (Object.keys(contentRatings).length > 0) {
+      const totalRatings = Object.values(contentRatings).reduce(
+        (sum, ratings) => sum + ratings.length,
+        0,
+      )
+      console.log(
+        `Average ratings per content: ${(totalRatings / Object.keys(contentRatings).length).toFixed(2)}`,
+      )
+    }
 
     await mongoose.disconnect()
     console.log('Database disconnected')

@@ -148,7 +148,7 @@
                     <span class="info-value">{{ getContentSeasons(item) }}</span>
                   </div>
                   <div class="info-item">
-                    <span class="info-label">TMDB Rating:</span>
+                    <span class="info-label">Rating:</span>
                     <span class="info-value">{{ getContentRating(item) }}</span>
                   </div>
                 </div>
@@ -295,6 +295,7 @@ import {
   tracksEpisodes,
 } from '@/services/api'
 import { getRatingColorHSL } from '@/utils/ratingColors'
+import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { useToast } from 'vue-toastification'
 import type { WatchlistItem, TVShow } from '@/types'
 import SortByControls from '@/components/SortByControls.vue'
@@ -417,8 +418,9 @@ const getContentSeasons = (item: WatchlistItem) => {
 
 const getContentRating = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'N/A'
-  if (typeof item.content === 'string') return 'N/A'
-  return item.content?.unifiedScore?.toFixed(1) || 'N/A'
+  if (typeof item.content === 'string' || !item.content) return 'N/A'
+  const average = getWeightedAverage(item.content)
+  return average != null ? average.toFixed(1) : 'N/A'
 }
 
 const getCurrentEpisodes = (item: WatchlistItem) => {
@@ -466,12 +468,12 @@ const getProgressPercent = (item: WatchlistItem) => {
 const getWatchlistRatingValue = (item: WatchlistItem) => {
   if (item.rating) return item.rating
   if (typeof item.content === 'string' || !item.content) return 0
-  return item.content.unifiedScore || 0
+  return getWeightedAverage(item.content) || 0
 }
 
 const getWatchlistPopularity = (item: WatchlistItem) => {
   if (typeof item.content === 'string' || !item.content) return 0
-  return (item.content.voteCount || 0) + (item.content.malScoredBy || 0)
+  return getTotalVoteCount(item.content)
 }
 
 const getWatchlistAddedAt = (item: WatchlistItem) => {

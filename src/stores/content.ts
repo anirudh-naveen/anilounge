@@ -528,8 +528,8 @@ export const useContentStore = defineStore('content', () => {
       genres: formatGenres(content.genres),
       rating: {
         score: content.unifiedScore || 0,
-        count: content.malScoredBy || content.voteCount || 0,
-        source: content.malScore ? 'mal' : 'tmdb',
+        count:
+          (content.malScoredBy || 0) + (content.voteCount || 0) + (content.userRatingCount || 0),
       },
       runtime: content.runtime,
       episodeCount: content.episodeCount || content.malEpisodes,
