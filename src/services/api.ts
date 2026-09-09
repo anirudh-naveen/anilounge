@@ -227,7 +227,41 @@ export const formatGenres = (genres: Array<{ id?: number; name?: string }> | str
 
 // Utility function to get content type display
 export const getContentTypeDisplay = (contentType: string) => {
-  return contentType === 'movie' ? 'Movie' : 'TV Show'
+  if (contentType === 'special') return 'Special'
+  if (contentType === 'movie') return 'Movie'
+  return 'TV Show'
+}
+
+export const isMovieLike = (contentType?: string) =>
+  contentType === 'movie' || contentType === 'special'
+
+export const getCardContentTypeDisplay = (contentType: string) =>
+  isMovieLike(contentType) ? 'Movie' : 'TV Show'
+
+export const matchesContentTypeFilter = (itemType: string | undefined, filter?: string) => {
+  if (!filter || filter === 'all') return true
+  if (filter === 'movie') return isMovieLike(itemType)
+  return itemType === filter
+}
+
+export const getContentTypeBadgeClass = (contentType: string) => {
+  return contentType === 'tv' ? 'tv-badge' : 'movie-badge'
+}
+
+export const tracksEpisodes = (item: {
+  contentType?: string
+  episodeCount?: number
+  malEpisodes?: number
+}) => {
+  if (item.contentType === 'tv') return true
+  if (item.contentType === 'special') {
+    return (item.episodeCount || item.malEpisodes || 0) > 1
+  }
+  return false
+}
+
+export const getDetailsRouteName = (item: { contentType?: string }) => {
+  return item.contentType === 'tv' ? 'TVShowDetails' : 'MovieDetails'
 }
 
 export default api

@@ -43,11 +43,8 @@
                 :alt="item.title"
                 @error="handleImageError"
               />
-              <div
-                class="content-type-badge"
-                :class="item.contentType === 'movie' ? 'movie-badge' : 'tv-badge'"
-              >
-                {{ getContentTypeDisplay(item.contentType) }}
+              <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
+                {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
             </div>
             <div class="content-info">
@@ -83,7 +80,13 @@ import { onMounted, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
+import {
+  getPosterUrl,
+  formatGenres,
+  getCardContentTypeDisplay,
+  getContentTypeBadgeClass,
+  getDetailsRouteName,
+} from '@/services/api'
 import { useToast } from 'vue-toastification'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
@@ -149,7 +152,7 @@ const viewContentDetails = (item: UnifiedContent) => {
   const scrollKey = 'home-page'
   contentStore.saveScrollPosition(scrollKey)
 
-  const routeName = item.contentType === 'movie' ? 'MovieDetails' : 'TVShowDetails'
+  const routeName = getDetailsRouteName(item)
   router.push({
     name: routeName,
     params: { id: item._id },

@@ -7,6 +7,14 @@ import relationshipService from '../services/relationshipService.js'
 import { validationResult } from 'express-validator'
 import mongoose from 'mongoose'
 
+const movieLikeTypes = ['movie', 'special']
+
+const matchContentType = (contentType) => {
+  if (!contentType || contentType === 'all') return {}
+  if (contentType === 'movie') return { contentType: { $in: movieLikeTypes } }
+  return { contentType }
+}
+
 // Get all content with pagination
 export const getContent = async (req, res) => {
   const startTime = Date.now()
@@ -16,10 +24,7 @@ export const getContent = async (req, res) => {
     const contentType = req.query.type || 'all'
     const skip = (page - 1) * limit
 
-    let query = {}
-    if (contentType !== 'all') {
-      query.contentType = contentType
-    }
+    const query = matchContentType(contentType)
 
     // Get total count for pagination
     const total = await Content.countDocuments(query)
@@ -179,7 +184,7 @@ export const searchContent = async (req, res) => {
         { overview: { $regex: query, $options: 'i' } },
         { alternativeTitles: { $regex: query, $options: 'i' } },
       ],
-      ...(type && type !== 'all' ? { contentType: type } : {}),
+      ...(type && type !== 'all' ? matchContentType(type) : {}),
     })
       .sort({ popularity: -1, unifiedScore: -1 })
       .skip(skip)
@@ -252,10 +257,7 @@ export const getPopularContent = async (req, res) => {
     const { type, limit = 20 } = req.query
 
     // Get from database first
-    let query = {}
-    if (type && type !== 'all') {
-      query.contentType = type
-    }
+    const query = matchContentType(type)
 
     // Use aggregation to add TMDB boost for popular content
     const dbContent = await Content.aggregate([
@@ -938,6 +940,7 @@ export const getDatabaseStats = async (req, res) => {
     })
     const movies = await Content.countDocuments({ contentType: 'movie' })
     const tvShows = await Content.countDocuments({ contentType: 'tv' })
+    const specials = await Content.countDocuments({ contentType: 'special' })
 
     const syncStatus = getContentSyncStatus()
 
@@ -950,6 +953,7 @@ export const getDatabaseStats = async (req, res) => {
         mergedContent,
         movies,
         tvShows,
+        specials,
         lastUpdated: syncStatus.lastSync?.finishedAt || null,
         contentSync: syncStatus,
       },

@@ -87,14 +87,34 @@
 
           <!-- Quality Filters -->
           <div class="filter-section">
-            <div class="filter-group">
-              <label>Rating:</label>
-              <select v-model="filters.rating">
-                <option value="all">All Ratings</option>
-                <option value="8">8+ Stars</option>
-                <option value="7">7+ Stars</option>
-                <option value="6">6+ Stars</option>
-              </select>
+            <div class="filter-group rating-filter">
+              <label>Rating: {{ filters.ratingMin }} – {{ filters.ratingMax }}</label>
+              <div class="rating-slider">
+                <div class="rating-slider-track">
+                  <div class="rating-slider-range" :style="ratingFillStyle"></div>
+                </div>
+                <input
+                  v-model.number="filters.ratingMin"
+                  type="range"
+                  min="1"
+                  max="10"
+                  step="1"
+                  aria-label="Minimum rating"
+                  @input="clampRatingMin"
+                />
+                <input
+                  v-model.number="filters.ratingMax"
+                  type="range"
+                  min="1"
+                  max="10"
+                  step="1"
+                  aria-label="Maximum rating"
+                  @input="clampRatingMax"
+                />
+              </div>
+              <div class="rating-slider-scale">
+                <span v-for="n in 10" :key="n">{{ n }}</span>
+              </div>
             </div>
             <div class="filter-group">
               <label>Year:</label>
@@ -165,11 +185,8 @@
                 :alt="item.title"
                 @error="handleImageError"
               />
-              <div
-                class="content-type-badge"
-                :class="item.contentType === 'movie' ? 'movie-badge' : 'tv-badge'"
-              >
-                {{ getContentTypeDisplay(item.contentType) }}
+              <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
+                {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
             </div>
             <div class="result-info">
@@ -188,11 +205,11 @@
                 <span v-if="item.releaseDate" class="release-year">
                   {{ getReleaseYear(item.releaseDate) }}
                 </span>
-                <span v-if="item.contentType === 'movie' && item.runtime" class="runtime">
+                <span v-if="isMovieLike(item.contentType) && item.runtime" class="runtime">
                   {{ item.runtime }} min
                 </span>
                 <span
-                  v-if="item.contentType === 'tv' && (item.episodeCount || item.malEpisodes)"
+                  v-if="tracksEpisodes(item) && (item.episodeCount || item.malEpisodes)"
                   class="episodes"
                 >
                   {{ item.episodeCount || item.malEpisodes }} episodes
@@ -243,7 +260,16 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
+import {
+  getPosterUrl,
+  formatGenres,
+  getCardContentTypeDisplay,
+  getContentTypeBadgeClass,
+  getDetailsRouteName,
+  isMovieLike,
+  matchesContentTypeFilter,
+  tracksEpisodes,
+} from '@/services/api'
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
 import Chatbot from '@/components/Chatbot.vue'
@@ -267,7 +293,8 @@ const itemsPerPage = 20
 
 const defaultFilters = () => ({
   type: 'all',
-  rating: 'all',
+  ratingMin: 1,
+  ratingMax: 10,
   year: 'all',
   genre: 'all',
   language: 'all',
@@ -285,17 +312,16 @@ const filteredResults = computed(() => {
   let results = [...searchResults.value]
   const active = appliedFilters.value
 
-  // Apply type filter
+  // Apply type filter (Movies includes specials)
   if (active.type !== 'all') {
-    results = results.filter((item) => item.contentType === active.type)
+    results = results.filter((item) => matchesContentTypeFilter(item.contentType, active.type))
   }
 
-  // Apply rating filter
-  if (active.rating !== 'all') {
-    const minRating = parseFloat(active.rating)
+  // Apply rating range (1–10). Full span includes unrated titles.
+  if (!(active.ratingMin === 1 && active.ratingMax === 10)) {
     results = results.filter((item) => {
       const rating = item.unifiedScore || 0
-      return rating >= minRating
+      return rating >= active.ratingMin && rating < active.ratingMax + 1
     })
   }
 
@@ -380,6 +406,29 @@ const truncateText = (text: string, maxLength: number) => {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
 }
 
+const clampRatingMin = () => {
+  if (filters.value.ratingMin > filters.value.ratingMax) {
+    filters.value.ratingMin = filters.value.ratingMax
+  }
+}
+
+const clampRatingMax = () => {
+  if (filters.value.ratingMax < filters.value.ratingMin) {
+    filters.value.ratingMax = filters.value.ratingMin
+  }
+}
+
+const ratingFillStyle = computed(() => {
+  const min = filters.value.ratingMin
+  const max = filters.value.ratingMax
+  const left = ((min - 1) / 9) * 100
+  const right = ((max - 1) / 9) * 100
+  return {
+    left: `${left}%`,
+    width: `${right - left}%`,
+  }
+})
+
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
   img.src = '/placeholder-movie.jpg'
@@ -390,7 +439,7 @@ const viewContentDetails = (item: UnifiedContent) => {
   const scrollKey = `search-page-${currentPage.value}`
   contentStore.saveScrollPosition(scrollKey)
 
-  const routeName = item.contentType === 'movie' ? 'MovieDetails' : 'TVShowDetails'
+  const routeName = getDetailsRouteName(item)
   router.push({
     name: routeName,
     params: { id: item._id },
@@ -639,6 +688,83 @@ onMounted(() => {
   outline: none;
   background: white;
   box-shadow: 0 0 0 2px var(--teal-primary);
+}
+
+.rating-slider {
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.rating-slider-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.rating-slider-range {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+}
+
+.rating-slider input[type='range'] {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: none;
+  height: 6px;
+}
+
+.rating-slider input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.rating-slider input[type='range']::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.rating-slider input[type='range']:nth-of-type(1) {
+  z-index: 2;
+}
+
+.rating-slider input[type='range']:nth-of-type(2) {
+  z-index: 3;
+}
+
+.rating-slider-scale {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0 1px;
 }
 
 .filter-actions {

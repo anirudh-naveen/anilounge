@@ -101,6 +101,7 @@
 import { computed, defineOptions } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
+import { isMovieLike } from '@/services/api'
 import { getRatingColorHSL } from '@/utils/ratingColors'
 import type { WatchlistItem } from '@/types'
 
@@ -174,7 +175,7 @@ const completedMovies = computed(() => {
       item.status === 'completed' &&
       item.content &&
       typeof item.content === 'object' &&
-      item.content.contentType === 'movie',
+      isMovieLike(item.content.contentType),
   ).length
 })
 
