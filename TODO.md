@@ -19,4 +19,5 @@ Bug Fixes -
 6. Fix the content hover screen when hovering over a content item ✅
    - show the Content Image to the left
    - have the dropdown for watchlist addition include watching as an option.
-7. Fix the watchlist content size in My Watchlist to default to smaller, bars of content
+7. Fix the watchlist content size in My Watchlist ✅
+8. Fix the tabs (Home, Movies, TV Shows, etc) to have icons when the screen is small (like on phone dimensions).
