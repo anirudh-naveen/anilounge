@@ -67,7 +67,6 @@
               :item="item"
               :is-authenticated="authStore.isAuthenticated"
               :in-watchlist="contentStore.isInWatchlist(item._id)"
-              @watchlist="handleWatchlistClick(item._id)"
             />
           </div>
         </div>
@@ -76,25 +75,16 @@
         </div>
       </div>
     </section>
-
-    <!-- Status Dropdown -->
-    <StatusDropdown
-      :show-dropdown="showStatusDropdown"
-      :content-id="selectedContentId"
-      :content-type="getContentType(selectedContentId)"
-      @close="closeStatusDropdown"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed, ref, nextTick } from 'vue'
+import { onMounted, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
 import { useToast } from 'vue-toastification'
-import StatusDropdown from '@/components/StatusDropdown.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
 
@@ -103,9 +93,6 @@ const route = useRoute()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
-
-const showStatusDropdown = ref(false)
-const selectedContentId = ref('')
 
 // Get trending content from unified store
 const featuredContent = computed(() => {
@@ -147,11 +134,6 @@ const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string
   return formatGenres(genres)
 }
 
-const getContentType = (contentId: string) => {
-  const content = contentStore.allContent.find((item: UnifiedContent) => item._id === contentId)
-  return content?.contentType || 'movie'
-}
-
 const truncateText = (text: string, maxLength: number) => {
   if (!text) return ''
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
@@ -173,26 +155,6 @@ const viewContentDetails = (item: UnifiedContent) => {
     params: { id: item._id },
     query: { from: route.fullPath },
   })
-}
-
-const handleWatchlistClick = (contentId: string) => {
-  if (!authStore.isAuthenticated) {
-    toast.error('Please log in to add items to your watchlist')
-    return
-  }
-
-  if (contentStore.isInWatchlist(contentId)) {
-    toast.info('Already in your watchlist!')
-    return
-  }
-
-  selectedContentId.value = contentId
-  showStatusDropdown.value = true
-}
-
-const closeStatusDropdown = () => {
-  showStatusDropdown.value = false
-  selectedContentId.value = ''
 }
 
 onMounted(async () => {
