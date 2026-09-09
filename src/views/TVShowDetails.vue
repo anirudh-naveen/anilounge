@@ -40,8 +40,10 @@
           <div class="show-meta">
             <div class="rating">
               <i class="fas fa-star"></i>
-              <span>{{ show.unifiedScore?.toFixed(1) || 'N/A' }}</span>
-              <span class="vote-count">({{ show.voteCount || 0 }} votes)</span>
+              <span>{{ getDisplayScore(show) }}</span>
+              <span v-if="getDisplayVoteCount(show)" class="vote-count">
+                ({{ getDisplayVoteCount(show).toLocaleString() }} votes)
+              </span>
             </div>
 
             <div class="first-air-date">
@@ -190,7 +192,7 @@
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
-                  <span>{{ sequel.unifiedScore?.toFixed(1) || 'N/A' }}</span>
+                  <span>{{ getDisplayScore(sequel) }}</span>
                 </div>
               </div>
             </div>
@@ -223,7 +225,7 @@
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
-                  <span>{{ prequel.unifiedScore?.toFixed(1) || 'N/A' }}</span>
+                  <span>{{ getDisplayScore(prequel) }}</span>
                 </div>
               </div>
             </div>
@@ -256,7 +258,7 @@
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
-                  <span>{{ related.unifiedScore?.toFixed(1) || 'N/A' }}</span>
+                  <span>{{ getDisplayScore(related) }}</span>
                 </div>
               </div>
             </div>
@@ -289,6 +291,7 @@ import {
 } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
+import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 
 const route = useRoute()
 const router = useRouter()
@@ -310,6 +313,13 @@ const isInWatchlist = computed(() => {
   if (!show.value || !authStore.user?.watchlist) return false
   return authStore.user.watchlist.some((item) => item.content?._id === show.value?._id)
 })
+
+const getDisplayScore = (content: UnifiedContent) => {
+  const average = getWeightedAverage(content)
+  return average != null ? average.toFixed(1) : 'N/A'
+}
+
+const getDisplayVoteCount = (content: UnifiedContent) => getTotalVoteCount(content)
 
 onMounted(async () => {
   // Scroll to top when component mounts

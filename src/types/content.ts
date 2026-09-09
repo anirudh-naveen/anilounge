@@ -11,10 +11,12 @@ export interface UnifiedContent {
   genres: Array<{ id?: number; name?: string }> | string[]
   voteAverage?: number
   malScore?: number
-  unifiedScore?: number // Combined score from TMDB and MAL
+  unifiedScore?: number // Vote-weighted average of MAL, TMDB, and Find Animation
   malStatus?: string
   voteCount?: number
   malScoredBy?: number
+  userRatingAverage?: number
+  userRatingCount?: number
   runtime?: number
   episodeCount?: number
   malEpisodes?: number

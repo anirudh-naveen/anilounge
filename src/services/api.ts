@@ -166,6 +166,8 @@ interface ContentData {
   unifiedScore?: number
   voteCount?: number
   malScoredBy?: number
+  userRatingAverage?: number
+  userRatingCount?: number
   runtime?: number
   episodeCount?: number
   malEpisodes?: number
@@ -194,8 +196,8 @@ export const getContentDisplayInfo = (content: ContentData) => {
     genres: content.genres || [],
     rating: {
       score: content.unifiedScore || 0,
-      count: content.voteCount || content.malScoredBy || 0,
-      source: content.malScore ? 'mal' : 'tmdb',
+      count:
+        (content.voteCount || 0) + (content.malScoredBy || 0) + (content.userRatingCount || 0),
     },
     // Additional info
     runtime: content.runtime,

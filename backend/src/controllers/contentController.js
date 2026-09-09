@@ -4,6 +4,7 @@ import User from '../models/User.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
 import relationshipService from '../services/relationshipService.js'
+import { applyUserRatingDelta, isValidUserRating } from '../utils/ratings.js'
 import { validationResult } from 'express-validator'
 import mongoose from 'mongoose'
 
@@ -501,6 +502,7 @@ export const addToWatchlist = async (req, res) => {
 
     // Check if already in watchlist
     const existingItem = user.watchlist.find((item) => item.content.toString() === contentId)
+    const previousRating = getEffectiveUserRating(user, contentId)
 
     if (existingItem) {
       // Update existing item
@@ -529,6 +531,14 @@ export const addToWatchlist = async (req, res) => {
         updatedAt: new Date(),
       })
     }
+
+    syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
+    await applyContentRatingChange(
+      content,
+      previousRating,
+      getEffectiveUserRating(user, contentId),
+      session,
+    )
 
     await user.save({ session })
     await session.commitTransaction()
@@ -562,7 +572,8 @@ export const getWatchlist = async (req, res) => {
         path: 'watchlist.content',
         model: 'Content',
         // Add select to limit fields for better performance
-        select: 'title posterPath contentType releaseDate unifiedScore',
+        select:
+          'title posterPath contentType releaseDate overview genres unifiedScore voteAverage voteCount malScore malScoredBy userRatingAverage userRatingCount episodeCount malEpisodes seasonCount',
       })
       .lean() // Use lean() for better performance if not modifying
 
@@ -588,31 +599,53 @@ export const getWatchlist = async (req, res) => {
 
 // Remove from watchlist
 export const removeFromWatchlist = async (req, res) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
   try {
     const { contentId } = req.params
     const userId = req.user._id
 
-    const user = await User.findById(userId)
+    const user = await User.findById(userId).session(session)
     if (!user) {
+      await session.abortTransaction()
       return res.status(404).json({
         success: false,
         message: 'User not found',
       })
     }
 
+    const content = await Content.findById(contentId).session(session)
+    const previousRating = getEffectiveUserRating(user, contentId)
+
     user.watchlist = user.watchlist.filter((item) => item.content.toString() !== contentId)
-    await user.save()
+    syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
+
+    if (content) {
+      await applyContentRatingChange(
+        content,
+        previousRating,
+        getEffectiveUserRating(user, contentId),
+        session,
+      )
+    }
+
+    await user.save({ session })
+    await session.commitTransaction()
 
     res.json({
       success: true,
       message: 'Removed from watchlist successfully',
     })
   } catch (error) {
+    await session.abortTransaction()
     console.error('Error removing from watchlist:', error)
     res.status(500).json({
       success: false,
       message: 'Error removing from watchlist',
     })
+  } finally {
+    session.endSession()
   }
 }
 
@@ -679,6 +712,8 @@ export const updateWatchlistItem = async (req, res) => {
       })
     }
 
+    const previousRating = getEffectiveUserRating(user, contentId)
+
     if (status) watchlistItem.status = status
     if (rating !== undefined) watchlistItem.rating = rating
     if (currentEpisode !== undefined) watchlistItem.currentEpisode = currentEpisode
@@ -690,6 +725,14 @@ export const updateWatchlistItem = async (req, res) => {
     if (!watchlistItem.totalSeasons) watchlistItem.totalSeasons = maxSeasons
 
     watchlistItem.updatedAt = new Date()
+
+    syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
+    await applyContentRatingChange(
+      content,
+      previousRating,
+      getEffectiveUserRating(user, contentId),
+      session,
+    )
 
     await user.save({ session })
     await session.commitTransaction()
@@ -711,85 +754,41 @@ export const updateWatchlistItem = async (req, res) => {
   }
 }
 
-// Calculate unified score including user ratings
-function calculateUnifiedScoreWithUserRatings(
-  tmdbScore,
-  tmdbVotes,
-  malScore,
-  malVotes,
-  userRatingAverage,
-  userRatingCount,
-) {
-  const scores = []
-  const weights = []
-
-  // Determine if we have multiple sources (for threshold flexibility)
-  const hasMultipleSources = (tmdbScore && malScore) || (tmdbScore && userRatingAverage) || (malScore && userRatingAverage)
-
-  // Add TMDB score if available
-  // For single-source: use any votes. For multi-source: require > 10 votes for quality
-  if (tmdbScore && tmdbVotes && (hasMultipleSources ? tmdbVotes > 10 : tmdbVotes > 0)) {
-    scores.push(tmdbScore)
-    weights.push(Math.log10(Math.max(tmdbVotes, 1)))
+function getEffectiveUserRating(user, contentId) {
+  const watchlistItem = user.watchlist?.find((item) => item.content?.toString() === contentId)
+  if (watchlistItem) {
+    return isValidUserRating(watchlistItem.rating) ? watchlistItem.rating : null
   }
 
-  // Add MAL score if available
-  // For single-source: use any votes. For multi-source: require > 100 votes for quality
-  if (malScore && malVotes && (hasMultipleSources ? malVotes > 100 : malVotes > 0)) {
-    scores.push(malScore)
-    weights.push(Math.log10(Math.max(malVotes, 1)))
-  }
-
-  // Add user rating if available (require at least 5 user ratings)
-  if (userRatingAverage && userRatingCount >= 5) {
-    scores.push(userRatingAverage)
-    // Give user ratings moderate weight (less than external sources initially)
-    weights.push(Math.log10(Math.max(userRatingCount, 1)) * 0.8)
-  }
-
-  if (scores.length === 0) return null
-
-  // Calculate weighted average
-  const totalWeight = weights.reduce((sum, w) => sum + w, 0)
-  if (totalWeight === 0) return scores.reduce((sum, s) => sum + s, 0) / scores.length
-
-  const weightedSum = scores.reduce((sum, score, i) => sum + score * weights[i], 0)
-  return weightedSum / totalWeight
+  const legacyRating = user.ratings?.find((item) => item.content?.toString() === contentId)
+  return isValidUserRating(legacyRating?.rating) ? legacyRating.rating : null
 }
 
-// Helper function to update content's user rating statistics
-async function updateContentUserRatings(content, oldRating, newRating, isUpdate, session) {
-  if (!content.userRatingCount) {
-    content.userRatingCount = 0
-  }
-  if (!content.userRatingAverage) {
-    content.userRatingAverage = 0
-  }
+function syncLegacyUserRating(user, contentId, rating) {
+  const existingIndex = user.ratings.findIndex((item) => item.content?.toString() === contentId)
 
-  if (isUpdate) {
-    // Updating existing rating
-    // Recalculate average: remove old rating, add new rating
-    const totalSum = content.userRatingAverage * content.userRatingCount
-    const newSum = totalSum - oldRating + newRating
-    content.userRatingAverage = newSum / content.userRatingCount
-  } else {
-    // Adding new rating
-    const totalSum = content.userRatingAverage * content.userRatingCount
-    const newSum = totalSum + newRating
-    content.userRatingCount += 1
-    content.userRatingAverage = newSum / content.userRatingCount
+  if (!isValidUserRating(rating)) {
+    if (existingIndex !== -1) {
+      user.ratings.splice(existingIndex, 1)
+    }
+    return
   }
 
-  // Recalculate unifiedScore to include user ratings
-  content.unifiedScore = calculateUnifiedScoreWithUserRatings(
-    content.voteAverage,
-    content.voteCount,
-    content.malScore,
-    content.malScoredBy,
-    content.userRatingAverage,
-    content.userRatingCount,
-  )
+  if (existingIndex !== -1) {
+    user.ratings[existingIndex].rating = rating
+    user.ratings[existingIndex].watchedAt = new Date()
+    return
+  }
 
+  user.ratings.push({
+    content: contentId,
+    rating,
+    watchedAt: new Date(),
+  })
+}
+
+async function applyContentRatingChange(content, oldRating, newRating, session) {
+  applyUserRatingDelta(content, oldRating, newRating)
   await content.save({ session })
 }
 
@@ -834,28 +833,17 @@ export const voteContent = async (req, res) => {
       })
     }
 
-    // Check if user already rated this content
-    const existingRatingIndex = user.ratings.findIndex(
-      (r) => r.content.toString() === contentId,
-    )
+    const previousRating = getEffectiveUserRating(user, contentId)
+    const hadRating = previousRating != null
 
-    let oldRating = null
-    if (existingRatingIndex !== -1) {
-      // Update existing rating
-      oldRating = user.ratings[existingRatingIndex].rating
-      user.ratings[existingRatingIndex].rating = rating
-      user.ratings[existingRatingIndex].watchedAt = new Date()
-    } else {
-      // Add new rating
-      user.ratings.push({
-        content: contentId,
-        rating: rating,
-        watchedAt: new Date(),
-      })
+    const watchlistItem = user.watchlist.find((item) => item.content.toString() === contentId)
+    if (watchlistItem) {
+      watchlistItem.rating = rating
+      watchlistItem.updatedAt = new Date()
     }
 
-    // Update content's user rating statistics
-    await updateContentUserRatings(content, oldRating, rating, existingRatingIndex !== -1, session)
+    syncLegacyUserRating(user, contentId, rating)
+    await applyContentRatingChange(content, previousRating, rating, session)
 
     // Save user
     await user.save({ session })
@@ -866,8 +854,7 @@ export const voteContent = async (req, res) => {
 
     res.json({
       success: true,
-      message:
-        existingRatingIndex !== -1 ? 'Rating updated successfully' : 'Rating submitted successfully',
+      message: hadRating ? 'Rating updated successfully' : 'Rating submitted successfully',
       data: {
         contentId,
         rating,

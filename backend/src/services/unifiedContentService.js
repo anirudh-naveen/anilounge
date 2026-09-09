@@ -7,7 +7,7 @@ dotenv.config()
 // https://myanimelist.net/apiconfig/references/api/v2
 
 const MAL_ANIME_FIELDS =
-  'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users,media_type'
+  'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users,num_scoring_users,media_type'
 
 const MAL_SPECIAL_TYPES = new Set(['ova', 'special'])
 
@@ -325,7 +325,7 @@ class UnifiedContentService {
       posterPath: anime.main_picture?.medium || anime.main_picture?.large,
       malId: anime.id,
       malScore: anime.mean,
-      malScoredBy: anime.num_list_users,
+      malScoredBy: anime.num_scoring_users,
       malRank: anime.rank,
       malStatus: anime.status,
       malEpisodes: anime.num_episodes,

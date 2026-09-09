@@ -52,7 +52,7 @@ const ContentSchema = new mongoose.Schema(
     voteAverage: Number,
     voteCount: Number,
     popularity: Number,
-    unifiedScore: Number, // Combined score from TMDB and MAL
+    unifiedScore: Number, // Vote-weighted average of MAL, TMDB, and Find Animation
 
     // User-generated ratings (from your app users)
     userRatingAverage: {
@@ -60,6 +60,10 @@ const ContentSchema = new mongoose.Schema(
       default: null,
     },
     userRatingCount: {
+      type: Number,
+      default: 0,
+    },
+    userRatingSum: {
       type: Number,
       default: 0,
     },
@@ -169,23 +173,35 @@ ContentSchema.virtual('displayTitle').get(function () {
   return this.title || this.originalTitle || 'Unknown Title'
 })
 
-// Virtual for primary rating
+// Virtual for primary rating (vote-weighted average of available sources)
 ContentSchema.virtual('primaryRating').get(function () {
-  if (this.malScore && this.malScoredBy > 100) {
-    return {
-      score: this.malScore,
-      count: this.malScoredBy,
-      source: 'mal',
-    }
+  const sources = []
+  if (this.malScore && this.malScoredBy > 0) {
+    sources.push({ score: this.malScore, count: this.malScoredBy, source: 'mal' })
   }
-  if (this.voteAverage && this.voteCount > 10) {
-    return {
-      score: this.voteAverage,
-      count: this.voteCount,
-      source: 'tmdb',
-    }
+  if (this.voteAverage && this.voteCount > 0) {
+    sources.push({ score: this.voteAverage, count: this.voteCount, source: 'tmdb' })
   }
-  return null
+  if (this.userRatingAverage && this.userRatingCount > 0) {
+    sources.push({
+      score: this.userRatingAverage,
+      count: this.userRatingCount,
+      source: 'findanimation',
+    })
+  }
+  if (sources.length === 0) return null
+
+  const totalCount = sources.reduce((sum, source) => sum + source.count, 0)
+  const score =
+    totalCount > 0
+      ? sources.reduce((sum, source) => sum + source.score * source.count, 0) / totalCount
+      : sources[0].score
+
+  return {
+    score,
+    count: totalCount,
+    source: sources.length === 1 ? sources[0].source : 'combined',
+  }
 })
 
 // Virtual for primary poster

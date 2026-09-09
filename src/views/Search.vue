@@ -277,6 +277,7 @@ import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
+import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
 
 const router = useRouter()
 const route = useRoute()
@@ -319,10 +320,7 @@ const filteredResults = computed(() => {
 
   // Apply rating range (1–10). Full span includes unrated titles.
   if (!(active.ratingMin === 1 && active.ratingMax === 10)) {
-    results = results.filter((item) => {
-      const rating = item.unifiedScore || 0
-      return rating >= active.ratingMin && rating < active.ratingMax + 1
-    })
+    results = results.filter((item) => ratingMatchesFilter(item, active.ratingMin, active.ratingMax))
   }
 
   // Apply year filter
@@ -376,8 +374,8 @@ const filteredResults = computed(() => {
     active.sortBy,
     active.sortDirection,
     (item) => item.title || '',
-    (item) => item.unifiedScore || 0,
-    (item) => (item.voteCount || 0) + (item.malScoredBy || 0),
+    (item) => getWeightedAverage(item) || 0,
+    (item) => getTotalVoteCount(item),
   )
 })
 
