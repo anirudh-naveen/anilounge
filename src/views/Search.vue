@@ -40,108 +40,97 @@
       <!-- Filters Bar -->
       <div class="filters-container" v-if="!isAIMode">
         <div class="filters-header">
-          <h3>Filters & Sorting</h3>
+          <h3>Filters</h3>
+          <button @click="clearFilters" class="clear-filters-btn">
+            <i class="fas fa-times"></i>
+            Clear All
+          </button>
         </div>
         <div class="filters-bar">
-          <!-- Content Filters -->
-          <div class="filter-section">
-            <div class="filter-group">
-              <label>Type:</label>
-              <select v-model="filters.type">
-                <option value="all">All</option>
-                <option value="movie">Movies</option>
-                <option value="tv">TV Shows</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label>Genre:</label>
-              <select v-model="filters.genre">
-                <option value="all">All Genres</option>
-                <option value="Action">Action</option>
-                <option value="Adventure">Adventure</option>
-                <option value="Comedy">Comedy</option>
-                <option value="Drama">Drama</option>
-                <option value="Fantasy">Fantasy</option>
-                <option value="Mystery">Mystery</option>
-                <option value="Sci-Fi">Sci-Fi</option>
-                <option value="Supernatural">Supernatural</option>
-                <option value="Historical">Historical</option>
-                <option value="Military">Military</option>
-                <option value="Psychological">Psychological</option>
-                <option value="Mecha">Mecha</option>
-                <option value="Samurai">Samurai</option>
-                <option value="Vampire">Vampire</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label>Language:</label>
-              <select v-model="filters.language">
-                <option value="all">All Languages</option>
-                <option value="Japanese">Japanese</option>
-                <option value="English">English</option>
-                <option value="Korean">Korean</option>
-                <option value="Chinese">Chinese</option>
-              </select>
-            </div>
+          <div class="filter-group">
+            <label>Type:</label>
+            <select v-model="filters.type">
+              <option value="all">All</option>
+              <option value="movie">Movies</option>
+              <option value="tv">TV Shows</option>
+            </select>
           </div>
-
-          <!-- Quality Filters -->
-          <div class="filter-section">
-            <div class="filter-group rating-filter">
-              <label>Rating: {{ filters.ratingMin }} – {{ filters.ratingMax }}</label>
-              <div class="rating-slider">
-                <div class="rating-slider-track">
-                  <div class="rating-slider-range" :style="ratingFillStyle"></div>
-                </div>
-                <input
-                  v-model.number="filters.ratingMin"
-                  type="range"
-                  min="1"
-                  max="10"
-                  step="1"
-                  aria-label="Minimum rating"
-                  @input="clampRatingMin"
-                />
-                <input
-                  v-model.number="filters.ratingMax"
-                  type="range"
-                  min="1"
-                  max="10"
-                  step="1"
-                  aria-label="Maximum rating"
-                  @input="clampRatingMax"
-                />
+          <div class="filter-group">
+            <label>Genre:</label>
+            <select v-model="filters.genre">
+              <option value="all">All Genres</option>
+              <option value="Action">Action</option>
+              <option value="Adventure">Adventure</option>
+              <option value="Comedy">Comedy</option>
+              <option value="Drama">Drama</option>
+              <option value="Fantasy">Fantasy</option>
+              <option value="Mystery">Mystery</option>
+              <option value="Sci-Fi">Sci-Fi</option>
+              <option value="Supernatural">Supernatural</option>
+              <option value="Historical">Historical</option>
+              <option value="Military">Military</option>
+              <option value="Psychological">Psychological</option>
+              <option value="Mecha">Mecha</option>
+              <option value="Samurai">Samurai</option>
+              <option value="Vampire">Vampire</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Language:</label>
+            <select v-model="filters.language">
+              <option value="all">All Languages</option>
+              <option value="Japanese">Japanese</option>
+              <option value="English">English</option>
+              <option value="Korean">Korean</option>
+              <option value="Chinese">Chinese</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Year:</label>
+            <select v-model="filters.year">
+              <option value="all">All Years</option>
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
+              <option value="2022">2022</option>
+              <option value="2021">2021</option>
+              <option value="2020">2020</option>
+              <option value="older">Older</option>
+            </select>
+          </div>
+          <div class="filter-group sort-filter">
+            <SortByControls
+              v-model:sort-by="filters.sortBy"
+              v-model:sort-direction="filters.sortDirection"
+            />
+          </div>
+          <div class="filter-group rating-filter">
+            <label>Rating: {{ filters.ratingMin }} – {{ filters.ratingMax }}</label>
+            <div class="rating-slider">
+              <div class="rating-slider-track">
+                <div class="rating-slider-range" :style="ratingFillStyle"></div>
               </div>
-              <div class="rating-slider-scale">
-                <span v-for="n in 10" :key="n">{{ n }}</span>
-              </div>
-            </div>
-            <div class="filter-group">
-              <label>Year:</label>
-              <select v-model="filters.year">
-                <option value="all">All Years</option>
-                <option value="2024">2024</option>
-                <option value="2023">2023</option>
-                <option value="2022">2022</option>
-                <option value="2021">2021</option>
-                <option value="2020">2020</option>
-                <option value="older">Older</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <SortByControls
-                v-model:sort-by="filters.sortBy"
-                v-model:sort-direction="filters.sortDirection"
+              <input
+                v-model.number="filters.ratingMin"
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                aria-label="Minimum rating"
+                @input="clampRatingMin"
+              />
+              <input
+                v-model.number="filters.ratingMax"
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                aria-label="Maximum rating"
+                @input="clampRatingMax"
               />
             </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="filter-actions">
-            <button @click="clearFilters" class="clear-filters-btn">
-              <i class="fas fa-times"></i>
-              Clear All
-            </button>
+            <div class="rating-slider-scale">
+              <span v-for="n in 10" :key="n">{{ n }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -256,9 +245,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
-import { useContentStore } from '@/stores/content'
+import { useContentStore, defaultSearchFilters } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import {
   getPosterUrl,
@@ -276,7 +266,7 @@ import Chatbot from '@/components/Chatbot.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import SortByControls from '@/components/SortByControls.vue'
-import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
+import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
 
 const router = useRouter()
@@ -286,25 +276,26 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 // State
-const searchQuery = ref('')
-const hasSearched = ref(false)
+const searchQuery = ref(contentStore.lastSearchQuery)
+const hasSearched = ref(
+  contentStore.searchResults.length > 0 || Boolean(contentStore.lastSearchQuery),
+)
 const isAIMode = ref(false)
-const currentPage = ref(1)
 const itemsPerPage = 20
 
-const defaultFilters = () => ({
-  type: 'all',
-  ratingMin: 1,
-  ratingMax: 10,
-  year: 'all',
-  genre: 'all',
-  language: 'all',
-  sortBy: 'relevance' as SortByOption,
-  sortDirection: 'desc' as SortDirection,
-})
+const { searchFilters: filters, searchAppliedFilters: appliedFilters, searchPage: currentPage } =
+  storeToRefs(contentStore)
 
-const filters = ref(defaultFilters())
-const appliedFilters = ref(defaultFilters())
+watch(
+  filters,
+  (value) => {
+    appliedFilters.value = { ...value }
+    if (hasSearched.value) {
+      currentPage.value = 1
+    }
+  },
+  { deep: true },
+)
 
 // Computed properties
 const searchResults = computed(() => contentStore.searchResults)
@@ -320,7 +311,9 @@ const filteredResults = computed(() => {
 
   // Apply rating range (1–10). Full span includes unrated titles.
   if (!(active.ratingMin === 1 && active.ratingMax === 10)) {
-    results = results.filter((item) => ratingMatchesFilter(item, active.ratingMin, active.ratingMax))
+    results = results.filter((item) =>
+      ratingMatchesFilter(item, active.ratingMin, active.ratingMax),
+    )
   }
 
   // Apply year filter
@@ -481,7 +474,7 @@ const handleAISearchResults = (results: UnifiedContent[]) => {
 }
 
 const clearFilters = () => {
-  const reset = defaultFilters()
+  const reset = defaultSearchFilters()
   filters.value = reset
   appliedFilters.value = { ...reset }
   currentPage.value = 1
@@ -490,9 +483,6 @@ const clearFilters = () => {
 const clearSearch = () => {
   searchQuery.value = ''
   hasSearched.value = false
-  currentPage.value = 1
-  filters.value = defaultFilters()
-  appliedFilters.value = defaultFilters()
   contentStore.clearSearchResults()
 }
 
@@ -501,31 +491,21 @@ const goToPage = (page: number) => {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// Handle scroll position restoration when returning from detail pages
+// Restore query, filters, page, and scroll when returning from a detail page
 onMounted(() => {
-  if (contentStore.searchResults.length > 0) {
+  if (contentStore.searchResults.length > 0 || contentStore.lastSearchQuery) {
     hasSearched.value = true
     if (contentStore.lastSearchQuery) {
       searchQuery.value = contentStore.lastSearchQuery
     }
   }
 
-  const previousPage = route.query.from as string
-  if (previousPage && previousPage.includes('/search')) {
-    const url = new URL(previousPage, window.location.origin)
-    const page = url.searchParams.get('page') || '1'
-    currentPage.value = parseInt(page, 10) || 1
-
-    const scrollKey = `search-page-${page}`
-    const restored = contentStore.restoreScrollPosition(scrollKey)
-
-    if (!restored) {
-      nextTick(() => {
-        contentStore.scrollToTop()
-      })
-    }
-  } else {
-    contentStore.scrollToTop()
+  const scrollKey = `search-page-${currentPage.value}`
+  const restored = contentStore.restoreScrollPosition(scrollKey)
+  if (!restored) {
+    nextTick(() => {
+      contentStore.scrollToTop()
+    })
   }
 })
 </script>
@@ -634,6 +614,10 @@ onMounted(() => {
 }
 
 .filters-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1rem;
 }
 
@@ -646,24 +630,28 @@ onMounted(() => {
 
 .filters-bar {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 1.5rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: start;
   background: rgba(255, 255, 255, 0.1);
   padding: 1.5rem;
   border-radius: 12px;
   backdrop-filter: blur(10px);
 }
 
-.filter-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
 .filter-group {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
+}
+
+.rating-filter {
+  grid-column: 1 / -1;
+}
+
+.sort-filter :deep(.sort-by-controls) {
+  width: 100%;
 }
 
 .filter-group label {
@@ -765,12 +753,6 @@ onMounted(() => {
   padding: 0 1px;
 }
 
-.filter-actions {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-}
-
 .clear-filters-btn {
   background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
   color: white;
@@ -785,6 +767,8 @@ onMounted(() => {
   align-items: center;
   gap: 0.4rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .clear-filters-btn:hover {
@@ -1017,6 +1001,17 @@ onMounted(() => {
   font-weight: 500;
 }
 
+@media (max-width: 900px) {
+  .filters-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sort-filter,
+  .rating-filter {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 768px) {
   .search-title {
     font-size: 2rem;
@@ -1032,8 +1027,9 @@ onMounted(() => {
     padding: 1rem;
   }
 
-  .filter-section {
-    gap: 0.5rem;
+  .sort-filter,
+  .rating-filter {
+    grid-column: 1;
   }
 
   .clear-filters-btn {

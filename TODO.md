@@ -35,4 +35,4 @@ Bug Fixes -
     - Add the numbers of voters together and weight the ratings in the avergae shown accordingly.
 10. Fix filter of ratings displaying proper values in search. ✅
     - Right now for example, filtering between 3-7 is including ratings of 8.0.
-11. Even out the filters.
+11. Even out the filters. ✅
