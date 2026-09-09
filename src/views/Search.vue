@@ -245,9 +245,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
-import { useContentStore } from '@/stores/content'
+import { useContentStore, defaultSearchFilters } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import {
   getPosterUrl,
@@ -265,7 +266,7 @@ import Chatbot from '@/components/Chatbot.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import SortByControls from '@/components/SortByControls.vue'
-import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
+import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
 
 const router = useRouter()
@@ -275,25 +276,26 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 // State
-const searchQuery = ref('')
-const hasSearched = ref(false)
+const searchQuery = ref(contentStore.lastSearchQuery)
+const hasSearched = ref(
+  contentStore.searchResults.length > 0 || Boolean(contentStore.lastSearchQuery),
+)
 const isAIMode = ref(false)
-const currentPage = ref(1)
 const itemsPerPage = 20
 
-const defaultFilters = () => ({
-  type: 'all',
-  ratingMin: 1,
-  ratingMax: 10,
-  year: 'all',
-  genre: 'all',
-  language: 'all',
-  sortBy: 'relevance' as SortByOption,
-  sortDirection: 'desc' as SortDirection,
-})
+const { searchFilters: filters, searchAppliedFilters: appliedFilters, searchPage: currentPage } =
+  storeToRefs(contentStore)
 
-const filters = ref(defaultFilters())
-const appliedFilters = ref(defaultFilters())
+watch(
+  filters,
+  (value) => {
+    appliedFilters.value = { ...value }
+    if (hasSearched.value) {
+      currentPage.value = 1
+    }
+  },
+  { deep: true },
+)
 
 // Computed properties
 const searchResults = computed(() => contentStore.searchResults)
@@ -472,7 +474,7 @@ const handleAISearchResults = (results: UnifiedContent[]) => {
 }
 
 const clearFilters = () => {
-  const reset = defaultFilters()
+  const reset = defaultSearchFilters()
   filters.value = reset
   appliedFilters.value = { ...reset }
   currentPage.value = 1
@@ -481,9 +483,6 @@ const clearFilters = () => {
 const clearSearch = () => {
   searchQuery.value = ''
   hasSearched.value = false
-  currentPage.value = 1
-  filters.value = defaultFilters()
-  appliedFilters.value = defaultFilters()
   contentStore.clearSearchResults()
 }
 
@@ -492,31 +491,21 @@ const goToPage = (page: number) => {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// Handle scroll position restoration when returning from detail pages
+// Restore query, filters, page, and scroll when returning from a detail page
 onMounted(() => {
-  if (contentStore.searchResults.length > 0) {
+  if (contentStore.searchResults.length > 0 || contentStore.lastSearchQuery) {
     hasSearched.value = true
     if (contentStore.lastSearchQuery) {
       searchQuery.value = contentStore.lastSearchQuery
     }
   }
 
-  const previousPage = route.query.from as string
-  if (previousPage && previousPage.includes('/search')) {
-    const url = new URL(previousPage, window.location.origin)
-    const page = url.searchParams.get('page') || '1'
-    currentPage.value = parseInt(page, 10) || 1
-
-    const scrollKey = `search-page-${page}`
-    const restored = contentStore.restoreScrollPosition(scrollKey)
-
-    if (!restored) {
-      nextTick(() => {
-        contentStore.scrollToTop()
-      })
-    }
-  } else {
-    contentStore.scrollToTop()
+  const scrollKey = `search-page-${currentPage.value}`
+  const restored = contentStore.restoreScrollPosition(scrollKey)
+  if (!restored) {
+    nextTick(() => {
+      contentStore.scrollToTop()
+    })
   }
 })
 </script>

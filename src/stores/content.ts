@@ -9,6 +9,29 @@ import {
 } from '@/services/api'
 import type { WatchlistItem } from '@/types'
 import type { UnifiedContent } from '@/types/content'
+import type { SortByOption, SortDirection } from '@/utils/sorting'
+
+export type SearchFilters = {
+  type: string
+  ratingMin: number
+  ratingMax: number
+  year: string
+  genre: string
+  language: string
+  sortBy: SortByOption
+  sortDirection: SortDirection
+}
+
+export const defaultSearchFilters = (): SearchFilters => ({
+  type: 'all',
+  ratingMin: 1,
+  ratingMax: 10,
+  year: 'all',
+  genre: 'all',
+  language: 'all',
+  sortBy: 'relevance',
+  sortDirection: 'desc',
+})
 
 export const useContentStore = defineStore('content', () => {
   // Unified content arrays
@@ -56,6 +79,9 @@ export const useContentStore = defineStore('content', () => {
   })
 
   const lastSearchQuery = ref('')
+  const searchFilters = ref<SearchFilters>(defaultSearchFilters())
+  const searchAppliedFilters = ref<SearchFilters>(defaultSearchFilters())
+  const searchPage = ref(1)
   const catalogSize = ref(0)
 
   // Get all content with pagination and filtering
@@ -575,6 +601,9 @@ export const useContentStore = defineStore('content', () => {
   const clearSearchResults = () => {
     searchResults.value = []
     lastSearchQuery.value = ''
+    searchFilters.value = defaultSearchFilters()
+    searchAppliedFilters.value = defaultSearchFilters()
+    searchPage.value = 1
   }
 
   const clearCurrentContent = () => {
@@ -591,6 +620,9 @@ export const useContentStore = defineStore('content', () => {
     watchlist.value = []
     watchlistLoaded.value = false
     lastSearchQuery.value = ''
+    searchFilters.value = defaultSearchFilters()
+    searchAppliedFilters.value = defaultSearchFilters()
+    searchPage.value = 1
     catalogSize.value = 0
     error.value = null
   }
@@ -613,6 +645,9 @@ export const useContentStore = defineStore('content', () => {
     moviesPagination,
     tvShowsPagination,
     lastSearchQuery,
+    searchFilters,
+    searchAppliedFilters,
+    searchPage,
 
     // Actions
     getContent,
