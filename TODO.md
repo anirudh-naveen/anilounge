@@ -20,4 +20,4 @@ Bug Fixes -
    - show the Content Image to the left
    - have the dropdown for watchlist addition include watching as an option.
 7. Fix the watchlist content size in My Watchlist ✅
-8. Fix the tabs (Home, Movies, TV Shows, etc) to have icons when the screen is small (like on phone dimensions).
+8. Fix the tabs (Home, Movies, TV Shows, etc) to have icons when the screen is small (like on phone dimensions). ✅
