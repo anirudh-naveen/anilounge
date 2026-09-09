@@ -7,8 +7,7 @@ Additions and Major Changes -
 5. Include episode content subgroup for tv shows, with its own cast and description.
 6. Include a currently airing tag and timer for new episode updates for airing shows.
 7. Seperate English title with Native title (and make both searchable)
-
-
+8. Add an OVA category to content IF MAL has it as a category.
 
 Bug Fixes -
 
@@ -17,3 +16,7 @@ Bug Fixes -
 3. Fix the accidental deletion of content (in merge or original filtering?)
 4. Fix duplication email login ✅
 5. Fix the search feature showing content by default. ✅
+6. Fix the content hover screen when hovering over a content item ✅
+   - show the Content Image to the left
+   - have the dropdown for watchlist addition include watching as an option.
+7. Fix the watchlist content size in My Watchlist to default to smaller, bars of content

@@ -174,28 +174,6 @@
               >
                 {{ getContentTypeDisplay(item.contentType) }}
               </div>
-              <div class="result-overlay">
-                <div class="result-rating" :style="getRatingStyle(item)">
-                  {{ getDisplayRating(item) }}
-                </div>
-                <div class="result-actions">
-                  <button
-                    v-if="authStore.isAuthenticated && !(item as any).source"
-                    @click.stop="handleWatchlistClick(item._id)"
-                    class="action-btn"
-                    :class="{ 'in-watchlist': contentStore.isInWatchlist(item._id) }"
-                  >
-                    {{ contentStore.isInWatchlist(item._id) ? '✓' : '+' }}
-                  </button>
-                  <div
-                    v-if="(item as any).source"
-                    class="external-content-notice"
-                    title="This content is from external search and cannot be added to watchlist"
-                  >
-                    <i class="fas fa-external-link-alt"></i>
-                  </div>
-                </div>
-              </div>
             </div>
             <div class="result-info">
               <h3 class="result-title">{{ item.title }}</h3>
@@ -224,6 +202,13 @@
                 </span>
               </div>
             </div>
+            <ContentHoverPreview
+              :item="item"
+              :is-authenticated="authStore.isAuthenticated"
+              :in-watchlist="contentStore.isInWatchlist(item._id)"
+              :show-watchlist="!(item as any).source"
+              @watchlist="handleWatchlistClick(item._id)"
+            />
           </div>
         </div>
 
@@ -271,12 +256,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
-import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import Chatbot from '@/components/Chatbot.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
+import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -405,15 +390,6 @@ const paginatedResults = computed(() => {
 })
 
 // Helper functions
-const getDisplayRating = (item: UnifiedContent) => {
-  const rating = item.unifiedScore
-  return rating ? rating.toFixed(1) : 'N/A'
-}
-
-const getRatingStyle = (item: UnifiedContent) => {
-  return getRatingTextStyle(item.unifiedScore)
-}
-
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
   return formatGenres(genres)
 }
@@ -767,23 +743,27 @@ onMounted(() => {
 }
 
 .result-card {
+  position: relative;
   background: white;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   cursor: pointer;
+  z-index: 1;
 }
 
 .result-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 20;
 }
 
 .result-poster {
   position: relative;
   aspect-ratio: 2/3;
   overflow: hidden;
+  border-radius: 8px 8px 0 0;
 }
 
 .result-poster img {
@@ -795,51 +775,6 @@ onMounted(() => {
 
 .result-card:hover .result-poster img {
   transform: scale(1.05);
-}
-
-.result-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.7) 0%,
-    rgba(0, 0, 0, 0.3) 50%,
-    rgba(0, 0, 0, 0.8) 100%
-  );
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 0.5rem;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.result-card:hover .result-overlay {
-  opacity: 1;
-}
-
-.result-rating {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 0.75rem;
-  align-self: flex-start;
-  position: absolute;
-  top: 8px;
-  left: 8px;
-}
-
-.result-type {
-  background: rgba(102, 126, 234, 0.9);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 0.8rem;
-  align-self: flex-start;
 }
 
 .content-type-badge {
@@ -872,58 +807,9 @@ onMounted(() => {
   transform: translateY(0);
 }
 
-.result-actions {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-}
-
-.action-btn {
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.action-btn:hover {
-  background: white;
-  transform: scale(1.1);
-}
-
-.action-btn.in-watchlist {
-  background: #4ecdc4;
-  color: white;
-}
-
-.external-content-notice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 0.8rem;
-  cursor: help;
-  transition: all 0.3s ease;
-}
-
-.external-content-notice:hover {
-  background: rgba(255, 255, 255, 0.3);
-  color: rgba(255, 255, 255, 0.8);
-}
-
 .result-info {
   padding: 0.6rem 0.7rem 0.75rem;
+  border-radius: 0 0 8px 8px;
 }
 
 .result-title {

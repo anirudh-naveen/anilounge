@@ -42,19 +42,6 @@
             >
               {{ getContentTypeDisplay(show.contentType) }}
             </div>
-            <div class="show-overlay">
-              <div class="show-rating">{{ getDisplayRating(show) }}</div>
-              <div class="show-actions">
-                <button
-                  v-if="authStore.isAuthenticated"
-                  @click.stop="handleWatchlistClick(show._id)"
-                  class="action-btn"
-                  :class="{ 'in-watchlist': contentStore.isInWatchlist(show._id) }"
-                >
-                  {{ contentStore.isInWatchlist(show._id) ? '✓' : '+' }}
-                </button>
-              </div>
-            </div>
           </div>
           <div class="show-info">
             <h3 class="show-title">{{ show.title }}</h3>
@@ -78,6 +65,12 @@
               <span v-if="show.seasonCount" class="seasons"> {{ show.seasonCount }} seasons </span>
             </div>
           </div>
+          <ContentHoverPreview
+            :item="show"
+            :is-authenticated="authStore.isAuthenticated"
+            :in-watchlist="contentStore.isInWatchlist(show._id)"
+            @watchlist="handleWatchlistClick(show._id)"
+          />
         </div>
       </div>
 
@@ -115,6 +108,7 @@ import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/ap
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
+import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
@@ -131,11 +125,6 @@ const tvShows = computed(() => {
 })
 
 // Helper functions
-const getDisplayRating = (show: UnifiedContent) => {
-  const rating = show.unifiedScore
-  return rating ? rating.toFixed(1) : 'N/A'
-}
-
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
   return formatGenres(genres)
 }
@@ -251,23 +240,27 @@ onMounted(async () => {
 }
 
 .show-card {
+  position: relative;
   background: white;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   cursor: pointer;
+  z-index: 1;
 }
 
 .show-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 20;
 }
 
 .show-poster {
   position: relative;
   aspect-ratio: 2/3;
   overflow: hidden;
+  border-radius: 8px 8px 0 0;
 }
 
 .show-poster img {
@@ -281,73 +274,9 @@ onMounted(async () => {
   transform: scale(1.05);
 }
 
-.show-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.7) 0%,
-    rgba(0, 0, 0, 0.3) 50%,
-    rgba(0, 0, 0, 0.8) 100%
-  );
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 0.5rem;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.show-card:hover .show-overlay {
-  opacity: 1;
-}
-
-.show-rating {
-  background: rgba(255, 255, 255, 0.9);
-  color: #333;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 0.75rem;
-  align-self: flex-start;
-}
-
-.show-actions {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-}
-
-.action-btn {
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.action-btn:hover {
-  background: white;
-  transform: scale(1.1);
-}
-
-.action-btn.in-watchlist {
-  background: #4ecdc4;
-  color: white;
-}
-
 .show-info {
   padding: 0.6rem 0.7rem 0.75rem;
+  border-radius: 0 0 8px 8px;
 }
 
 .show-title {

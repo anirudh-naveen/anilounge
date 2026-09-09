@@ -49,21 +49,6 @@
               >
                 {{ getContentTypeDisplay(item.contentType) }}
               </div>
-              <div class="content-overlay">
-                <div class="content-rating" :style="getRatingStyle(item)">
-                  {{ getDisplayRating(item) }}
-                </div>
-                <div class="content-actions">
-                  <button
-                    v-if="authStore.isAuthenticated"
-                    @click.stop="handleWatchlistClick(item._id)"
-                    class="action-btn"
-                    :class="{ 'in-watchlist': contentStore.isInWatchlist(item._id) }"
-                  >
-                    {{ contentStore.isInWatchlist(item._id) ? '✓' : '+' }}
-                  </button>
-                </div>
-              </div>
             </div>
             <div class="content-info">
               <h3 class="content-title">{{ item.title }}</h3>
@@ -78,6 +63,12 @@
                 </span>
               </div>
             </div>
+            <ContentHoverPreview
+              :item="item"
+              :is-authenticated="authStore.isAuthenticated"
+              :in-watchlist="contentStore.isInWatchlist(item._id)"
+              @watchlist="handleWatchlistClick(item._id)"
+            />
           </div>
         </div>
         <div v-else class="error-state">
@@ -102,9 +93,9 @@ import { useRouter, useRoute } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
-import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
+import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
@@ -150,15 +141,6 @@ const getRecencyBonus = (releaseDate: string | Date | undefined) => {
   }
 
   return 0
-}
-
-const getDisplayRating = (item: UnifiedContent) => {
-  const rating = item.unifiedScore
-  return rating ? rating.toFixed(1) : 'N/A'
-}
-
-const getRatingStyle = (item: UnifiedContent) => {
-  return getRatingTextStyle(item.unifiedScore)
 }
 
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
@@ -359,25 +341,29 @@ onMounted(async () => {
 }
 
 .content-card {
+  position: relative;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
   cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 1;
 }
 
 .content-card:hover {
   transform: translateY(-8px);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
   border-color: var(--coral-primary);
+  z-index: 20;
 }
 
 .content-poster {
   position: relative;
   aspect-ratio: 2/3;
   overflow: hidden;
+  border-radius: 12px 12px 0 0;
 }
 
 .content-poster img {
@@ -421,84 +407,9 @@ onMounted(async () => {
   transform: scale(1.05);
 }
 
-.content-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.7) 0%,
-    rgba(0, 0, 0, 0.3) 50%,
-    rgba(0, 0, 0, 0.8) 100%
-  );
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 1rem;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.content-card:hover .content-overlay {
-  opacity: 1;
-}
-
-.content-rating {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  align-self: flex-start;
-  position: absolute;
-  top: 8px;
-  left: 8px;
-}
-
-.content-type {
-  background: rgba(102, 126, 234, 0.9);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 0.8rem;
-  align-self: flex-start;
-}
-
-.content-actions {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-}
-
-.action-btn {
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.action-btn:hover {
-  background: white;
-  transform: scale(1.1);
-}
-
-.action-btn.in-watchlist {
-  background: #4ecdc4;
-  color: white;
-}
-
 .content-info {
   padding: 1.5rem;
+  border-radius: 0 0 12px 12px;
 }
 
 .content-title {

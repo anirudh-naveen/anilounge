@@ -42,21 +42,6 @@
             >
               {{ getContentTypeDisplay(movie.contentType) }}
             </div>
-            <div class="movie-overlay">
-              <div class="movie-rating" :style="getRatingStyle(movie)">
-                {{ getDisplayRating(movie) }}
-              </div>
-              <div class="movie-actions">
-                <button
-                  v-if="authStore.isAuthenticated"
-                  @click.stop="handleWatchlistClick(movie._id)"
-                  class="action-btn"
-                  :class="{ 'in-watchlist': contentStore.isInWatchlist(movie._id) }"
-                >
-                  {{ contentStore.isInWatchlist(movie._id) ? '✓' : '+' }}
-                </button>
-              </div>
-            </div>
           </div>
           <div class="movie-info">
             <h3 class="movie-title">{{ movie.title }}</h3>
@@ -77,6 +62,12 @@
               <span v-if="movie.runtime" class="runtime"> {{ movie.runtime }} min </span>
             </div>
           </div>
+          <ContentHoverPreview
+            :item="movie"
+            :is-authenticated="authStore.isAuthenticated"
+            :in-watchlist="contentStore.isInWatchlist(movie._id)"
+            @watchlist="handleWatchlistClick(movie._id)"
+          />
         </div>
       </div>
 
@@ -111,10 +102,10 @@ import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres, getContentTypeDisplay } from '@/services/api'
-import { getRatingTextStyle } from '@/utils/ratingColors'
 import { useToast } from 'vue-toastification'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
+import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
 
 const router = useRouter()
@@ -131,15 +122,6 @@ const movies = computed(() => {
 })
 
 // Helper functions
-const getDisplayRating = (movie: UnifiedContent) => {
-  const rating = movie.unifiedScore
-  return rating ? rating.toFixed(1) : 'N/A'
-}
-
-const getRatingStyle = (movie: UnifiedContent) => {
-  return getRatingTextStyle(movie.unifiedScore)
-}
-
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
   return formatGenres(genres)
 }
@@ -255,23 +237,27 @@ onMounted(async () => {
 }
 
 .movie-card {
+  position: relative;
   background: white;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   cursor: pointer;
+  z-index: 1;
 }
 
 .movie-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 20;
 }
 
 .movie-poster {
   position: relative;
   aspect-ratio: 2/3;
   overflow: hidden;
+  border-radius: 8px 8px 0 0;
 }
 
 .movie-poster img {
@@ -285,71 +271,9 @@ onMounted(async () => {
   transform: scale(1.05);
 }
 
-.movie-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.7) 0%,
-    rgba(0, 0, 0, 0.3) 50%,
-    rgba(0, 0, 0, 0.8) 100%
-  );
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 0.5rem;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.movie-card:hover .movie-overlay {
-  opacity: 1;
-}
-
-.movie-rating {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 0.75rem;
-  align-self: flex-start;
-}
-
-.movie-actions {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-}
-
-.action-btn {
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.action-btn:hover {
-  background: white;
-  transform: scale(1.1);
-}
-
-.action-btn.in-watchlist {
-  background: #4ecdc4;
-  color: white;
-}
-
 .movie-info {
   padding: 0.6rem 0.7rem 0.75rem;
+  border-radius: 0 0 8px 8px;
 }
 
 .movie-title {
