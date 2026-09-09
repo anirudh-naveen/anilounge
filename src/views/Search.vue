@@ -47,7 +47,7 @@
           <div class="filter-section">
             <div class="filter-group">
               <label>Type:</label>
-              <select v-model="filters.type" @change="applyFilters">
+              <select v-model="filters.type">
                 <option value="all">All</option>
                 <option value="movie">Movies</option>
                 <option value="tv">TV Shows</option>
@@ -55,7 +55,7 @@
             </div>
             <div class="filter-group">
               <label>Genre:</label>
-              <select v-model="filters.genre" @change="applyFilters">
+              <select v-model="filters.genre">
                 <option value="all">All Genres</option>
                 <option value="Action">Action</option>
                 <option value="Adventure">Adventure</option>
@@ -75,7 +75,7 @@
             </div>
             <div class="filter-group">
               <label>Language:</label>
-              <select v-model="filters.language" @change="applyFilters">
+              <select v-model="filters.language">
                 <option value="all">All Languages</option>
                 <option value="Japanese">Japanese</option>
                 <option value="English">English</option>
@@ -89,7 +89,7 @@
           <div class="filter-section">
             <div class="filter-group">
               <label>Rating:</label>
-              <select v-model="filters.rating" @change="applyFilters">
+              <select v-model="filters.rating">
                 <option value="all">All Ratings</option>
                 <option value="8">8+ Stars</option>
                 <option value="7">7+ Stars</option>
@@ -98,7 +98,7 @@
             </div>
             <div class="filter-group">
               <label>Year:</label>
-              <select v-model="filters.year" @change="applyFilters">
+              <select v-model="filters.year">
                 <option value="all">All Years</option>
                 <option value="2024">2024</option>
                 <option value="2023">2023</option>
@@ -109,13 +109,10 @@
               </select>
             </div>
             <div class="filter-group">
-              <label>Sort by:</label>
-              <select v-model="filters.sortBy" @change="applySorting">
-                <option value="relevance">Relevance</option>
-                <option value="alphabetical">Alphabetical</option>
-                <option value="rating">Rating</option>
-                <option value="popularity">Popularity</option>
-              </select>
+              <SortByControls
+                v-model:sort-by="filters.sortBy"
+                v-model:sort-direction="filters.sortDirection"
+              />
             </div>
           </div>
 
@@ -252,6 +249,8 @@ import type { UnifiedContent } from '@/types/content'
 import Chatbot from '@/components/Chatbot.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
+import SortByControls from '@/components/SortByControls.vue'
+import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
 
 const router = useRouter()
 const route = useRoute()
@@ -266,29 +265,34 @@ const isAIMode = ref(false)
 const currentPage = ref(1)
 const itemsPerPage = 20
 
-const filters = ref({
+const defaultFilters = () => ({
   type: 'all',
   rating: 'all',
   year: 'all',
   genre: 'all',
   language: 'all',
-  sortBy: 'relevance',
+  sortBy: 'relevance' as SortByOption,
+  sortDirection: 'desc' as SortDirection,
 })
+
+const filters = ref(defaultFilters())
+const appliedFilters = ref(defaultFilters())
 
 // Computed properties
 const searchResults = computed(() => contentStore.searchResults)
 
 const filteredResults = computed(() => {
   let results = [...searchResults.value]
+  const active = appliedFilters.value
 
   // Apply type filter
-  if (filters.value.type !== 'all') {
-    results = results.filter((item) => item.contentType === filters.value.type)
+  if (active.type !== 'all') {
+    results = results.filter((item) => item.contentType === active.type)
   }
 
   // Apply rating filter
-  if (filters.value.rating !== 'all') {
-    const minRating = parseFloat(filters.value.rating)
+  if (active.rating !== 'all') {
+    const minRating = parseFloat(active.rating)
     results = results.filter((item) => {
       const rating = item.unifiedScore || 0
       return rating >= minRating
@@ -296,35 +300,35 @@ const filteredResults = computed(() => {
   }
 
   // Apply year filter
-  if (filters.value.year !== 'all') {
+  if (active.year !== 'all') {
     results = results.filter((item) => {
       if (!item.releaseDate) return false
       const year = new Date(item.releaseDate).getFullYear()
 
-      if (filters.value.year === 'older') {
+      if (active.year === 'older') {
         return year < 2020
       }
-      return year === parseInt(filters.value.year)
+      return year === parseInt(active.year)
     })
   }
 
   // Apply genre filter
-  if (filters.value.genre !== 'all') {
+  if (active.genre !== 'all') {
     results = results.filter((item) => {
       if (!item.genres || !Array.isArray(item.genres)) return false
       return item.genres.some((genre) => {
         const genreName = typeof genre === 'string' ? genre : genre.name
-        return genreName === filters.value.genre
+        return genreName === active.genre
       })
     })
   }
 
   // Apply language filter (this is a simplified implementation)
-  if (filters.value.language !== 'all') {
+  if (active.language !== 'all') {
     results = results.filter((item) => {
       // For now, we'll assume Japanese content based on MAL data
       // This could be enhanced with actual language data from TMDB
-      if (filters.value.language === 'Japanese') {
+      if (active.language === 'Japanese') {
         return (
           item.malId != null ||
           item.studios?.some(
@@ -341,30 +345,14 @@ const filteredResults = computed(() => {
     })
   }
 
-  // Apply sorting
-  if (filters.value.sortBy !== 'relevance') {
-    results.sort((a, b) => {
-      switch (filters.value.sortBy) {
-        case 'alphabetical':
-          return a.title.localeCompare(b.title)
-
-        case 'rating':
-          const ratingA = a.unifiedScore || 0
-          const ratingB = b.unifiedScore || 0
-          return ratingB - ratingA // Higher ratings first
-
-        case 'popularity':
-          const popularityA = (a.voteCount || 0) + (a.malScoredBy || 0)
-          const popularityB = (b.voteCount || 0) + (b.malScoredBy || 0)
-          return popularityB - popularityA // Higher popularity first
-
-        default:
-          return 0
-      }
-    })
-  }
-
-  return results
+  return applySort(
+    results,
+    active.sortBy,
+    active.sortDirection,
+    (item) => item.title || '',
+    (item) => item.unifiedScore || 0,
+    (item) => (item.voteCount || 0) + (item.malScoredBy || 0),
+  )
 })
 
 const totalPages = computed(() => {
@@ -413,9 +401,16 @@ const viewContentDetails = (item: UnifiedContent) => {
 const handleSearch = async () => {
   if (!searchQuery.value.trim()) return
 
+  appliedFilters.value = { ...filters.value }
+  hasSearched.value = true
+  currentPage.value = 1
+
+  const queryChanged = searchQuery.value !== contentStore.lastSearchQuery
+  if (!queryChanged && contentStore.searchResults.length > 0) {
+    return
+  }
+
   try {
-    hasSearched.value = true
-    currentPage.value = 1
     await contentStore.searchContent(searchQuery.value, 'all')
   } catch (error) {
     console.error('Search error:', error)
@@ -435,25 +430,13 @@ const toggleAIMode = () => {
 const handleAISearchResults = (results: UnifiedContent[]) => {
   contentStore.searchResults = results
   hasSearched.value = true
-}
-
-const applyFilters = () => {
-  currentPage.value = 1
-}
-
-const applySorting = () => {
-  currentPage.value = 1
+  appliedFilters.value = { ...filters.value }
 }
 
 const clearFilters = () => {
-  filters.value = {
-    type: 'all',
-    rating: 'all',
-    year: 'all',
-    genre: 'all',
-    language: 'all',
-    sortBy: 'relevance',
-  }
+  const reset = defaultFilters()
+  filters.value = reset
+  appliedFilters.value = { ...reset }
   currentPage.value = 1
 }
 
@@ -461,6 +444,8 @@ const clearSearch = () => {
   searchQuery.value = ''
   hasSearched.value = false
   currentPage.value = 1
+  filters.value = defaultFilters()
+  appliedFilters.value = defaultFilters()
   contentStore.clearSearchResults()
 }
 
