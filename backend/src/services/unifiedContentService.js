@@ -134,6 +134,42 @@ class UnifiedContentService {
   }
 
   /**
+   * TMDB movies currently in theatres, filtered to animation (genre 16).
+   * @param {number} [limit=40]
+   * @returns {Promise<object[]>}
+   */
+  async getTmdbNowPlayingAnimatedMovies(limit = 40) {
+    if (!this.hasTmdbKey) {
+      console.log('TMDB API key not configured')
+      return []
+    }
+
+    const collected = []
+    try {
+      for (let page = 1; page <= 5 && collected.length < limit; page++) {
+        await this.delay(this.tmdbDelay)
+        const response = await this.tmdbClient.get('/movie/now_playing', {
+          params: {
+            api_key: this.tmdbApiKey,
+            page,
+            include_adult: false,
+          },
+        })
+        const results = response.data.results || []
+        for (const movie of results) {
+          if ((movie.genre_ids || []).includes(16)) collected.push(movie)
+          if (collected.length >= limit) break
+        }
+        if (page >= (response.data.total_pages || 1)) break
+      }
+    } catch (error) {
+      console.error('TMDB now-playing animated movies error:', error.response?.data || error.message)
+    }
+
+    return collected.slice(0, limit)
+  }
+
+  /**
    * Discover TMDB animation TV (genre 16), popularity descending.
    * @param {number} [page=1]
    * @param {number} [limit=20]
@@ -344,13 +380,17 @@ class UnifiedContentService {
 
   /**
    * Map a TMDB movie/TV payload onto a Content-shaped object.
-   * Drops titles with fewer than 50 votes or a missing vote average.
+   * Drops titles with fewer than `minVoteCount` votes or a missing vote average.
    * @param {object} tmdbData
    * @param {'movie' | 'tv'} contentType
+   * @param {{ minVoteCount?: number }} [options]
    * @returns {object | null}
    */
-  convertTmdbToContent(tmdbData, contentType) {
-    if (!tmdbData.vote_count || tmdbData.vote_count < 50 || !tmdbData.vote_average) {
+  convertTmdbToContent(tmdbData, contentType, { minVoteCount = 50 } = {}) {
+    if (
+      minVoteCount > 0 &&
+      (!tmdbData.vote_count || tmdbData.vote_count < minVoteCount || !tmdbData.vote_average)
+    ) {
       return null
     }
 

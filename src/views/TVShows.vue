@@ -3,7 +3,7 @@
   TVShows.vue — TV catalog view.
 
   Tabbed, paginated series lists (popular, currently airing, upcoming) from the
-  content store as poster cards. Loading, error, and empty states sit above the pager.
+  content store as poster cards. Popular Right Now is a single page; other tabs paginate.
 -->
 <template>
   <div class="tvshows-page">
@@ -106,6 +106,7 @@
 
       <!-- Pagination -->
       <PaginationNav
+        v-if="catalogTabHasPagination(activeTab)"
         :current-page="contentStore.tvShowsPagination.currentPage"
         :total-pages="contentStore.tvShowsPagination.totalPages"
         @change="loadTVShows"
@@ -128,6 +129,7 @@ import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle } from '@/utils/titles'
 import {
   TV_CATALOG_TABS,
+  catalogTabHasPagination,
   getTvCatalogTab,
   normalizeTvCatalogTab,
   parseTvCatalogPage,
@@ -146,7 +148,7 @@ const skipScroll = ref(true)
 
 const activeTab = computed(() => normalizeTvCatalogTab(route.query.tab))
 const activeTabMeta = computed(() => getTvCatalogTab(activeTab.value))
-const catalogPage = computed(() => parseTvCatalogPage(route.query.page))
+const catalogPage = computed(() => parseTvCatalogPage(route.query.page, activeTab.value))
 
 // Get TV shows from unified store
 const tvShows = computed(() => {
