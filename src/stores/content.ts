@@ -18,7 +18,7 @@ import type { WatchlistItem } from '@/types'
 import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
 import { getDisplayTitle, getSearchableTitles } from '@/utils/titles'
-import type { TvCatalogTab } from '@/utils/catalogTabs'
+import type { MovieCatalogTab, TvCatalogTab } from '@/utils/catalogTabs'
 
 export type SearchFilters = {
   type: string
@@ -100,14 +100,14 @@ export const useContentStore = defineStore('content', () => {
    * @param page - 1-based page index.
    * @param contentType - Which list to update (`movie`, `tv`, or `all`).
    * @param limit - Page size.
-   * @param tab - TV catalog tab (`popular`, `airing`, `upcoming`); ignored for other types.
+   * @param tab - Catalog tab (`popular`, `airing`, `theatres`, `upcoming`); ignored for mixed lists.
    * @returns The API payload (`success`, `data`, `pagination`).
    */
   const getContent = async (
     page = 1,
     contentType?: 'movie' | 'tv' | 'all',
     limit = 20,
-    tab?: TvCatalogTab,
+    tab?: MovieCatalogTab | TvCatalogTab,
   ) => {
     try {
       if (contentType === 'movie') {
@@ -122,7 +122,7 @@ export const useContentStore = defineStore('content', () => {
       if (contentType && contentType !== 'all') {
         params.type = contentType
       }
-      if (contentType === 'tv' && tab && tab !== 'popular') {
+      if ((contentType === 'tv' || contentType === 'movie') && tab && tab !== 'popular') {
         params.tab = tab
       }
 

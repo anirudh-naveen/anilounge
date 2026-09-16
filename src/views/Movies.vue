@@ -2,8 +2,8 @@
 <!--
   Movies.vue — movie catalog view.
 
-  Lists paginated animated movies from the content store as poster cards.
-  Loading, error, and empty states sit above the pager.
+  Tabbed movie lists (popular, now in theatres, upcoming) from the content
+  store as poster cards. Popular Right Now is a single page; other tabs paginate.
 -->
 <template>
   <div class="movies-page">
@@ -11,7 +11,25 @@
       <!-- Page Header -->
       <div class="page-header">
         <h1 class="page-title">Animated Movies</h1>
-        <p class="page-subtitle">Discover amazing animated films from around the world</p>
+        <p class="page-subtitle">{{ activeTabMeta.subtitle }}</p>
+      </div>
+
+      <!-- Tabs -->
+      <!-- Title: Catalog Tabs -->
+      <div class="catalog-tabs" role="tablist" aria-label="Movie lists">
+        <button
+          v-for="tab in MOVIE_CATALOG_TABS"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          class="tab-btn"
+          :class="{ active: activeTab === tab.id }"
+          :aria-selected="activeTab === tab.id"
+          :data-testid="`movie-tab-${tab.id}`"
+          @click="selectTab(tab.id)"
+        >
+          {{ tab.label }}
+        </button>
       </div>
 
       <!-- Catalog -->
@@ -26,7 +44,7 @@
         <div class="error-icon">⚠️</div>
         <h3>Failed to load movies</h3>
         <p>{{ contentStore.error }}</p>
-        <button @click="loadMovies(1)" class="btn btn-primary">Try Again</button>
+        <button @click="reloadCurrent" class="btn btn-primary">Try Again</button>
       </div>
 
       <!-- Title: Content Card -->
@@ -81,13 +99,14 @@
       <!-- Title: Empty State -->
       <div v-else class="empty-state">
         <div class="empty-icon">🎬</div>
-        <h3>No movies found</h3>
-        <p>We couldn't find any animated movies at the moment.</p>
-        <button @click="loadMovies(1)" class="btn btn-primary">Refresh</button>
+        <h3>{{ activeTabMeta.emptyTitle }}</h3>
+        <p>{{ activeTabMeta.emptyBody }}</p>
+        <button @click="reloadCurrent" class="btn btn-primary">Refresh</button>
       </div>
 
       <!-- Pagination -->
       <PaginationNav
+        v-if="catalogTabHasPagination(activeTab)"
         :current-page="contentStore.moviesPagination.currentPage"
         :total-pages="contentStore.moviesPagination.totalPages"
         @change="loadMovies"
@@ -97,8 +116,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -113,18 +132,33 @@ import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle } from '@/utils/titles'
+import {
+  MOVIE_CATALOG_TABS,
+  catalogTabHasPagination,
+  getMovieCatalogTab,
+  movieCatalogPath,
+  movieCatalogRouteQuery,
+  movieCatalogScrollKey,
+  normalizeMovieCatalogTab,
+  parseMovieCatalogPage,
+  type MovieCatalogTab,
+} from '@/utils/catalogTabs'
 
 const router = useRouter()
+const route = useRoute()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
+const skipScroll = ref(true)
 
-// Get movies from unified store
+const activeTab = computed(() => normalizeMovieCatalogTab(route.query.tab))
+const activeTabMeta = computed(() => getMovieCatalogTab(activeTab.value))
+const catalogPage = computed(() => parseMovieCatalogPage(route.query.page, activeTab.value))
+
 const movies = computed(() => {
   return contentStore.movies
 })
 
-// Helper functions
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
   return formatGenres(genres)
 }
@@ -145,20 +179,37 @@ const handleImageError = (event: Event) => {
 }
 
 const viewMovieDetails = (movie: UnifiedContent) => {
-  // Save current scroll position before navigating
-  const scrollKey = `movies-page-${contentStore.moviesPagination.currentPage}`
-  contentStore.saveScrollPosition(scrollKey)
+  const tab = activeTab.value
+  const page = contentStore.moviesPagination.currentPage
+  contentStore.saveScrollPosition(movieCatalogScrollKey(tab, page))
 
   router.push({
     name: 'MovieDetails',
     params: { id: movie._id },
-    query: { from: `/movies?page=${contentStore.moviesPagination.currentPage}` },
+    query: { from: movieCatalogPath(tab, page) },
   })
 }
 
-const loadMovies = async (page: number) => {
+const selectTab = (tab: MovieCatalogTab) => {
+  if (tab === activeTab.value) return
+  router.replace({ query: movieCatalogRouteQuery(tab, 1) })
+}
+
+const loadMovies = (page: number) => {
+  router.replace({ query: movieCatalogRouteQuery(activeTab.value, page) })
+}
+
+const reloadCurrent = () => {
+  void fetchCatalog(activeTab.value, catalogPage.value)
+}
+
+const fetchCatalog = async (tab: MovieCatalogTab, page: number) => {
   try {
-    await contentStore.getContent(page, 'movie', 20)
+    await contentStore.getContent(page, 'movie', 20, tab)
+    if (skipScroll.value) {
+      skipScroll.value = false
+      return
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (error) {
     console.error('Error loading movies:', error)
@@ -166,12 +217,16 @@ const loadMovies = async (page: number) => {
   }
 }
 
+watch(
+  () => [activeTab.value, catalogPage.value] as const,
+  ([tab, page]) => {
+    void fetchCatalog(tab, page)
+  },
+  { immediate: true },
+)
+
 onMounted(async () => {
   try {
-    // Always load movies when mounting the component to ensure fresh data
-    await contentStore.getContent(1, 'movie', 20)
-
-    // Load watchlist if user is authenticated (now optimized to skip if already loaded)
     if (authStore.isAuthenticated) {
       await contentStore.loadWatchlist()
     }
@@ -197,8 +252,38 @@ onMounted(async () => {
 
 .page-header {
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 1.5rem;
   color: white;
+}
+
+.catalog-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.tab-btn {
+  padding: 0.75rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.tab-btn.active {
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  border-color: transparent;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .page-title {
@@ -383,6 +468,11 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .page-title {
     font-size: 2rem;
+  }
+
+  .tab-btn {
+    padding: 0.6rem 0.9rem;
+    font-size: 0.85rem;
   }
 
   .movies-grid {

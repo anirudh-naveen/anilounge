@@ -868,19 +868,22 @@ class DatabasePopulator {
 }
 
 /**
- * Upsert MAL ranking TV rows (upcoming/airing) so catalog tabs have titles
- * that overall popularity sync does not ingest.
+ * Upsert MAL ranking rows so catalog tabs have titles that overall popularity
+ * sync does not ingest.
  * @param {string} rankingType - MAL `ranking_type` (`upcoming` or `airing`).
  * @param {number} [limit=50]
- * @returns {Promise<number>} Newly inserted TV documents.
+ * @param {string[]} [allowedTypes=['tv']] - Content types to keep.
+ * @returns {Promise<number>} Newly inserted documents.
  */
-export async function ingestMalRankingTv(rankingType, limit = 50) {
+export async function ingestMalRankingByTypes(rankingType, limit = 50, allowedTypes = ['tv']) {
   const rows = await unifiedContentService.getMalRanking(rankingType, limit)
   let inserted = 0
 
   for (const row of rows) {
     const contentData = unifiedContentService.convertMalToContent(row)
-    if (!contentData || contentData.contentType !== 'tv' || !contentData.malId) continue
+    if (!contentData || !allowedTypes.includes(contentData.contentType) || !contentData.malId) {
+      continue
+    }
 
     const existing = await Content.findOne({ malId: contentData.malId })
     if (existing) {
@@ -901,6 +904,57 @@ export async function ingestMalRankingTv(rankingType, limit = 50) {
     contentData.userRatingCount = 0
     contentData.userRatingSum = 0
     if (contentData.malScore) contentData.unifiedScore = contentData.malScore
+
+    await Content.create(contentData)
+    inserted++
+  }
+
+  return inserted
+}
+
+/**
+ * Upsert MAL ranking TV rows (upcoming/airing) so catalog tabs have titles
+ * that overall popularity sync does not ingest.
+ * @param {string} rankingType - MAL `ranking_type` (`upcoming` or `airing`).
+ * @param {number} [limit=50]
+ * @returns {Promise<number>} Newly inserted TV documents.
+ */
+export async function ingestMalRankingTv(rankingType, limit = 50) {
+  return ingestMalRankingByTypes(rankingType, limit, ['tv'])
+}
+
+/**
+ * Upsert TMDB now-playing animation movies so the theatres tab has titles
+ * that overall popularity sync does not ingest.
+ * @param {number} [limit=40]
+ * @returns {Promise<number>} Newly inserted movie documents.
+ */
+export async function ingestTmdbNowPlayingMovies(limit = 40) {
+  const rows = await unifiedContentService.getTmdbNowPlayingAnimatedMovies(limit)
+  let inserted = 0
+
+  for (const row of rows) {
+    const details = await unifiedContentService.getTmdbContentDetails(row.id, 'movie')
+    if (!details) continue
+
+    const contentData = unifiedContentService.convertTmdbToContent(details, 'movie', {
+      minVoteCount: 0,
+    })
+    if (!contentData?.tmdbId) continue
+
+    const existing = await Content.findOne({ tmdbId: contentData.tmdbId })
+    if (existing) {
+      if (contentData.releaseDate && !existing.releaseDate) {
+        existing.releaseDate = contentData.releaseDate
+        await existing.save()
+      }
+      continue
+    }
+
+    contentData.userRatingAverage = null
+    contentData.userRatingCount = 0
+    contentData.userRatingSum = 0
+    if (contentData.voteAverage) contentData.unifiedScore = contentData.voteAverage
 
     await Content.create(contentData)
     inserted++
