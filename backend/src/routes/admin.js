@@ -1,13 +1,26 @@
+/**
+ * Admin HTTP routes for IP-ban inspection and manual ban/unban.
+ *
+ * Layer: router. Every path requires `authMiddleware`. Handlers call helpers
+ * from `ipBan` middleware rather than talking to Mongo directly.
+ */
+
 import express from 'express'
 import authMiddleware from '../middleware/auth.js'
 import { manuallyBanIP, unbanIP, getBanStats, getActiveBans } from '../middleware/ipBan.js'
 
 const router = express.Router()
 
-// Admin-only routes for IP ban management
-router.use(authMiddleware) // Require authentication
+/** Every admin route requires a valid Bearer token. */
+router.use(authMiddleware)
 
-// Get ban statistics
+/**
+ * Return aggregate IP-ban counts from the ban collection.
+ *
+ * @param {import('express').Request} req - Authenticated admin request (user unused).
+ * @param {import('express').Response} res - 200 `{ data: { stats } }` or 500.
+ * @returns {Promise<void>}
+ */
 router.get('/ban-stats', async (req, res) => {
   try {
     const stats = await getBanStats()
@@ -24,7 +37,13 @@ router.get('/ban-stats', async (req, res) => {
   }
 })
 
-// Get all active bans
+/**
+ * List currently active, unexpired IP bans, newest first.
+ *
+ * @param {import('express').Request} req - Authenticated admin request (user unused).
+ * @param {import('express').Response} res - 200 `{ data: { bans } }` or 500.
+ * @returns {Promise<void>}
+ */
 router.get('/active-bans', async (req, res) => {
   try {
     const bans = await getActiveBans()
@@ -41,7 +60,13 @@ router.get('/active-bans', async (req, res) => {
   }
 })
 
-// Manually ban an IP
+/**
+ * Ban an IP for `duration` ms (or the default manual window) with an optional reason.
+ *
+ * @param {import('express').Request} req - `body.ip` required; `body.reason`, `body.duration` optional.
+ * @param {import('express').Response} res - 200 `{ data: { ban } }`, 400 if ip missing, or 500.
+ * @returns {Promise<void>}
+ */
 router.post('/ban-ip', async (req, res) => {
   try {
     const { ip, reason = 'manual', duration } = req.body
@@ -69,7 +94,13 @@ router.post('/ban-ip', async (req, res) => {
   }
 })
 
-// Unban an IP
+/**
+ * Clear an active ban for the given IP.
+ *
+ * @param {import('express').Request} req - `body.ip` required.
+ * @param {import('express').Response} res - 200 on success, 400 if ip missing, or 500.
+ * @returns {Promise<void>}
+ */
 router.post('/unban-ip', async (req, res) => {
   try {
     const { ip } = req.body

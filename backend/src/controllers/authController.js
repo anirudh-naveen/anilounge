@@ -1,3 +1,10 @@
+/**
+ * User registration, login, profile, password, and avatar HTTP handlers.
+ *
+ * Layer: controller. Issues JWTs via auth middleware helpers, enforces lockout
+ * after failed logins, and writes profile pictures under `uploads/profiles`.
+ */
+
 import User from '../models/User.js'
 import { generateAccessToken, generateRefreshToken, generateToken } from '../middleware/auth.js'
 import { validationResult } from 'express-validator'
@@ -7,9 +14,15 @@ import fs from 'fs'
 import { logLoginAttempt, logAccountLockout, logFileUpload } from '../middleware/securityLogger.js'
 import { banIPForBruteForce } from '../middleware/ipBan.js'
 
+/**
+ * Create a user from validated username/email/password and return a 15-minute access token.
+ *
+ * @param {import('express').Request} req - `body.username`, `body.email`, `body.password` (email is lowercased).
+ * @param {import('express').Response} res - 201 `{ user, token }`, 400 validation/duplicate, or 500.
+ * @returns {Promise<void>}
+ */
 export const register = async (req, res) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -21,10 +34,8 @@ export const register = async (req, res) => {
 
     const { username, email, password } = req.body
 
-    // Normalize email to lowercase for consistent lookup
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ email: normalizedEmail }, { username }],
     })
@@ -36,7 +47,6 @@ export const register = async (req, res) => {
       })
     }
 
-    // Create new user with normalized email
     const user = new User({
       username,
       email: normalizedEmail,
@@ -45,7 +55,6 @@ export const register = async (req, res) => {
 
     await user.save()
 
-    // Generate token
     const token = generateToken(user._id)
 
     res.status(201).json({
@@ -69,9 +78,16 @@ export const register = async (req, res) => {
   }
 }
 
+/**
+ * Authenticate with email/password and issue access plus refresh tokens.
+ * Five failed logins lock the account for 30 minutes and ban the IP for brute force.
+ *
+ * @param {import('express').Request} req - `body.email`, `body.password`; uses `req.ip` and User-Agent for logs/bans.
+ * @param {import('express').Response} res - 200 `{ user, accessToken, refreshToken }`, 401/423, 400, or 500.
+ * @returns {Promise<void>}
+ */
 export const login = async (req, res) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -83,10 +99,8 @@ export const login = async (req, res) => {
 
     const { email, password } = req.body
 
-    // Normalize email to lowercase for consistent lookup
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Find user by email
     const user = await User.findOne({ email: normalizedEmail })
     if (!user) {
       return res.status(401).json({
@@ -95,7 +109,6 @@ export const login = async (req, res) => {
       })
     }
 
-    // Check if account is locked
     const isLocked = user.lockUntil && user.lockUntil > Date.now()
     if (isLocked) {
       const lockTimeRemaining = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60))
@@ -105,26 +118,20 @@ export const login = async (req, res) => {
       })
     }
 
-    // Check password FIRST
     const isPasswordValid = await user.comparePassword(password)
 
     if (!isPasswordValid) {
-      // Log failed login attempt
       logLoginAttempt(normalizedEmail, false, req.ip, req.get('User-Agent'), user._id)
 
-      // Increment failed attempts
       user.failedLoginAttempts += 1
 
-      // Lock account after 5 attempts
+      // Five failures lock for 30 minutes and trigger a brute-force IP ban.
       if (user.failedLoginAttempts >= 5) {
         user.lockUntil = Date.now() + 30 * 60 * 1000 // 30 minutes
-        // Log account lockout
         logAccountLockout(normalizedEmail, req.ip, req.get('User-Agent'), user._id)
-        // Ban IP for brute force
         banIPForBruteForce(req.ip, req.get('User-Agent')).catch(console.error)
       }
 
-      // Save the failed attempt
       await user.save()
 
       return res.status(401).json({
@@ -133,16 +140,13 @@ export const login = async (req, res) => {
       })
     }
 
-    // SUCCESSFUL LOGIN - Reset failed attempts
     user.failedLoginAttempts = 0
     user.lockUntil = undefined
     user.lastLogin = new Date()
     await user.save()
 
-    // Log successful login
     logLoginAttempt(normalizedEmail, true, req.ip, req.get('User-Agent'), user._id)
 
-    // Generate tokens
     const accessToken = generateAccessToken(user._id)
     const refreshToken = await generateRefreshToken(user._id)
 
@@ -170,6 +174,13 @@ export const login = async (req, res) => {
   }
 }
 
+/**
+ * Return the authenticated user's profile, populated watchlist, ratings, and preferences.
+ *
+ * @param {import('express').Request} req - Reads `req.user._id` from auth middleware.
+ * @param {import('express').Response} res - 200 `{ data: { user } }` or 500.
+ * @returns {Promise<void>}
+ */
 export const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
@@ -211,20 +222,23 @@ export const getProfile = async (req, res) => {
   }
 }
 
-// Updates user preferences
+/**
+ * Patch username, email, and/or preferences for the authenticated user.
+ *
+ * @param {import('express').Request} req - Optional `body.username`, `body.email`, `body.preferences`.
+ * @param {import('express').Response} res - 200 `{ data: { user } }` (password omitted), 400 duplicate, or 500.
+ * @returns {Promise<void>}
+ */
 export const updateProfile = async (req, res) => {
   try {
     const { username, email, preferences } = req.body
 
-    // Build update object
     const updateData = {}
     if (username) updateData.username = username
     if (email) updateData.email = email.toLowerCase().trim()
     if (preferences) updateData.preferences = preferences
 
-    // Check if username or email already exists (if being updated)
     if (username || email) {
-      // Normalize email to lowercase if being updated
       const normalizedEmail = email ? email.toLowerCase().trim() : null
       const existingUser = await User.findOne({
         _id: { $ne: req.user._id },
@@ -261,7 +275,14 @@ export const updateProfile = async (req, res) => {
   }
 }
 
-// Change user password
+/**
+ * Replace the authenticated user's password after verifying the current one.
+ * Complexity rules match registration (8+ chars, mixed case, number, special).
+ *
+ * @param {import('express').Request} req - `body.currentPassword`, `body.newPassword`.
+ * @param {import('express').Response} res - 200 on success, 400 invalid, 404 user missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body
@@ -273,7 +294,6 @@ export const changePassword = async (req, res) => {
       })
     }
 
-    // Use same validation as registration
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/
     if (!passwordRegex.test(newPassword) || newPassword.length < 8) {
       return res.status(400).json({
@@ -283,7 +303,6 @@ export const changePassword = async (req, res) => {
       })
     }
 
-    // Get user with password
     const user = await User.findById(req.user._id)
     if (!user) {
       return res.status(404).json({
@@ -292,7 +311,6 @@ export const changePassword = async (req, res) => {
       })
     }
 
-    // Verify current password
     const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password)
     if (!isCurrentPasswordValid) {
       return res.status(400).json({
@@ -301,10 +319,8 @@ export const changePassword = async (req, res) => {
       })
     }
 
-    // Hash new password
     const hashedNewPassword = await bcrypt.hash(newPassword, 12)
 
-    // Update password
     await User.findByIdAndUpdate(req.user._id, { password: hashedNewPassword })
 
     res.json({
@@ -320,7 +336,13 @@ export const changePassword = async (req, res) => {
   }
 }
 
-// Upload profile picture
+/**
+ * Store a multer-uploaded profile image, deleting any previous file on disk.
+ *
+ * @param {import('express').Request} req - `req.file` from upload middleware; `req.user._id`.
+ * @param {import('express').Response} res - 200 `{ data: { user } }`, 400 no file, 404, or 500.
+ * @returns {Promise<void>}
+ */
 export const uploadProfilePicture = async (req, res) => {
   try {
     if (!req.file) {
@@ -338,7 +360,6 @@ export const uploadProfilePicture = async (req, res) => {
       })
     }
 
-    // Delete old profile picture if it exists
     if (user.profilePicture) {
       const oldPicturePath = path.join(
         process.cwd(),
@@ -351,12 +372,10 @@ export const uploadProfilePicture = async (req, res) => {
       }
     }
 
-    // Update user with new profile picture path
     const profilePicturePath = `/uploads/profiles/${req.file.filename}`
     user.profilePicture = profilePicturePath
     await user.save()
 
-    // Log successful file upload
     logFileUpload(req.file.filename, user._id, req.ip, true)
 
     res.json({
@@ -375,7 +394,6 @@ export const uploadProfilePicture = async (req, res) => {
   } catch (error) {
     console.error('Upload profile picture error:', error)
 
-    // Log failed file upload
     logFileUpload(req.file?.filename || 'unknown', req.user?._id, req.ip, false, error)
 
     res.status(500).json({

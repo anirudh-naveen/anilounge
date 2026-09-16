@@ -1,9 +1,22 @@
+/**
+ * MongoDB connection bootstrap for the API process.
+ *
+ * Layer: config. Opens a mongoose pool from `MONGODB_URI` and decides whether
+ * a failed connect is fatal (production) or a warning (development).
+ */
+
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 
-// Load environment variables
 dotenv.config()
 
+/**
+ * Connect mongoose using `MONGODB_URI`, or local `find-animation` if unset.
+ * Production `process.exit(1)`s on failure; development logs and continues
+ * so the HTTP server can still bind.
+ *
+ * @returns {Promise<void>} Resolves after connect or after a non-fatal failure.
+ */
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/find-animation'

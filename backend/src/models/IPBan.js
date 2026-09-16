@@ -1,6 +1,9 @@
+/**
+ * Mongoose schema for temporary IP bans used by auth/rate-limit middleware.
+ * Models layer: ban reason, attempt counts, and TTL expiry via MongoDB expireAfterSeconds.
+ */
 import mongoose from 'mongoose'
 
-// IP Ban schema for MongoDB
 const ipBanSchema = new mongoose.Schema({
   ip: {
     type: String,
@@ -38,10 +41,18 @@ const ipBanSchema = new mongoose.Schema({
   },
 })
 
-// Index for automatic cleanup of expired bans
+// MongoDB TTL index: documents drop when expiresAt is in the past
 ipBanSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 
-// Static method to ban an IP
+/**
+ * Create or extend an active ban for an IP.
+ * Repeat hits increment attempts and refresh expiry rather than inserting a second row.
+ * @param {string} ip
+ * @param {string} reason - One of the schema enum values
+ * @param {number} [duration=86400000] - Ban length in milliseconds (default 24h)
+ * @param {string | null} [userAgent=null]
+ * @returns {Promise<import('mongoose').Document>}
+ */
 ipBanSchema.statics.banIP = async function (
   ip,
   reason,
@@ -54,7 +65,6 @@ ipBanSchema.statics.banIP = async function (
     const existingBan = await this.findOne({ ip, isActive: true })
 
     if (existingBan) {
-      // Update existing ban
       existingBan.attempts += 1
       existingBan.lastSeen = new Date()
       existingBan.expiresAt = expiresAt
@@ -62,7 +72,6 @@ ipBanSchema.statics.banIP = async function (
       await existingBan.save()
       return existingBan
     } else {
-      // Create new ban
       const ban = new this({
         ip,
         reason,
@@ -78,7 +87,11 @@ ipBanSchema.statics.banIP = async function (
   }
 }
 
-// Static method to check if IP is banned
+/**
+ * Active, unexpired ban document for this IP, or null.
+ * @param {string} ip
+ * @returns {Promise<import('mongoose').Document | null>}
+ */
 ipBanSchema.statics.isIPBanned = async function (ip) {
   const ban = await this.findOne({
     ip,
@@ -89,12 +102,19 @@ ipBanSchema.statics.isIPBanned = async function (ip) {
   return ban
 }
 
-// Static method to unban an IP
+/**
+ * Soft-unban by clearing isActive (TTL still removes expired rows).
+ * @param {string} ip
+ * @returns {Promise<import('mongoose').UpdateWriteOpResult>}
+ */
 ipBanSchema.statics.unbanIP = async function (ip) {
   return this.updateMany({ ip }, { isActive: false })
 }
 
-// Static method to get ban statistics
+/**
+ * Counts of currently active bans grouped by reason.
+ * @returns {Promise<Array<{ _id: string, count: number, totalAttempts: number }>>}
+ */
 ipBanSchema.statics.getBanStats = async function () {
   const stats = await this.aggregate([
     {

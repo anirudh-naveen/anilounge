@@ -1,32 +1,31 @@
+/**
+ * Sequel/prequel/related lookup for catalog titles.
+ * Domain service: known franchise map, MAL related_anime ingest, title-pattern matching,
+ * and genre-similar fallback. Results are cached in memory for 10 minutes.
+ */
 import Content from '../models/Content.js'
+import { contentTitleMatchOr } from '../utils/titles.js'
 
 class RelationshipService {
   constructor() {
-    // Simple in-memory cache for related content
     this.cache = new Map()
-    this.cacheTimeout = 10 * 60 * 1000 // 10 minutes (longer cache for better performance)
+    this.cacheTimeout = 10 * 60 * 1000
 
     this.relationshipPatterns = {
-      // Numbered sequels
       numbered: /(.*?)\s*(\d+)$/,
-      // Roman numerals
       roman: /(.*?)\s*([IVX]+)$/,
-      // Part indicators
       part: /(.*?)\s*[:\-]\s*(part|chapter|episode)\s*(\d+)$/i,
-      // Subtitle patterns
       subtitle: /(.*?)\s*[:\-]\s*(.*)$/,
-      // Movie series indicators
       movie: /(.*?)\s*movie\s*(\d*)$/i,
-      // Season indicators
       season: /(.*?)\s*season\s*(\d+)$/i,
     }
 
-    // Enhanced franchise mapping with MAL and TMDB cross-references
+    // Hand-maintained crosswalk of franchise titles to TMDB/MAL ids
     this.franchiseMap = {
       'Toy Story': {
         titles: ['Toy Story', 'Toy Story 2', 'Toy Story 3', 'Toy Story 4'],
         tmdbIds: [862, 1245, 10193, 301528],
-        malIds: [], // No MAL entries for Toy Story
+        malIds: [],
       },
       'How to Train Your Dragon': {
         titles: [
@@ -35,7 +34,7 @@ class RelationshipService {
           'How to Train Your Dragon: The Hidden World',
         ],
         tmdbIds: [10191, 82702, 166428],
-        malIds: [], // No MAL entries for How to Train Your Dragon
+        malIds: [],
       },
       'Despicable Me': {
         titles: [
@@ -46,12 +45,12 @@ class RelationshipService {
           'Minions: The Rise of Gru',
         ],
         tmdbIds: [20352, 93456, 324852, 211672, 438148],
-        malIds: [], // No MAL entries for Despicable Me
+        malIds: [],
       },
       'One Piece': {
         titles: ['One Piece', 'One Piece Film', 'One Piece Movie', 'One Piece Fan Letter'],
-        tmdbIds: [37854, 37854, 37854, 37854], // One Piece TV series
-        malIds: [21, 21, 21, 21], // One Piece MAL ID
+        tmdbIds: [37854, 37854, 37854, 37854],
+        malIds: [21, 21, 21, 21],
       },
       'My Hero Academia': {
         titles: [
@@ -59,13 +58,13 @@ class RelationshipService {
           "My Hero Academia: You're Next",
           'My Hero Academia: Heroes Rising',
         ],
-        tmdbIds: [37854, 37854, 37854], // Placeholder
-        malIds: [31964, 31964, 31964], // Boku no Hero Academia MAL ID
+        tmdbIds: [37854, 37854, 37854],
+        malIds: [31964, 31964, 31964],
       },
       'Attack on Titan': {
         titles: ['Attack on Titan', 'Shingeki no Kyojin', 'Attack on Titan: The Final Season'],
-        tmdbIds: [37854, 37854, 37854], // Placeholder
-        malIds: [16498, 16498, 16498], // Shingeki no Kyojin MAL ID
+        tmdbIds: [37854, 37854, 37854],
+        malIds: [16498, 16498, 16498],
       },
       Gintama: {
         titles: [
@@ -78,18 +77,18 @@ class RelationshipService {
           'Gintama Movie 2: Kanketsu-hen - Yorozuya yo Eien Nare',
           'Gintama.',
         ],
-        tmdbIds: [], // No TMDB entries for Gintama (it's MAL-only)
-        malIds: [918, 9969, 15417, 15335, 28977, 34096, 37491, 39486], // All Gintama MAL IDs
+        tmdbIds: [],
+        malIds: [918, 9969, 15417, 15335, 28977, 34096, 37491, 39486],
       },
       'Chainsaw Man': {
         titles: ['Chainsaw Man', 'Chainsaw Man Movie', 'Chainsaw Man: Reze-hen'],
-        tmdbIds: [37854, 37854, 37854], // Placeholder
-        malIds: [44511, 44511, 57555], // Updated with actual MAL ID from API
+        tmdbIds: [37854, 37854, 37854],
+        malIds: [44511, 44511, 57555],
       },
       Naruto: {
         titles: ['Naruto', 'Naruto Shippuden', 'Naruto Movie', 'Boruto'],
-        tmdbIds: [37854, 37854, 37854, 37854], // Placeholder
-        malIds: [11, 11, 11, 11], // Naruto MAL ID
+        tmdbIds: [37854, 37854, 37854, 37854],
+        malIds: [11, 11, 11, 11],
       },
       'Spider-Man': {
         titles: [
@@ -97,13 +96,13 @@ class RelationshipService {
           'Spider-Man: Into the Spider-Verse',
           'Spider-Man: Across the Spider-Verse',
         ],
-        tmdbIds: [324857, 324857, 324857], // Spider-Verse movies
-        malIds: [], // No MAL entries for Spider-Man
+        tmdbIds: [324857, 324857, 324857],
+        malIds: [],
       },
       Monogatari: {
         titles: ['Bakemonogatari', 'Kizumonogatari', 'Nisemonogatari', 'Monogatari Series'],
-        tmdbIds: [37854, 37854, 37854, 37854], // Placeholder
-        malIds: [5081, 5081, 5081, 5081], // Bakemonogatari MAL ID
+        tmdbIds: [37854, 37854, 37854, 37854],
+        malIds: [5081, 5081, 5081, 5081],
       },
       'Solo Leveling': {
         titles: [
@@ -114,8 +113,8 @@ class RelationshipService {
           'Ore dake Level Up na Ken: ReAwakening',
           'Ore dake Level Up na Ken: How to Get Stronger',
         ],
-        tmdbIds: [127532, 127532, 127532, 127532, 127532, 127532], // Solo Leveling TMDB ID
-        malIds: [142845, 142845, 142845, 142845, 142845, 142845], // Solo Leveling MAL ID
+        tmdbIds: [127532, 127532, 127532, 127532, 127532, 127532],
+        malIds: [142845, 142845, 142845, 142845, 142845, 142845],
       },
       'Demon Slayer': {
         titles: [
@@ -125,8 +124,8 @@ class RelationshipService {
           'Demon Slayer: Kimetsu no Yaiba - Swordsmith Village Arc',
           'Demon Slayer: Kimetsu no Yaiba - Hashira Training Arc',
         ],
-        tmdbIds: [121063, 121063, 121063, 121063, 121063], // Demon Slayer TMDB ID
-        malIds: [38000, 38000, 38000, 38000, 38000], // Demon Slayer MAL ID
+        tmdbIds: [121063, 121063, 121063, 121063, 121063],
+        malIds: [38000, 38000, 38000, 38000, 38000],
       },
       'Jujutsu Kaisen': {
         titles: [
@@ -136,33 +135,32 @@ class RelationshipService {
           'Jujutsu Kaisen: Hidden Inventory / Premature Death',
           'Jujutsu Kaisen: Shibuya Incident',
         ],
-        tmdbIds: [95451, 95451, 95451, 95451, 95451], // Jujutsu Kaisen TMDB ID
-        malIds: [40748, 40748, 40748, 40748, 40748], // Jujutsu Kaisen MAL ID
+        tmdbIds: [95451, 95451, 95451, 95451, 95451],
+        malIds: [40748, 40748, 40748, 40748, 40748],
       },
     }
   }
 
   /**
-   * Find related content based on title patterns and franchises
+   * Sequels/prequels/related for a catalog id, served from cache when fresh.
+   * @param {string} contentId
+   * @returns {Promise<{ sequels: object[], prequels: object[], related: object[] }>}
    */
   async findRelatedContent(contentId) {
     try {
-      // Check cache first with optimized key
       const cacheKey = `rel_${contentId}`
       const cached = this.cache.get(cacheKey)
       if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
         return cached.data
       }
 
-      const content = await Content.findById(contentId).lean() // Use lean() for faster query
+      const content = await Content.findById(contentId).lean()
       if (!content) {
         return { sequels: [], prequels: [], related: [] }
       }
 
-      // Use smart relationship detection based on actual data
       const result = await this.findSmartRelationships(content)
 
-      // Cache the result
       this.cache.set(cacheKey, {
         data: result,
         timestamp: Date.now(),
@@ -177,19 +175,19 @@ class RelationshipService {
   }
 
   /**
-   * Smart relationship detection based on actual content data
+   * Resolution order: stored relationship ids, franchise map, genre-similar fallback, then title patterns.
+   * @param {object} content
+   * @returns {Promise<{ sequels: object[], prequels: object[], related: object[] }>}
    */
   async findSmartRelationships(content) {
     const result = { sequels: [], prequels: [], related: [] }
 
-    // Method 1: Check for existing relationships in content data
     if (
       content.relationships &&
       (content.relationships.sequels?.length > 0 ||
         content.relationships.prequels?.length > 0 ||
         content.relationships.related?.length > 0)
     ) {
-      // Populate relationships from existing data
       const sequelIds = content.relationships.sequels?.map((s) => s._id || s) || []
       const prequelIds = content.relationships.prequels?.map((p) => p._id || p) || []
       const relatedIds = content.relationships.related?.map((r) => r._id || r) || []
@@ -197,7 +195,7 @@ class RelationshipService {
       if (sequelIds.length > 0 || prequelIds.length > 0 || relatedIds.length > 0) {
         const allRelatedContent = await Content.find({
           _id: { $in: [...sequelIds, ...prequelIds, ...relatedIds] },
-        }).lean() // Use lean() for faster queries
+        }).lean()
 
         result.sequels = allRelatedContent.filter((c) => sequelIds.includes(c._id.toString()))
         result.prequels = allRelatedContent.filter((c) => prequelIds.includes(c._id.toString()))
@@ -207,13 +205,11 @@ class RelationshipService {
       }
     }
 
-    // Method 2: Use franchise mapping (fast and accurate)
     const franchiseContent = await this.findByFranchise(content)
     if (franchiseContent.length > 0) {
       return this.categorizeRelationships(franchiseContent, content)
     }
 
-    // Method 3: Quick genre-based recommendations (faster than pattern matching)
     const genreRecommendations = await this.getGenreBasedRecommendations(content, 6)
     if (genreRecommendations.length > 0) {
       result.related = genreRecommendations
@@ -221,7 +217,6 @@ class RelationshipService {
       return result
     }
 
-    // Method 4: Use pattern matching only if no other method worked
     const relatedContent = await this.findByPatterns(content)
     if (relatedContent.length > 0) {
       return this.categorizeRelationships(relatedContent, content)
@@ -231,7 +226,10 @@ class RelationshipService {
   }
 
   /**
-   * Get genre-based recommendations as fallback when no relationships are found
+   * Same type, overlapping genres, runtime ±30 min or episodes ±10, ranked by unifiedScore.
+   * @param {object} content
+   * @param {number} [limit=5]
+   * @returns {Promise<object[]>}
    */
   async getGenreBasedRecommendations(content, limit = 5) {
     try {
@@ -239,14 +237,12 @@ class RelationshipService {
         return []
       }
 
-      // Extract genre names
       const genreNames = content.genres
         .map((genre) => (typeof genre === 'string' ? genre : genre.name))
         .filter(Boolean)
 
       if (genreNames.length === 0) return []
 
-      // Find content with similar genres and similar runtime/episode count
       const runtimeRange = content.runtime
         ? {
             $gte: Math.max(0, content.runtime - 30),
@@ -268,7 +264,7 @@ class RelationshipService {
         ...(runtimeRange && { runtime: runtimeRange }),
         ...(episodeRange && { episodeCount: episodeRange }),
       })
-        .lean() // Use lean() for faster queries
+        .lean()
         .sort({ unifiedScore: -1, popularity: -1 })
         .limit(limit)
 
@@ -280,7 +276,8 @@ class RelationshipService {
   }
 
   /**
-   * Clear cache (useful for testing or when franchise data is updated)
+   * Drop the in-memory related-content cache (after franchise map edits).
+   * @returns {void}
    */
   clearCache() {
     this.cache.clear()
@@ -288,8 +285,10 @@ class RelationshipService {
   }
 
   /**
-   * Populate relationships from MAL API data
-   * This fetches real relationship data from MAL API v2
+   * Load MAL related_anime and map relation_type onto sequels/prequels/related ObjectIds.
+   * sequel/prequel stay dedicated; alternative/side/parent/summary/full_story go to related.
+   * @param {object} content
+   * @returns {Promise<object>} The same content object with relationships filled when MAL data exists
    */
   async populateRelationshipsFromMAL(content) {
     try {
@@ -297,7 +296,6 @@ class RelationshipService {
         return content
       }
 
-      // Fetch relationship data from MAL API
       const malApiUrl = `https://api.myanimelist.net/v2/anime/${content.malId}?fields=related_anime`
       const response = await fetch(malApiUrl, {
         headers: {
@@ -316,7 +314,6 @@ class RelationshipService {
         return content
       }
 
-      // Parse MAL relationship data
       const relationships = {
         sequels: [],
         prequels: [],
@@ -329,7 +326,6 @@ class RelationshipService {
 
         if (!relatedMalId) continue
 
-        // Find the related content in our database
         const relatedContent = await Content.findOne({ malId: relatedMalId })
         if (!relatedContent) continue
 
@@ -353,7 +349,6 @@ class RelationshipService {
         }
       }
 
-      // Update content with real relationship data
       if (!content.relationships) {
         content.relationships = {
           sequels: [],
@@ -375,25 +370,24 @@ class RelationshipService {
   }
 
   /**
-   * Populate relationships from external API data during content creation
-   * This should be called when content is first imported from TMDB/MAL
+   * During ingest: MAL uses related_anime; other sources stamp franchise from the static map.
+   * @param {object} content
+   * @param {object} externalData
+   * @param {'tmdb' | 'mal'} source
+   * @returns {Promise<object>}
    */
   async populateRelationshipsFromExternalData(content, externalData, source) {
     try {
       if (source === 'mal' && content.malId) {
-        // Use real MAL API data for relationships
         return await this.populateRelationshipsFromMAL(content)
       }
 
-      // Fallback to franchise mapping for other sources
       const relationships = await this.detectRelationshipsFromExternalData(externalData, source)
 
-      // Update the content with detected relationships
       if (relationships.franchise) {
         content.franchise = relationships.franchise
       }
 
-      // Store relationship metadata for future use
       if (!content.relationships) {
         content.relationships = {
           sequels: [],
@@ -411,59 +405,55 @@ class RelationshipService {
   }
 
   /**
-   * Find related content based on title patterns
+   * Same contentType whose title starts with the extracted base title.
+   * @param {object} content
+   * @returns {Promise<object[]>}
    */
   async findByPatterns(content) {
     const related = []
-    const baseTitle = this.extractBaseTitle(content.title)
+    const baseTitle = this.extractBaseTitle(content.englishTitle || content.title)
 
     if (!baseTitle) return related
 
-    // Find content with similar base titles - use lean() for faster queries
     const similarContent = await Content.find({
       _id: { $ne: content._id },
       contentType: content.contentType,
-      $or: [
-        { title: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
-        { originalTitle: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
-      ],
+      $or: contentTitleMatchOr({ $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' }),
     })
-      .lean() // Use lean() for faster queries
+      .lean()
       .limit(10)
 
     return similarContent
   }
 
   /**
-   * Find related content based on known franchises using enhanced mapping
+   * Titles in the same franchiseMap entry, matched by title string or TMDB/MAL id.
+   * @param {object} content
+   * @returns {Promise<object[]>}
    */
   async findByFranchise(content) {
     const related = []
 
     for (const [, franchiseData] of Object.entries(this.franchiseMap)) {
-      if (this.isInFranchise(content.title, franchiseData.titles)) {
-        // Optimize: Combine all searches into a single query using $or
+      if (
+        this.isInFranchise(content.englishTitle || content.title, franchiseData.titles) ||
+        this.isInFranchise(content.nativeTitle || content.originalTitle, franchiseData.titles)
+      ) {
         const allMatches = await Content.find({
           _id: { $ne: content._id },
           contentType: content.contentType,
           $or: [
-            // Search by titles
-            ...franchiseData.titles.map((title) => ({
-              $or: [
-                { title: { $regex: this.escapeRegex(title), $options: 'i' } },
-                { originalTitle: { $regex: this.escapeRegex(title), $options: 'i' } },
-              ],
-            })),
-            // Search by TMDB IDs (only if there are any)
+            ...franchiseData.titles.flatMap((title) =>
+              contentTitleMatchOr({ $regex: this.escapeRegex(title), $options: 'i' }),
+            ),
             ...(franchiseData.tmdbIds.length > 0
               ? [{ tmdbId: { $in: franchiseData.tmdbIds } }]
               : []),
-            // Search by MAL IDs (only if there are any)
             ...(franchiseData.malIds.length > 0 ? [{ malId: { $in: franchiseData.malIds } }] : []),
           ],
         })
-          .lean() // Use lean() for faster queries
-          .limit(20) // Increased limit since we're combining queries
+          .lean()
+          .limit(20)
 
         related.push(...allMatches)
       }
@@ -473,7 +463,10 @@ class RelationshipService {
   }
 
   /**
-   * Detect relationships during data processing (for TMDB/MAL data)
+   * Franchise membership from an upstream TMDB/MAL payload (ids only; no sequel lists).
+   * @param {object} externalData
+   * @param {'tmdb' | 'mal'} source
+   * @returns {Promise<{ sequels: unknown[], prequels: unknown[], related: unknown[], franchise: object | null }>}
    */
   async detectRelationshipsFromExternalData(externalData, source) {
     const relationships = {
@@ -483,7 +476,6 @@ class RelationshipService {
       franchise: null,
     }
 
-    // Check if this content belongs to a known franchise
     const franchise = this.findFranchiseByExternalId(externalData, source)
     if (franchise) {
       relationships.franchise = franchise
@@ -493,7 +485,10 @@ class RelationshipService {
   }
 
   /**
-   * Find franchise by external ID (TMDB or MAL)
+   * Look up franchiseMap by TMDB id or MAL id (raw `{ id }` or `{ node.id }`).
+   * @param {object} externalData
+   * @param {'tmdb' | 'mal'} source
+   * @returns {{ name: string, titles: string[], tmdbIds: number[], malIds: number[] } | null}
    */
   findFranchiseByExternalId(externalData, source) {
     let externalId
@@ -501,7 +496,6 @@ class RelationshipService {
     if (source === 'tmdb') {
       externalId = externalData.id
     } else {
-      // For MAL, handle both raw API response and converted content
       externalId = externalData.id || externalData.node?.id
     }
 
@@ -521,33 +515,32 @@ class RelationshipService {
   }
 
   /**
-   * Find related content by title pattern during data processing
+   * Existing catalog rows whose title starts with `baseTitle`.
+   * @param {string} baseTitle
+   * @returns {Promise<object[]>}
    */
   async findRelatedByTitlePattern(baseTitle) {
-    // Find existing content with similar base titles
     const similarContent = await Content.find({
-      $or: [
-        { title: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
-        { originalTitle: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
-      ],
+      $or: contentTitleMatchOr({ $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' }),
     }).limit(5)
 
     return similarContent
   }
 
   /**
-   * Process relationships during content merging
+   * Stamp franchise name onto an existing document during TMDB/MAL merge.
+   * @param {object} existingContent
+   * @param {object} newData
+   * @param {'tmdb' | 'mal'} source
+   * @returns {Promise<object>}
    */
   async processRelationshipsDuringMerge(existingContent, newData, source) {
-    // Detect relationships for the new data
     const newRelationships = await this.detectRelationshipsFromExternalData(newData, source)
 
-    // Update existing content with relationship information
     if (newRelationships.franchise) {
       existingContent.franchise = newRelationships.franchise.name
     }
 
-    // Store relationship metadata
     if (!existingContent.relationships) {
       existingContent.relationships = {
         sequels: [],
@@ -557,7 +550,6 @@ class RelationshipService {
       }
     }
 
-    // Merge relationship data
     if (newRelationships.franchise) {
       existingContent.relationships.franchise = newRelationships.franchise.name
     }
@@ -566,12 +558,13 @@ class RelationshipService {
   }
 
   /**
-   * Extract base title from a title (remove numbers, parts, etc.)
+   * Strip numbered/roman/part/movie/season suffixes to get a series root title.
+   * @param {string} title
+   * @returns {string | null}
    */
   extractBaseTitle(title) {
     if (!title) return null
 
-    // Try different patterns
     for (const [, pattern] of Object.entries(this.relationshipPatterns)) {
       const match = title.match(pattern)
       if (match) {
@@ -579,18 +572,20 @@ class RelationshipService {
       }
     }
 
-    // If no pattern matches, return the original title
     return title.trim()
   }
 
   /**
-   * Check if content belongs to a franchise
+   * Whole-word / prefix franchise membership (avoids "One" matching "One Piece" siblings loosely).
+   * @param {string} title
+   * @param {string[]} franchiseTitles
+   * @returns {boolean}
    */
   isInFranchise(title, franchiseTitles) {
+    if (!title) return false
     const titleLower = title.toLowerCase()
     return franchiseTitles.some((franchiseTitle) => {
       const franchiseLower = franchiseTitle.toLowerCase()
-      // More strict matching: title must start with franchise name or contain it as a complete word
       return (
         titleLower === franchiseLower ||
         titleLower.startsWith(franchiseLower + ' ') ||
@@ -601,7 +596,9 @@ class RelationshipService {
   }
 
   /**
-   * Deduplicate related content
+   * Unique related documents by `_id`.
+   * @param {object[]} relatedContent
+   * @returns {object[]}
    */
   deduplicateRelated(relatedContent) {
     const seen = new Set()
@@ -614,7 +611,10 @@ class RelationshipService {
   }
 
   /**
-   * Categorize relationships as sequels, prequels, or related
+   * Split a related set into sequels, prequels, and related using release-year order.
+   * @param {object[]} relatedContent
+   * @param {object} originalContent
+   * @returns {{ sequels: object[], prequels: object[], related: object[] }}
    */
   categorizeRelationships(relatedContent, originalContent) {
     const sequels = []
@@ -640,7 +640,10 @@ class RelationshipService {
   }
 
   /**
-   * Determine the relationship between two pieces of content
+   * Newer release year → sequel, older → prequel, missing/same year → related.
+   * @param {object} original
+   * @param {object} related
+   * @returns {'sequel' | 'prequel' | 'related'}
    */
   determineRelationship(original, related) {
     const originalYear = this.extractYear(original.releaseDate)
@@ -650,8 +653,6 @@ class RelationshipService {
       return 'related'
     }
 
-    // Simple heuristic: if related content is newer, it's a sequel
-    // If it's older, it's a prequel
     if (relatedYear > originalYear) {
       return 'sequel'
     } else if (relatedYear < originalYear) {
@@ -662,7 +663,9 @@ class RelationshipService {
   }
 
   /**
-   * Extract year from release date
+   * Calendar year from a Date or date string.
+   * @param {Date | string | null | undefined} releaseDate
+   * @returns {number | null}
    */
   extractYear(releaseDate) {
     if (!releaseDate) return null
@@ -671,7 +674,9 @@ class RelationshipService {
   }
 
   /**
-   * Escape regex special characters
+   * Escape a string for use inside a RegExp.
+   * @param {string} string
+   * @returns {string}
    */
   escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

@@ -1,3 +1,8 @@
+/**
+ * One-off setup script: insert the recruiter demo account if it does not already exist.
+ * Run once on a fresh database (or after wiping users). Inserts a User with
+ * email demo@findanimation.com; no-ops when that email is present. Does not mutate Content.
+ */
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 import User from '../models/User.js'
@@ -5,20 +10,21 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
+/**
+ * Create demo@findanimation.com / DemoPassword123! when missing.
+ * @returns {Promise<void>}
+ */
 const createDemoUser = async () => {
   try {
-    // Connect to MongoDB
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/findanimation')
     console.log('Connected to MongoDB')
 
-    // Check if demo user already exists
     const existingUser = await User.findOne({ email: 'demo@findanimation.com' })
     if (existingUser) {
       console.log('Demo user already exists')
       return
     }
 
-    // Create demo user
     const hashedPassword = await bcrypt.hash('DemoPassword123!', 12)
 
     const demoUser = new User({

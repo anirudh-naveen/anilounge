@@ -1,3 +1,10 @@
+/**
+ * ratings.ts — rating aggregation helpers.
+ *
+ * Combines MAL, TMDB, and Find Animation scores into a vote-weighted average
+ * used by catalog filters, sort, and rating badges.
+ */
+
 export interface ContentRatingFields {
   voteAverage?: number | null
   voteCount?: number | null
@@ -38,6 +45,12 @@ function getContributions(content: ContentRatingFields): RatingContribution[] {
   return contributions
 }
 
+/**
+ * Vote-weighted average of MAL, TMDB, and user ratings.
+ * Falls back to `unifiedScore` when no source has both a score and a vote count.
+ * @param content - Rating fields from a catalog item.
+ * @returns Weighted average, or `null` if no usable score exists.
+ */
 export function getWeightedAverage(content: ContentRatingFields): number | null {
   const contributions = getContributions(content)
   if (contributions.length === 0) {
@@ -48,15 +61,33 @@ export function getWeightedAverage(content: ContentRatingFields): number | null 
   return contributions.reduce((sum, source) => sum + source.score * source.count, 0) / totalVotes
 }
 
+/**
+ * Sum of vote counts from sources that also have a valid score.
+ * @param content - Rating fields from a catalog item.
+ * @returns Combined voter count across MAL, TMDB, and Find Animation.
+ */
 export function getTotalVoteCount(content: ContentRatingFields): number {
   return getContributions(content).reduce((sum, source) => sum + source.count, 0)
 }
 
+/**
+ * Score shown in the UI, rounded to one decimal place.
+ * @param score - Raw average or unified score.
+ * @returns Rounded score, or `0` when missing/invalid.
+ */
 export function displayedRating(score: number | null | undefined): number {
   if (!isValidScore(score)) return 0
   return Number(score.toFixed(1))
 }
 
+/**
+ * Whether the displayed (rounded) rating falls in the filter range.
+ * Uses the rounded value so a 7.96 shown as 8.0 is not treated as 7.x.
+ * @param content - Rating fields from a catalog item.
+ * @param min - Inclusive lower bound of the filter (0–10).
+ * @param max - Inclusive upper bound of the filter (0–10).
+ * @returns True when the shown rating is inside `[min, max]`.
+ */
 export function ratingMatchesFilter(
   content: ContentRatingFields,
   min: number,

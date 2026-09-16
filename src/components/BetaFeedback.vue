@@ -1,17 +1,27 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  BetaFeedback.vue — beta feedback widget (component).
+
+  Floating trigger that opens a modal for bug reports, feature requests,
+  and other feedback submitted to the backend.
+-->
 <template>
   <div class="beta-feedback">
+    <!-- Title: Trigger -->
     <button @click="showModal = true" class="feedback-trigger" title="Send Feedback">💬</button>
 
+    <!-- Title: Modal -->
     <transition name="modal">
       <div v-if="showModal" class="modal-overlay" @click="closeModal">
         <div class="modal-content" @click.stop>
+          <!-- Title: Header -->
           <div class="modal-header">
             <h2>Beta Feedback</h2>
             <button @click="closeModal" class="close-btn">&times;</button>
           </div>
 
           <form @submit.prevent="submitFeedback" class="feedback-form">
+            <!-- Title: Fields -->
             <div class="form-group">
               <label for="feedbackType">Feedback Type</label>
               <select id="feedbackType" v-model="form.type" required class="form-control">
@@ -45,6 +55,7 @@
               />
             </div>
 
+            <!-- Title: Submit -->
             <button type="submit" class="btn-submit" :disabled="isSubmitting">
               {{ isSubmitting ? 'Sending...' : 'Send Feedback' }}
             </button>

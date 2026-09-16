@@ -1,7 +1,22 @@
+/**
+ * pagination.ts — pagination helpers.
+ *
+ * Builds compact page-number lists with ellipses for catalog and search
+ * pagination controls.
+ */
+
 const DEFAULT_VISIBLE_PAGES = 7
 
 export type PaginationItem = number | 'ellipsis'
 
+/**
+ * Page numbers to show around the current page, always including first and last.
+ * Expands outward until `count` slots are filled (default 7).
+ * @param currentPage - Active page (clamped to `[1, totalPages]`).
+ * @param totalPages - Total page count.
+ * @param count - Maximum number of numeric page slots.
+ * @returns Sorted unique page numbers to render.
+ */
 export function getVisiblePages(
   currentPage: number,
   totalPages: number,
@@ -42,6 +57,13 @@ export function getVisiblePages(
   return [...pages].sort((a, b) => a - b)
 }
 
+/**
+ * Page numbers plus `'ellipsis'` tokens for gaps larger than 1.
+ * @param currentPage - Active page.
+ * @param totalPages - Total page count.
+ * @param count - Maximum number of numeric page slots.
+ * @returns Mixed list of page numbers and ellipsis markers.
+ */
 export function getPaginationItems(
   currentPage: number,
   totalPages: number,

@@ -1,5 +1,11 @@
+<!--
+  BetaBanner.vue — site-wide beta notice (component).
+
+  Displays a dismissible preview banner and hosts the inline feedback modal.
+-->
 <template>
   <div v-if="showBanner" class="beta-banner">
+    <!-- Title: Banner Content -->
     <div class="beta-content">
       <span class="beta-badge">BETA</span>
       <span class="beta-text">
@@ -11,7 +17,7 @@
       <button @click="dismissBanner" class="dismiss-btn" title="Dismiss">&times;</button>
     </div>
 
-    <!-- Beta Feedback Modal -->
+    <!-- Title: Feedback Modal -->
     <BetaFeedback v-if="showFeedback" @close="showFeedback = false" />
   </div>
 </template>

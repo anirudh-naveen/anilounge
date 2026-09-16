@@ -1,4 +1,10 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  Watchlist.vue — authenticated watchlist view.
+
+  Status tabs and sort toolbar over a compact expandable list of tracked
+  movies and TV shows. Progress, rating, and status are editable per row.
+-->
 <template>
   <div class="watchlist-page">
     <div class="container">
@@ -8,7 +14,8 @@
         <p class="page-subtitle">Track your animated content progress</p>
       </div>
 
-      <!-- Filter Tabs -->
+      <!-- Toolbar -->
+      <!-- Title: Status Tabs -->
       <div class="filter-tabs">
         <button
           v-for="status in statusOptions"
@@ -20,19 +27,21 @@
         </button>
       </div>
 
+      <!-- Title: Sort -->
       <div class="watchlist-toolbar">
         <SortByControls v-model:sort-by="sortBy" v-model:sort-direction="sortDirection" />
       </div>
 
-      <!-- Loading State -->
+      <!-- List -->
+      <!-- Title: Loading State -->
       <div v-if="isLoading" class="loading-container">
         <div class="spinner"></div>
         <p>Loading your watchlist...</p>
         <button @click="refreshWatchlist" class="btn btn-secondary">Refresh</button>
       </div>
 
-      <!-- Watchlist Items -->
       <div v-else-if="filteredWatchlist.length > 0" class="watchlist-container">
+        <!-- Title: Column Header -->
         <div class="list-column-header">
           <span class="col-poster"></span>
           <span class="col-title">Title</span>
@@ -48,7 +57,7 @@
           class="watchlist-item"
           :class="{ expanded: expandedItems.has(getContentId(item)) }"
         >
-          <!-- Compact list bar -->
+          <!-- Title: Compact Row -->
           <div class="item-header" @click="toggleExpanded(item)">
             <div class="item-poster">
               <img
@@ -118,7 +127,7 @@
             </div>
           </div>
 
-          <!-- Expanded State -->
+          <!-- Title: Expanded Details -->
           <div v-if="expandedItems.has(getContentId(item))" class="item-details">
             <div class="details-content">
               <div class="content-description">
@@ -272,7 +281,7 @@
         </div>
       </div>
 
-      <!-- Empty State -->
+      <!-- Title: Empty State -->
       <div v-else class="empty-state">
         <div class="empty-icon">Watchlist</div>
         <h3>No items in your watchlist</h3>
@@ -300,6 +309,7 @@ import { useToast } from 'vue-toastification'
 import type { WatchlistItem, TVShow } from '@/types'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
+import { getDisplayTitle } from '@/utils/titles'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -350,7 +360,7 @@ const getRatingStyle = (rating: number | undefined) => {
 const getContentTitle = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'Unknown Title'
   if (typeof item.content === 'string') return 'Unknown Title'
-  return item.content?.title || 'Unknown Title'
+  return getDisplayTitle(item.content)
 }
 
 const getContentOverview = (item: WatchlistItem) => {

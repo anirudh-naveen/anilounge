@@ -1,7 +1,15 @@
-// Unified content interface - shared across all components
+/**
+ * content.ts — unified catalog content types.
+ *
+ * Shared TypeScript shapes for movies, TV, and specials used by stores,
+ * views, and display helpers.
+ */
+
 export interface UnifiedContent {
   _id: string
   title: string
+  englishTitle?: string
+  nativeTitle?: string
   originalTitle?: string
   overview: string
   contentType: 'movie' | 'tv' | 'special'
@@ -11,7 +19,8 @@ export interface UnifiedContent {
   genres: Array<{ id?: number; name?: string }> | string[]
   voteAverage?: number
   malScore?: number
-  unifiedScore?: number // Vote-weighted average of MAL, TMDB, and Find Animation
+  /** Vote-weighted average of MAL, TMDB, and Find Animation. */
+  unifiedScore?: number
   malStatus?: string
   voteCount?: number
   malScoredBy?: number
@@ -32,7 +41,8 @@ export interface UnifiedContent {
     mal?: { hasData?: boolean }
   }
   franchise?: string
-  source?: string // 'tmdb' or 'mal' for external search results
+  /** `'tmdb'` or `'mal'` on external search results. */
+  source?: string
   relationships?: {
     sequels: string[]
     prequels: string[]
@@ -41,7 +51,6 @@ export interface UnifiedContent {
   }
 }
 
-// Extended interface for content with unified score
 export interface UnifiedContentWithScore extends UnifiedContent {
   unifiedScore: number
 }

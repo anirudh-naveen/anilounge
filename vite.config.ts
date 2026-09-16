@@ -1,3 +1,10 @@
+/**
+ * vite.config.ts — Vue/Vite app config.
+ *
+ * Dev server is pinned to port 5174 (`strictPort: true`) so it does not
+ * collide with the portfolio on 5173.
+ */
+
 import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig } from 'vite'
@@ -5,7 +12,6 @@ import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [vue(), vueJsx(), vueDevTools()],
   resolve: {
@@ -14,7 +20,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
-    strictPort: true, // Fail if port 5173 is already in use
+    port: 5174,
+    strictPort: true,
   },
 })

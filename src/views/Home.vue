@@ -1,10 +1,17 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  Home.vue — catalog landing view.
+
+  Renders the marketing hero and a trending grid of movies/TV shows from the
+  content store. No search or filter chrome; discovery only.
+-->
 <template>
   <div class="home-page">
-    <!-- Hero Section -->
+    <!-- Hero -->
     <section class="hero">
       <div class="container">
         <div class="hero-content fade-in">
+          <!-- Title: Headline -->
           <h1 class="hero-title">
             Discover
             <span class="gradient-text">Animated Content</span>
@@ -13,6 +20,7 @@
             Find your next favorite animated movie or TV show. Rate, track, and get personalized
             recommendations.
           </p>
+          <!-- Title: Primary CTA -->
           <div class="hero-actions">
             <router-link to="/search" class="btn btn-primary btn-large">
               Search Content
@@ -22,14 +30,16 @@
       </div>
     </section>
 
-    <!-- Trending Content -->
+    <!-- Catalog -->
     <section class="featured-section">
       <div class="container">
         <h2 class="section-title">Trending Now</h2>
+        <!-- Title: Loading State -->
         <div v-if="contentStore.isLoading" class="loading-container">
           <div class="spinner"></div>
           <p>Loading amazing content...</p>
         </div>
+        <!-- Title: Content Card -->
         <div v-else-if="featuredContent.length > 0" class="content-grid">
           <div
             v-for="item in featuredContent.slice(0, 8)"
@@ -40,7 +50,7 @@
             <div class="content-poster">
               <img
                 :src="getPosterUrl(item.posterPath || '')"
-                :alt="item.title"
+                :alt="getDisplayTitle(item)"
                 @error="handleImageError"
               />
               <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
@@ -48,7 +58,7 @@
               </div>
             </div>
             <div class="content-info">
-              <h3 class="content-title">{{ item.title }}</h3>
+              <h3 class="content-title">{{ getDisplayTitle(item) }}</h3>
               <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
               <div class="content-genres">
                 <span
@@ -67,6 +77,7 @@
             />
           </div>
         </div>
+        <!-- Title: Empty State -->
         <div v-else class="error-state">
           <p>No content found. Please try again later.</p>
         </div>
@@ -90,6 +101,7 @@ import {
 import { useToast } from 'vue-toastification'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
+import { getDisplayTitle } from '@/utils/titles'
 
 const router = useRouter()
 const route = useRoute()

@@ -1,3 +1,10 @@
+/**
+ * Public and authenticated REST routes for catalog, auth, watchlist, and feedback.
+ *
+ * Layer: router. Validators and middleware are stacked here; handlers live in
+ * controllers. `authMiddleware` applies to every route declared after it.
+ */
+
 import express from 'express'
 import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
@@ -10,7 +17,7 @@ import { validateObjectId } from '../middleware/security.js'
 
 const router = express.Router()
 
-// Auth routes (public - must be before authMiddleware)
+/** Public credential routes (must stay above `authMiddleware`). Password rules match registration. */
 router.post(
   '/auth/register',
   [
@@ -23,12 +30,21 @@ router.post(
       .withMessage(
         'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
       ),
-    body('confirmPassword').custom((value, { req }) => {
-      if (value !== req.body.password) {
-        throw new Error('Password confirmation does not match password')
-      }
-      return true
-    }),
+    body('confirmPassword').custom(
+      /**
+       * Reject registration when confirmPassword does not equal password.
+       *
+       * @param {string} value - `body.confirmPassword`.
+       * @param {{ req: import('express').Request }} meta - Reads `req.body.password`.
+       * @returns {true} When the two password fields match.
+       */
+      (value, { req }) => {
+        if (value !== req.body.password) {
+          throw new Error('Password confirmation does not match password')
+        }
+        return true
+      },
+    ),
   ],
   bruteForceProtection.prevent,
   authController.register,
@@ -44,11 +60,11 @@ router.post(
   authController.login,
 )
 
-// Token refresh routes (public)
+/** Public token rotation; no access JWT required. */
 router.post('/auth/refresh', refreshAccessToken)
 router.post('/auth/revoke', revokeRefreshToken)
 
-// Public routes
+/** Catalog reads: list, search, stats, and relationship lookups. */
 router.get('/content', contentController.getContent)
 router.get('/popular', contentController.getPopularContent)
 router.get('/search', contentController.searchContent)
@@ -59,28 +75,27 @@ router.get('/content/:id/similar', validateObjectId, contentController.getSimila
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
 router.get('/franchise/:franchiseName', contentController.getFranchiseContent)
 
-// AI search route
+/** Gemini-backed search and chat. */
 router.post(
   '/ai-search',
   [body('query').notEmpty().withMessage('Search query is required')],
   contentController.aiSearch,
 )
 
-// AI chat route
 router.post(
   '/ai/chat',
   [body('message').notEmpty().withMessage('Message is required')],
   contentController.aiChat,
 )
 
-// Beta feedback routes (public)
+/** Beta feedback is public and stored in-process (see feedbackController). */
 router.post('/feedback', feedbackController.submitFeedback)
 router.get('/feedback', feedbackController.getFeedback)
 
-// Protected routes (require authentication)
+/** All routes below require a valid Bearer access token. */
 router.use(authMiddleware)
 
-// Auth profile routes
+/** Authenticated profile, password, and avatar. */
 router.get('/auth/profile', authController.getProfile)
 router.put(
   '/auth/profile',
@@ -104,7 +119,7 @@ router.post(
   authController.uploadProfilePicture,
 )
 
-// Watchlist routes
+/** Watchlist CRUD; status/rating/episode fields are optional on write. */
 router.post(
   '/watchlist',
   [
@@ -137,7 +152,7 @@ router.put(
   contentController.updateWatchlistItem,
 )
 
-// Vote/rate content
+/** User rating writes (1–10) and the current user's stored rating. */
 router.post(
   '/content/:contentId/vote',
   [
@@ -149,7 +164,6 @@ router.post(
   contentController.voteContent,
 )
 
-// Get user's rating for specific content
 router.get('/content/:contentId/my-rating', validateObjectId, contentController.getMyRating)
 
 export default router

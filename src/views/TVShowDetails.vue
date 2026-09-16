@@ -1,15 +1,25 @@
+<!--
+  TVShowDetails.vue — TV show detail view.
+
+  Loads one series by route id and shows poster, titles, season/episode meta,
+  watchlist actions, overview, studios, and related sequels/prequels.
+-->
 <template>
   <div class="tv-details">
+    <!-- Navigation -->
     <div class="back-button" @click="goBack">
       <i class="fas fa-arrow-left"></i>
       Back
     </div>
 
+    <!-- Status -->
+    <!-- Title: Loading State -->
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
       <p>Loading TV show details...</p>
     </div>
 
+    <!-- Title: Error State -->
     <div v-else-if="error" class="error">
       <h2>Error loading TV show</h2>
       <p>{{ error }}</p>
@@ -17,12 +27,14 @@
     </div>
 
     <div v-else-if="show" class="show-content">
+      <!-- Header -->
       <div class="show-header">
+        <!-- Title: Poster -->
         <div class="show-poster">
           <img
             v-if="show.posterPath"
             :src="getPosterUrl(show.posterPath)"
-            :alt="show.title"
+            :alt="getDisplayTitle(show)"
             @error="handleImageError"
           />
           <div v-else class="no-poster">
@@ -32,11 +44,13 @@
         </div>
 
         <div class="show-info">
-          <h1 class="show-title">{{ show.title }}</h1>
-          <p v-if="show.originalTitle && show.originalTitle !== show.title" class="original-title">
-            Original Title: {{ show.originalTitle }}
+          <!-- Title: Titles -->
+          <h1 class="show-title">{{ getDisplayTitle(show) }}</h1>
+          <p v-if="getNativeTitle(show)" class="original-title">
+            Native Title: {{ getNativeTitle(show) }}
           </p>
 
+          <!-- Title: Meta -->
           <div class="show-meta">
             <div class="rating">
               <i class="fas fa-star"></i>
@@ -81,6 +95,7 @@
             </span>
           </div>
 
+          <!-- Title: Actions -->
           <div class="show-actions">
             <button
               v-if="authStore.isAuthenticated && !isInWatchlist"
@@ -108,11 +123,14 @@
         </div>
       </div>
 
+      <!-- Body -->
+      <!-- Title: Overview -->
       <div class="show-description">
         <h2>Overview</h2>
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Studios -->
       <div v-if="show.studios?.length" class="network-info">
         <h3>Studios</h3>
         <div class="networks">
@@ -122,6 +140,7 @@
         </div>
       </div>
 
+      <!-- Title: Production Companies -->
       <div v-if="show.productionCompanies?.length" class="production-info">
         <h3>Production Companies</h3>
         <div class="companies">
@@ -131,16 +150,17 @@
         </div>
       </div>
 
-      <div v-if="show.alternativeTitles?.length" class="alternative-titles">
+      <!-- Title: Alternative Titles -->
+      <div v-if="getAlternativeTitles(show).length" class="alternative-titles">
         <h3>Alternative Titles</h3>
         <div class="titles">
-          <span v-for="title in show.alternativeTitles" :key="title" class="title-tag">
+          <span v-for="title in getAlternativeTitles(show)" :key="title" class="title-tag">
             {{ title }}
           </span>
         </div>
       </div>
 
-      <!-- Related Content Loading State -->
+      <!-- Title: Related Loading -->
       <div v-if="relatedContentLoading" class="related-content-loading">
         <h3>Loading Related Content...</h3>
         <div class="loading-spinner">
@@ -149,7 +169,7 @@
         </div>
       </div>
 
-      <!-- Related Content Section -->
+      <!-- Title: Related Content -->
       <div
         v-else-if="
           relatedContent &&
@@ -161,12 +181,12 @@
       >
         <h3>Related Content</h3>
 
-        <!-- Franchise Info -->
+        <!-- Title: Franchise -->
         <div v-if="show.franchise" class="franchise-info">
           <h4>Part of the {{ show.franchise }} franchise</h4>
         </div>
 
-        <!-- Sequels -->
+        <!-- Title: Sequels -->
         <div v-if="relatedContent.sequels.length > 0" class="relationship-section">
           <h4>Sequels</h4>
           <div class="content-grid">
@@ -179,14 +199,14 @@
               <img
                 v-if="sequel.posterPath"
                 :src="getPosterUrl(sequel.posterPath)"
-                :alt="sequel.title"
+                :alt="getDisplayTitle(sequel)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ sequel.title }}</h5>
+                <h5>{{ getDisplayTitle(sequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(sequel.contentType) }}
                 </p>
@@ -199,7 +219,7 @@
           </div>
         </div>
 
-        <!-- Prequels -->
+        <!-- Title: Prequels -->
         <div v-if="relatedContent.prequels.length > 0" class="relationship-section">
           <h4>Prequels</h4>
           <div class="content-grid">
@@ -212,14 +232,14 @@
               <img
                 v-if="prequel.posterPath"
                 :src="getPosterUrl(prequel.posterPath)"
-                :alt="prequel.title"
+                :alt="getDisplayTitle(prequel)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ prequel.title }}</h5>
+                <h5>{{ getDisplayTitle(prequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(prequel.contentType) }}
                 </p>
@@ -232,7 +252,7 @@
           </div>
         </div>
 
-        <!-- Related -->
+        <!-- Title: Related -->
         <div v-if="relatedContent.related.length > 0" class="relationship-section">
           <h4>Related</h4>
           <div class="content-grid">
@@ -245,14 +265,14 @@
               <img
                 v-if="related.posterPath"
                 :src="getPosterUrl(related.posterPath)"
-                :alt="related.title"
+                :alt="getDisplayTitle(related)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ related.title }}</h5>
+                <h5>{{ getDisplayTitle(related) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(related.contentType) }}
                 </p>
@@ -267,7 +287,7 @@
       </div>
     </div>
 
-    <!-- Status Dropdown -->
+    <!-- Title: Watchlist -->
     <StatusDropdown
       v-if="showStatusDropdown"
       :show-dropdown="showStatusDropdown"
@@ -292,6 +312,7 @@ import {
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
+import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'
 
 const route = useRoute()
 const router = useRouter()
@@ -456,7 +477,7 @@ const removeFromWatchlist = async () => {
 const shareShow = () => {
   if (navigator.share && show.value) {
     navigator.share({
-      title: show.value.title,
+      title: getDisplayTitle(show.value),
       text: show.value.overview,
       url: window.location.href,
     })
@@ -764,13 +785,15 @@ const handleImageError = (event: Event) => {
 
 .network-info,
 .production-info,
-.creator-info {
+.creator-info,
+.alternative-titles {
   margin-bottom: 2rem;
 }
 
 .network-info h3,
 .production-info h3,
-.creator-info h3 {
+.creator-info h3,
+.alternative-titles h3 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
@@ -779,7 +802,8 @@ const handleImageError = (event: Event) => {
 .networks,
 .companies,
 .countries,
-.creators {
+.creators,
+.titles {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -788,7 +812,8 @@ const handleImageError = (event: Event) => {
 .network-tag,
 .company-tag,
 .country-tag,
-.creator-tag {
+.creator-tag,
+.title-tag {
   background: var(--bg-card);
   color: var(--text-primary);
   padding: 0.25rem 0.75rem;

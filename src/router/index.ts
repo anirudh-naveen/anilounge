@@ -1,3 +1,10 @@
+/**
+ * router/index.ts — client-side routing (router).
+ *
+ * Declares catalog, auth, and protected account routes. Guards
+ * `meta.requiresAuth` pages and clears catalog scroll positions when
+ * navigating between top-level sections.
+ */
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '@/views/Home.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -67,7 +74,13 @@ const router = createRouter({
   ],
 })
 
-// Navigation guard for protected routes
+/**
+ * Route guard. Redirects unauthenticated users away from `meta.requiresAuth` routes.
+ *
+ * @param to - Target location
+ * @param from - Prior location
+ * @param next - Vue Router next()
+ */
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
 

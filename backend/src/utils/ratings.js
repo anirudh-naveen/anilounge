@@ -1,6 +1,19 @@
 /**
+ * Vote-weighted rating math for catalog scores.
+ * Utils layer: combine MAL, TMDB, and Find Animation scores, and apply O(1) user-rating deltas.
+ */
+
+/**
  * Vote-count weighted average of MAL, TMDB, and Find Animation ratings.
  * Sources without a score or with zero voters are omitted from the average.
+ * If every source lacks voters, falls back to the first available raw score (MAL, then TMDB, then user).
+ * @param {number | null | undefined} tmdbScore
+ * @param {number | null | undefined} tmdbVotes
+ * @param {number | null | undefined} malScore
+ * @param {number | null | undefined} malVotes
+ * @param {number | null | undefined} userRatingAverage
+ * @param {number | null | undefined} userRatingCount
+ * @returns {number | null}
  */
 export function calculateUnifiedScore(
   tmdbScore,
@@ -38,6 +51,11 @@ export function calculateUnifiedScore(
   return weightedSum / totalVotes
 }
 
+/**
+ * Whether a value is a 1–10 Find Animation rating.
+ * @param {unknown} rating
+ * @returns {boolean}
+ */
 export function isValidUserRating(rating) {
   return typeof rating === 'number' && Number.isFinite(rating) && rating >= 1 && rating <= 10
 }
@@ -46,6 +64,10 @@ export function isValidUserRating(rating) {
  * O(1) update of Find Animation rating stats on a content document.
  * oldRating/newRating are this user's previous and next scores (or null if none).
  * Stores a running sum so we never rescan all users on each change.
+ * @param {object} content - Mongoose content document (mutated in place)
+ * @param {number | null | undefined} oldRating
+ * @param {number | null | undefined} newRating
+ * @returns {void}
  */
 export function applyUserRatingDelta(content, oldRating, newRating) {
   const previous = isValidUserRating(oldRating) ? oldRating : null
@@ -84,6 +106,11 @@ export function applyUserRatingDelta(content, oldRating, newRating) {
   refreshUnifiedScore(content)
 }
 
+/**
+ * Recompute unifiedScore from the document's current source scores.
+ * @param {object} content
+ * @returns {void}
+ */
 function refreshUnifiedScore(content) {
   content.unifiedScore = calculateUnifiedScore(
     content.voteAverage,
