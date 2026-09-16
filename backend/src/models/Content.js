@@ -1,8 +1,13 @@
+/**
+ * Mongoose schema for unified catalog titles (movies, TV, specials).
+ * Models layer: identity, ratings from MAL/TMDB/Find Animation, and franchise relationships.
+ * Exposes virtuals for display title and vote-weighted primary rating, plus lookup helpers.
+ */
 import mongoose from 'mongoose'
 
 const ContentSchema = new mongoose.Schema(
   {
-    // Basic Information
+    // Identity
     title: {
       type: String,
       required: true,
@@ -10,11 +15,10 @@ const ContentSchema = new mongoose.Schema(
     },
     englishTitle: String,
     nativeTitle: String,
-    originalTitle: String, // Native title, kept for backward compatibility
+    originalTitle: String, // Legacy alias of nativeTitle
     overview: String,
     tagline: String,
 
-    // Content Type
     contentType: {
       type: String,
       enum: ['movie', 'tv', 'special'],
@@ -22,15 +26,14 @@ const ContentSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Media Information
+    // Presentation
     posterPath: String,
     backdropPath: String,
     releaseDate: Date,
-    runtime: Number, // For movies
-    episodeCount: Number, // For TV shows
-    seasonCount: Number, // For TV shows
+    runtime: Number,
+    episodeCount: Number,
+    seasonCount: Number,
 
-    // Internal ID for unified content management
     internalId: {
       type: String,
       unique: true,
@@ -38,7 +41,7 @@ const ContentSchema = new mongoose.Schema(
       index: true,
     },
 
-    // External IDs (for reference only, not used for deduplication)
+    // External IDs are reference-only; catalog dedup is title/type based, not these IDs
     tmdbId: {
       type: Number,
       sparse: true,
@@ -50,13 +53,12 @@ const ContentSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Ratings and Popularity
+    // Ratings: TMDB votes, MAL scores, and in-app user ratings feed unifiedScore
     voteAverage: Number,
     voteCount: Number,
     popularity: Number,
     unifiedScore: Number, // Vote-weighted average of MAL, TMDB, and Find Animation
 
-    // User-generated ratings (from your app users)
     userRatingAverage: {
       type: Number,
       default: null,
@@ -70,7 +72,7 @@ const ContentSchema = new mongoose.Schema(
       default: 0,
     },
 
-    // MAL Specific Fields
+    // MAL catalog fields (status, media type, source, age rating)
     malScore: Number,
     malScoredBy: Number,
     malRank: Number,
@@ -105,7 +107,7 @@ const ContentSchema = new mongoose.Schema(
       enum: ['g', 'pg', 'pg_13', 'r', 'r+', 'rx'],
     },
 
-    // Genres (unified from both sources)
+    // Classification (genres merged from TMDB and MAL)
     genres: [
       {
         id: Number,
@@ -113,23 +115,21 @@ const ContentSchema = new mongoose.Schema(
       },
     ],
 
-    // Studios/Production Companies
     studios: [String],
     productionCompanies: [String],
 
-    // Alternative Titles
     alternativeTitles: [String],
 
-    // Relationship Information
-    franchise: String, // Name of the franchise this content belongs to
+    // Relationships
+    franchise: String,
     relationships: {
       sequels: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Content' }],
       prequels: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Content' }],
       related: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Content' }],
-      franchise: String, // Franchise name
+      franchise: String,
     },
 
-    // Data Source Tracking
+    // Provenance
     dataSources: {
       tmdb: {
         hasData: { type: Boolean, default: false },
@@ -141,7 +141,6 @@ const ContentSchema = new mongoose.Schema(
       },
     },
 
-    // Metadata
     lastUpdated: {
       type: Date,
       default: Date.now,
@@ -156,7 +155,6 @@ const ContentSchema = new mongoose.Schema(
   },
 )
 
-// Create compound indexes for efficient queries
 ContentSchema.index({ contentType: 1, popularity: -1 })
 ContentSchema.index({ contentType: 1, voteAverage: -1 })
 ContentSchema.index({ contentType: 1, malScore: -1 })
@@ -164,7 +162,6 @@ ContentSchema.index({ contentType: 1, unifiedScore: -1 })
 ContentSchema.index({ unifiedScore: -1, popularity: -1 })
 ContentSchema.index({ genres: 1, contentType: 1 })
 ContentSchema.index({ title: 'text', overview: 'text' })
-// Indexes for relationship queries
 ContentSchema.index({ contentType: 1, tmdbId: 1 })
 ContentSchema.index({ contentType: 1, malId: 1 })
 ContentSchema.index({ contentType: 1, title: 1 })
@@ -172,12 +169,18 @@ ContentSchema.index({ contentType: 1, englishTitle: 1 })
 ContentSchema.index({ contentType: 1, nativeTitle: 1 })
 ContentSchema.index({ contentType: 1, originalTitle: 1 })
 
-// Virtual for display title
+/**
+ * Preferred on-screen title: English, then canonical, then native/legacy.
+ * @returns {string}
+ */
 ContentSchema.virtual('displayTitle').get(function () {
   return this.englishTitle || this.title || this.nativeTitle || this.originalTitle || 'Unknown Title'
 })
 
-// Virtual for primary rating (vote-weighted average of available sources)
+/**
+ * Vote-weighted average across MAL, TMDB, and Find Animation; omits sources with no voters.
+ * @returns {{ score: number, count: number, source: string } | null}
+ */
 ContentSchema.virtual('primaryRating').get(function () {
   const sources = []
   if (this.malScore && this.malScoredBy > 0) {
@@ -208,21 +211,29 @@ ContentSchema.virtual('primaryRating').get(function () {
   }
 })
 
-// Virtual for primary poster
+/**
+ * Poster path when present; callers still prefix the image CDN.
+ * @returns {string | null}
+ */
 ContentSchema.virtual('primaryPoster').get(function () {
   return this.posterPath || null
 })
 
-// Method to check if content is complete
+/**
+ * Whether the document has enough fields to show a detail card.
+ * @returns {boolean}
+ */
 ContentSchema.methods.isComplete = function () {
   return !!(this.title && this.overview && (this.posterPath || this.backdropPath))
 }
 
-// Method to get unified genres
+/**
+ * Deduplicate genre objects/strings by lowercase name.
+ * @returns {Array<{ id?: number, name: string }>}
+ */
 ContentSchema.methods.getUnifiedGenres = function () {
   const genreMap = new Map()
 
-  // Add TMDB genres
   if (this.genres && Array.isArray(this.genres)) {
     this.genres.forEach((genre) => {
       if (typeof genre === 'object' && genre.name) {
@@ -236,13 +247,23 @@ ContentSchema.methods.getUnifiedGenres = function () {
   return Array.from(genreMap.values())
 }
 
-// Static method to find content by external ID
+/**
+ * Look up a catalog row by TMDB or MAL id (reference lookup, not dedup).
+ * @param {number} id - External numeric id
+ * @param {'tmdb' | 'mal'} [source='tmdb']
+ * @returns {Promise<import('mongoose').Document | null>}
+ */
 ContentSchema.statics.findByExternalId = function (id, source = 'tmdb') {
   const query = source === 'tmdb' ? { tmdbId: id } : { malId: id }
   return this.findOne(query)
 }
 
-// Static method to find similar content
+/**
+ * Same type and overlapping genres, ranked by popularity.
+ * @param {{ _id: unknown, contentType: string, genres?: Array }} content
+ * @param {number} [limit=10]
+ * @returns {import('mongoose').Query}
+ */
 ContentSchema.statics.findSimilar = function (content, limit = 10) {
   const genreIds = content.genres ? content.genres.map((g) => g.id || g) : []
 

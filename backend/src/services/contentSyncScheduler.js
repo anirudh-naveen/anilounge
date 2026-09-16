@@ -1,7 +1,12 @@
+/**
+ * Cron wrapper around DatabasePopulator for hourly TMDB/MAL catalog refresh.
+ * Domain service: start/stop scheduling, overlap guard, and last-run status.
+ * Mutates Content via populateDatabase with clear:false and the process mongoose connection.
+ */
 import cron from 'node-cron'
 import DatabasePopulator from './contentSyncService.js'
 
-const DEFAULT_CRON = '0 * * * *' // top of every hour
+const DEFAULT_CRON = '0 * * * *'
 const DEFAULT_TMDB_LIMIT = 40
 const DEFAULT_MAL_LIMIT = 40
 
@@ -9,22 +14,38 @@ let isRunning = false
 let lastSync = null
 let scheduledTask = null
 
+/**
+ * Positive integer from env, else fallback.
+ * @param {string | undefined} value
+ * @param {number} fallback
+ * @returns {number}
+ */
 function parseLimit(value, fallback) {
   const parsed = parseInt(value, 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
+/**
+ * CONTENT_SYNC_ENABLED overrides; otherwise on in production and off in development.
+ * @returns {boolean}
+ */
 function isSyncEnabled() {
   if (process.env.CONTENT_SYNC_ENABLED === 'false') return false
   if (process.env.CONTENT_SYNC_ENABLED === 'true') return true
-  // Default: on in production, off in development
   return process.env.NODE_ENV === 'production'
 }
 
+/**
+ * @returns {boolean}
+ */
 function hasExternalApiKeys() {
   return Boolean(process.env.TMDB_API_KEY || process.env.MAL_CLIENT_ID)
 }
 
+/**
+ * Snapshot for health/admin endpoints.
+ * @returns {{ enabled: boolean, running: boolean, schedule: string, lastSync: object | null }}
+ */
 export function getContentSyncStatus() {
   return {
     enabled: isSyncEnabled(),
@@ -34,6 +55,12 @@ export function getContentSyncStatus() {
   }
 }
 
+/**
+ * Run one populate pass. Skips if another run is in flight or API keys are missing.
+ * Does not drop existing Content (`clear: false`).
+ * @param {string} [trigger='manual'] - `manual` | `scheduled` | `startup`
+ * @returns {Promise<object>} lastSync payload or `{ skipped, reason }`
+ */
 export async function runContentSync(trigger = 'manual') {
   if (isRunning) {
     console.warn(`Content sync skipped (${trigger}): already running`)
@@ -91,12 +118,11 @@ export async function runContentSync(trigger = 'manual') {
 }
 
 /**
- * Starts the hourly TMDB/MAL catalog sync when enabled.
- * Env knobs:
- * - CONTENT_SYNC_ENABLED=true|false (default: on in production)
- * - CONTENT_SYNC_CRON (default: "0 * * * *")
- * - CONTENT_SYNC_TMDB_LIMIT / CONTENT_SYNC_MAL_LIMIT
- * - CONTENT_SYNC_RUN_ON_START=true to sync shortly after boot
+ * Register the cron task when sync is enabled and keys exist.
+ * Env knobs: CONTENT_SYNC_ENABLED, CONTENT_SYNC_CRON (default hourly),
+ * CONTENT_SYNC_TMDB_LIMIT / CONTENT_SYNC_MAL_LIMIT,
+ * CONTENT_SYNC_RUN_ON_START plus CONTENT_SYNC_START_DELAY_MS.
+ * @returns {import('node-cron').ScheduledTask | null}
  */
 export function startContentSyncScheduler() {
   if (!isSyncEnabled()) {

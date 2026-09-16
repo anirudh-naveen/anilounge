@@ -1,10 +1,17 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  Home.vue — catalog landing view.
+
+  Renders the marketing hero and a trending grid of movies/TV shows from the
+  content store. No search or filter chrome; discovery only.
+-->
 <template>
   <div class="home-page">
-    <!-- Hero Section -->
+    <!-- Hero -->
     <section class="hero">
       <div class="container">
         <div class="hero-content fade-in">
+          <!-- Title: Headline -->
           <h1 class="hero-title">
             Discover
             <span class="gradient-text">Animated Content</span>
@@ -13,6 +20,7 @@
             Find your next favorite animated movie or TV show. Rate, track, and get personalized
             recommendations.
           </p>
+          <!-- Title: Primary CTA -->
           <div class="hero-actions">
             <router-link to="/search" class="btn btn-primary btn-large">
               Search Content
@@ -22,14 +30,16 @@
       </div>
     </section>
 
-    <!-- Trending Content -->
+    <!-- Catalog -->
     <section class="featured-section">
       <div class="container">
         <h2 class="section-title">Trending Now</h2>
+        <!-- Title: Loading State -->
         <div v-if="contentStore.isLoading" class="loading-container">
           <div class="spinner"></div>
           <p>Loading amazing content...</p>
         </div>
+        <!-- Title: Content Card -->
         <div v-else-if="featuredContent.length > 0" class="content-grid">
           <div
             v-for="item in featuredContent.slice(0, 8)"
@@ -67,6 +77,7 @@
             />
           </div>
         </div>
+        <!-- Title: Empty State -->
         <div v-else class="error-state">
           <p>No content found. Please try again later.</p>
         </div>

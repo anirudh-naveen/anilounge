@@ -1,10 +1,24 @@
+/**
+ * JWT authentication middleware and token helpers.
+ *
+ * Layer: middleware. Verifies Bearer access tokens, mints 15-minute access and
+ * 7-day refresh tokens, and exposes refresh/revoke route handlers.
+ */
+
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import RefreshToken from '../models/RefreshToken.js'
 
+/**
+ * Verify the Bearer JWT and attach the matching user to the request.
+ *
+ * @param {import('express').Request} req - Reads `headers.authorization`.
+ * @param {import('express').Response} res - Sends 401/500 JSON on failure.
+ * @param {import('express').NextFunction} next - Continues the chain on success.
+ * @returns {Promise<void>}
+ */
 export const authenticateToken = async (req, res, next) => {
   try {
-    // Get token from Authorization header
     const authHeader = req.headers['authorization']
     const token = authHeader && authHeader.split(' ')[1] // Bearer TOKEN
 
@@ -15,7 +29,6 @@ export const authenticateToken = async (req, res, next) => {
       })
     }
 
-    // Verify the token
     if (!process.env.JWT_SECRET) {
       return res.status(500).json({
         success: false,
@@ -24,7 +37,6 @@ export const authenticateToken = async (req, res, next) => {
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
 
-    // Find user by ID from token
     const user = await User.findById(decoded.userId).select('-password')
 
     if (!user) {
@@ -34,7 +46,6 @@ export const authenticateToken = async (req, res, next) => {
       })
     }
 
-    // Add user to request object
     req.user = user
     next()
   } catch (error) {
@@ -59,21 +70,42 @@ export const authenticateToken = async (req, res, next) => {
   }
 }
 
-// Generate access token (15 minutes)
+/**
+ * Sign a short-lived access JWT for `userId`.
+ *
+ * @param {import('mongoose').Types.ObjectId|string} userId - Subject stored as `userId` in the payload.
+ * @returns {string} Signed token that expires in 15 minutes.
+ */
 export const generateAccessToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '15m' })
 }
 
-// Generate refresh token (7 days)
+/**
+ * Persist and return a refresh token document's token string (7-day lifetime in the model).
+ *
+ * @param {import('mongoose').Types.ObjectId|string} userId - Owner of the refresh token row.
+ * @returns {Promise<string>} Opaque refresh token string.
+ */
 export const generateRefreshToken = async (userId) => {
   const refreshToken = await RefreshToken.createToken(userId)
   return refreshToken.token
 }
 
-// Legacy function for backward compatibility
+/**
+ * Alias of `generateAccessToken` for callers that still use the legacy name.
+ *
+ * @param {import('mongoose').Types.ObjectId|string} userId - Subject of the JWT.
+ * @returns {string} Signed access token (15m).
+ */
 export const generateToken = generateAccessToken
 
-// Refresh token endpoint handler
+/**
+ * Rotate a valid refresh token: revoke the old row and issue a new access+refresh pair.
+ *
+ * @param {import('express').Request} req - Reads `body.refreshToken`.
+ * @param {import('express').Response} res - 200 `{ accessToken, refreshToken }`, 401 if missing/expired, or 500.
+ * @returns {Promise<void>}
+ */
 export const refreshAccessToken = async (req, res) => {
   try {
     const { refreshToken } = req.body
@@ -85,7 +117,6 @@ export const refreshAccessToken = async (req, res) => {
       })
     }
 
-    // Find the refresh token
     const tokenDoc = await RefreshToken.findOne({
       token: refreshToken,
       isRevoked: false,
@@ -98,11 +129,9 @@ export const refreshAccessToken = async (req, res) => {
       })
     }
 
-    // Revoke old token
     tokenDoc.isRevoked = true
     await tokenDoc.save()
 
-    // Generate new tokens
     const newAccessToken = generateAccessToken(tokenDoc.userId._id)
     const newRefreshToken = await generateRefreshToken(tokenDoc.userId._id)
 
@@ -111,7 +140,7 @@ export const refreshAccessToken = async (req, res) => {
       message: 'Token refreshed successfully',
       data: {
         accessToken: newAccessToken,
-        refreshToken: newRefreshToken.token, // New refresh token
+        refreshToken: newRefreshToken.token,
       },
     })
   } catch (error) {
@@ -123,7 +152,13 @@ export const refreshAccessToken = async (req, res) => {
   }
 }
 
-// Revoke refresh token (logout)
+/**
+ * Mark a refresh token revoked (logout). Succeeds even if the body omits the token.
+ *
+ * @param {import('express').Request} req - Optional `body.refreshToken`.
+ * @param {import('express').Response} res - 200 on success or 500.
+ * @returns {Promise<void>}
+ */
 export const revokeRefreshToken = async (req, res) => {
   try {
     const { refreshToken } = req.body
@@ -145,5 +180,4 @@ export const revokeRefreshToken = async (req, res) => {
   }
 }
 
-// Default export for backward compatibility
 export default authenticateToken

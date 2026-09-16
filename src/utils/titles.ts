@@ -1,3 +1,10 @@
+/**
+ * titles.ts — title-resolution helpers.
+ *
+ * Picks English vs native display names, builds searchable title lists, and
+ * filters alternative titles used by catalog cards and detail views.
+ */
+
 export interface TitledContent {
   title?: string
   englishTitle?: string
@@ -8,6 +15,11 @@ export interface TitledContent {
 
 const normalize = (value?: string | null) => (typeof value === 'string' ? value.trim() : '')
 
+/**
+ * Resolves the title shown on cards and detail views, preferring English.
+ * @param content - Title fields from a catalog item (or null).
+ * @returns English, default, native, or original title; `"Unknown Title"` if none.
+ */
 export function getDisplayTitle(content?: TitledContent | null) {
   if (!content) return 'Unknown Title'
   return (
@@ -19,6 +31,11 @@ export function getDisplayTitle(content?: TitledContent | null) {
   )
 }
 
+/**
+ * Native/original title for secondary display when it differs from the English title.
+ * @param content - Title fields from a catalog item (or null).
+ * @returns Native title, or `""` if missing or identical to the display title.
+ */
 export function getNativeTitle(content?: TitledContent | null) {
   if (!content) return ''
   const native = normalize(content.nativeTitle) || normalize(content.originalTitle)
@@ -27,6 +44,11 @@ export function getNativeTitle(content?: TitledContent | null) {
   return native
 }
 
+/**
+ * Deduplicated title list used by client-side search matching.
+ * @param content - Title fields from a catalog item (or null).
+ * @returns Unique titles including alternatives, in source order.
+ */
 export function getSearchableTitles(content?: TitledContent | null) {
   if (!content) return []
 
@@ -52,6 +74,11 @@ export function getSearchableTitles(content?: TitledContent | null) {
   return titles
 }
 
+/**
+ * Alternate titles that are not already the display, English, native, or original name.
+ * @param content - Title fields from a catalog item (or null).
+ * @returns Remaining alternative titles for detail views.
+ */
 export function getAlternativeTitles(content?: TitledContent | null) {
   if (!content) return []
 

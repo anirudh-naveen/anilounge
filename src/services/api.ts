@@ -1,3 +1,11 @@
+/**
+ * api.ts — Axios API client and content display helpers.
+ *
+ * Configures the backend base URL, attaches JWTs, and exports auth, content,
+ * AI, and watchlist endpoints used by Pinia stores and views. Dev points at
+ * `localhost:5001`; production uses the Railway API.
+ */
+
 import axios from 'axios'
 import type {
   LoginCredentials,
@@ -15,7 +23,6 @@ const API_BASE_URL =
     ? 'http://localhost:5001/api'
     : 'https://find-animation-production.up.railway.app/api')
 
-// Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -24,7 +31,6 @@ const api = axios.create({
   withCredentials: true, // Required for CORS requests with credentials
 })
 
-// Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
@@ -38,12 +44,11 @@ api.interceptors.request.use(
   },
 )
 
-// Response interceptor to handle errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
+      // Expired/invalid access token: drop the session and send the user to login.
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'
@@ -52,7 +57,6 @@ api.interceptors.response.use(
   },
 )
 
-// Auth API
 export const authAPI = {
   register: (userData: RegisterData) => api.post('/auth/register', userData),
   login: (credentials: LoginCredentials) => api.post('/auth/login', credentials),
@@ -66,91 +70,85 @@ export const authAPI = {
     }),
 }
 
-// Unified Content API
 export const contentAPI = {
-  // Get all content with pagination and filtering
   getContent: (params: ContentParams) => api.get('/content', { params }),
 
-  // Get content by ID
   getContentById: (id: string) => api.get(`/content/${id}`),
 
-  // Get content by external ID (TMDB or MAL)
   getContentByExternalId: (id: string, source?: 'tmdb' | 'mal') =>
     api.get(`/content/external/${id}`, {
       params: source ? { source } : {},
     }),
 
-  // Search content
   searchContent: (searchParams: Record<string, string | number>) =>
     api.get('/search', { params: searchParams }),
 
-  // Get popular content
   getPopularContent: (params?: { type?: string; limit?: number }) =>
     api.get('/popular', { params }),
 
-  // Get similar content
   getSimilarContent: (id: string, limit?: number) =>
     api.get(`/content/${id}/similar`, {
       params: limit ? { limit } : {},
     }),
 
-  // Get related content (sequels, prequels, related)
   getRelatedContent: (contentId: string) => api.get(`/content/${contentId}/related`),
 
-  // Get franchise content
   getFranchiseContent: (franchiseName: string) => api.get(`/franchise/${franchiseName}`),
 
-  // Get database statistics
   getDatabaseStats: () => api.get('/stats'),
 }
 
-// AI API
 export const aiAPI = {
-  // AI-powered search
   search: (query: string) => api.post('/ai-search', { query }),
 
-  // Legacy endpoints for compatibility
+  // Legacy endpoints kept for older chatbot/recommendation callers.
   getRecommendations: (userId: string) => api.get(`/ai/recommendations/${userId}`),
   analyzeContent: (contentId: string) => api.get(`/ai/analyze/${contentId}`),
   chat: (message: string) => api.post('/ai/chat', { message }),
 }
 
-// Watchlist API
 export const watchlistAPI = {
-  // Add to watchlist
   addToWatchlist: (data: WatchlistData) => api.post('/watchlist', data),
 
-  // Get user watchlist
   getWatchlist: () => api.get('/watchlist'),
 
-  // Update watchlist item
   updateWatchlistItem: (contentId: string, data: UpdateWatchlistData) =>
     api.put(`/watchlist/${contentId}`, data),
 
-  // Remove from watchlist
   removeFromWatchlist: (contentId: string) => api.delete(`/watchlist/${contentId}`),
 }
 
-// Legacy API compatibility - removed redundant userAPI
-// All watchlist functionality is now handled by watchlistAPI
-
-// Utility functions for images
+/**
+ * Builds a TMDB image URL, or returns MAL URLs unchanged (they are already absolute).
+ * @param path - TMDB path, full HTTP URL, or empty.
+ * @param size - TMDB size token (default `w500`).
+ * @returns Image URL, or the local placeholder when `path` is empty.
+ */
 export const getImageUrl = (path: string, size = 'w500') => {
   if (!path) return '/placeholder-movie.jpg'
 
-  // Handle MAL images (they're already full URLs)
   if (path.startsWith('http')) {
     return path
   }
 
-  // Handle TMDB images
   return `https://image.tmdb.org/t/p/${size}${path}`
 }
 
+/**
+ * Poster-sized TMDB/MAL image URL (`w500`).
+ * @param path - Poster path or absolute URL.
+ * @returns Image URL or placeholder.
+ */
 export const getPosterUrl = (path: string) => getImageUrl(path, 'w500')
+
+/**
+ * Backdrop-sized TMDB/MAL image URL (`w1280`).
+ * @param path - Backdrop path or absolute URL.
+ * @returns Image URL or placeholder.
+ */
 export const getBackdropUrl = (path: string) => getImageUrl(path, 'w1280')
 
-// Content interface for type safety
+/** Local loose shape for display helpers; distinct from `UnifiedContent`. */
 interface ContentData {
   _id?: string
   id?: string
@@ -187,7 +185,11 @@ interface ContentData {
   }
 }
 
-// Utility function to get content display info
+/**
+ * Flattened display fields for catalog cards and detail views.
+ * @param content - Catalog item or API payload with optional source fields.
+ * @returns Title, media, rating, and source flags used by the UI.
+ */
 export const getContentDisplayInfo = (content: ContentData) => {
   return {
     id: content._id || content.id,
@@ -203,22 +205,23 @@ export const getContentDisplayInfo = (content: ContentData) => {
       count:
         (content.voteCount || 0) + (content.malScoredBy || 0) + (content.userRatingCount || 0),
     },
-    // Additional info
     runtime: content.runtime,
     episodeCount: content.episodeCount || content.malEpisodes,
     seasonCount: content.seasonCount,
     studios: content.studios || content.productionCompanies || [],
     alternativeTitles: content.alternativeTitles || [],
-    // External IDs
     tmdbId: content.tmdbId,
     malId: content.malId,
-    // Data sources
     hasTmdbData: content.dataSources?.tmdb?.hasData || false,
     hasMalData: content.dataSources?.mal?.hasData || false,
   }
 }
 
-// Utility function to format genres
+/**
+ * Maps genre objects/strings to names and drops the redundant `"Animation"` genre.
+ * @param genres - Genre objects or name strings from TMDB/MAL.
+ * @returns Display names excluding Animation.
+ */
 export const formatGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
   if (!genres || !Array.isArray(genres)) return []
 
@@ -228,32 +231,63 @@ export const formatGenres = (genres: Array<{ id?: number; name?: string }> | str
       if (typeof genre === 'object' && genre.name) return genre.name
       return 'Unknown'
     })
-    .filter((genre) => genre !== 'Animation') // Filter out Animation genre as requested
+    .filter((genre) => genre !== 'Animation')
 }
 
-// Utility function to get content type display
+/**
+ * Human-readable content-type label, including `"Special"` for MAL specials.
+ * @param contentType - `movie`, `tv`, or `special`.
+ * @returns `"Movie"`, `"TV Show"`, or `"Special"`.
+ */
 export const getContentTypeDisplay = (contentType: string) => {
   if (contentType === 'special') return 'Special'
   if (contentType === 'movie') return 'Movie'
   return 'TV Show'
 }
 
+/**
+ * Whether this type is grouped with movies in catalog filters (includes specials).
+ * @param contentType - `movie`, `tv`, `special`, or undefined.
+ * @returns True for movies and specials.
+ */
 export const isMovieLike = (contentType?: string) =>
   contentType === 'movie' || contentType === 'special'
 
+/**
+ * Card badge label: specials display as `"Movie"` (full `"Special"` is hover-only).
+ * @param contentType - `movie`, `tv`, or `special`.
+ * @returns `"Movie"` or `"TV Show"`.
+ */
 export const getCardContentTypeDisplay = (contentType: string) =>
   isMovieLike(contentType) ? 'Movie' : 'TV Show'
 
+/**
+ * Whether an item matches a Movies/TV/All filter; `"movie"` includes specials.
+ * @param itemType - The item's `contentType`.
+ * @param filter - Active type filter (`all`, `movie`, `tv`, …).
+ * @returns True when the item should appear under that filter.
+ */
 export const matchesContentTypeFilter = (itemType: string | undefined, filter?: string) => {
   if (!filter || filter === 'all') return true
   if (filter === 'movie') return isMovieLike(itemType)
   return itemType === filter
 }
 
+/**
+ * CSS class for movie vs TV type badges.
+ * @param contentType - `movie`, `tv`, or `special`.
+ * @returns `'tv-badge'` or `'movie-badge'` (specials use the movie class).
+ */
 export const getContentTypeBadgeClass = (contentType: string) => {
   return contentType === 'tv' ? 'tv-badge' : 'movie-badge'
 }
 
+/**
+ * Whether the watchlist should track episode progress.
+ * Specials only track when they have more than one episode.
+ * @param item - Content type plus episode counts.
+ * @returns True for TV and multi-episode specials.
+ */
 export const tracksEpisodes = (item: {
   contentType?: string
   episodeCount?: number
@@ -266,6 +300,11 @@ export const tracksEpisodes = (item: {
   return false
 }
 
+/**
+ * Vue route name for a detail page; specials use `MovieDetails`.
+ * @param item - Object with a `contentType`.
+ * @returns `'TVShowDetails'` or `'MovieDetails'`.
+ */
 export const getDetailsRouteName = (item: { contentType?: string }) => {
   return item.contentType === 'tv' ? 'TVShowDetails' : 'MovieDetails'
 }

@@ -1,3 +1,10 @@
+/**
+ * Express entry point for the Find Animation API.
+ *
+ * Layer: HTTP server. Loads env, connects MongoDB, applies security/rate-limit
+ * middleware, mounts `/api` and `/admin`, and starts the content-sync scheduler.
+ */
+
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -20,10 +27,9 @@ import {
   getContentSyncStatus,
 } from './services/contentSyncScheduler.js'
 
-// Load environment variables
 dotenv.config()
 
-// Validate required environment variables (only in production)
+// Production exits without JWT_SECRET and MONGODB_URI; development only warns so local work can start.
 if (process.env.NODE_ENV === 'production') {
   const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI']
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
@@ -34,7 +40,6 @@ if (process.env.NODE_ENV === 'production') {
     process.exit(1)
   }
 } else {
-  // In development, warn but don't exit
   const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI']
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
   if (missingVars.length > 0) {
@@ -46,7 +51,7 @@ if (process.env.NODE_ENV === 'production') {
 const app = express()
 const PORT = process.env.PORT || 5001
 
-// Health check endpoint
+/** Liveness probe: process health plus content-sync scheduler status. */
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -58,7 +63,7 @@ app.get('/health', (req, res) => {
   })
 })
 
-// Basic API status endpoint
+/** Lightweight readiness payload (no sync details). */
 app.get('/api/status', (req, res) => {
   res.json({
     success: true,
@@ -68,7 +73,7 @@ app.get('/api/status', (req, res) => {
   })
 })
 
-// Connect to MongoDB (non-blocking - server will start even if DB connection fails in dev)
+// connectDB is non-blocking in development; production exits if the promise rejects.
 connectDB().catch((error) => {
   if (process.env.NODE_ENV === 'production') {
     console.error('Failed to connect to database. Exiting...', error)
@@ -78,10 +83,10 @@ connectDB().catch((error) => {
   }
 })
 
-// Trust proxy for accurate IP addresses (important for rate limiting)
+// Trust the first proxy hop so req.ip (and rate limits) reflect the client, not the proxy.
 app.set('trust proxy', 1)
 
-// Enhanced security middleware
+// Helmet: CSP and CORP are off so the SPA on a different origin can call the API.
 app.use(
   helmet({
     contentSecurityPolicy: false, // Disabled to allow cross-origin API requests
@@ -95,10 +100,10 @@ app.use(
   }),
 )
 
-// Enhanced rate limiting with different limits for different endpoints
+/** 15-minute window: 100 requests per IP for all routes. */
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 100, // 100 requests per IP per window
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again later.',
@@ -107,9 +112,10 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+/** Auth paths: 5 attempts per IP per 15 minutes to slow credential stuffing. */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 auth requests per windowMs
+  max: 5, // 5 auth requests per IP per window
   message: {
     success: false,
     message: 'Too many authentication attempts, please try again later.',
@@ -118,9 +124,10 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+/** Profile-picture uploads: 10 per IP per hour. */
 const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // limit each IP to 10 uploads per hour
+  max: 10, // 10 uploads per IP per hour
   message: {
     success: false,
     message: 'Too many upload attempts, please try again later.',
@@ -129,18 +136,19 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-// Apply general rate limiting
 app.use(generalLimiter)
 
-// CORS configuration - Simple and permissive for development, restrictive for production
+/**
+ * CORS allowlist: production Find Animation hosts, local Vite ports, and any
+ * `*.vercel.app` preview. Requests with no Origin (curl, mobile) are allowed.
+ */
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, curl)
+    // Allow requests with no origin (mobile apps, Postman, curl)
     if (!origin) {
       return callback(null, true)
     }
 
-    // List of allowed origins
     const allowedOrigins = [
       // Production domains
       'https://find-animation.vercel.app',
@@ -154,7 +162,6 @@ const corsOptions = {
       'http://127.0.0.1:5174',
     ]
 
-    // Check if origin is in allowed list
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true)
     } else if (origin.match(/^https:\/\/.*\.vercel\.app$/)) {
@@ -175,12 +182,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions))
 
-// Body parsing middleware with size limits
+/** JSON/urlencoded bodies capped at 10mb; JSON is re-parsed so malformed payloads fail closed. */
 app.use(
   express.json({
     limit: '10mb',
     verify: (req, res, buf) => {
-      // Additional JSON parsing security
       try {
         JSON.parse(buf.toString())
       } catch {
@@ -191,11 +197,11 @@ app.use(
 )
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Input sanitization middleware
+/** Strip HTML tags and XSS payloads from inbound body/query before controllers run. */
 app.use(sanitizeHtmlInput)
 app.use(sanitizeXSS)
 
-// Security monitoring and logging with error handling
+/** Security monitor/logger: swallow their own errors so a logging failure cannot 500 the request. */
 app.use((req, res, next) => {
   try {
     if (securityMonitor) {
@@ -222,7 +228,7 @@ app.use((req, res, next) => {
   }
 })
 
-// IP ban checking (must be early in the chain) with error handling
+/** IP ban runs early. Development continues on error; production fails closed with 500. */
 app.use(async (req, res, next) => {
   try {
     await checkIPBan(req, res, next)
@@ -242,22 +248,20 @@ app.use(async (req, res, next) => {
   }
 })
 
-// Anti-bot and database protection
+/** Bot UA filter, NoSQL-injection scan, then progressive delay after 50 requests / 15 min. */
 app.use(antiBotProtection)
 app.use(databaseProtection)
 app.use(progressiveSlowdown)
 
-// Serve static files from uploads directory with enhanced security
+/** Static `/uploads`: nosniff/DENY frame plus open CORS so poster/profile images load cross-origin. */
 app.use(
   '/uploads',
   (req, res, next) => {
-    // Security headers for uploaded files
     res.header('X-Content-Type-Options', 'nosniff')
     res.header('X-Frame-Options', 'DENY')
     res.header('X-XSS-Protection', '1; mode=block')
     res.header('Referrer-Policy', 'strict-origin-when-cross-origin')
 
-    // CORS headers
     res.header('Access-Control-Allow-Origin', '*')
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     res.header(
@@ -270,7 +274,7 @@ app.use(
   express.static('uploads'),
 )
 
-// Health check endpoint
+/** Duplicate health route (legacy JSON shape; does not include contentSync). */
 app.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -281,25 +285,21 @@ app.get('/health', (req, res) => {
   })
 })
 
-// Apply specific rate limiting to auth routes
+/** Tighter limits on credential and upload paths (stacked on the general limiter). */
 app.use('/api/auth', authLimiter)
-
-// Apply upload rate limiting to upload routes
 app.use('/api/auth/upload-profile-picture', uploadLimiter)
 
-// Add API version header to all /api responses (optional for clients)
+/** Stamp every `/api` response with the current API version. */
 app.use('/api', (req, res, next) => {
   res.setHeader('X-API-Version', '1.0.0-beta')
   next()
 })
 
-// API routes with protection
+/** Public API and admin mounts, both behind apiProtection (referer/header checks). */
 app.use('/api', apiProtection, apiRoutes)
-
-// Admin routes (protected)
 app.use('/admin', apiProtection, adminRoutes)
 
-// 404 handler
+/** Catch-all 404 for unmatched methods and paths. */
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
@@ -307,12 +307,14 @@ app.use('*', (req, res) => {
   })
 })
 
-// Global error handler
+/**
+ * Express error middleware (four args). Maps Mongoose validation/duplicate-key
+ * and JWT errors to 400/401; otherwise 500. Stack is included only in development.
+ */
 app.use((err, req, res, next) => {
   void next // Express requires 4 args to treat this as error middleware
   console.error('Global error handler:', err)
 
-  // Mongoose validation error
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map((e) => e.message)
     return res.status(400).json({
@@ -322,7 +324,6 @@ app.use((err, req, res, next) => {
     })
   }
 
-  // Mongoose duplicate key error
   if (err.code === 11000) {
     const field = Object.keys(err.keyValue)[0]
     return res.status(400).json({
@@ -331,7 +332,6 @@ app.use((err, req, res, next) => {
     })
   }
 
-  // JWT errors
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
       success: false,
@@ -346,7 +346,6 @@ app.use((err, req, res, next) => {
     })
   }
 
-  // Default error
   if (!res.headersSent) {
     res.status(err.status || 500).json({
       success: false,
@@ -356,7 +355,7 @@ app.use((err, req, res, next) => {
   }
 })
 
-// Start server
+// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync scheduler on listen.
 app
   .listen(PORT, () => {
     console.log(`Find Animation API server running on port ${PORT}`)

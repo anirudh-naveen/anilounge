@@ -1,9 +1,18 @@
+/**
+ * Destructive maintenance script: delete Content with TMDB voteCount under 100 or missing.
+ * Run to shrink a noisy catalog; this does not consider MAL scored-by counts.
+ * Mutates Content by deleting matching documents. Prefer a dry review of the printed list first.
+ */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
 
 dotenv.config()
 
+/**
+ * Connect using MONGODB_URI.
+ * @returns {Promise<void>}
+ */
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
@@ -14,12 +23,15 @@ const connectDB = async () => {
   }
 }
 
+/**
+ * Print then delete rows with voteCount < 100 or unset, and log remaining counts by contentType.
+ * @returns {Promise<void>}
+ */
 const cleanupLowVoteContent = async () => {
   await connectDB()
   console.log('Cleaning up low-vote content...')
 
   try {
-    // Find content with low vote counts
     const lowVoteContent = await Content.find({
       $or: [{ voteCount: { $lt: 100 } }, { voteCount: { $exists: false } }],
     }).select('title voteCount voteAverage contentType')
@@ -32,14 +44,12 @@ const cleanupLowVoteContent = async () => {
     })
 
     if (lowVoteContent.length > 0) {
-      // Delete low-vote content
       const result = await Content.deleteMany({
         $or: [{ voteCount: { $lt: 100 } }, { voteCount: { $exists: false } }],
       })
 
       console.log(`\nDeleted ${result.deletedCount} low-vote content items`)
 
-      // Show remaining counts
       const remainingCounts = await Content.aggregate([
         {
           $group: {

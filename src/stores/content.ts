@@ -1,3 +1,10 @@
+/**
+ * content.ts — Pinia content store.
+ *
+ * Owns catalog lists, client-side search, watchlist, and detail cache used by
+ * Home, Movies, TV, Search, and detail views.
+ */
+
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
@@ -23,6 +30,10 @@ export type SearchFilters = {
   sortDirection: SortDirection
 }
 
+/**
+ * Default Search view filters (all types, 1–10 rating, relevance descending).
+ * @returns A fresh filter object (not shared across callers).
+ */
 export const defaultSearchFilters = (): SearchFilters => ({
   type: 'all',
   ratingMin: 1,
@@ -35,7 +46,6 @@ export const defaultSearchFilters = (): SearchFilters => ({
 })
 
 export const useContentStore = defineStore('content', () => {
-  // Unified content arrays
   const allContent = ref<UnifiedContent[]>([])
   const movies = ref<UnifiedContent[]>([])
   const tvShows = ref<UnifiedContent[]>([])
@@ -44,7 +54,6 @@ export const useContentStore = defineStore('content', () => {
   const watchlist = ref<WatchlistItem[]>([])
   const recommendations = ref<UnifiedContent[]>([])
 
-  // State
   const isLoading = ref(false)
   const moviesLoading = ref(false)
   const tvShowsLoading = ref(false)
@@ -60,7 +69,6 @@ export const useContentStore = defineStore('content', () => {
     hasPrevPage: false,
   })
 
-  // Separate pagination for movies and TV shows
   const moviesPagination = ref({
     currentPage: 1,
     totalPages: 1,
@@ -85,10 +93,16 @@ export const useContentStore = defineStore('content', () => {
   const searchPage = ref(1)
   const catalogSize = ref(0)
 
-  // Get all content with pagination and filtering
+  /**
+   * Fetches a catalog page into the matching list and pagination refs.
+   * Movie/TV fetches leave `allContent` unchanged so mixed Home pages are not overwritten.
+   * @param page - 1-based page index.
+   * @param contentType - Which list to update (`movie`, `tv`, or `all`).
+   * @param limit - Page size.
+   * @returns The API payload (`success`, `data`, `pagination`).
+   */
   const getContent = async (page = 1, contentType?: 'movie' | 'tv' | 'all', limit = 20) => {
     try {
-      // Set appropriate loading state
       if (contentType === 'movie') {
         moviesLoading.value = true
       } else if (contentType === 'tv') {
@@ -105,13 +119,11 @@ export const useContentStore = defineStore('content', () => {
       const response = await contentAPI.getContent(params)
 
       if (response.data.success) {
-        // Only update allContent for 'all' content type to avoid conflicts
         if (contentType === 'all' || !contentType) {
           allContent.value = response.data.data
           pagination.value = response.data.pagination
         }
 
-        // Update appropriate pagination state based on content type
         if (contentType === 'movie') {
           movies.value = response.data.data
           moviesPagination.value = response.data.pagination
@@ -149,7 +161,12 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  // Get popular content
+  /**
+   * Loads popular items and merges them into `allContent` without dropping the other type.
+   * @param contentType - Which popular list to fetch (`movie`, `tv`, or `all`).
+   * @param limit - Max items.
+   * @returns The popular-content API payload.
+   */
   const getPopularContent = async (contentType?: 'movie' | 'tv' | 'all', limit = 20) => {
     try {
       isLoading.value = true
@@ -205,6 +222,7 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  // Pull the full catalog once so search can run locally instead of hitting /search.
   const ensureFullCatalog = async () => {
     if (catalogSize.value > 0 && allContent.value.length >= catalogSize.value) return
 
@@ -215,7 +233,15 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  // Search content
+  /**
+   * Filters and ranks `allContent` locally (after ensuring the catalog is loaded).
+   * Punctuation is stripped so queries like "spider man" match "Spider-Man".
+   * @param query - Free-text search string.
+   * @param contentType - Optional type filter (`movie`, `tv`, or `all`).
+   * @param page - 1-based page when `limit` is set.
+   * @param limit - Optional page size; omit to return every match.
+   * @returns `{ success, data: { content, pagination } }`.
+   */
   const searchContent = async (
     query: string,
     contentType?: 'movie' | 'tv' | 'all',
@@ -229,7 +255,6 @@ export const useContentStore = defineStore('content', () => {
 
       await ensureFullCatalog()
 
-      // Search through local database instead of API call
       let filteredResults = allContent.value
 
       if (contentType && contentType !== 'all') {
@@ -238,10 +263,8 @@ export const useContentStore = defineStore('content', () => {
         )
       }
 
-      // Enhanced search with better title and genre matching
       const searchTerm = query.toLowerCase().trim()
       if (searchTerm) {
-        // Normalize search term for better matching (remove special chars, extra spaces)
         const normalizedSearchTerm = searchTerm
           .replace(/[^\w\s]/g, ' ')
           .replace(/\s+/g, ' ')
@@ -263,14 +286,12 @@ export const useContentStore = defineStore('content', () => {
           const overview = item.overview?.toLowerCase() || ''
           const studios = (item.studios || []).join(' ').toLowerCase()
 
-          // Check if search term appears anywhere
           const directMatch =
             titles.some((title) => title.includes(searchTerm)) ||
             genres.includes(searchTerm) ||
             overview.includes(searchTerm) ||
             studios.includes(searchTerm)
 
-          // Check if all search words appear in normalized title (for "spider man" matching "Spider-Man")
           const allWordsInTitle = searchWords.every((word) =>
             normalizedTitles.some((title) => title.includes(word)),
           )
@@ -279,7 +300,6 @@ export const useContentStore = defineStore('content', () => {
         })
       }
 
-      // Enhanced sorting by relevance with multiple tiers
       if (searchTerm) {
         filteredResults.sort((a, b) => {
           const aTitles = getSearchableTitles(a).map((title) => title.toLowerCase())
@@ -293,41 +313,35 @@ export const useContentStore = defineStore('content', () => {
             .join(' ')
             .toLowerCase()
 
-          // Priority 1: Exact title match
+          // Exact title, then prefix, then substring, then genre, then unified score.
           const aExactTitle = aTitles.includes(searchTerm)
           const bExactTitle = bTitles.includes(searchTerm)
           if (aExactTitle && !bExactTitle) return -1
           if (!aExactTitle && bExactTitle) return 1
 
-          // Priority 2: Title starts with search term
           const aTitleStarts = aTitles.some((title) => title.startsWith(searchTerm))
           const bTitleStarts = bTitles.some((title) => title.startsWith(searchTerm))
           if (aTitleStarts && !bTitleStarts) return -1
           if (!aTitleStarts && bTitleStarts) return 1
 
-          // Priority 3: Title contains search term
           const aTitleContains = aTitles.some((title) => title.includes(searchTerm))
           const bTitleContains = bTitles.some((title) => title.includes(searchTerm))
           if (aTitleContains && !bTitleContains) return -1
           if (!aTitleContains && bTitleContains) return 1
 
-          // Priority 4: Genre exact match
           const aGenreMatch = aGenres.split(' ').some((genre) => genre.toLowerCase() === searchTerm)
           const bGenreMatch = bGenres.split(' ').some((genre) => genre.toLowerCase() === searchTerm)
           if (aGenreMatch && !bGenreMatch) return -1
           if (!aGenreMatch && bGenreMatch) return 1
 
-          // Priority 5: Genre contains search term
           const aGenreContains = aGenres.includes(searchTerm)
           const bGenreContains = bGenres.includes(searchTerm)
           if (aGenreContains && !bGenreContains) return -1
           if (!aGenreContains && bGenreContains) return 1
 
-          // Final: Sort by unified score
           return (b.unifiedScore || 0) - (a.unifiedScore || 0)
         })
       } else {
-        // If no search term, just sort by unified score
         filteredResults.sort((a, b) => (b.unifiedScore || 0) - (a.unifiedScore || 0))
       }
 
@@ -363,7 +377,11 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  // Get content details by ID
+  /**
+   * Loads one catalog item into `currentContent`.
+   * @param id - Mongo content id.
+   * @returns The content-by-id API payload.
+   */
   const getContentDetails = async (id: string) => {
     try {
       isLoading.value = true
@@ -385,7 +403,12 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  // Get similar content
+  /**
+   * Loads similar-title recommendations for a content id.
+   * @param id - Mongo content id.
+   * @param limit - Max recommendations (default 10).
+   * @returns The similar-content API payload.
+   */
   const getSimilarContent = async (id: string, limit = 10) => {
     try {
       const response = await contentAPI.getSimilarContent(id, limit)
@@ -402,7 +425,16 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  // Watchlist functions
+  /**
+   * Adds an item to the watchlist, then force-reloads the list.
+   * @param contentId - Mongo content id.
+   * @param status - Watch status (default `plan_to_watch`).
+   * @param rating - Optional user rating.
+   * @param currentEpisode - Optional episode progress.
+   * @param currentSeason - Optional season progress.
+   * @param notes - Optional notes.
+   * @returns `true` on success.
+   */
   const addToWatchlist = async (
     contentId: string,
     status: 'plan_to_watch' | 'watching' | 'completed' | 'dropped' = 'plan_to_watch',
@@ -422,24 +454,29 @@ export const useContentStore = defineStore('content', () => {
       })
 
       if (response.data.success) {
-        // Force refresh watchlist
         await loadWatchlist(true)
       }
 
       return true
     } catch (err: unknown) {
-      console.error('Error in addToWatchlist:', err) // Debug log
+      console.error('Error in addToWatchlist:', err)
       error.value = err instanceof Error ? err.message : 'Failed to add to watchlist'
       throw err
     }
   }
 
+  /**
+   * Patches one watchlist row in place instead of reloading the whole list.
+   * `item.content` may be a populated document or a bare id string.
+   * @param contentId - Mongo content id.
+   * @param updates - Fields to merge onto the existing item.
+   * @returns `true` on success.
+   */
   const updateWatchlistItem = async (contentId: string, updates: Partial<WatchlistItem>) => {
     try {
       const response = await watchlistAPI.updateWatchlistItem(contentId, updates)
 
       if (response.data.success) {
-        // Update the specific item in the watchlist array instead of reloading everything
         const itemIndex = watchlist.value.findIndex((item) => {
           if (typeof item.content === 'string') {
             return item.content === contentId
@@ -448,7 +485,6 @@ export const useContentStore = defineStore('content', () => {
         })
 
         if (itemIndex !== -1) {
-          // Update the specific item with the new data
           const existingItem = watchlist.value[itemIndex]
           watchlist.value[itemIndex] = { ...existingItem, ...updates } as WatchlistItem
         }
@@ -461,12 +497,16 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  /**
+   * Removes an item from the watchlist, then force-reloads the list.
+   * @param contentId - Mongo content id.
+   * @returns `true` on success.
+   */
   const removeFromWatchlist = async (contentId: string) => {
     try {
       const response = await watchlistAPI.removeFromWatchlist(contentId)
 
       if (response.data.success) {
-        // Force refresh watchlist
         await loadWatchlist(true)
       }
 
@@ -477,8 +517,11 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  /**
+   * Loads the signed-in user's watchlist. Skips the request if already loaded unless forced.
+   * @param forceReload - When true, fetch even if `watchlistLoaded` is set.
+   */
   const loadWatchlist = async (forceReload = false) => {
-    // Skip if already loaded, unless force reload is requested
     if (watchlistLoaded.value && !forceReload) {
       return
     }
@@ -496,7 +539,6 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  // Computed properties
   const isInWatchlist = computed(() => (contentId: string) => {
     return watchlist.value.some((item) => {
       if (typeof item.content === 'string') {
@@ -515,7 +557,11 @@ export const useContentStore = defineStore('content', () => {
     })
   })
 
-  // Utility functions
+  /**
+   * Flattened display fields for a catalog item (title, rating, media, source flags).
+   * @param content - Unified catalog document.
+   * @returns View-ready fields used by cards and detail pages.
+   */
   const getContentDisplayInfo = (content: UnifiedContent) => {
     return {
       id: content._id,
@@ -544,13 +590,21 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  // Scroll position management
   const savedScrollPositions = ref<Record<string, number>>({})
 
+  /**
+   * Records `window.scrollY` under a route/view key for later restore.
+   * @param key - Scroll-position bucket (usually a route name).
+   */
   const saveScrollPosition = (key: string) => {
     savedScrollPositions.value[key] = window.scrollY
   }
 
+  /**
+   * Restores a previously saved scroll offset.
+   * @param key - Scroll-position bucket.
+   * @returns True if a saved position existed and was applied.
+   */
   const restoreScrollPosition = (key: string) => {
     const savedPosition = savedScrollPositions.value[key]
     if (savedPosition !== undefined) {
@@ -572,7 +626,6 @@ export const useContentStore = defineStore('content', () => {
     window.scrollTo(0, 0)
   }
 
-  // Clear functions
   const clearSearchResults = () => {
     searchResults.value = []
     lastSearchQuery.value = ''
@@ -583,6 +636,11 @@ export const useContentStore = defineStore('content', () => {
 
   const contentDetailsCache = new Map<string, UnifiedContent>()
 
+  /**
+   * Stores an item in the detail cache, optionally promoting it to `currentContent`.
+   * @param item - Catalog document to cache.
+   * @param setAsCurrent - When true, also set `currentContent`.
+   */
   const cacheContent = (item?: UnifiedContent | null, setAsCurrent = false) => {
     if (item?._id) {
       contentDetailsCache.set(item._id, item)
@@ -592,6 +650,11 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  /**
+   * Looks up a catalog item by id in current, cache, then list refs.
+   * @param id - Mongo content id.
+   * @returns The first matching document, or `undefined`.
+   */
   const findContentById = (id: string): UnifiedContent | undefined => {
     if (currentContent.value?._id === id) return currentContent.value
     return (
@@ -625,7 +688,6 @@ export const useContentStore = defineStore('content', () => {
   }
 
   return {
-    // State
     allContent,
     movies,
     tvShows,
@@ -646,7 +708,6 @@ export const useContentStore = defineStore('content', () => {
     searchAppliedFilters,
     searchPage,
 
-    // Actions
     getContent,
     getPopularContent,
     searchContent,
@@ -657,23 +718,19 @@ export const useContentStore = defineStore('content', () => {
     removeFromWatchlist,
     loadWatchlist,
 
-    // Computed
     isInWatchlist,
     getWatchlistItem,
 
-    // Utilities
     getContentDisplayInfo,
     findContentById,
     cacheContent,
 
-    // Scroll position management
     saveScrollPosition,
     restoreScrollPosition,
     clearScrollPosition,
     clearAllScrollPositions,
     scrollToTop,
 
-    // Clear functions
     clearSearchResults,
     clearCurrentContent,
     clearAll,

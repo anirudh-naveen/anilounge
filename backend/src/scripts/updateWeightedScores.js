@@ -1,3 +1,8 @@
+/**
+ * One-off maintenance script: recompute Content.unifiedScore from stored source ratings.
+ * Run after changing calculateUnifiedScore or when TMDB/MAL/user vote fields were backfilled.
+ * Mutates only unifiedScore; does not refetch APIs.
+ */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
@@ -5,6 +10,10 @@ import { calculateUnifiedScore } from '../utils/ratings.js'
 
 dotenv.config()
 
+/**
+ * Connect using MONGODB_URI.
+ * @returns {Promise<void>}
+ */
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
@@ -15,6 +24,10 @@ const connectDB = async () => {
   }
 }
 
+/**
+ * Persist a new unifiedScore when the vote-weighted value differs from the stored one.
+ * @returns {Promise<void>}
+ */
 const updateWeightedScores = async () => {
   try {
     console.log('Updating weighted scores for existing content...')
@@ -46,6 +59,10 @@ const updateWeightedScores = async () => {
   }
 }
 
+/**
+ * Connect, recompute scores, disconnect.
+ * @returns {Promise<void>}
+ */
 const main = async () => {
   try {
     await connectDB()
