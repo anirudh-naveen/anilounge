@@ -15,6 +15,10 @@
 12. Create a "Stats"" page for watched content (tab under watchlist)
     - Call the original watchlist page "List"
     - Additionally change watchlist so that the filter between the types of "watched" is a dropdown clicker next to the sort instead of individual tabs.
+13. Add option to delete account
+    - Deny this option for the demo account
+14. Add email verification pipeline
+15. Create CI/CD test blockers before PRs
 
 ---
 

@@ -10,6 +10,8 @@ import { ref, computed } from 'vue'
 import { authAPI } from '@/services/api'
 import type { User, LoginCredentials, RegisterData, UpdateProfileData } from '@/types'
 
+const DEMO_USER_EMAIL = 'demo@findanimation.com'
+
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const token = ref<string | null>(localStorage.getItem('token'))
@@ -17,6 +19,11 @@ export const useAuthStore = defineStore('auth', () => {
   const error = ref<string | null>(null)
 
   const isAuthenticated = computed(() => !!token.value)
+  /** True for the shared recruiter demo account, which cannot change its password. */
+  const isDemoUser = computed(
+    () =>
+      Boolean(user.value?.isDemoAccount) || user.value?.email?.toLowerCase() === DEMO_USER_EMAIL,
+  )
 
   /**
    * Signs in and stores the user plus access token in memory and localStorage.
@@ -134,11 +141,16 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * Changes the signed-in user's password.
+   * Changes the signed-in user's password. Rejected for the shared demo account.
    * @param data - Current and new password.
    * @returns The change-password API payload.
    */
   const changePassword = async (data: { currentPassword: string; newPassword: string }) => {
+    if (isDemoUser.value) {
+      error.value = 'Password cannot be changed for the demo account.'
+      throw new Error(error.value)
+    }
+
     try {
       isLoading.value = true
       error.value = null
@@ -203,6 +215,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading,
     error,
     isAuthenticated,
+    isDemoUser,
     login,
     register,
     logout,
