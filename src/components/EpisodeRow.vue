@@ -181,7 +181,7 @@ const handleImageError = (event: Event) => {
 .episode-row h2 {
   font-size: 1.5rem;
   margin-bottom: 1rem;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .episode-loading {
@@ -326,7 +326,7 @@ const handleImageError = (event: Event) => {
   padding: 0.55rem 0.65rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -343,20 +343,20 @@ const handleImageError = (event: Event) => {
 .expanded-header h3 {
   margin: 0 0 0.35rem;
   font-size: 1.15rem;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .expanded-meta {
   margin: 0 0 0.75rem;
   font-size: 0.9rem;
-  color: #ffd4a3;
+  color: var(--text-muted);
 }
 
 .expanded-overview {
   margin: 0;
   font-size: 1rem;
   line-height: 1.6;
-  color: #ffd4a3;
+  color: var(--text-secondary);
 }
 
 .expanded-cast {
@@ -366,7 +366,7 @@ const handleImageError = (event: Event) => {
 .expanded-cast h4 {
   margin: 0 0 0.75rem;
   font-size: 1rem;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .cast-list {
@@ -402,11 +402,11 @@ const handleImageError = (event: Event) => {
 
 .cast-name {
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .cast-character {
-  color: #ffd4a3;
+  color: var(--text-muted);
 }
 
 @media (max-width: 768px) {

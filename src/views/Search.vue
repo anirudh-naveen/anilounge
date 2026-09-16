@@ -10,8 +10,8 @@
     <div class="container">
       <!-- Page Header -->
       <div class="search-header">
-        <h1 class="search-title">Search Animated Content</h1>
-        <p class="search-subtitle">Find your next favorite animated movie or TV show</p>
+        <h1 class="search-title">Search the Catalog</h1>
+        <p class="search-subtitle">Find animated films and series to add to your AniScribe</p>
       </div>
 
       <!-- Search -->
@@ -22,7 +22,7 @@
               v-model="searchQuery"
               type="text"
               class="search-input"
-              placeholder="Search for movies or TV shows..."
+              placeholder="Search for movies or series..."
               @keydown.enter="handleSearch"
               :disabled="isAIMode"
               required
@@ -58,7 +58,7 @@
             <select v-model="filters.type">
               <option value="all">All</option>
               <option value="movie">Movies</option>
-              <option value="tv">TV Shows</option>
+              <option value="tv">Series</option>
             </select>
           </div>
           <div class="filter-group">
@@ -244,7 +244,7 @@
       <div v-else class="initial-state">
         <div class="initial-icon">🎬</div>
         <h3>Start your search</h3>
-        <p>Enter a movie or TV show title to get started.</p>
+        <p>Enter a movie or series title to get started.</p>
       </div>
 
       <!-- Title: AI Chat -->
@@ -521,7 +521,7 @@ onMounted(() => {
 <style scoped>
 .search-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  background: transparent;
   padding: 2rem 0;
 }
 
@@ -534,13 +534,15 @@ onMounted(() => {
 .search-header {
   text-align: center;
   margin-bottom: 3rem;
-  color: white;
+  color: var(--text-primary);
 }
 
 .search-title {
+  font-family: var(--font-display);
   font-size: 3rem;
-  font-weight: 700;
+  font-weight: 650;
   margin-bottom: 1rem;
+  letter-spacing: -0.03em;
 }
 
 .search-subtitle {
@@ -575,7 +577,7 @@ onMounted(() => {
 .search-input:focus {
   outline: none;
   background: white;
-  box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.3);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.35);
 }
 
 .search-btn,
@@ -592,15 +594,15 @@ onMounted(() => {
 }
 
 .search-btn {
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
-  color: white;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-ink);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.25);
 }
 
 .ai-btn {
-  background: var(--navbar-accent);
-  color: white;
-  border: 1px solid var(--navbar-primary);
+  background: var(--teal-primary);
+  color: var(--text-on-accent);
+  border: 1px solid transparent;
 }
 
 .search-btn:hover,
@@ -630,7 +632,7 @@ onMounted(() => {
 }
 
 .filters-header h3 {
-  color: white;
+  color: var(--text-primary);
   font-size: 1.2rem;
   font-weight: 600;
   margin: 0;
@@ -641,7 +643,8 @@ onMounted(() => {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem 1rem;
   align-items: start;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   padding: 1.5rem;
   border-radius: 12px;
   backdrop-filter: blur(10px);
@@ -663,7 +666,7 @@ onMounted(() => {
 }
 
 .filter-group label {
-  color: white;
+  color: var(--text-secondary);
   font-weight: 500;
   font-size: 0.85rem;
 }
@@ -681,7 +684,7 @@ onMounted(() => {
 .filter-group select:focus {
   outline: none;
   background: white;
-  box-shadow: 0 0 0 2px var(--teal-primary);
+  box-shadow: 0 0 0 2px var(--coral-primary);
 }
 
 .rating-slider {
@@ -697,7 +700,7 @@ onMounted(() => {
   right: 0;
   height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(201, 163, 107, 0.35);
 }
 
 .rating-slider-range {
@@ -705,7 +708,7 @@ onMounted(() => {
   top: 0;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  background: linear-gradient(90deg, var(--coral-light), var(--coral-primary));
 }
 
 .rating-slider input[type='range'] {
@@ -755,7 +758,7 @@ onMounted(() => {
 .rating-slider-scale {
   display: flex;
   justify-content: space-between;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--text-muted);
   font-size: 0.7rem;
   font-weight: 600;
   padding: 0 1px;
@@ -791,7 +794,7 @@ onMounted(() => {
 .results-header {
   text-align: center;
   margin-bottom: 2rem;
-  color: white;
+  color: var(--text-primary);
 }
 
 .results-header h2 {
@@ -808,18 +811,20 @@ onMounted(() => {
 
 .result-card {
   position: relative;
-  background: white;
-  border-radius: 8px;
+  background: var(--bg-parchment);
+  border-radius: 14px;
   overflow: visible;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
   transition: all 0.3s ease;
   cursor: pointer;
   z-index: 1;
+  border: 1px solid rgba(232, 213, 181, 0.28);
 }
 
 .result-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
+  border-color: var(--coral-primary);
   z-index: 20;
 }
 
@@ -854,7 +859,7 @@ onMounted(() => {
   font-size: 0.85rem;
   font-weight: 600;
   margin-bottom: 0.35rem;
-  color: #333;
+  color: var(--text-ink);
   line-height: 1.25;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -886,12 +891,12 @@ onMounted(() => {
 }
 
 .genre-tag {
-  background: #f0f0f0;
-  color: #666;
+  background: rgba(224, 122, 95, 0.16);
+  color: var(--coral-deep);
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: 999px;
   font-size: 0.65rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .genre-tag:nth-child(n + 2) {
@@ -920,14 +925,14 @@ onMounted(() => {
 .initial-state {
   text-align: center;
   padding: 4rem 0;
-  color: white;
+  color: var(--text-primary);
 }
 
 .spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid #4ecdc4;
+  border: 2px solid var(--border-color);
+  border-top: 2px solid var(--coral-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -960,15 +965,15 @@ onMounted(() => {
 }
 
 .btn-primary {
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
-  color: white;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-ink);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.25);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--bg-parchment);
+  color: var(--coral-deep);
+  border: 1px solid var(--border-color);
 }
 
 .btn:hover {
@@ -991,7 +996,7 @@ onMounted(() => {
 }
 
 .pagination-info {
-  color: white;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 

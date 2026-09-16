@@ -171,7 +171,7 @@ Respond as simple comma-separated terms: term1, term2, term3`
         }
       }
 
-      const prompt = `You are an AI assistant for an animated content discovery app. Help users find anime, movies, and TV shows.
+      const prompt = `You are an AI assistant for an animated content discovery app. Help users find anime, movies, and series.
 
 User message: "${userMessage}"
 
@@ -220,7 +220,7 @@ Respond in 1-2 sentences max.`
    */
   async generateRecommendations(userPreferences, availableContent) {
     try {
-      const prompt = `You are an AI assistant that recommends animated movies and TV shows.
+      const prompt = `You are an AI assistant that recommends animated movies and series.
 
 User preferences: ${JSON.stringify(userPreferences)}
 

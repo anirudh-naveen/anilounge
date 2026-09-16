@@ -3,7 +3,7 @@
   Watchlist.vue — authenticated watchlist view.
 
   Status tabs and sort toolbar over a compact expandable list of tracked
-  movies and TV shows. Progress, rating, and status are editable per row.
+  movies and series. Progress, rating, and status are editable per row.
 -->
 <template>
   <div class="watchlist-page">
@@ -290,7 +290,7 @@
       <div v-else class="empty-state">
         <div class="empty-icon">Watchlist</div>
         <h3>No items in your watchlist</h3>
-        <p>Start adding movies and TV shows to track your progress!</p>
+        <p>Start adding movies and series to track your progress!</p>
         <router-link to="/movies" class="btn btn-primary">Browse Movies</router-link>
       </div>
     </div>
@@ -760,10 +760,12 @@ onUnmounted(() => {
 }
 
 .page-title {
+  font-family: var(--font-display);
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 650;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
 }
 
 .page-subtitle {
@@ -780,25 +782,27 @@ onUnmounted(() => {
 }
 
 .tab-btn {
-  padding: 0.75rem 1.5rem;
+  padding: 0.7rem 1.35rem;
   border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border-radius: 8px;
+  background: var(--bg-parchment);
+  color: var(--text-secondary);
+  border-radius: 999px;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-weight: 500;
+  font-weight: 600;
+  font-family: inherit;
 }
 
 .tab-btn:hover {
-  background: var(--bg-hover);
+  background: var(--navbar-accent);
+  color: var(--text-primary);
   border-color: var(--border-hover);
 }
 
 .tab-btn.active {
-  background: var(--highlight-color);
-  color: white;
-  border-color: var(--highlight-color);
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-ink);
+  border-color: transparent;
 }
 
 .watchlist-toolbar {
@@ -1212,8 +1216,8 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 0.9rem;
-  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
-  color: white;
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-ink);
 }
 
 .save-watch-btn:hover {

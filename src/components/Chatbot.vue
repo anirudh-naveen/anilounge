@@ -150,7 +150,7 @@ onMounted(() => {
   const welcomeMessage: Message = {
     id: 'welcome',
     type: 'bot',
-    text: 'Hi! I\'m your AI assistant for finding animated content. I can help you discover anime, movies, and TV shows from our database. Try asking me things like "Find me some action anime" or "What are the best Studio Ghibli movies?" and I\'ll search our database to show you specific recommendations!',
+    text: 'Hi! I\'m your AI assistant for finding animated content. I can help you discover anime, movies, and series from our database. Try asking me things like "Find me some action anime" or "What are the best Studio Ghibli movies?" and I\'ll search our database to show you specific recommendations!',
     timestamp: new Date(),
   }
   messages.value.push(welcomeMessage)
@@ -338,7 +338,7 @@ onMounted(() => {
 }
 
 .chatbot-input button:hover:not(:disabled) {
-  background: var(--purple-accent);
+  background: var(--coral-deep);
 }
 
 .chatbot-input button:disabled {

@@ -2,7 +2,7 @@
 <!--
   Home.vue — catalog landing view.
 
-  Renders the marketing hero and a trending grid of movies/TV shows from the
+  Renders the marketing hero and a trending grid of movies and series from the
   content store. No search or filter chrome; discovery only.
 -->
 <template>
@@ -14,11 +14,11 @@
           <!-- Title: Headline -->
           <h1 class="hero-title">
             Discover
-            <span class="gradient-text">Animated Content</span>
+            <span class="gradient-text">Animated Worlds</span>
           </h1>
           <p class="hero-subtitle">
-            Find your next favorite animated movie or TV show. Rate, track, and get personalized
-            recommendations.
+            AniScribe is your studio notebook for animation — find films and series, rate them,
+            and keep a living watchlist.
           </p>
           <!-- Title: Primary CTA -->
           <div class="hero-actions">
@@ -196,7 +196,7 @@ onMounted(async () => {
       contentStore.scrollToTop()
     }
 
-    // Load popular content (which includes both movies and TV shows)
+    // Load popular content (which includes both movies and series)
     await contentStore.getPopularContent('all', 20)
 
     // Load watchlist if user is authenticated (now optimized to skip if already loaded)
@@ -218,8 +218,8 @@ onMounted(async () => {
 .hero {
   padding: 120px 0 80px;
   text-align: center;
-  color: white;
-  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: var(--text-primary);
+  background: transparent;
 }
 
 .hero-content {
@@ -228,14 +228,16 @@ onMounted(async () => {
 }
 
 .hero-title {
+  font-family: var(--font-display);
   font-size: 3.5rem;
-  font-weight: 700;
+  font-weight: 650;
   margin-bottom: 1.5rem;
-  line-height: 1.2;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
 }
 
 .gradient-text {
-  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
+  background: linear-gradient(90deg, var(--coral-light), var(--tan-primary), var(--teal-primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -264,9 +266,9 @@ onMounted(async () => {
 }
 
 .btn-primary {
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
-  color: white;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-ink);
+  box-shadow: 0 8px 20px rgba(224, 122, 95, 0.28);
 }
 
 .btn-large {
@@ -281,7 +283,7 @@ onMounted(async () => {
 
 .featured-section {
   padding: 80px 0;
-  background: linear-gradient(135deg, var(--navbar-primary) 0%, var(--navbar-secondary) 100%);
+  background: transparent;
   position: relative;
 }
 
@@ -292,7 +294,7 @@ onMounted(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(45deg, rgba(45, 27, 105, 0.8), rgba(26, 11, 61, 0.9));
+  background: radial-gradient(ellipse at top, rgba(224, 122, 95, 0.1), transparent 62%);
   z-index: 1;
 }
 
@@ -308,11 +310,13 @@ onMounted(async () => {
 }
 
 .section-title {
+  font-family: var(--font-display);
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 650;
   text-align: center;
   margin-bottom: 3rem;
   color: var(--text-primary);
+  letter-spacing: -0.03em;
 }
 
 .content-grid {
@@ -324,19 +328,19 @@ onMounted(async () => {
 
 .content-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
+  background: var(--bg-parchment);
+  border-radius: 16px;
   overflow: visible;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(232, 213, 181, 0.35);
   z-index: 1;
 }
 
 .content-card:hover {
   transform: translateY(-8px);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-lg);
   border-color: var(--coral-primary);
   z-index: 20;
 }
@@ -372,7 +376,7 @@ onMounted(async () => {
   font-size: 1.25rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: #333;
+  color: var(--text-ink);
   line-height: 1.3;
 }
 
@@ -390,12 +394,12 @@ onMounted(async () => {
 }
 
 .genre-tag {
-  background: var(--coral-light);
-  color: white;
+  background: rgba(224, 122, 95, 0.18);
+  color: var(--coral-deep);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 999px;
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .loading-container {
@@ -411,8 +415,8 @@ onMounted(async () => {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top: 4px solid var(--teal-primary);
+  border: 4px solid var(--border-color);
+  border-top: 4px solid var(--coral-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 1rem;

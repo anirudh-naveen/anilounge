@@ -429,12 +429,13 @@ onBeforeUnmount(() => {
   font-weight: 600;
   font-size: 0.8rem;
   cursor: pointer;
-  color: white;
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  color: var(--text-ink);
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
 }
 
 .hover-watchlist-btn.added {
-  background: #4ecdc4;
+  background: var(--teal-primary);
+  color: var(--text-ink);
   cursor: default;
 }
 

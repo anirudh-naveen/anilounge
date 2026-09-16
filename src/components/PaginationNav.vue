@@ -92,15 +92,15 @@ const goTo = (page: number) => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .pagination-page {
   padding: 0 0.4rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--bg-parchment);
+  border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.3s ease;
 }
@@ -111,7 +111,8 @@ const goTo = (page: number) => {
 }
 
 .pagination-page.active {
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-ink);
   border-color: transparent;
   cursor: default;
   transform: none;
@@ -134,9 +135,9 @@ const goTo = (page: number) => {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--bg-parchment);
+  color: var(--coral-deep);
+  border: 1px solid var(--border-color);
 }
 
 .btn:hover:not(:disabled) {
