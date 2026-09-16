@@ -13,6 +13,7 @@
    - Place it under Overview
 5. Include a currently airing tag and timer for new episode updates for airing shows. ✅
 6. Have the TV Shows Page have tabs for "Popular Right Now", "Currently Airing", and Upcoming Highlights ✅
+   - Movies page tabs: Popular Right Now, Now in Theatres, and Upcoming Highlights ✅
 7. Add voice actors as a type of content.
    - They will not have their own tab but will have their own screen and can be clicked and will be searchable and favoritable for the profile.
    - Additionally if the API has pictures for them, include them.

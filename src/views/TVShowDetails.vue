@@ -316,7 +316,12 @@ import type { Episode, UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airing'
-import { isTvCatalogPath, tvCatalogLocationFromUrl } from '@/utils/catalogTabs'
+import {
+  isMovieCatalogPath,
+  isTvCatalogPath,
+  movieCatalogLocationFromUrl,
+  tvCatalogLocationFromUrl,
+} from '@/utils/catalogTabs'
 
 const route = useRoute()
 const router = useRouter()
@@ -401,13 +406,11 @@ const goBack = () => {
     const url = new URL(previousPage, window.location.origin)
     const pathname = url.pathname
 
-    if (pathname === '/movies') {
-      // Coming from movies page - handle pagination
-      const page = url.searchParams.get('page') || '1'
-      const scrollKey = `movies-page-${page}`
-      const restored = contentStore.restoreScrollPosition(scrollKey)
+    if (isMovieCatalogPath(pathname)) {
+      const location = movieCatalogLocationFromUrl(url)
+      const restored = contentStore.restoreScrollPosition(location.scrollKey)
 
-      router.push({ path: '/movies', query: { page } })
+      router.push({ path: location.path, query: location.query })
 
       if (!restored) {
         nextTick(() => {
