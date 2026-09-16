@@ -17,6 +17,11 @@
   --teal-primary: #80e6b3; /* Teal/green */
   --teal-light: #99e6b3; /* Light teal */
   --blend-color: #b3999a; /* Blend between coral and teal */
+  --upcoming-color: #e8a317; /* Sunflower yellow/orange */
+  --upcoming-light: #f0c14d; /* Light sunflower */
+  --movie-badge: #d94a4a; /* Cinema red / red carpet */
+  --tv-badge: #3d8bd9; /* Broadcast / CRT screen blue */
+  --special-badge: #9b6ad9; /* Event / premium purple */
 
   /* Text Colors */
   --text-primary: #ffffff; /* Pure white */
@@ -256,6 +261,47 @@ html {
     padding: 0.5rem 1rem;
     font-size: 0.9rem;
   }
+}
+
+/* Matching poster overlay tags: status top-left, type top-right */
+.poster-corner-tag {
+  position: absolute;
+  top: 4px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 1.125rem;
+  padding: 0 5px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 0.55rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.poster-corner-tag-left {
+  left: 4px;
+}
+
+.poster-corner-tag-right {
+  right: 4px;
+}
+
+.movie-badge {
+  background: var(--movie-badge);
+}
+
+.tv-badge {
+  background: var(--tv-badge);
+}
+
+.special-badge {
+  background: var(--special-badge);
 }
 
 /* Grid Layout */

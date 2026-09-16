@@ -63,6 +63,7 @@ export interface User {
   id: string
   username: string
   email: string
+  isDemoAccount?: boolean
   profilePicture?: string
   createdAt?: string
   preferences?: {
@@ -195,4 +196,6 @@ export interface RateContentData {
 export interface ContentParams {
   page?: number
   limit?: number
+  type?: string
+  tab?: string
 }

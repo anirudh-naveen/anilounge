@@ -2,7 +2,8 @@
   Settings.vue — account settings view.
 
   Edit username, email, profile picture, favorite genres/studios, and
-  password. Profile-picture crop happens in a modal overlay.
+  password. The shared demo account cannot change its password.
+  Profile-picture crop happens in a modal overlay.
 -->
 <template>
   <div class="settings-page">
@@ -187,9 +188,10 @@
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Change Password</h3>
-                <p>Update your account password</p>
+                <p v-if="authStore.isDemoUser">Disabled for the demo account</p>
+                <p v-else>Update your account password</p>
               </div>
-              <div class="setting-control">
+              <div v-if="!authStore.isDemoUser" class="setting-control">
                 <div class="password-form">
                   <input
                     v-model="currentPassword"
@@ -217,6 +219,9 @@
                     Change Password
                   </button>
                 </div>
+              </div>
+              <div v-else class="setting-control">
+                <p class="demo-restriction">The shared demo account cannot change its password.</p>
               </div>
             </div>
           </div>
@@ -376,6 +381,7 @@ const hasStudioChanges = computed(() => {
 
 const canChangePassword = computed(() => {
   return (
+    !authStore.isDemoUser &&
     currentPassword.value &&
     newPassword.value &&
     confirmPassword.value &&
@@ -455,6 +461,11 @@ const updateStudios = async () => {
 }
 
 const changePassword = async () => {
+  if (authStore.isDemoUser) {
+    toast.error('Password cannot be changed for the demo account')
+    return
+  }
+
   try {
     await authStore.changePassword({
       currentPassword: currentPassword.value,
@@ -840,6 +851,13 @@ onMounted(() => {
 .password-form {
   display: grid;
   gap: 1rem;
+}
+
+.demo-restriction {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 0.75rem 0;
 }
 
 @media (max-width: 768px) {

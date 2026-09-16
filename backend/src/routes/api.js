@@ -64,12 +64,13 @@ router.post(
 router.post('/auth/refresh', refreshAccessToken)
 router.post('/auth/revoke', revokeRefreshToken)
 
-/** Catalog reads: list, search, stats, and relationship lookups. */
+/** Catalog reads: list, search, stats, episodes, and relationship lookups. */
 router.get('/content', contentController.getContent)
 router.get('/popular', contentController.getPopularContent)
 router.get('/search', contentController.searchContent)
 router.get('/stats', contentController.getDatabaseStats)
 router.get('/content/:id', validateObjectId, contentController.getContentById)
+router.get('/content/:id/episodes', validateObjectId, contentController.getContentEpisodes)
 router.get('/content/external/:id', contentController.getContentByExternalId)
 router.get('/content/:id/similar', validateObjectId, contentController.getSimilarContent)
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
