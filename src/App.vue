@@ -192,6 +192,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import BetaFeedback from '@/components/BetaFeedback.vue'
 import BetaBanner from '@/components/BetaBanner.vue'
+import { API_HOST } from '@/services/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -222,7 +223,7 @@ const getProfilePictureUrl = (profilePicture: string) => {
   if (profilePicture.startsWith('http')) {
     return profilePicture
   }
-  return `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}${profilePicture}`
+  return `${API_HOST}${profilePicture}`
 }
 
 const handleClickOutside = (event: Event) => {
