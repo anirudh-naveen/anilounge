@@ -2,7 +2,8 @@
   TVShowDetails.vue — TV show detail view.
 
   Loads one series by route id and shows poster, titles, season/episode meta,
-  watchlist actions, overview, studios, and related sequels/prequels.
+  watchlist actions, overview, an expandable episode row, studios, and related
+  sequels/prequels.
 -->
 <template>
   <div class="tv-details">
@@ -133,6 +134,9 @@
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Episodes -->
+      <EpisodeRow :episodes="episodes" :loading="episodesLoading" />
+
       <!-- Title: Studios -->
       <div v-if="show.studios?.length" class="network-info">
         <h3>Studios</h3>
@@ -149,16 +153,6 @@
         <div class="companies">
           <span v-for="company in show.productionCompanies" :key="company" class="company-tag">
             {{ company }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Title: Alternative Titles -->
-      <div v-if="getAlternativeTitles(show).length" class="alternative-titles">
-        <h3>Alternative Titles</h3>
-        <div class="titles">
-          <span v-for="title in getAlternativeTitles(show)" :key="title" class="title-tag">
-            {{ title }}
           </span>
         </div>
       </div>
@@ -317,9 +311,10 @@ import {
 } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
-import type { UnifiedContent } from '@/types/content'
+import EpisodeRow from '@/components/EpisodeRow.vue'
+import type { Episode, UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
-import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { formatAiringStatus, isCurrentlyAiring } from '@/utils/airing'
 
 const route = useRoute()
@@ -337,8 +332,11 @@ const relatedContent = ref<{
   related: UnifiedContent[]
 } | null>(null)
 const relatedContentLoading = ref(false)
+const episodes = ref<Episode[]>([])
+const episodesLoading = ref(false)
 let detailsRequestId = 0
 let relatedRequestId = 0
+let episodesRequestId = 0
 
 const isInWatchlist = computed(() => {
   if (!show.value || !authStore.user?.watchlist) return false
@@ -364,9 +362,11 @@ const loadShow = async (showId: string) => {
   error.value = ''
   relatedContent.value = null
   relatedContentLoading.value = false
+  episodes.value = []
   contentStore.scrollToTop()
 
   const cached = contentStore.findContentById(showId)
+  fetchEpisodes(showId)
   if (cached) {
     show.value = cached
     loading.value = false
@@ -504,6 +504,24 @@ const formatDate = (date: string | Date) => {
     month: 'long',
     day: 'numeric',
   })
+}
+
+const fetchEpisodes = async (contentId: string) => {
+  const requestId = ++episodesRequestId
+  episodesLoading.value = true
+  try {
+    const response = await contentAPI.getContentEpisodes(contentId)
+    if (requestId !== episodesRequestId) return
+    episodes.value = (response.data as { data: { episodes: Episode[] } }).data.episodes || []
+  } catch (err) {
+    if (requestId !== episodesRequestId) return
+    console.error('Failed to fetch episodes:', err)
+    episodes.value = []
+  } finally {
+    if (requestId === episodesRequestId) {
+      episodesLoading.value = false
+    }
+  }
 }
 
 const fetchRelatedContent = async (contentId: string) => {
@@ -797,15 +815,13 @@ const handleImageError = (event: Event) => {
 
 .network-info,
 .production-info,
-.creator-info,
-.alternative-titles {
+.creator-info {
   margin-bottom: 2rem;
 }
 
 .network-info h3,
 .production-info h3,
-.creator-info h3,
-.alternative-titles h3 {
+.creator-info h3 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
@@ -814,8 +830,7 @@ const handleImageError = (event: Event) => {
 .networks,
 .companies,
 .countries,
-.creators,
-.titles {
+.creators {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -824,8 +839,7 @@ const handleImageError = (event: Event) => {
 .network-tag,
 .company-tag,
 .country-tag,
-.creator-tag,
-.title-tag {
+.creator-tag {
   background: var(--bg-card);
   color: var(--text-primary);
   padding: 0.25rem 0.75rem;
@@ -1034,8 +1048,7 @@ const handleImageError = (event: Event) => {
 .company-tag,
 .network-tag,
 .country-tag,
-.creator-tag,
-.title-tag {
+.creator-tag {
   color: #ffffff !important; /* White text */
 }
 </style>

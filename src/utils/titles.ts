@@ -2,7 +2,8 @@
  * titles.ts — title-resolution helpers.
  *
  * Picks English vs native display names, builds searchable title lists, and
- * filters alternative titles used by catalog cards and detail views.
+ * filters leftover alternative titles. Detail views show English + native only;
+ * alternatives stay searchable.
  */
 
 export interface TitledContent {
@@ -76,8 +77,9 @@ export function getSearchableTitles(content?: TitledContent | null) {
 
 /**
  * Alternate titles that are not already the display, English, native, or original name.
+ * Kept for search; detail pages do not render this list.
  * @param content - Title fields from a catalog item (or null).
- * @returns Remaining alternative titles for detail views.
+ * @returns Remaining alternative titles, excluding the on-screen English/native names.
  */
 export function getAlternativeTitles(content?: TitledContent | null) {
   if (!content) return []

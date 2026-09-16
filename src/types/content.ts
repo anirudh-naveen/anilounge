@@ -58,6 +58,28 @@ export interface UnifiedContent {
   }
 }
 
+/** Voice/acting credit on a single TV episode. */
+export interface EpisodeCastMember {
+  name: string
+  character: string
+  profilePath: string
+}
+
+/**
+ * Episode card shown on a TV details page (not a standalone catalog type).
+ * Expanded in place; there is no episode route.
+ */
+export interface Episode {
+  seasonNumber: number
+  episodeNumber: number
+  title: string
+  overview: string
+  stillPath: string
+  airDate?: string | null
+  runtime?: number | null
+  cast: EpisodeCastMember[]
+}
+
 export interface UnifiedContentWithScore extends UnifiedContent {
   unifiedScore: number
 }

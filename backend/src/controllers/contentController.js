@@ -158,6 +158,42 @@ export const getContentById = async (req, res) => {
 }
 
 /**
+ * Episode cards for a TV catalog title (title, description, still, cast).
+ * Movies and specials return an empty list. Episodes are not separate pages.
+ *
+ * @param {import('express').Request} req - Reads `params.id`.
+ * @param {import('express').Response} res - 200 `{ data: { episodes } }`, 404 if missing, or 500.
+ * @returns {Promise<void>}
+ */
+export const getContentEpisodes = async (req, res) => {
+  try {
+    const { id } = req.params
+    const content = await Content.findById(id)
+
+    if (!content) {
+      return res.status(404).json({
+        success: false,
+        message: 'Content not found',
+      })
+    }
+
+    const episodes =
+      content.contentType === 'tv' ? await unifiedContentService.getTvShowEpisodes(content) : []
+
+    res.json({
+      success: true,
+      data: { episodes },
+    })
+  } catch (error) {
+    console.error('Error fetching content episodes:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching episodes',
+    })
+  }
+}
+
+/**
  * Fetch one catalog document by TMDB or MAL numeric id.
  *
  * @param {import('express').Request} req - Reads `params.id` and optional `query.source` (`tmdb`|`mal`).
@@ -1142,6 +1178,7 @@ export const getFranchiseContent = async (req, res) => {
 export default {
   getContent,
   getContentById,
+  getContentEpisodes,
   getContentByExternalId,
   searchContent,
   getPopularContent,
