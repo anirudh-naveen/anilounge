@@ -63,6 +63,7 @@ export interface User {
   id: string
   username: string
   email: string
+  isDemoAccount?: boolean
   profilePicture?: string
   createdAt?: string
   preferences?: {

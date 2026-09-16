@@ -6,6 +6,9 @@
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 
+/** Shared recruiter demo account. Password changes are blocked for this email. */
+export const DEMO_USER_EMAIL = 'demo@findanimation.com'
+
 const userSchema = new mongoose.Schema(
   {
     // Identity
@@ -42,6 +45,10 @@ const userSchema = new mongoose.Schema(
     profilePicture: {
       type: String,
       default: null,
+    },
+    isDemoAccount: {
+      type: Boolean,
+      default: false,
     },
 
     // Security (lockout after failed logins)
@@ -158,12 +165,23 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 }
 
 /**
- * Serialize without the password hash.
+ * Whether this is the shared recruiter demo account (password changes are blocked).
+ * Matches the stored flag or the canonical demo email so existing accounts still count.
+ * @returns {boolean}
+ */
+userSchema.methods.isDemo = function () {
+  return this.isDemoAccount === true || this.email === DEMO_USER_EMAIL
+}
+
+/**
+ * Serialize without the password hash. `isDemoAccount` is derived so clients
+ * can hide password changes even when the stored flag was never backfilled.
  * @returns {object}
  */
 userSchema.methods.toJSON = function () {
   const userObject = this.toObject()
   delete userObject.password
+  userObject.isDemoAccount = this.isDemo()
   return userObject
 }
 
