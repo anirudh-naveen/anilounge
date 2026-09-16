@@ -85,7 +85,7 @@ const toggleDirection = () => {
 }
 
 .sort-label {
-  color: white;
+  color: var(--text-secondary);
   font-weight: 500;
   font-size: 0.85rem;
 }

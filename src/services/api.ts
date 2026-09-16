@@ -252,12 +252,12 @@ export const formatGenres = (genres: Array<{ id?: number; name?: string }> | str
 /**
  * Human-readable content-type label, including `"Special"` for MAL specials.
  * @param contentType - `movie`, `tv`, or `special`.
- * @returns `"Movie"`, `"TV Show"`, or `"Special"`.
+ * @returns `"Movie"`, `"Series"`, or `"Special"`.
  */
 export const getContentTypeDisplay = (contentType: string) => {
   if (contentType === 'special') return 'Special'
   if (contentType === 'movie') return 'Movie'
-  return 'TV Show'
+  return 'Series'
 }
 
 /**
@@ -271,7 +271,7 @@ export const isMovieLike = (contentType?: string) =>
 /**
  * Card badge label. Specials keep their own tag even though they live in Movies.
  * @param contentType - `movie`, `tv`, or `special`.
- * @returns `"Movie"`, `"TV Show"`, or `"Special"`.
+ * @returns `"Movie"`, `"Series"`, or `"Special"`.
  */
 export const getCardContentTypeDisplay = (contentType: string) => getContentTypeDisplay(contentType)
 

@@ -255,10 +255,12 @@ const getProfilePictureUrl = (profilePicture: string) => {
 }
 
 .page-header h1 {
+  font-family: var(--font-display);
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--text-primary);
   margin-bottom: 0.5rem;
+  letter-spacing: -0.03em;
 }
 
 .page-header p {
@@ -273,10 +275,10 @@ const getProfilePictureUrl = (profilePicture: string) => {
 
 .profile-card {
   background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
 }
 
 .profile-header {
@@ -337,7 +339,8 @@ const getProfilePictureUrl = (profilePicture: string) => {
 .stat-item {
   text-align: center;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(224, 122, 95, 0.08);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
 }
 

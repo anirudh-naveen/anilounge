@@ -19,6 +19,11 @@ const router = createRouter({
       component: Home,
     },
     {
+      path: '/forum',
+      name: 'forum',
+      component: () => import('@/views/Forum.vue'),
+    },
+    {
       path: '/movies',
       name: 'movies',
       component: () => import('@/views/Movies.vue'),
@@ -99,7 +104,7 @@ router.beforeEach((to, from, next) => {
 router.afterEach((to, from) => {
   // Clear scroll positions when navigating to different main sections
   // This ensures scroll positions are only preserved for back navigation
-  const mainSections = ['/', '/movies', '/tv', '/search', '/watchlist']
+  const mainSections = ['/', '/forum', '/movies', '/tv', '/search', '/watchlist']
   const isFromMainSection = mainSections.includes(from.path)
   const isToMainSection = mainSections.includes(to.path)
 

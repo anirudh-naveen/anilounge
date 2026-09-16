@@ -16,84 +16,14 @@
           <!-- Title: Logo -->
           <div class="logo">
             <router-link to="/" class="logo-link">
-              <div class="logo-icon">
-                <svg
-                  width="50"
-                  height="50"
-                  viewBox="0 0 32 32"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <!-- Logo artwork -->
-                  <!-- Title: Screen -->
-                  <rect
-                    x="4"
-                    y="6"
-                    width="24"
-                    height="16"
-                    rx="2"
-                    fill="var(--coral-primary)"
-                    stroke="var(--teal-primary)"
-                    stroke-width="1"
-                  />
-                  <!-- Title: Stand -->
-                  <rect x="12" y="22" width="8" height="2" fill="var(--teal-primary)" />
-                  <rect x="14" y="24" width="4" height="1" fill="var(--teal-primary)" />
-                  <rect
-                    x="6"
-                    y="8"
-                    width="20"
-                    height="12"
-                    rx="1"
-                    fill="var(--blend-color)"
-                    opacity="0.8"
-                  />
-                  <!-- Title: Animation -->
-                  <path
-                    d="M8 10 Q10 8 12 10 T16 10 T20 10 T24 10"
-                    stroke="var(--coral-primary)"
-                    stroke-width="1.5"
-                    fill="none"
-                    opacity="0.7"
-                  >
-                    <animate
-                      attributeName="d"
-                      dur="2s"
-                      repeatCount="indefinite"
-                      values="M8 10 Q10 8 12 10 T16 10 T20 10 T24 10;M8 10 Q10 12 12 10 T16 10 T20 10 T24 10;M8 10 Q10 8 12 10 T16 10 T20 10 T24 10"
-                    />
-                  </path>
-                  <path
-                    d="M8 14 Q10 12 12 14 T16 14 T20 14 T24 14"
-                    stroke="var(--teal-primary)"
-                    stroke-width="1.5"
-                    fill="none"
-                    opacity="0.7"
-                  >
-                    <animate
-                      attributeName="d"
-                      dur="2.5s"
-                      repeatCount="indefinite"
-                      values="M8 14 Q10 12 12 14 T16 14 T20 14 T24 14;M8 14 Q10 16 12 14 T16 14 T20 14 T24 14;M8 14 Q10 12 12 14 T16 14 T20 14 T24 14"
-                    />
-                  </path>
-                  <path
-                    d="M8 18 Q10 16 12 18 T16 18 T20 18 T24 18"
-                    stroke="var(--coral-primary)"
-                    stroke-width="1.5"
-                    fill="none"
-                    opacity="0.7"
-                  >
-                    <animate
-                      attributeName="d"
-                      dur="3s"
-                      repeatCount="indefinite"
-                      values="M8 18 Q10 16 12 18 T16 18 T20 18 T24 18;M8 18 Q10 20 12 18 T16 18 T20 18 T24 18;M8 18 Q10 16 12 18 T16 18 T20 18 T24 18"
-                    />
-                  </path>
-                </svg>
-              </div>
-              <h1 class="logo-text">Find Animation</h1>
+              <img
+                src="/aniscribe-logo.png"
+                alt=""
+                class="logo-mark"
+                width="44"
+                height="44"
+              />
+              <h1 class="logo-text"><span>Ani</span>Scribe</h1>
             </router-link>
           </div>
 
@@ -111,6 +41,30 @@
               </span>
               <span class="nav-text">Home</span>
             </router-link>
+            <router-link
+              to="/forum"
+              class="nav-link nav-link-locked"
+              aria-label="Forum (coming soon)"
+              title="Forum (coming soon)"
+            >
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M5.5 16.5h.8l2.2 2.2V16.5H16A2.5 2.5 0 0 0 18.5 14V8A2.5 2.5 0 0 0 16 5.5H8A2.5 2.5 0 0 0 5.5 8v8.5Z"
+                  />
+                  <path stroke-linecap="round" d="M9 9.5h6M9 12.5h4" />
+                </svg>
+              </span>
+              <span class="nav-text">Forum</span>
+              <span class="nav-lock" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="6" y="11" width="12" height="9" rx="1.75" />
+                  <path stroke-linecap="round" d="M8.5 11V8.25a3.5 3.5 0 0 1 7 0V11" />
+                </svg>
+              </span>
+            </router-link>
             <router-link to="/movies" class="nav-link" aria-label="Movies" title="Movies">
               <span class="nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
@@ -123,7 +77,7 @@
               </span>
               <span class="nav-text">Movies</span>
             </router-link>
-            <router-link to="/tv" class="nav-link" aria-label="TV Shows" title="TV Shows">
+            <router-link to="/tv" class="nav-link" aria-label="Series" title="Series">
               <span class="nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
                   <rect x="2.5" y="6.5" width="19" height="12.5" rx="2" />
@@ -134,7 +88,7 @@
                   />
                 </svg>
               </span>
-              <span class="nav-text">TV Shows</span>
+              <span class="nav-text">Series</span>
             </router-link>
             <router-link to="/search" class="nav-link" aria-label="Search" title="Search">
               <span class="nav-icon" aria-hidden="true">
@@ -225,7 +179,7 @@
     <!-- Title: Copyright -->
     <footer class="footer">
       <div class="container">
-        <p>&copy; 2024 Find Animation. Discover your next favorite animated content!</p>
+        <p>&copy; 2026 AniScribe. Chronicle your next favorite animated world.</p>
       </div>
     </footer>
   </div>
@@ -290,14 +244,24 @@ const handleLogout = () => {
 
 <style scoped>
 .header {
-  background: linear-gradient(90deg, var(--navbar-primary), var(--navbar-secondary));
-  border-bottom: 1px solid var(--navbar-accent);
-  padding: 1.25rem 0;
+  background: linear-gradient(90deg, rgba(26, 20, 18, 0.96), rgba(42, 28, 24, 0.94));
+  border-bottom: 1px solid rgba(232, 213, 181, 0.16);
+  padding: 0.9rem 0;
   position: sticky;
   top: 0;
   z-index: 100;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 10px 28px rgba(26, 20, 18, 0.28);
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--coral-primary), var(--teal-light));
 }
 
 .container {
@@ -317,35 +281,34 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   text-decoration: none;
+  gap: 0.75rem;
   transition: transform 0.3s ease;
 }
 
 .logo-link:hover {
-  transform: scale(1.05);
+  transform: translateY(-1px);
+}
+
+.logo-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: block;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(224, 122, 95, 0.35);
 }
 
 .logo-text {
-  font-size: 1.6rem;
-  font-weight: 800;
-  background: linear-gradient(90deg, var(--coral-primary), var(--teal-primary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--tan-light);
   margin: 0;
 }
 
-.logo-icon {
-  margin-right: 1rem;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.logo-link {
-  display: flex;
-  align-items: center;
-  text-decoration: none;
-  transition: transform 0.3s ease;
+.logo-text span {
+  color: var(--coral-primary);
 }
 
 .nav-links {
@@ -358,13 +321,13 @@ const handleLogout = () => {
 .nav-link {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  color: var(--text-secondary);
+  gap: 0.4rem;
+  color: var(--tan-light);
   text-decoration: none;
   font-weight: 500;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  transition: all 0.3s ease;
+  padding: 0.6rem 0.9rem;
+  border-radius: 999px;
+  transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
 }
@@ -386,17 +349,35 @@ const handleLogout = () => {
 
 .nav-link:hover,
 .nav-link.router-link-exact-active {
-  color: var(--text-primary);
-  background: var(--navbar-accent);
+  color: #fffbf6;
+  background: rgba(224, 122, 95, 0.22);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(74, 20, 140, 0.3);
+  box-shadow: 0 6px 16px rgba(224, 122, 95, 0.22);
+}
+
+.nav-link-locked {
+  color: rgba(232, 213, 181, 0.72);
+}
+
+.nav-lock {
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  color: var(--tan-primary);
+  flex-shrink: 0;
+}
+
+.nav-lock svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .nav-icon {
   display: none;
   width: 22px;
   height: 22px;
-  color: #b8b8c2;
+  color: var(--tan-light);
   transition:
     transform 0.3s ease,
     color 0.3s ease;
@@ -410,7 +391,7 @@ const handleLogout = () => {
 
 .nav-link:hover .nav-icon,
 .nav-link.router-link-exact-active .nav-icon {
-  color: #e8e8e8;
+  color: var(--coral-light);
   transform: scale(1.08);
 }
 
@@ -437,21 +418,21 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: var(--bg-card);
+  padding: 0.45rem 0.9rem;
+  background: rgba(247, 240, 232, 0.1);
   border-radius: 25px;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(232, 213, 181, 0.22);
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 0.9rem;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--tan-light);
 }
 
 .user-trigger:hover {
-  background: var(--navbar-accent);
+  background: rgba(224, 122, 95, 0.22);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(74, 20, 140, 0.3);
+  box-shadow: 0 6px 16px rgba(224, 122, 95, 0.22);
 }
 
 .user-avatar {
@@ -477,7 +458,7 @@ const handleLogout = () => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  color: #d4d4d8;
+  color: var(--text-on-accent);
 }
 
 .avatar-placeholder svg {
@@ -486,14 +467,14 @@ const handleLogout = () => {
 }
 
 .user-name {
-  color: var(--text-primary);
+  color: var(--tan-light);
   font-weight: 600;
 }
 
 .dropdown-arrow {
   font-size: 0.8rem;
   transition: transform 0.3s ease;
-  color: var(--text-secondary);
+  color: var(--tan-light);
 }
 
 .dropdown-arrow.rotated {
@@ -505,10 +486,10 @@ const handleLogout = () => {
   top: 100%;
   right: 0;
   margin-top: 0.5rem;
-  background: var(--bg-card);
+  background: var(--bg-parchment);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-lg);
   min-width: 180px;
   z-index: 1000;
   overflow: hidden;
@@ -607,26 +588,26 @@ const handleLogout = () => {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--highlight-color), var(--purple-accent));
-  color: var(--text-primary);
-  box-shadow: 0 4px 15px rgba(83, 52, 131, 0.3);
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-ink);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.28);
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(83, 52, 131, 0.4);
+  box-shadow: 0 10px 22px rgba(224, 122, 95, 0.38);
 }
 
 .btn-secondary {
-  background: var(--bg-card);
-  color: var(--highlight-color);
-  border: 1px solid var(--border-color);
+  background: rgba(247, 240, 232, 0.08);
+  color: var(--tan-light);
+  border: 1px solid rgba(232, 213, 181, 0.28);
 }
 
 .btn-secondary:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--highlight-color);
+  background: rgba(224, 122, 95, 0.2);
+  color: #fffbf6;
+  border-color: var(--coral-light);
   transform: translateY(-2px);
 }
 
@@ -660,11 +641,12 @@ const handleLogout = () => {
 }
 
 .footer {
-  background: var(--bg-secondary);
+  background: rgba(255, 251, 246, 0.88);
   border-top: 1px solid var(--border-color);
-  padding: 2rem 0;
+  padding: 1.75rem 0;
   text-align: center;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
 }
 
 @media (max-width: 768px) {
@@ -694,6 +676,19 @@ const handleLogout = () => {
 
   .nav-text {
     display: none;
+  }
+
+  .nav-link-locked {
+    position: relative;
+  }
+
+  .nav-lock {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    width: 10px;
+    height: 10px;
+    color: var(--coral-light);
   }
 
   .nav-actions {

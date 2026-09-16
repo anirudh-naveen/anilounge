@@ -11,7 +11,7 @@
         <!-- Page Header -->
         <div class="login-header">
           <h1 class="login-title">Login</h1>
-          <p class="login-subtitle">Welcome back! Sign in to your account</p>
+          <p class="login-subtitle">Welcome back to AniScribe</p>
         </div>
 
         <!-- Form -->
@@ -125,10 +125,11 @@ const handleLogin = async () => {
 }
 
 .login-title {
+  font-family: var(--font-display);
   font-size: 2rem;
-  font-weight: 700;
+  font-weight: 650;
   margin-bottom: 0.5rem;
-  background: linear-gradient(135deg, var(--highlight-color), var(--purple-accent));
+  background: linear-gradient(135deg, var(--coral-primary), var(--tan-primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

@@ -882,7 +882,7 @@ const handleImageError = (event: Event) => {
 .franchise-info {
   margin-bottom: 1.5rem;
   padding: 1rem;
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  background: linear-gradient(90deg, var(--coral-light), var(--tan-primary));
   border-radius: 8px;
 }
 
@@ -978,35 +978,35 @@ const handleImageError = (event: Event) => {
 .movie-description h2,
 .movie-description h3,
 .movie-description h4 {
-  color: #ffffff; /* White text for better readability */
+  color: var(--text-primary);
 }
 
 .movie-description p {
-  color: #ffd4a3; /* Lighter orange for paragraph text */
+  color: var(--text-secondary);
 }
 
 .original-title {
-  color: #ffd4a3 !important; /* Lighter orange */
+  color: var(--text-muted) !important;
 }
 
 .vote-count {
-  color: #ffffff !important; /* White */
+  color: var(--text-muted) !important;
 }
 
 .movie-meta span {
-  color: #ffffff !important; /* White */
+  color: var(--text-primary) !important;
 }
 
 .genre-tag {
-  color: #ffffff !important; /* White text */
+  color: var(--text-on-accent) !important;
 }
 
 .company-tag,
 .country-tag {
-  color: #ffffff !important; /* White text */
+  color: var(--text-on-accent) !important;
 }
 
 .content-type {
-  color: #ffd4a3 !important; /* Lighter orange for better readability */
+  color: var(--coral-deep) !important;
 }
 </style>

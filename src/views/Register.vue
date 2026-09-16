@@ -11,8 +11,8 @@
       <div class="register-container">
         <!-- Page Header -->
         <div class="register-header">
-          <h1 class="register-title">📝 Sign Up</h1>
-          <p class="register-subtitle">Create your account to start tracking animated content</p>
+          <h1 class="register-title">Sign Up</h1>
+          <p class="register-subtitle">Create your AniScribe account to start tracking animation</p>
         </div>
 
         <!-- Form -->
@@ -169,10 +169,11 @@ const handleRegister = async () => {
 }
 
 .register-title {
+  font-family: var(--font-display);
   font-size: 2rem;
-  font-weight: 700;
+  font-weight: 650;
   margin-bottom: 0.5rem;
-  background: linear-gradient(135deg, var(--highlight-color), var(--purple-accent));
+  background: linear-gradient(135deg, var(--coral-primary), var(--tan-primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
