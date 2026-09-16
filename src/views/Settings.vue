@@ -1,15 +1,24 @@
+<!--
+  Settings.vue — account settings view.
+
+  Edit username, email, profile picture, favorite genres/studios, and
+  password. Profile-picture crop happens in a modal overlay.
+-->
 <template>
   <div class="settings-page">
     <div class="container">
+      <!-- Page Header -->
       <div class="page-header">
         <h1>Settings</h1>
         <p>Customize your experience</p>
       </div>
 
       <div class="settings-content">
+        <!-- Account -->
         <div class="settings-section">
           <h2>Account Settings</h2>
           <div class="settings-card">
+            <!-- Title: Username -->
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Username</h3>
@@ -32,6 +41,7 @@
               </div>
             </div>
 
+            <!-- Title: Email -->
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Email</h3>
@@ -56,9 +66,11 @@
           </div>
         </div>
 
+        <!-- Profile Picture -->
         <div class="settings-section">
           <h2>Profile Picture</h2>
           <div class="settings-card">
+            <!-- Title: Upload -->
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Profile Picture</h3>
@@ -104,9 +116,11 @@
           </div>
         </div>
 
+        <!-- Preferences -->
         <div class="settings-section">
           <h2>Preferences</h2>
           <div class="settings-card">
+            <!-- Title: Favorite Genres -->
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Favorite Genres</h3>
@@ -130,6 +144,7 @@
               </div>
             </div>
 
+            <!-- Title: Favorite Studios -->
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Favorite Studios</h3>
@@ -164,9 +179,11 @@
           </div>
         </div>
 
+        <!-- Privacy -->
         <div class="settings-section">
           <h2>Privacy & Security</h2>
           <div class="settings-card">
+            <!-- Title: Change Password -->
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Change Password</h3>
@@ -207,7 +224,7 @@
       </div>
     </div>
 
-    <!-- Image Cropping Modal -->
+    <!-- Title: Image Crop -->
     <div v-if="showCropModal" class="crop-modal-overlay" @click="closeCropModal">
       <div class="crop-modal" @click.stop>
         <div class="crop-modal-header">

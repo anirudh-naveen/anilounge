@@ -1,15 +1,23 @@
+/**
+ * Read-only diagnostic script: print likely duplicate Content rows.
+ * Run before mergeDuplicates.js. Logs known pairs (Ne Zha, A Silent Voice) plus groups that
+ * share a punctuation-stripped title. Does not mutate the database.
+ */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
 
 dotenv.config()
 
+/**
+ * Print Ne Zha / Silent Voice matches and all normalized-title groups with more than one row.
+ * @returns {Promise<void>}
+ */
 async function findDuplicates() {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
     console.log('Database connected')
 
-    // Find potential duplicates for Ne Zha
     const nezhaItems = await Content.find({
       $or: [{ title: { $regex: /nezha/i } }, { title: { $regex: /ne zha/i } }],
     }).lean()
@@ -22,7 +30,6 @@ async function findDuplicates() {
       )
     })
 
-    // Find potential duplicates for A Silent Voice
     const silentVoiceItems = await Content.find({
       $or: [
         { title: { $regex: /silent voice/i } },
@@ -39,13 +46,11 @@ async function findDuplicates() {
       )
     })
 
-    // Find all potential duplicates based on similar titles
     console.log('\nSearching for potential duplicates across all content...')
     const allContent = await Content.find({}).lean()
     const titleGroups = {}
 
     allContent.forEach((item) => {
-      // Normalize title for comparison
       const normalizedTitle = item.title
         .toLowerCase()
         .replace(/[^\w\s]/g, '')
@@ -57,7 +62,6 @@ async function findDuplicates() {
       titleGroups[normalizedTitle].push(item)
     })
 
-    // Find groups with multiple items
     const duplicateGroups = Object.entries(titleGroups).filter(([, items]) => items.length > 1)
 
     if (duplicateGroups.length > 0) {

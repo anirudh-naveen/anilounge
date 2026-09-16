@@ -1,15 +1,23 @@
+/**
+ * Read-only diagnostic script: list sequel/prequel links and report ids that do not resolve.
+ * Run after relationship ingest or merge. Looks up related rows by malId/tmdbId stored on
+ * relationships.sequels/prequels. Does not mutate Content.
+ */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
 
 dotenv.config()
 
+/**
+ * Print titles with sequels/prequels and count links whose malId/tmdbId is missing from the catalog.
+ * @returns {Promise<void>}
+ */
 async function checkRelationships() {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
     console.log('Database connected')
 
-    // Get all content with relationships
     const contentWithRelationships = await Content.find({
       'relationships.sequels': { $exists: true, $ne: [] },
     }).lean()
@@ -36,7 +44,6 @@ async function checkRelationships() {
       }
     }
 
-    // Get all content with prequel relationships
     const contentWithPrequels = await Content.find({
       'relationships.prequels': { $exists: true, $ne: [] },
     }).lean()
@@ -63,7 +70,6 @@ async function checkRelationships() {
       }
     }
 
-    // Check for broken relationships (sequels/prequels that don't exist in DB)
     console.log('\n\nChecking for broken relationships...\n')
     let brokenCount = 0
 

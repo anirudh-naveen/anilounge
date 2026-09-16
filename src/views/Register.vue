@@ -1,14 +1,23 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  Register.vue — registration view.
+
+  Username, email, and password form that creates an account via the auth
+  store. Client-side checks cover password match and complexity.
+-->
 <template>
   <div class="register-page">
     <div class="container">
       <div class="register-container">
+        <!-- Page Header -->
         <div class="register-header">
           <h1 class="register-title">📝 Sign Up</h1>
           <p class="register-subtitle">Create your account to start tracking animated content</p>
         </div>
 
+        <!-- Form -->
         <form @submit.prevent="handleRegister" class="register-form">
+          <!-- Title: Username -->
           <div class="form-group">
             <label for="username" class="form-label">Username</label>
             <input
@@ -23,6 +32,7 @@
             />
           </div>
 
+          <!-- Title: Email -->
           <div class="form-group">
             <label for="email" class="form-label">Email</label>
             <input
@@ -35,6 +45,7 @@
             />
           </div>
 
+          <!-- Title: Password -->
           <div class="form-group">
             <label for="password" class="form-label">Password</label>
             <input
@@ -48,6 +59,7 @@
             />
           </div>
 
+          <!-- Title: Confirm Password -->
           <div class="form-group">
             <label for="confirmPassword" class="form-label">Confirm Password</label>
             <input
@@ -72,11 +84,13 @@
             {{ authStore.isLoading ? 'Creating account...' : 'Create Account' }}
           </button>
 
+          <!-- Title: Error -->
           <div v-if="authStore.error" class="error-message">
             {{ authStore.error }}
           </div>
         </form>
 
+        <!-- Footer -->
         <div class="register-footer">
           <p>
             Already have an account? <router-link to="/login" class="link">Sign in</router-link>

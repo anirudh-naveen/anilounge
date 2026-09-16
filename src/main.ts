@@ -1,3 +1,9 @@
+/**
+ * main.ts — Vue application bootstrap (entry).
+ *
+ * Creates the app instance, registers Pinia, Vue Router, and toast
+ * notifications, then hydrates auth and watchlist state before mounting.
+ */
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import Toast from 'vue-toastification'

@@ -1,13 +1,23 @@
-// import nodemailer from 'nodemailer' // Optional: install nodemailer if you want email notifications
+/**
+ * In-memory beta-feedback HTTP handlers.
+ *
+ * Layer: controller. Stores submissions in process memory (not Mongo) and logs
+ * an email-shaped notification; nodemailer is not wired up.
+ */
 
-// Simple feedback storage (you can enhance this later)
 const feedbackStore = []
 
+/**
+ * Validate and append a feedback record, then log a notification payload.
+ *
+ * @param {import('express').Request} req - `body.type` and `body.message` required; email/timestamp/userAgent/url optional.
+ * @param {import('express').Response} res - 200 `{ data: { id } }`, 400 if type/message missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const submitFeedback = async (req, res) => {
   try {
     const { type, message, email, timestamp, userAgent, url } = req.body
 
-    // Validate required fields
     if (!type || !message) {
       return res.status(400).json({
         success: false,
@@ -15,7 +25,6 @@ export const submitFeedback = async (req, res) => {
       })
     }
 
-    // Create feedback object
     const feedback = {
       id: Date.now().toString(),
       type,
@@ -27,10 +36,9 @@ export const submitFeedback = async (req, res) => {
       status: 'new',
     }
 
-    // Store feedback (in production, you'd save to database)
+    // In-process only; not persisted across restarts.
     feedbackStore.push(feedback)
 
-    // Send email notification (optional)
     await sendFeedbackEmail(feedback)
 
     console.log('Beta Feedback Received:', feedback)
@@ -49,9 +57,15 @@ export const submitFeedback = async (req, res) => {
   }
 }
 
+/**
+ * Return every in-memory feedback record (no auth gate on this controller).
+ *
+ * @param {import('express').Request} req - Unused; listing is unfiltered.
+ * @param {import('express').Response} res - 200 `{ data: feedbackStore }` or 500.
+ * @returns {Promise<void>}
+ */
 export const getFeedback = async (req, res) => {
   try {
-    // In production, you'd fetch from database
     res.json({
       success: true,
       data: feedbackStore,
@@ -65,11 +79,14 @@ export const getFeedback = async (req, res) => {
   }
 }
 
-// Simple email notification function
+/**
+ * Log a notification-shaped payload; does not send mail until nodemailer is configured.
+ *
+ * @param {object} feedback - Stored feedback row (`type`, `email`, `message`, `timestamp`).
+ * @returns {Promise<void>}
+ */
 const sendFeedbackEmail = async (feedback) => {
   try {
-    // You can set up nodemailer here if you want email notifications
-    // For now, just log it
     console.log('Email notification for feedback:', {
       subject: `Beta Feedback: ${feedback.type}`,
       from: feedback.email,

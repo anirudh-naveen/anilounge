@@ -1,18 +1,24 @@
+/**
+ * One-off maintenance script: stamp franchise names from RelationshipService.franchiseMap.
+ * Run after editing the franchise map or when Content.franchise is empty on known series.
+ * Mutates Content.franchise and relationships.franchise; does not rewrite sequel/prequel ids.
+ */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
 import relationshipService from '../services/relationshipService.js'
 
-// Load environment variables
 dotenv.config()
 
+/**
+ * For each Content row, look up TMDB then MAL id in the franchise map and persist the name.
+ * @returns {Promise<void>}
+ */
 async function updateFranchises() {
   try {
-    // Connect to database
     await mongoose.connect(process.env.MONGODB_URI)
     console.log('Database connected')
 
-    // Get all content
     const allContent = await Content.find({})
     console.log(`Found ${allContent.length} content items to process`)
 
@@ -22,7 +28,6 @@ async function updateFranchises() {
       let hasFranchise = false
       let franchiseName = null
 
-      // Check TMDB ID
       if (content.tmdbId) {
         const tmdbFranchise = relationshipService.findFranchiseByExternalId(
           { id: content.tmdbId },
@@ -34,7 +39,6 @@ async function updateFranchises() {
         }
       }
 
-      // Check MAL ID
       if (!hasFranchise && content.malId) {
         const malFranchise = relationshipService.findFranchiseByExternalId(
           { id: content.malId },
@@ -46,7 +50,6 @@ async function updateFranchises() {
         }
       }
 
-      // Update content if franchise found
       if (hasFranchise) {
         await Content.findByIdAndUpdate(content._id, {
           franchise: franchiseName,
@@ -66,5 +69,4 @@ async function updateFranchises() {
   }
 }
 
-// Run the update
 updateFranchises()

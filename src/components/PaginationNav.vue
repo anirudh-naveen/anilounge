@@ -1,5 +1,12 @@
+<!--
+  PaginationNav.vue — page navigation (component).
+
+  Previous/next controls and a numbered page list for paginated catalog and
+  search results.
+-->
 <template>
   <nav v-if="totalPages > 1" class="pagination" aria-label="Pagination">
+    <!-- Title: Previous -->
     <button
       type="button"
       class="btn btn-secondary"
@@ -9,6 +16,7 @@
       Previous
     </button>
 
+    <!-- Title: Page List -->
     <div class="pagination-pages">
       <template v-for="(item, index) in paginationItems" :key="`${item}-${index}`">
         <span v-if="item === 'ellipsis'" class="pagination-ellipsis" aria-hidden="true">…</span>
@@ -26,6 +34,7 @@
       </template>
     </div>
 
+    <!-- Title: Next -->
     <button
       type="button"
       class="btn btn-secondary"

@@ -1,4 +1,10 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  Movies.vue — movie catalog view.
+
+  Lists paginated animated movies from the content store as poster cards.
+  Loading, error, and empty states sit above the pager.
+-->
 <template>
   <div class="movies-page">
     <div class="container">
@@ -8,13 +14,14 @@
         <p class="page-subtitle">Discover amazing animated films from around the world</p>
       </div>
 
-      <!-- Loading State -->
+      <!-- Catalog -->
+      <!-- Title: Loading State -->
       <div v-if="contentStore.moviesLoading" class="loading-container">
         <div class="spinner"></div>
         <p>Loading amazing movies...</p>
       </div>
 
-      <!-- Error State -->
+      <!-- Title: Error State -->
       <div v-else-if="contentStore.error" class="error-state">
         <div class="error-icon">⚠️</div>
         <h3>Failed to load movies</h3>
@@ -22,7 +29,7 @@
         <button @click="loadMovies(1)" class="btn btn-primary">Try Again</button>
       </div>
 
-      <!-- Movies Grid -->
+      <!-- Title: Content Card -->
       <div v-else-if="movies.length > 0" class="movies-grid">
         <div
           v-for="movie in movies"
@@ -33,13 +40,13 @@
           <div class="movie-poster">
             <img
               :src="getPosterUrl(movie.posterPath || '')"
-              :alt="movie.title"
+              :alt="getDisplayTitle(movie)"
               @error="handleImageError"
             />
             <div class="content-type-badge movie-badge">Movie</div>
           </div>
           <div class="movie-info">
-            <h3 class="movie-title">{{ movie.title }}</h3>
+            <h3 class="movie-title">{{ getDisplayTitle(movie) }}</h3>
             <p class="movie-overview">{{ truncateText(movie.overview, 120) }}</p>
             <div class="movie-genres">
               <span
@@ -65,7 +72,7 @@
         </div>
       </div>
 
-      <!-- Empty State -->
+      <!-- Title: Empty State -->
       <div v-else class="empty-state">
         <div class="empty-icon">🎬</div>
         <h3>No movies found</h3>
@@ -73,6 +80,7 @@
         <button @click="loadMovies(1)" class="btn btn-primary">Refresh</button>
       </div>
 
+      <!-- Pagination -->
       <PaginationNav
         :current-page="contentStore.moviesPagination.currentPage"
         :total-pages="contentStore.moviesPagination.totalPages"
@@ -92,6 +100,7 @@ import { useToast } from 'vue-toastification'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
+import { getDisplayTitle } from '@/utils/titles'
 
 const router = useRouter()
 const contentStore = useContentStore()

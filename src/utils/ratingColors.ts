@@ -1,26 +1,30 @@
-// Utility function to get rating color based on score (0-10 scale)
+/**
+ * ratingColors.ts — rating color helpers.
+ *
+ * Maps 0–10 scores onto a red → yellow → green gradient for badges and text.
+ */
+
+/**
+ * RGB gradient color for a 0–10 rating (red at 0, yellow at 5, green at 10).
+ * @param rating - Score on a 0–10 scale.
+ * @returns CSS `rgb()` color, or red when missing/zero.
+ */
 export const getRatingColor = (rating: number | null | undefined): string => {
   if (!rating || rating === 0) {
-    return '#ff4444' // Red for 0 or no rating
+    return '#ff4444'
   }
 
-  // Clamp rating between 0 and 10
   const clampedRating = Math.max(0, Math.min(10, rating))
-
-  // Convert to 0-1 scale
   const normalizedRating = clampedRating / 10
 
-  // Create color gradient from red (0) -> yellow (0.5) -> green (1)
   if (normalizedRating <= 0.5) {
-    // Red to Yellow (0 to 0.5)
-    const intensity = normalizedRating * 2 // 0 to 1
+    const intensity = normalizedRating * 2
     const red = 255
     const green = Math.round(255 * intensity)
     const blue = 0
     return `rgb(${red}, ${green}, ${blue})`
   } else {
-    // Yellow to Green (0.5 to 1)
-    const intensity = (normalizedRating - 0.5) * 2 // 0 to 1
+    const intensity = (normalizedRating - 0.5) * 2
     const red = Math.round(255 * (1 - intensity))
     const green = 255
     const blue = 0
@@ -28,47 +32,51 @@ export const getRatingColor = (rating: number | null | undefined): string => {
   }
 }
 
-// Brighter HSL-based approach for text colors
+/**
+ * HSL color for rating text: hue 0° (red) through 120° (green).
+ * @param rating - Score on a 0–10 scale.
+ * @returns CSS `hsl()` color, or bright red when missing/zero.
+ */
 export const getRatingColorHSL = (rating: number | null | undefined): string => {
   if (!rating || rating === 0) {
-    return 'hsl(0, 100%, 50%)' // Bright red for 0 or no rating
+    return 'hsl(0, 100%, 50%)'
   }
 
-  // Clamp rating between 0 and 10
   const clampedRating = Math.max(0, Math.min(10, rating))
-
-  // Convert to 0-1 scale
   const normalizedRating = clampedRating / 10
 
-  // HSL: Red (0°) -> Yellow (60°) -> Green (120°)
-  const hue = normalizedRating * 120 // 0 to 120 degrees
-  const saturation = 100 // Full saturation for bright colors
-  const lightness = 50 // Medium lightness for bright colors
+  const hue = normalizedRating * 120
+  const saturation = 100
+  const lightness = 50
 
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`
 }
 
-// Darker HSL-based approach for background colors
+/**
+ * Darker HSL color for rating badge backgrounds (lower saturation/lightness).
+ * @param rating - Score on a 0–10 scale.
+ * @returns CSS `hsl()` color, or darker red when missing/zero.
+ */
 export const getRatingColorHSLBackground = (rating: number | null | undefined): string => {
   if (!rating || rating === 0) {
-    return 'hsl(0, 70%, 40%)' // Darker red for 0 or no rating
+    return 'hsl(0, 70%, 40%)'
   }
 
-  // Clamp rating between 0 and 10
   const clampedRating = Math.max(0, Math.min(10, rating))
-
-  // Convert to 0-1 scale
   const normalizedRating = clampedRating / 10
 
-  // HSL: Red (0°) -> Yellow (60°) -> Green (120°)
-  const hue = normalizedRating * 120 // 0 to 120 degrees
-  const saturation = 70 // Reduced saturation for less brightness
-  const lightness = 40 // Reduced lightness for darker colors
+  const hue = normalizedRating * 120
+  const saturation = 70
+  const lightness = 40
 
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`
 }
 
-// Get rating text style with deep purple outline
+/**
+ * Inline styles for a rating badge (colored background, white bold text).
+ * @param rating - Score on a 0–10 scale.
+ * @returns Style object for a rating label.
+ */
 export const getRatingTextStyle = (rating: number | null | undefined) => {
   const color = getRatingColorHSLBackground(rating)
   return {

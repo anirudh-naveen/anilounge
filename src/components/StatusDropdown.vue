@@ -1,5 +1,12 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  StatusDropdown.vue — watchlist add overlay (component).
+
+  Modal form for status, rating, episodes, and notes when adding a title to
+  the authenticated user's watchlist.
+-->
 <template>
+  <!-- Overlay -->
   <div v-if="showDropdown" class="status-dropdown-overlay" @click="closeDropdown">
     <div class="status-dropdown" @click.stop>
       <div class="dropdown-header">
@@ -7,7 +14,9 @@
         <button @click="closeDropdown" class="close-btn">×</button>
       </div>
 
+      <!-- Form fields -->
       <div class="dropdown-content">
+        <!-- Title: Status -->
         <div class="status-selection">
           <label>Status:</label>
           <select v-model="selectedStatus" class="status-select">
@@ -17,6 +26,7 @@
           </select>
         </div>
 
+        <!-- Title: Rating -->
         <div class="rating-selection">
           <label>Rating (1-10):</label>
           <input
@@ -29,6 +39,7 @@
           />
         </div>
 
+        <!-- Title: Episodes -->
         <div class="episode-selection" v-if="contentType === 'tv'">
           <label>Episodes Watched:</label>
           <input
@@ -40,6 +51,7 @@
           />
         </div>
 
+        <!-- Title: Notes -->
         <div class="notes-selection">
           <label>Notes:</label>
           <textarea
@@ -51,6 +63,7 @@
         </div>
       </div>
 
+      <!-- Actions -->
       <div class="dropdown-actions">
         <button @click="closeDropdown" class="btn btn-secondary">Cancel</button>
         <button @click="addToWatchlist" class="btn btn-primary">Add to Watchlist</button>

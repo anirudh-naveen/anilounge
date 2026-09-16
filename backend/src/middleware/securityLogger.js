@@ -1,7 +1,13 @@
+/**
+ * Security event logging to daily files under `logs/` plus request-body monitors.
+ *
+ * Layer: middleware. `securityLogger` / `securityMonitor` wrap every request;
+ * the `log*` helpers are called from auth and upload controllers.
+ */
+
 import fs from 'fs'
 import path from 'path'
 
-// Security event types
 const SECURITY_EVENTS = {
   LOGIN_FAILED: 'LOGIN_FAILED',
   LOGIN_SUCCESS: 'LOGIN_SUCCESS',
@@ -15,7 +21,13 @@ const SECURITY_EVENTS = {
   XSS_ATTEMPT: 'XSS_ATTEMPT',
 }
 
-// Security log entry structure
+/**
+ * Build a timestamped log object with a severity derived from `event`.
+ *
+ * @param {string} event - One of `SECURITY_EVENTS`.
+ * @param {object} details - Arbitrary fields stored beside the event.
+ * @returns {{ timestamp: string, event: string, details: object, severity: string }}
+ */
 const createSecurityLogEntry = (event, details) => {
   return {
     timestamp: new Date().toISOString(),
@@ -25,7 +37,12 @@ const createSecurityLogEntry = (event, details) => {
   }
 }
 
-// Determine severity level based on event type
+/**
+ * Map an event type to HIGH / MEDIUM / LOW for console and file logs.
+ *
+ * @param {string} event - One of `SECURITY_EVENTS`.
+ * @returns {'HIGH'|'MEDIUM'|'LOW'}
+ */
 const getSeverityLevel = (event) => {
   const highSeverity = [
     SECURITY_EVENTS.ACCOUNT_LOCKED,
@@ -46,7 +63,12 @@ const getSeverityLevel = (event) => {
   return 'LOW'
 }
 
-// Write security log to file
+/**
+ * Append one JSON line to `logs/security-YYYY-MM-DD.log` and echo to the console.
+ *
+ * @param {object} logEntry - Output of `createSecurityLogEntry`.
+ * @returns {void}
+ */
 const writeSecurityLog = (logEntry) => {
   try {
     const logDir = path.join(process.cwd(), 'logs')
@@ -59,20 +81,24 @@ const writeSecurityLog = (logEntry) => {
 
     fs.appendFileSync(logFile, logLine)
 
-    // Also log to console for immediate visibility
     console.log(`🔒 SECURITY [${logEntry.severity}]: ${logEntry.event}`, logEntry.details)
   } catch (error) {
     console.error('Failed to write security log:', error)
   }
 }
 
-// Security logging middleware
+/**
+ * Wrap `res.send` so 4xx/5xx responses are written as UNAUTHORIZED_ACCESS (401) or SUSPICIOUS_ACTIVITY.
+ *
+ * @param {import('express').Request} req - Method, url, ip, User-Agent, and optional `req.user`.
+ * @param {import('express').Response} res - `send` is patched for the remainder of the request.
+ * @param {import('express').NextFunction} next - Always continues after installing the wrapper.
+ * @returns {void}
+ */
 export const securityLogger = (req, res, next) => {
-  // Log all requests for monitoring
   const originalSend = res.send
 
   res.send = function (data) {
-    // Log failed requests
     if (res.statusCode >= 400) {
       const logEntry = createSecurityLogEntry(
         res.statusCode === 401
@@ -96,13 +122,28 @@ export const securityLogger = (req, res, next) => {
   next()
 }
 
-// Specific security event loggers
+/**
+ * Write an arbitrary security event through the shared file/console pipeline.
+ *
+ * @param {string} event - One of `SECURITY_EVENTS`.
+ * @param {object} details - Fields stored on the log line.
+ * @returns {void}
+ */
 export const logSecurityEvent = (event, details) => {
   const logEntry = createSecurityLogEntry(event, details)
   writeSecurityLog(logEntry)
 }
 
-// Login attempt logger
+/**
+ * Record a login success or failure against `LOGIN_SUCCESS` / `LOGIN_FAILED`.
+ *
+ * @param {string} email - Normalized email that was attempted.
+ * @param {boolean} success - True for a successful password check.
+ * @param {string} ip - Client address.
+ * @param {string} userAgent - Request User-Agent.
+ * @param {string|null} [userId=null] - User ObjectId when known.
+ * @returns {void}
+ */
 export const logLoginAttempt = (email, success, ip, userAgent, userId = null) => {
   const event = success ? SECURITY_EVENTS.LOGIN_SUCCESS : SECURITY_EVENTS.LOGIN_FAILED
   logSecurityEvent(event, {
@@ -114,7 +155,15 @@ export const logLoginAttempt = (email, success, ip, userAgent, userId = null) =>
   })
 }
 
-// Account lockout logger
+/**
+ * Record an account lockout after repeated failed logins.
+ *
+ * @param {string} email - Locked account email.
+ * @param {string} ip - Client address.
+ * @param {string} userAgent - Request User-Agent.
+ * @param {string} userId - User ObjectId.
+ * @returns {void}
+ */
 export const logAccountLockout = (email, ip, userAgent, userId) => {
   logSecurityEvent(SECURITY_EVENTS.ACCOUNT_LOCKED, {
     email,
@@ -125,7 +174,16 @@ export const logAccountLockout = (email, ip, userAgent, userId) => {
   })
 }
 
-// File upload logger
+/**
+ * Record a profile-picture upload outcome.
+ *
+ * @param {string} filename - Stored or attempted filename.
+ * @param {string} userId - Uploading user ObjectId.
+ * @param {string} ip - Client address.
+ * @param {boolean} success - Whether the file was saved.
+ * @param {Error|null} [error=null] - Failure cause; `message` is logged when present.
+ * @returns {void}
+ */
 export const logFileUpload = (filename, userId, ip, success, error = null) => {
   logSecurityEvent(SECURITY_EVENTS.FILE_UPLOAD, {
     filename,
@@ -137,7 +195,14 @@ export const logFileUpload = (filename, userId, ip, success, error = null) => {
   })
 }
 
-// Rate limit exceeded logger
+/**
+ * Record that an IP exceeded a rate limit on `endpoint`.
+ *
+ * @param {string} ip - Client address.
+ * @param {string} endpoint - Path or route that was limited.
+ * @param {string} userAgent - Request User-Agent.
+ * @returns {void}
+ */
 export const logRateLimitExceeded = (ip, endpoint, userAgent) => {
   logSecurityEvent(SECURITY_EVENTS.RATE_LIMIT_EXCEEDED, {
     ip,
@@ -147,7 +212,14 @@ export const logRateLimitExceeded = (ip, endpoint, userAgent) => {
   })
 }
 
-// Invalid token logger
+/**
+ * Record a rejected or malformed token.
+ *
+ * @param {string} ip - Client address.
+ * @param {string} userAgent - Request User-Agent.
+ * @param {string} [tokenType='access'] - `access` or `refresh`.
+ * @returns {void}
+ */
 export const logInvalidToken = (ip, userAgent, tokenType = 'access') => {
   logSecurityEvent(SECURITY_EVENTS.INVALID_TOKEN, {
     ip,
@@ -157,7 +229,13 @@ export const logInvalidToken = (ip, userAgent, tokenType = 'access') => {
   })
 }
 
-// Suspicious activity logger
+/**
+ * Record a free-form suspicious-activity event.
+ *
+ * @param {string} activity - Short label for the activity.
+ * @param {object} details - Extra fields merged onto the log line.
+ * @returns {void}
+ */
 export const logSuspiciousActivity = (activity, details) => {
   logSecurityEvent(SECURITY_EVENTS.SUSPICIOUS_ACTIVITY, {
     activity,
@@ -166,7 +244,14 @@ export const logSuspiciousActivity = (activity, details) => {
   })
 }
 
-// Input validation logger
+/**
+ * If sanitization changed a field, log it as an XSS_ATTEMPT.
+ *
+ * @param {string} input - Original value.
+ * @param {string} sanitizedInput - Value after HTML/XSS filters.
+ * @param {string} field - Field name for the log.
+ * @returns {void}
+ */
 export const logInputValidation = (input, sanitizedInput, field) => {
   if (input !== sanitizedInput) {
     logSecurityEvent(SECURITY_EVENTS.XSS_ATTEMPT, {
@@ -178,9 +263,15 @@ export const logInputValidation = (input, sanitizedInput, field) => {
   }
 }
 
-// Security monitoring middleware
+/**
+ * Scan JSON body and query for script/SQL-ish patterns and log without blocking.
+ *
+ * @param {import('express').Request} req - Inspects `body` and `query`.
+ * @param {import('express').Response} res - Unused; never sends a response.
+ * @param {import('express').NextFunction} next - Always continues after scanning.
+ * @returns {void}
+ */
 export const securityMonitor = (req, res, next) => {
-  // Monitor for suspicious patterns
   const suspiciousPatterns = [
     /<script/i,
     /javascript:/i,
@@ -192,7 +283,6 @@ export const securityMonitor = (req, res, next) => {
     /update\s+set/i,
   ]
 
-  // Check request body
   if (req.body) {
     const bodyString = JSON.stringify(req.body)
     for (const pattern of suspiciousPatterns) {
@@ -209,7 +299,6 @@ export const securityMonitor = (req, res, next) => {
     }
   }
 
-  // Check query parameters
   if (req.query) {
     const queryString = JSON.stringify(req.query)
     for (const pattern of suspiciousPatterns) {

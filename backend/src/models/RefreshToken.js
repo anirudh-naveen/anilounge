@@ -1,3 +1,7 @@
+/**
+ * Mongoose schema for JWT refresh tokens.
+ * Models layer: opaque token strings tied to a User, with revoke flag and TTL expiry.
+ */
 import mongoose from 'mongoose'
 import crypto from 'crypto'
 
@@ -27,10 +31,14 @@ const refreshTokenSchema = new mongoose.Schema({
   },
 })
 
-// Index for automatic cleanup of expired tokens
+// MongoDB TTL index: expired tokens are deleted automatically
 refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 
-// Static method to create a new refresh token
+/**
+ * Persist a new 64-byte hex refresh token for the user (7-day default expiry).
+ * @param {import('mongoose').Types.ObjectId | string} userId
+ * @returns {Promise<import('mongoose').Document>}
+ */
 refreshTokenSchema.statics.createToken = async function (userId) {
   const token = crypto.randomBytes(64).toString('hex')
   const refreshToken = new this({
@@ -41,7 +49,11 @@ refreshTokenSchema.statics.createToken = async function (userId) {
   return refreshToken
 }
 
-// Static method to revoke all tokens for a user
+/**
+ * Mark every refresh token for a user as revoked (logout-all).
+ * @param {import('mongoose').Types.ObjectId | string} userId
+ * @returns {Promise<import('mongoose').UpdateWriteOpResult>}
+ */
 refreshTokenSchema.statics.revokeAllForUser = async function (userId) {
   return this.updateMany({ userId }, { isRevoked: true })
 }

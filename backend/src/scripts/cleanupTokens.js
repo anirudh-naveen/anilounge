@@ -1,10 +1,18 @@
+/**
+ * One-off maintenance script: delete expired refresh tokens and revoked tokens older than 30 days.
+ * Run periodically (or after a token-store leak) to keep the RefreshToken collection small.
+ * Mutates RefreshToken by deleting matching documents. Complements the TTL index on expiresAt.
+ */
 import RefreshToken from '../models/RefreshToken.js'
 import dotenv from 'dotenv'
 import connectDB from '../../config/database.js'
 
 dotenv.config()
 
-// Cleanup expired and old revoked refresh tokens
+/**
+ * Delete expired tokens and revoked tokens created more than 30 days ago.
+ * @returns {Promise<void>}
+ */
 const cleanupTokens = async () => {
   try {
     await connectDB()
@@ -14,7 +22,7 @@ const cleanupTokens = async () => {
         { expiresAt: { $lt: new Date() } },
         {
           isRevoked: true,
-          createdAt: { $lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, // 30 days old
+          createdAt: { $lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
         },
       ],
     })
@@ -27,6 +35,4 @@ const cleanupTokens = async () => {
   }
 }
 
-// Run cleanup
 cleanupTokens()
-
