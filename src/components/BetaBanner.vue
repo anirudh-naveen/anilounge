@@ -9,7 +9,7 @@
     <div class="beta-content">
       <span class="beta-badge">BETA</span>
       <span class="beta-text">
-        Welcome to AniScribe Beta! This is a preview version.
+        Welcome to AniLounge Beta! This is a preview version.
         <button @click="showFeedback = true" class="feedback-link">
           Report bugs or suggestions
         </button>
@@ -45,7 +45,7 @@ onMounted(() => {
 
 <style scoped>
 .beta-banner {
-  background: linear-gradient(90deg, #3b2a26, #c45c45 55%, #e07a5f);
+  background: linear-gradient(90deg, #152238, #e07a5f 70%, #2bbbad);
   color: white;
   padding: 12px 0;
   position: relative;

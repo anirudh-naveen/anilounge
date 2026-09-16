@@ -17,13 +17,13 @@
           <div class="logo">
             <router-link to="/" class="logo-link">
               <img
-                src="/aniscribe-logo.png"
+                src="/anilounge-logo.png"
                 alt=""
                 class="logo-mark"
                 width="44"
                 height="44"
               />
-              <h1 class="logo-text"><span>Ani</span>Scribe</h1>
+              <h1 class="logo-text"><span>Ani</span>Lounge</h1>
             </router-link>
           </div>
 
@@ -179,7 +179,7 @@
     <!-- Title: Copyright -->
     <footer class="footer">
       <div class="container">
-        <p>&copy; 2026 AniScribe. Chronicle your next favorite animated world.</p>
+        <p>&copy; 2026 AniLounge. Stay as long as the credits roll.</p>
       </div>
     </footer>
   </div>
@@ -244,14 +244,14 @@ const handleLogout = () => {
 
 <style scoped>
 .header {
-  background: linear-gradient(90deg, rgba(26, 20, 18, 0.96), rgba(42, 28, 24, 0.94));
-  border-bottom: 1px solid rgba(232, 213, 181, 0.16);
+  background: linear-gradient(90deg, rgba(21, 34, 56, 0.97), rgba(27, 42, 74, 0.96));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.9rem 0;
   position: sticky;
   top: 0;
   z-index: 100;
   backdrop-filter: blur(18px);
-  box-shadow: 0 10px 28px rgba(26, 20, 18, 0.28);
+  box-shadow: 0 10px 28px rgba(21, 34, 56, 0.18);
 }
 
 .header::after {
@@ -295,7 +295,7 @@ const handleLogout = () => {
   border-radius: 12px;
   display: block;
   flex-shrink: 0;
-  box-shadow: 0 0 0 1px rgba(224, 122, 95, 0.35);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 
 .logo-text {
@@ -303,12 +303,12 @@ const handleLogout = () => {
   font-size: 1.55rem;
   font-weight: 650;
   letter-spacing: -0.03em;
-  color: var(--tan-light);
+  color: #f7f8fa;
   margin: 0;
 }
 
 .logo-text span {
-  color: var(--coral-primary);
+  color: var(--coral-light);
 }
 
 .nav-links {
@@ -322,7 +322,7 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  color: var(--tan-light);
+  color: #e8edf5;
   text-decoration: none;
   font-weight: 500;
   padding: 0.6rem 0.9rem;
@@ -349,14 +349,14 @@ const handleLogout = () => {
 
 .nav-link:hover,
 .nav-link.router-link-exact-active {
-  color: #fffbf6;
+  color: #ffffff;
   background: rgba(224, 122, 95, 0.22);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(224, 122, 95, 0.22);
+  box-shadow: 0 6px 16px rgba(224, 122, 95, 0.18);
 }
 
 .nav-link-locked {
-  color: rgba(232, 213, 181, 0.72);
+  color: rgba(232, 237, 245, 0.72);
 }
 
 .nav-lock {
@@ -432,7 +432,7 @@ const handleLogout = () => {
 .user-trigger:hover {
   background: rgba(224, 122, 95, 0.22);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(224, 122, 95, 0.22);
+  box-shadow: 0 6px 16px rgba(224, 122, 95, 0.18);
 }
 
 .user-avatar {
@@ -589,24 +589,24 @@ const handleLogout = () => {
 
 .btn-primary {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
-  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.28);
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.24);
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 22px rgba(224, 122, 95, 0.38);
+  box-shadow: 0 10px 22px rgba(224, 122, 95, 0.32);
 }
 
 .btn-secondary {
-  background: rgba(247, 240, 232, 0.08);
-  color: var(--tan-light);
-  border: 1px solid rgba(232, 213, 181, 0.28);
+  background: rgba(247, 248, 250, 0.1);
+  color: #e8edf5;
+  border: 1px solid rgba(247, 248, 250, 0.22);
 }
 
 .btn-secondary:hover {
-  background: rgba(224, 122, 95, 0.2);
-  color: #fffbf6;
+  background: rgba(224, 122, 95, 0.22);
+  color: #ffffff;
   border-color: var(--coral-light);
   transform: translateY(-2px);
 }
@@ -641,7 +641,7 @@ const handleLogout = () => {
 }
 
 .footer {
-  background: rgba(255, 251, 246, 0.88);
+  background: #eef0f4;
   border-top: 1px solid var(--border-color);
   padding: 1.75rem 0;
   text-align: center;

@@ -112,7 +112,7 @@ const goTo = (page: number) => {
 
 .pagination-page.active {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
+  color: var(--text-on-accent);
   border-color: transparent;
   cursor: default;
   transform: none;

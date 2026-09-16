@@ -801,7 +801,7 @@ onUnmounted(() => {
 
 .tab-btn.active {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
+  color: var(--text-on-accent);
   border-color: transparent;
 }
 
@@ -1217,7 +1217,7 @@ onUnmounted(() => {
   transition: all 0.2s ease;
   font-size: 0.9rem;
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
+  color: var(--text-on-accent);
 }
 
 .save-watch-btn:hover {

@@ -11,7 +11,7 @@
         <!-- Page Header -->
         <div class="login-header">
           <h1 class="login-title">Login</h1>
-          <p class="login-subtitle">Welcome back to AniScribe</p>
+          <p class="login-subtitle">Welcome back to the lobby</p>
         </div>
 
         <!-- Form -->

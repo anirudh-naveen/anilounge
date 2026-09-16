@@ -11,7 +11,7 @@
       <!-- Page Header -->
       <div class="search-header">
         <h1 class="search-title">Search the Catalog</h1>
-        <p class="search-subtitle">Find animated films and series to add to your AniScribe</p>
+        <p class="search-subtitle">What are you in the mood for?</p>
       </div>
 
       <!-- Search -->
@@ -172,7 +172,7 @@
           <div
             v-for="item in paginatedResults"
             :key="item._id"
-            class="result-card"
+            class="result-card poster-frame"
             @click="viewContentDetails(item)"
           >
             <div class="result-poster">
@@ -595,8 +595,8 @@ onMounted(() => {
 
 .search-btn {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
-  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.25);
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.22);
 }
 
 .ai-btn {
@@ -811,19 +811,19 @@ onMounted(() => {
 
 .result-card {
   position: relative;
-  background: var(--bg-parchment);
+  background: #fff;
   border-radius: 14px;
   overflow: visible;
   box-shadow: var(--shadow-sm);
   transition: all 0.3s ease;
   cursor: pointer;
   z-index: 1;
-  border: 1px solid rgba(232, 213, 181, 0.28);
+  border: 1px solid var(--border-color);
 }
 
 .result-card:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-spot), var(--shadow-md);
   border-color: var(--coral-primary);
   z-index: 20;
 }
@@ -891,7 +891,7 @@ onMounted(() => {
 }
 
 .genre-tag {
-  background: rgba(224, 122, 95, 0.16);
+  background: rgba(224, 122, 95, 0.14);
   color: var(--coral-deep);
   padding: 2px 5px;
   border-radius: 999px;
@@ -966,8 +966,8 @@ onMounted(() => {
 
 .btn-primary {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
-  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.25);
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.22);
 }
 
 .btn-secondary {
