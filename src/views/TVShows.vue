@@ -44,6 +44,7 @@
               @error="handleImageError"
             />
             <div class="content-type-badge tv-badge">TV Show</div>
+            <AiringBadge :content="show" variant="card" />
           </div>
           <div class="show-info">
             <h3 class="show-title">{{ getDisplayTitle(show) }}</h3>
@@ -102,6 +103,7 @@ import { getPosterUrl, formatGenres } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle } from '@/utils/titles'
 

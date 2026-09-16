@@ -13,7 +13,7 @@ import { buildTitleFields, uniqueTitles } from '../utils/titles.js'
 dotenv.config()
 
 const MAL_ANIME_FIELDS =
-  'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users,num_scoring_users,media_type'
+  'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users,num_scoring_users,media_type,broadcast'
 
 const MAL_SPECIAL_TYPES = new Set(['ova', 'special'])
 
@@ -161,13 +161,14 @@ class UnifiedContentService {
    * Full TMDB movie/TV document plus alternative_titles for English/native mapping.
    * @param {number} tmdbId
    * @param {'movie' | 'tv'} contentType
+   * @param {{ skipDelay?: boolean }} [options]
    * @returns {Promise<object | null>}
    */
-  async getTmdbContentDetails(tmdbId, contentType) {
+  async getTmdbContentDetails(tmdbId, contentType, { skipDelay = false } = {}) {
     if (!this.hasTmdbKey) return null
 
     try {
-      await this.delay(this.tmdbDelay)
+      if (!skipDelay) await this.delay(this.tmdbDelay)
       const endpoint = contentType === 'movie' ? '/movie' : '/tv'
       const response = await this.tmdbClient.get(`${endpoint}/${tmdbId}`, {
         params: {
@@ -264,13 +265,14 @@ class UnifiedContentService {
   /**
    * Single MAL anime document for the configured field set.
    * @param {number} malId
+   * @param {{ skipDelay?: boolean }} [options]
    * @returns {Promise<object | null>}
    */
-  async getMalAnimeDetails(malId) {
+  async getMalAnimeDetails(malId, { skipDelay = false } = {}) {
     if (!this.hasMalKey) return null
 
     try {
-      await this.delay(this.malDelay)
+      if (!skipDelay) await this.delay(this.malDelay)
       const response = await this.malClient.get(`/anime/${malId}`, {
         params: {
           fields: MAL_ANIME_FIELDS,
@@ -367,6 +369,10 @@ class UnifiedContentService {
     } else {
       content.episodeCount = tmdbData.number_of_episodes
       content.seasonCount = tmdbData.number_of_seasons
+      const nextEpisode = tmdbData.next_episode_to_air
+      content.nextEpisodeAirDate = nextEpisode?.air_date || null
+      content.nextEpisodeNumber = nextEpisode?.episode_number ?? null
+      content.nextEpisodeSeason = nextEpisode?.season_number ?? null
     }
 
     content.internalId = this.generateInternalId(content)
@@ -437,6 +443,8 @@ class UnifiedContentService {
       malRank: anime.rank,
       malStatus: anime.status,
       malEpisodes: anime.num_episodes,
+      broadcastDay: anime.broadcast?.day_of_the_week || undefined,
+      broadcastTime: anime.broadcast?.start_time || undefined,
       malMediaType: ['unknown', 'tv', 'ova', 'movie', 'special', 'ona', 'music'].includes(
         malMediaType,
       )
@@ -872,6 +880,70 @@ class UnifiedContentService {
         return bPop - aPop
       })
       .slice(0, limit)
+  }
+
+  /**
+   * Whether a TV title needs a live MAL/TMDB airing-schedule refresh.
+   * Currently airing/upcoming shows refresh when the next air time is missing or stale.
+   * @param {object} content
+   * @returns {boolean}
+   */
+  needsAiringRefresh(content) {
+    if (!content || content.contentType !== 'tv') return false
+    if (content.malStatus === 'finished_airing') return false
+
+    const now = Date.now()
+    const updatedAt = content.airingUpdatedAt ? new Date(content.airingUpdatedAt).getTime() : 0
+    const fresh = updatedAt > 0 && now - updatedAt < 6 * 60 * 60 * 1000
+    const nextTs = content.nextEpisodeAirDate ? new Date(content.nextEpisodeAirDate).getTime() : 0
+    const hasFutureEpisode = nextTs > now
+    const hasWeekly =
+      Boolean(content.broadcastDay) && String(content.broadcastDay).toLowerCase() !== 'other'
+
+    if (fresh && (hasFutureEpisode || hasWeekly)) return false
+    return true
+  }
+
+  /**
+   * Overlay MAL broadcast + TMDB next-episode fields onto a Content document.
+   * Caller persists. Returns true when any airing field changed.
+   * @param {object} content - Mongoose Content document
+   * @returns {Promise<boolean>}
+   */
+  async refreshAiringSchedule(content) {
+    if (!this.needsAiringRefresh(content)) return false
+
+    let updated = false
+
+    if (content.malId) {
+      const mal = await this.getMalAnimeDetails(content.malId, { skipDelay: true })
+      if (mal) {
+        if (mal.status) content.malStatus = mal.status
+        if (mal.num_episodes != null) content.malEpisodes = mal.num_episodes
+        content.broadcastDay = mal.broadcast?.day_of_the_week || null
+        content.broadcastTime = mal.broadcast?.start_time || null
+        updated = true
+      }
+    }
+
+    if (content.tmdbId) {
+      const tmdb = await this.getTmdbContentDetails(content.tmdbId, 'tv', { skipDelay: true })
+      if (tmdb) {
+        const next = tmdb.next_episode_to_air
+        content.nextEpisodeAirDate = next?.air_date || null
+        content.nextEpisodeNumber = next?.episode_number ?? null
+        content.nextEpisodeSeason = next?.season_number ?? null
+        if (tmdb.number_of_episodes != null) content.episodeCount = tmdb.number_of_episodes
+        if (tmdb.number_of_seasons != null) content.seasonCount = tmdb.number_of_seasons
+        updated = true
+      }
+    }
+
+    if (updated) {
+      content.airingUpdatedAt = new Date()
+    }
+
+    return updated
   }
 }
 

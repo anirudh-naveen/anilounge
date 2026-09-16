@@ -189,6 +189,7 @@
                 <h5>{{ getDisplayTitle(sequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(sequel.contentType) }}
+                  <AiringBadge :content="sequel" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -222,6 +223,7 @@
                 <h5>{{ getDisplayTitle(prequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(prequel.contentType) }}
+                  <AiringBadge :content="prequel" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -255,6 +257,7 @@
                 <h5>{{ getDisplayTitle(related) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(related.contentType) }}
+                  <AiringBadge :content="related" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -290,6 +293,7 @@ import {
   getDetailsRouteName,
 } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'

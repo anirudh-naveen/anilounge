@@ -56,6 +56,7 @@
               <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
                 {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
+              <AiringBadge :content="item" variant="card" />
             </div>
             <div class="content-info">
               <h3 class="content-title">{{ getDisplayTitle(item) }}</h3>
@@ -100,6 +101,7 @@ import {
 } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle } from '@/utils/titles'
 

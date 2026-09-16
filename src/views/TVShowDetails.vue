@@ -79,9 +79,12 @@
               >
             </div>
 
-            <div v-if="show.malStatus" class="status">
+            <div v-if="isCurrentlyAiring(show)" class="status airing-status">
+              <AiringBadge :content="show" variant="detail" />
+            </div>
+            <div v-else-if="show.malStatus" class="status">
               <i class="fas fa-info-circle"></i>
-              <span>{{ show.malStatus }}</span>
+              <span>{{ formatAiringStatus(show.malStatus) }}</span>
             </div>
           </div>
 
@@ -209,6 +212,7 @@
                 <h5>{{ getDisplayTitle(sequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(sequel.contentType) }}
+                  <AiringBadge :content="sequel" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -242,6 +246,7 @@
                 <h5>{{ getDisplayTitle(prequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(prequel.contentType) }}
+                  <AiringBadge :content="prequel" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -275,6 +280,7 @@
                 <h5>{{ getDisplayTitle(related) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(related.contentType) }}
+                  <AiringBadge :content="related" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -310,9 +316,11 @@ import {
   getDetailsRouteName,
 } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { formatAiringStatus, isCurrentlyAiring } from '@/utils/airing'
 
 const route = useRoute()
 const router = useRouter()
@@ -361,14 +369,12 @@ const loadShow = async (showId: string) => {
   const cached = contentStore.findContentById(showId)
   if (cached) {
     show.value = cached
-    contentStore.cacheContent(cached, true)
     loading.value = false
     fetchRelatedContent(showId)
-    return
+  } else {
+    loading.value = true
+    show.value = null
   }
-
-  loading.value = true
-  show.value = null
 
   try {
     const response = await contentAPI.getContentById(showId)
@@ -376,10 +382,12 @@ const loadShow = async (showId: string) => {
     show.value = response.data.data
     contentStore.cacheContent(show.value, true)
     loading.value = false
-    fetchRelatedContent(showId)
+    if (!cached) fetchRelatedContent(showId)
   } catch (err) {
     if (requestId !== detailsRequestId) return
-    error.value = err instanceof Error ? err.message : 'Failed to load TV show'
+    if (!cached) {
+      error.value = err instanceof Error ? err.message : 'Failed to load TV show'
+    }
     loading.value = false
   }
 }
@@ -687,6 +695,10 @@ const handleImageError = (event: Event) => {
   align-items: center;
   gap: 0.5rem;
   font-size: 1rem;
+}
+
+.airing-status {
+  padding: 0;
 }
 
 .show-meta i {

@@ -184,6 +184,7 @@
               <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
                 {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
+              <AiringBadge :content="item" variant="card" />
             </div>
             <div class="result-info">
               <h3 class="result-title">{{ getDisplayTitle(item) }}</h3>
@@ -275,6 +276,7 @@ import type { UnifiedContent } from '@/types/content'
 import Chatbot from '@/components/Chatbot.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
