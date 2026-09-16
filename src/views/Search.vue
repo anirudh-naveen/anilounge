@@ -112,7 +112,7 @@
           <div class="filter-group rating-filter">
             <label>Rating: {{ filters.ratingMin }} – {{ filters.ratingMax }}</label>
             <div class="rating-slider">
-              <div class="rating-slider-track" :style="{ backgroundImage: ratingTrackGradient }">
+              <div class="rating-slider-track">
                 <div class="rating-slider-range" :style="ratingFillStyle"></div>
               </div>
               <input
@@ -283,7 +283,6 @@ import AiringBadge from '@/components/AiringBadge.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
-import { getRatingScaleGradient } from '@/utils/ratingColors'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 
 const router = useRouter()
@@ -418,9 +417,6 @@ const clampRatingMax = () => {
   }
 }
 
-const ratingTrackGradient = getRatingScaleGradient(0.32)
-const ratingRangeGradient = getRatingScaleGradient(1)
-
 const ratingFillStyle = computed(() => {
   const min = filters.value.ratingMin
   const max = filters.value.ratingMax
@@ -430,7 +426,6 @@ const ratingFillStyle = computed(() => {
   return {
     left: `${left}%`,
     width: `${width}%`,
-    backgroundImage: ratingRangeGradient,
     backgroundSize: `${10000 / width}% 100%`,
     backgroundPosition: `${-(left / width) * 100}% 0`,
   }
@@ -709,6 +704,7 @@ onMounted(() => {
   right: 0;
   height: 6px;
   border-radius: 999px;
+  background: linear-gradient(90deg, #fca5a5 0%, #fde047 50%, #86efac 100%);
 }
 
 .rating-slider-range {
@@ -716,6 +712,7 @@ onMounted(() => {
   top: 0;
   height: 100%;
   border-radius: 999px;
+  background: linear-gradient(90deg, #ef4444 0%, #facc15 50%, #22c55e 100%);
   background-repeat: no-repeat;
 }
 
