@@ -22,7 +22,7 @@
           <img
             v-if="movie.posterPath"
             :src="getPosterUrl(movie.posterPath)"
-            :alt="movie.title"
+            :alt="getDisplayTitle(movie)"
             @error="handleImageError"
           />
           <div v-else class="no-poster">
@@ -32,12 +32,9 @@
         </div>
 
         <div class="movie-info">
-          <h1 class="movie-title">{{ movie.title }}</h1>
-          <p
-            v-if="movie.originalTitle && movie.originalTitle !== movie.title"
-            class="original-title"
-          >
-            Original Title: {{ movie.originalTitle }}
+          <h1 class="movie-title">{{ getDisplayTitle(movie) }}</h1>
+          <p v-if="getNativeTitle(movie)" class="original-title">
+            Native Title: {{ getNativeTitle(movie) }}
           </p>
 
           <div class="movie-meta">
@@ -111,6 +108,19 @@
         </div>
       </div>
 
+      <div v-if="getAlternativeTitles(movie).length" class="alternative-titles">
+        <h3>Alternative Titles</h3>
+        <div class="titles">
+          <span
+            v-for="title in getAlternativeTitles(movie)"
+            :key="title"
+            class="company-tag title-tag"
+          >
+            {{ title }}
+          </span>
+        </div>
+      </div>
+
       <!-- Related Content Loading State -->
       <div v-if="relatedContentLoading" class="related-content-loading">
         <h3>Loading Related Content...</h3>
@@ -150,14 +160,14 @@
               <img
                 v-if="sequel.posterPath"
                 :src="getPosterUrl(sequel.posterPath)"
-                :alt="sequel.title"
+                :alt="getDisplayTitle(sequel)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ sequel.title }}</h5>
+                <h5>{{ getDisplayTitle(sequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(sequel.contentType) }}
                 </p>
@@ -183,14 +193,14 @@
               <img
                 v-if="prequel.posterPath"
                 :src="getPosterUrl(prequel.posterPath)"
-                :alt="prequel.title"
+                :alt="getDisplayTitle(prequel)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ prequel.title }}</h5>
+                <h5>{{ getDisplayTitle(prequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(prequel.contentType) }}
                 </p>
@@ -216,14 +226,14 @@
               <img
                 v-if="related.posterPath"
                 :src="getPosterUrl(related.posterPath)"
-                :alt="related.title"
+                :alt="getDisplayTitle(related)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ related.title }}</h5>
+                <h5>{{ getDisplayTitle(related) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(related.contentType) }}
                 </p>
@@ -263,6 +273,7 @@ import {
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
+import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'
 
 const route = useRoute()
 const router = useRouter()
@@ -427,7 +438,7 @@ const removeFromWatchlist = async () => {
 const shareMovie = () => {
   if (navigator.share && movie.value) {
     navigator.share({
-      title: movie.value.title,
+      title: getDisplayTitle(movie.value),
       text: movie.value.overview,
       url: window.location.href,
     })
@@ -733,18 +744,21 @@ const handleImageError = (event: Event) => {
   color: var(--text-muted);
 }
 
-.production-info {
+.production-info,
+.alternative-titles {
   margin-bottom: 2rem;
 }
 
-.production-info h3 {
+.production-info h3,
+.alternative-titles h3 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
 }
 
 .companies,
-.countries {
+.countries,
+.titles {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -967,7 +981,8 @@ const handleImageError = (event: Event) => {
 }
 
 .company-tag,
-.country-tag {
+.country-tag,
+.title-tag {
   color: #ffffff !important; /* White text */
 }
 

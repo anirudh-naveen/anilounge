@@ -300,6 +300,7 @@ import { useToast } from 'vue-toastification'
 import type { WatchlistItem, TVShow } from '@/types'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
+import { getDisplayTitle } from '@/utils/titles'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -350,7 +351,7 @@ const getRatingStyle = (rating: number | undefined) => {
 const getContentTitle = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'Unknown Title'
   if (typeof item.content === 'string') return 'Unknown Title'
-  return item.content?.title || 'Unknown Title'
+  return getDisplayTitle(item.content)
 }
 
 const getContentOverview = (item: WatchlistItem) => {

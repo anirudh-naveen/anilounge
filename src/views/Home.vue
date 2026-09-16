@@ -40,7 +40,7 @@
             <div class="content-poster">
               <img
                 :src="getPosterUrl(item.posterPath || '')"
-                :alt="item.title"
+                :alt="getDisplayTitle(item)"
                 @error="handleImageError"
               />
               <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
@@ -48,7 +48,7 @@
               </div>
             </div>
             <div class="content-info">
-              <h3 class="content-title">{{ item.title }}</h3>
+              <h3 class="content-title">{{ getDisplayTitle(item) }}</h3>
               <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
               <div class="content-genres">
                 <span
@@ -90,6 +90,7 @@ import {
 import { useToast } from 'vue-toastification'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
+import { getDisplayTitle } from '@/utils/titles'
 
 const router = useRouter()
 const route = useRoute()

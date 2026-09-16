@@ -1,4 +1,5 @@
 import Content from '../models/Content.js'
+import { contentTitleMatchOr } from '../utils/titles.js'
 
 class RelationshipService {
   constructor() {
@@ -415,7 +416,7 @@ class RelationshipService {
    */
   async findByPatterns(content) {
     const related = []
-    const baseTitle = this.extractBaseTitle(content.title)
+    const baseTitle = this.extractBaseTitle(content.englishTitle || content.title)
 
     if (!baseTitle) return related
 
@@ -423,10 +424,7 @@ class RelationshipService {
     const similarContent = await Content.find({
       _id: { $ne: content._id },
       contentType: content.contentType,
-      $or: [
-        { title: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
-        { originalTitle: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
-      ],
+      $or: contentTitleMatchOr({ $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' }),
     })
       .lean() // Use lean() for faster queries
       .limit(10)
@@ -441,19 +439,19 @@ class RelationshipService {
     const related = []
 
     for (const [, franchiseData] of Object.entries(this.franchiseMap)) {
-      if (this.isInFranchise(content.title, franchiseData.titles)) {
+      if (
+        this.isInFranchise(content.englishTitle || content.title, franchiseData.titles) ||
+        this.isInFranchise(content.nativeTitle || content.originalTitle, franchiseData.titles)
+      ) {
         // Optimize: Combine all searches into a single query using $or
         const allMatches = await Content.find({
           _id: { $ne: content._id },
           contentType: content.contentType,
           $or: [
             // Search by titles
-            ...franchiseData.titles.map((title) => ({
-              $or: [
-                { title: { $regex: this.escapeRegex(title), $options: 'i' } },
-                { originalTitle: { $regex: this.escapeRegex(title), $options: 'i' } },
-              ],
-            })),
+            ...franchiseData.titles.flatMap((title) =>
+              contentTitleMatchOr({ $regex: this.escapeRegex(title), $options: 'i' }),
+            ),
             // Search by TMDB IDs (only if there are any)
             ...(franchiseData.tmdbIds.length > 0
               ? [{ tmdbId: { $in: franchiseData.tmdbIds } }]
@@ -526,10 +524,7 @@ class RelationshipService {
   async findRelatedByTitlePattern(baseTitle) {
     // Find existing content with similar base titles
     const similarContent = await Content.find({
-      $or: [
-        { title: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
-        { originalTitle: { $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' } },
-      ],
+      $or: contentTitleMatchOr({ $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' }),
     }).limit(5)
 
     return similarContent
@@ -587,6 +582,7 @@ class RelationshipService {
    * Check if content belongs to a franchise
    */
   isInFranchise(title, franchiseTitles) {
+    if (!title) return false
     const titleLower = title.toLowerCase()
     return franchiseTitles.some((franchiseTitle) => {
       const franchiseLower = franchiseTitle.toLowerCase()

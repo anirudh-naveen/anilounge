@@ -5,6 +5,7 @@ import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
 import relationshipService from '../services/relationshipService.js'
 import { applyUserRatingDelta, isValidUserRating } from '../utils/ratings.js'
+import { contentTitleMatchOr } from '../utils/titles.js'
 import { validationResult } from 'express-validator'
 import mongoose from 'mongoose'
 
@@ -181,9 +182,8 @@ export const searchContent = async (req, res) => {
     // Search in database first
     const dbResults = await Content.find({
       $or: [
-        { title: { $regex: query, $options: 'i' } },
+        ...contentTitleMatchOr({ $regex: query, $options: 'i' }),
         { overview: { $regex: query, $options: 'i' } },
-        { alternativeTitles: { $regex: query, $options: 'i' } },
       ],
       ...(type && type !== 'all' ? matchContentType(type) : {}),
     })

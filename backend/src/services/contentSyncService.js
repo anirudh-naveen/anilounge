@@ -3,6 +3,7 @@ import Content from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import relationshipService from './relationshipService.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
+import { applyTitleFields, contentTitleMatchOr } from '../utils/titles.js'
 
 /**
  * Syncs animation catalog content from TMDB and MyAnimeList into MongoDB.
@@ -334,15 +335,11 @@ class DatabasePopulator {
     const titleVariations = this.generateTitleVariations(contentData.title)
 
     for (const title of titleVariations) {
+      const titleMatcher = {
+        $regex: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+      }
       const byTitle = await Content.findOne({
-        $or: [
-          { title: { $regex: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } },
-          {
-            alternativeTitles: {
-              $regex: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
-            },
-          },
-        ],
+        $or: contentTitleMatchOr(titleMatcher),
         contentType: contentData.contentType,
       })
 
@@ -592,10 +589,20 @@ class DatabasePopulator {
     return Array.from(genreMap.values())
   }
 
+  assignTitleFields(existingContent, titleFields) {
+    existingContent.title = titleFields.title
+    if (titleFields.englishTitle) existingContent.englishTitle = titleFields.englishTitle
+    if (titleFields.nativeTitle) existingContent.nativeTitle = titleFields.nativeTitle
+    if (titleFields.originalTitle) existingContent.originalTitle = titleFields.originalTitle
+    existingContent.alternativeTitles = titleFields.alternativeTitles
+  }
+
   async mergeTmdbIntoExisting(existingContent, tmdbData, detailedTmdbData) {
     // Refresh core TMDB metadata without touching user ratings or MAL fields
-    if (tmdbData.title) existingContent.title = tmdbData.title
-    if (tmdbData.originalTitle) existingContent.originalTitle = tmdbData.originalTitle
+    this.assignTitleFields(
+      existingContent,
+      applyTitleFields(existingContent, tmdbData, { preferIncomingEnglish: true }),
+    )
     if (tmdbData.overview) existingContent.overview = tmdbData.overview
     if (tmdbData.posterPath) existingContent.posterPath = tmdbData.posterPath
     if (tmdbData.backdropPath) existingContent.backdropPath = tmdbData.backdropPath
@@ -613,12 +620,6 @@ class DatabasePopulator {
     // Merge arrays
     existingContent.studios = [
       ...new Set([...(existingContent.studios || []), ...(tmdbData.studios || [])]),
-    ]
-    existingContent.alternativeTitles = [
-      ...new Set([
-        ...(existingContent.alternativeTitles || []),
-        ...(tmdbData.alternativeTitles || []),
-      ]),
     ]
     // Properly deduplicate genres by id or name
     existingContent.genres = this.deduplicateGenres([
@@ -676,13 +677,12 @@ class DatabasePopulator {
     // For anime content, prioritize MAL data but be conservative about overwriting
     const isAnime = this.isAnimeContent(malData)
 
-    if (isAnime) {
-      // Only overwrite title if MAL title is significantly different and more complete
-      // Don't overwrite English titles with Japanese titles unless the English title is missing
-      if (!existingContent.title || existingContent.title.length < malData.title.length) {
-        existingContent.title = malData.title
-      }
+    this.assignTitleFields(
+      existingContent,
+      applyTitleFields(existingContent, malData, { preferIncomingNative: true }),
+    )
 
+    if (isAnime) {
       // Only overwrite overview if existing one is empty or much shorter
       if (!existingContent.overview || existingContent.overview.length < malData.overview.length) {
         existingContent.overview = malData.overview
@@ -717,12 +717,6 @@ class DatabasePopulator {
     // Merge arrays
     existingContent.studios = [
       ...new Set([...(existingContent.studios || []), ...(malData.studios || [])]),
-    ]
-    existingContent.alternativeTitles = [
-      ...new Set([
-        ...(existingContent.alternativeTitles || []),
-        ...(malData.alternativeTitles || []),
-      ]),
     ]
     // Properly deduplicate genres by id or name
     existingContent.genres = this.deduplicateGenres([

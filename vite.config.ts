@@ -14,7 +14,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
-    strictPort: true, // Fail if port 5173 is already in use
+    port: 5174,
+    strictPort: true, // Fail if port 5174 is already in use
   },
 })

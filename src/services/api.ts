@@ -7,6 +7,7 @@ import type {
   UpdateWatchlistData,
   ContentParams,
 } from '@/types'
+import { getDisplayTitle } from '@/utils/titles'
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
@@ -154,7 +155,10 @@ interface ContentData {
   _id?: string
   id?: string
   title?: string
+  englishTitle?: string
+  nativeTitle?: string
   displayTitle?: string
+  originalTitle?: string
   overview?: string
   posterPath?: string
   backdropPath?: string
@@ -187,7 +191,7 @@ interface ContentData {
 export const getContentDisplayInfo = (content: ContentData) => {
   return {
     id: content._id || content.id,
-    title: content.title || content.displayTitle || 'Unknown Title',
+    title: getDisplayTitle(content),
     overview: content.overview || '',
     posterPath: content.posterPath,
     backdropPath: content.backdropPath,

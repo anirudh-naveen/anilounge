@@ -171,7 +171,7 @@
             <div class="result-poster">
               <img
                 :src="getPosterUrl(item.posterPath || '')"
-                :alt="item.title"
+                :alt="getDisplayTitle(item)"
                 @error="handleImageError"
               />
               <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
@@ -179,7 +179,10 @@
               </div>
             </div>
             <div class="result-info">
-              <h3 class="result-title">{{ item.title }}</h3>
+              <h3 class="result-title">{{ getDisplayTitle(item) }}</h3>
+              <p v-if="getNativeTitle(item)" class="result-native-title">
+                {{ getNativeTitle(item) }}
+              </p>
               <p class="result-overview">{{ truncateText(item.overview, 100) }}</p>
               <div class="result-genres">
                 <span
@@ -268,6 +271,7 @@ import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
+import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 
 const router = useRouter()
 const route = useRoute()
@@ -355,7 +359,7 @@ const filteredResults = computed(() => {
     results,
     active.sortBy,
     active.sortDirection,
-    (item) => item.title || '',
+    (item) => getDisplayTitle(item),
     (item) => getWeightedAverage(item) || 0,
     (item) => getTotalVoteCount(item),
   )
@@ -865,6 +869,18 @@ onMounted(() => {
   line-height: 1.25;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.result-native-title {
+  font-size: 0.75rem;
+  color: #666;
+  font-style: italic;
+  margin: -0.2rem 0 0.35rem;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
