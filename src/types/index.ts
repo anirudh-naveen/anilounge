@@ -70,6 +70,8 @@ export interface Movie {
   _id: string
   tmdbId: number
   title: string
+  englishTitle?: string
+  nativeTitle?: string
   originalTitle: string
   overview: string
   posterPath: string
@@ -103,6 +105,8 @@ export interface TVShow {
   _id: string
   tmdbId: number
   title: string
+  englishTitle?: string
+  nativeTitle?: string
   originalTitle: string
   overview: string
   posterPath: string

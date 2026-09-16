@@ -6,11 +6,18 @@
     @click.stop
   >
     <div class="hover-preview-poster">
-      <img :src="getPosterUrl(item.posterPath || '')" :alt="item.title" @error="handleImageError" />
+      <img
+        :src="getPosterUrl(item.posterPath || '')"
+        :alt="displayTitle"
+        @error="handleImageError"
+      />
     </div>
     <div class="hover-preview-body">
       <div class="hover-preview-header">
-        <h3 class="hover-preview-title">{{ item.title }}</h3>
+        <div class="hover-preview-titles">
+          <h3 class="hover-preview-title">{{ displayTitle }}</h3>
+          <p v-if="nativeTitle" class="hover-preview-native">{{ nativeTitle }}</p>
+        </div>
         <div class="hover-preview-rating" :style="getRatingTextStyle(averageRating)">
           {{ displayRating }}
         </div>
@@ -115,6 +122,7 @@ import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
+import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 
 const PREVIEW_WIDTH = 420
 
@@ -149,6 +157,8 @@ const averageRating = computed(() => getWeightedAverage(props.item))
 const displayRating = computed(() =>
   averageRating.value != null ? averageRating.value.toFixed(1) : 'N/A',
 )
+const displayTitle = computed(() => getDisplayTitle(props.item))
+const nativeTitle = computed(() => getNativeTitle(props.item))
 
 const overview = computed(() => {
   const text = props.item.overview || ''
@@ -323,12 +333,24 @@ onBeforeUnmount(() => {
   gap: 0.5rem;
 }
 
+.hover-preview-titles {
+  min-width: 0;
+}
+
 .hover-preview-title {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
   color: #222;
   line-height: 1.25;
+}
+
+.hover-preview-native {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: #666;
+  font-style: italic;
+  line-height: 1.2;
 }
 
 .hover-preview-rating {

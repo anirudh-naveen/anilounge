@@ -2,6 +2,8 @@
 export interface UnifiedContent {
   _id: string
   title: string
+  englishTitle?: string
+  nativeTitle?: string
   originalTitle?: string
   overview: string
   contentType: 'movie' | 'tv' | 'special'

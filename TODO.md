@@ -6,7 +6,7 @@ Additions and Major Changes -
 4. Add review system and discussion features for users.
 5. Include episode content subgroup for tv shows, with its own cast and description.
 6. Include a currently airing tag and timer for new episode updates for airing shows.
-7. Seperate English title with Native title (and make both searchable)
+7. Seperate English title with Native title (and make both searchable) ✅
 8. Collapse MAL specials (OVA/special) into Movies; label them Specials on hover. ✅
 9. Add email verification for sign up and password lockouts
 10. Make a person's watchlist publicly visible.

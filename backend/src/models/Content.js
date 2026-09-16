@@ -8,7 +8,9 @@ const ContentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    originalTitle: String,
+    englishTitle: String,
+    nativeTitle: String,
+    originalTitle: String, // Native title, kept for backward compatibility
     overview: String,
     tagline: String,
 
@@ -166,11 +168,13 @@ ContentSchema.index({ title: 'text', overview: 'text' })
 ContentSchema.index({ contentType: 1, tmdbId: 1 })
 ContentSchema.index({ contentType: 1, malId: 1 })
 ContentSchema.index({ contentType: 1, title: 1 })
+ContentSchema.index({ contentType: 1, englishTitle: 1 })
+ContentSchema.index({ contentType: 1, nativeTitle: 1 })
 ContentSchema.index({ contentType: 1, originalTitle: 1 })
 
 // Virtual for display title
 ContentSchema.virtual('displayTitle').get(function () {
-  return this.title || this.originalTitle || 'Unknown Title'
+  return this.englishTitle || this.title || this.nativeTitle || this.originalTitle || 'Unknown Title'
 })
 
 // Virtual for primary rating (vote-weighted average of available sources)

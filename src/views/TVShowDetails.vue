@@ -22,7 +22,7 @@
           <img
             v-if="show.posterPath"
             :src="getPosterUrl(show.posterPath)"
-            :alt="show.title"
+            :alt="getDisplayTitle(show)"
             @error="handleImageError"
           />
           <div v-else class="no-poster">
@@ -32,9 +32,9 @@
         </div>
 
         <div class="show-info">
-          <h1 class="show-title">{{ show.title }}</h1>
-          <p v-if="show.originalTitle && show.originalTitle !== show.title" class="original-title">
-            Original Title: {{ show.originalTitle }}
+          <h1 class="show-title">{{ getDisplayTitle(show) }}</h1>
+          <p v-if="getNativeTitle(show)" class="original-title">
+            Native Title: {{ getNativeTitle(show) }}
           </p>
 
           <div class="show-meta">
@@ -131,10 +131,10 @@
         </div>
       </div>
 
-      <div v-if="show.alternativeTitles?.length" class="alternative-titles">
+      <div v-if="getAlternativeTitles(show).length" class="alternative-titles">
         <h3>Alternative Titles</h3>
         <div class="titles">
-          <span v-for="title in show.alternativeTitles" :key="title" class="title-tag">
+          <span v-for="title in getAlternativeTitles(show)" :key="title" class="title-tag">
             {{ title }}
           </span>
         </div>
@@ -179,14 +179,14 @@
               <img
                 v-if="sequel.posterPath"
                 :src="getPosterUrl(sequel.posterPath)"
-                :alt="sequel.title"
+                :alt="getDisplayTitle(sequel)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ sequel.title }}</h5>
+                <h5>{{ getDisplayTitle(sequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(sequel.contentType) }}
                 </p>
@@ -212,14 +212,14 @@
               <img
                 v-if="prequel.posterPath"
                 :src="getPosterUrl(prequel.posterPath)"
-                :alt="prequel.title"
+                :alt="getDisplayTitle(prequel)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ prequel.title }}</h5>
+                <h5>{{ getDisplayTitle(prequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(prequel.contentType) }}
                 </p>
@@ -245,14 +245,14 @@
               <img
                 v-if="related.posterPath"
                 :src="getPosterUrl(related.posterPath)"
-                :alt="related.title"
+                :alt="getDisplayTitle(related)"
                 @error="handleImageError"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
               </div>
               <div class="content-info">
-                <h5>{{ related.title }}</h5>
+                <h5>{{ getDisplayTitle(related) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(related.contentType) }}
                 </p>
@@ -292,6 +292,7 @@ import {
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
+import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'
 
 const route = useRoute()
 const router = useRouter()
@@ -456,7 +457,7 @@ const removeFromWatchlist = async () => {
 const shareShow = () => {
   if (navigator.share && show.value) {
     navigator.share({
-      title: show.value.title,
+      title: getDisplayTitle(show.value),
       text: show.value.overview,
       url: window.location.href,
     })
@@ -764,13 +765,15 @@ const handleImageError = (event: Event) => {
 
 .network-info,
 .production-info,
-.creator-info {
+.creator-info,
+.alternative-titles {
   margin-bottom: 2rem;
 }
 
 .network-info h3,
 .production-info h3,
-.creator-info h3 {
+.creator-info h3,
+.alternative-titles h3 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
@@ -779,7 +782,8 @@ const handleImageError = (event: Event) => {
 .networks,
 .companies,
 .countries,
-.creators {
+.creators,
+.titles {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -788,7 +792,8 @@ const handleImageError = (event: Event) => {
 .network-tag,
 .company-tag,
 .country-tag,
-.creator-tag {
+.creator-tag,
+.title-tag {
   background: var(--bg-card);
   color: var(--text-primary);
   padding: 0.25rem 0.75rem;

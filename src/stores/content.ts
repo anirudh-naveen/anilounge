@@ -10,6 +10,7 @@ import {
 import type { WatchlistItem } from '@/types'
 import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
+import { getDisplayTitle, getSearchableTitles } from '@/utils/titles'
 
 export type SearchFilters = {
   type: string
@@ -248,11 +249,13 @@ export const useContentStore = defineStore('content', () => {
         const searchWords = normalizedSearchTerm.split(' ')
 
         filteredResults = filteredResults.filter((item) => {
-          const title = item.title?.toLowerCase() || ''
-          const originalTitle = item.originalTitle?.toLowerCase() || ''
-          const alternativeTitles = (item.alternativeTitles || [])
-            .map((t) => t.toLowerCase())
-            .join(' ')
+          const titles = getSearchableTitles(item).map((title) => title.toLowerCase())
+          const normalizedTitles = titles.map((title) =>
+            title
+              .replace(/[^\w\s]/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim(),
+          )
           const genres = (item.genres || [])
             .map((g) => (typeof g === 'string' ? g : g.name || ''))
             .join(' ')
@@ -260,28 +263,16 @@ export const useContentStore = defineStore('content', () => {
           const overview = item.overview?.toLowerCase() || ''
           const studios = (item.studios || []).join(' ').toLowerCase()
 
-          // Normalize titles for comparison
-          const normalizedTitle = title
-            .replace(/[^\w\s]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-          const normalizedOriginalTitle = originalTitle
-            .replace(/[^\w\s]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-
           // Check if search term appears anywhere
           const directMatch =
-            title.includes(searchTerm) ||
-            originalTitle.includes(searchTerm) ||
-            alternativeTitles.includes(searchTerm) ||
+            titles.some((title) => title.includes(searchTerm)) ||
             genres.includes(searchTerm) ||
             overview.includes(searchTerm) ||
             studios.includes(searchTerm)
 
           // Check if all search words appear in normalized title (for "spider man" matching "Spider-Man")
-          const allWordsInTitle = searchWords.every(
-            (word) => normalizedTitle.includes(word) || normalizedOriginalTitle.includes(word),
+          const allWordsInTitle = searchWords.every((word) =>
+            normalizedTitles.some((title) => title.includes(word)),
           )
 
           return directMatch || allWordsInTitle
@@ -291,16 +282,8 @@ export const useContentStore = defineStore('content', () => {
       // Enhanced sorting by relevance with multiple tiers
       if (searchTerm) {
         filteredResults.sort((a, b) => {
-          const aTitle = a.title?.toLowerCase() || ''
-          const bTitle = b.title?.toLowerCase() || ''
-          const aOriginalTitle = a.originalTitle?.toLowerCase() || ''
-          const bOriginalTitle = b.originalTitle?.toLowerCase() || ''
-          const aAlternativeTitles = (a.alternativeTitles || [])
-            .map((t) => t.toLowerCase())
-            .join(' ')
-          const bAlternativeTitles = (b.alternativeTitles || [])
-            .map((t) => t.toLowerCase())
-            .join(' ')
+          const aTitles = getSearchableTitles(a).map((title) => title.toLowerCase())
+          const bTitles = getSearchableTitles(b).map((title) => title.toLowerCase())
           const aGenres = (a.genres || [])
             .map((g) => (typeof g === 'string' ? g : g.name || ''))
             .join(' ')
@@ -311,38 +294,30 @@ export const useContentStore = defineStore('content', () => {
             .toLowerCase()
 
           // Priority 1: Exact title match
-          const aExactTitle = aTitle === searchTerm
-          const bExactTitle = bTitle === searchTerm
+          const aExactTitle = aTitles.includes(searchTerm)
+          const bExactTitle = bTitles.includes(searchTerm)
           if (aExactTitle && !bExactTitle) return -1
           if (!aExactTitle && bExactTitle) return 1
 
           // Priority 2: Title starts with search term
-          const aTitleStarts = aTitle.startsWith(searchTerm)
-          const bTitleStarts = bTitle.startsWith(searchTerm)
+          const aTitleStarts = aTitles.some((title) => title.startsWith(searchTerm))
+          const bTitleStarts = bTitles.some((title) => title.startsWith(searchTerm))
           if (aTitleStarts && !bTitleStarts) return -1
           if (!aTitleStarts && bTitleStarts) return 1
 
           // Priority 3: Title contains search term
-          const aTitleContains = aTitle.includes(searchTerm)
-          const bTitleContains = bTitle.includes(searchTerm)
+          const aTitleContains = aTitles.some((title) => title.includes(searchTerm))
+          const bTitleContains = bTitles.some((title) => title.includes(searchTerm))
           if (aTitleContains && !bTitleContains) return -1
           if (!aTitleContains && bTitleContains) return 1
 
-          // Priority 4: Original title or alternative titles contain search term
-          const aOtherTitles =
-            aOriginalTitle.includes(searchTerm) || aAlternativeTitles.includes(searchTerm)
-          const bOtherTitles =
-            bOriginalTitle.includes(searchTerm) || bAlternativeTitles.includes(searchTerm)
-          if (aOtherTitles && !bOtherTitles) return -1
-          if (!aOtherTitles && bOtherTitles) return 1
-
-          // Priority 5: Genre exact match
+          // Priority 4: Genre exact match
           const aGenreMatch = aGenres.split(' ').some((genre) => genre.toLowerCase() === searchTerm)
           const bGenreMatch = bGenres.split(' ').some((genre) => genre.toLowerCase() === searchTerm)
           if (aGenreMatch && !bGenreMatch) return -1
           if (!aGenreMatch && bGenreMatch) return 1
 
-          // Priority 6: Genre contains search term
+          // Priority 5: Genre contains search term
           const aGenreContains = aGenres.includes(searchTerm)
           const bGenreContains = bGenres.includes(searchTerm)
           if (aGenreContains && !bGenreContains) return -1
@@ -544,7 +519,7 @@ export const useContentStore = defineStore('content', () => {
   const getContentDisplayInfo = (content: UnifiedContent) => {
     return {
       id: content._id,
-      title: content.title || 'Unknown Title',
+      title: getDisplayTitle(content),
       overview: content.overview || '',
       posterPath: content.posterPath,
       backdropPath: content.backdropPath,

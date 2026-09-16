@@ -1,5 +1,6 @@
 import axios from 'axios'
 import dotenv from 'dotenv'
+import { buildTitleFields, uniqueTitles } from '../utils/titles.js'
 
 dotenv.config()
 
@@ -49,7 +50,13 @@ class UnifiedContentService {
 
   // Generate unique internal ID for content
   generateInternalId(contentData) {
-    const titleSlug = (contentData.title || contentData.originalTitle || 'unknown')
+    const titleSlug = (
+      contentData.englishTitle ||
+      contentData.title ||
+      contentData.nativeTitle ||
+      contentData.originalTitle ||
+      'unknown'
+    )
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '-')
       .substring(0, 50) // Limit length
@@ -130,6 +137,7 @@ class UnifiedContentService {
       const response = await this.tmdbClient.get(`${endpoint}/${tmdbId}`, {
         params: {
           api_key: this.tmdbApiKey,
+          append_to_response: 'alternative_titles',
         },
       })
 
@@ -246,6 +254,13 @@ class UnifiedContentService {
     }
   }
 
+  collectTmdbAlternativeTitles(tmdbData) {
+    const block = tmdbData.alternative_titles
+    if (!block) return []
+    const list = block.titles || block.results || []
+    return list.map((entry) => entry?.title).filter(Boolean)
+  }
+
   // Content Conversion Methods
   convertTmdbToContent(tmdbData, contentType) {
     // Filter out TMDB content with less than 50 votes or null vote data
@@ -253,9 +268,15 @@ class UnifiedContentService {
       return null
     }
 
+    const titleFields = buildTitleFields({
+      englishTitle: tmdbData.title || tmdbData.name,
+      nativeTitle: tmdbData.original_title || tmdbData.original_name,
+      fallbackTitle: tmdbData.title || tmdbData.name,
+      alternativeTitles: this.collectTmdbAlternativeTitles(tmdbData),
+    })
+
     const content = {
-      title: tmdbData.title || tmdbData.name,
-      originalTitle: tmdbData.original_title || tmdbData.original_name,
+      ...titleFields,
       overview: tmdbData.overview,
       contentType,
       posterPath: tmdbData.poster_path,
@@ -317,9 +338,17 @@ class UnifiedContentService {
     const finalContentType = this.resolveMalContentType(anime)
     const malMediaType = String(anime.media_type || '').toLowerCase() || undefined
 
+    const alternativeTitles = anime.alternative_titles || {}
+    const synonyms = Array.isArray(alternativeTitles.synonyms) ? alternativeTitles.synonyms : []
+    const titleFields = buildTitleFields({
+      englishTitle: alternativeTitles.en,
+      nativeTitle: alternativeTitles.ja,
+      fallbackTitle: anime.title,
+      alternativeTitles: [anime.title, ...synonyms],
+    })
+
     const content = {
-      title: anime.title || 'Unknown Title',
-      originalTitle: anime.alternative_titles?.en || anime.title || 'Unknown Title',
+      ...titleFields,
       overview: anime.synopsis || '',
       contentType: finalContentType,
       posterPath: anime.main_picture?.medium || anime.main_picture?.large,
@@ -338,9 +367,6 @@ class UnifiedContentService {
       malRating: anime.rating,
       genres: anime.genres?.map((genre) => ({ id: genre.id, name: genre.name })) || [],
       studios: anime.studios?.map((studio) => studio.name) || [],
-      alternativeTitles: anime.alternative_titles
-        ? Object.values(anime.alternative_titles).flat()
-        : [],
       dataSources: {
         mal: {
           hasData: true,
@@ -664,17 +690,27 @@ class UnifiedContentService {
     const deduplicated = []
 
     for (const result of results) {
-      const key = `${result.title}-${result.contentType}`
+      const key = `${result.englishTitle || result.title}-${result.contentType}`
       if (!seen.has(key)) {
         seen.add(key)
         deduplicated.push(result)
       }
     }
 
+    const queryLower = query.toLowerCase()
+    const matchesQuery = (item) =>
+      uniqueTitles(
+        item.englishTitle,
+        item.title,
+        item.nativeTitle,
+        item.originalTitle,
+        item.alternativeTitles,
+      ).some((title) => title.toLowerCase().includes(queryLower))
+
     // Sort by relevance (exact title match first, then popularity)
     return deduplicated.sort((a, b) => {
-      const aTitleMatch = a.title.toLowerCase().includes(query.toLowerCase())
-      const bTitleMatch = b.title.toLowerCase().includes(query.toLowerCase())
+      const aTitleMatch = matchesQuery(a)
+      const bTitleMatch = matchesQuery(b)
 
       if (aTitleMatch && !bTitleMatch) return -1
       if (!aTitleMatch && bTitleMatch) return 1

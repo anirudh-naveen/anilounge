@@ -33,13 +33,13 @@
           <div class="movie-poster">
             <img
               :src="getPosterUrl(movie.posterPath || '')"
-              :alt="movie.title"
+              :alt="getDisplayTitle(movie)"
               @error="handleImageError"
             />
             <div class="content-type-badge movie-badge">Movie</div>
           </div>
           <div class="movie-info">
-            <h3 class="movie-title">{{ movie.title }}</h3>
+            <h3 class="movie-title">{{ getDisplayTitle(movie) }}</h3>
             <p class="movie-overview">{{ truncateText(movie.overview, 120) }}</p>
             <div class="movie-genres">
               <span
@@ -92,6 +92,7 @@ import { useToast } from 'vue-toastification'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import type { UnifiedContent } from '@/types/content'
+import { getDisplayTitle } from '@/utils/titles'
 
 const router = useRouter()
 const contentStore = useContentStore()
