@@ -1,10 +1,17 @@
 #!/usr/bin/env node
 
-// Simple script to view beta feedback
+/**
+ * Read-only diagnostic script: print beta feedback from GET /api/feedback.
+ * Run against a live API (API_URL, default localhost:5001). Does not mutate the database.
+ */
 import fetch from 'node-fetch'
 
 const API_BASE_URL = process.env.API_URL || 'http://localhost:5001/api'
 
+/**
+ * Fetch and print each feedback row (type, email, message, timestamp, url, user agent).
+ * @returns {Promise<void>}
+ */
 async function viewFeedback() {
   try {
     console.log('Fetching beta feedback...\n')

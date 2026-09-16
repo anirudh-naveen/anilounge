@@ -1,14 +1,23 @@
+<!--
+  Profile.vue — user profile view.
+
+  Shows the signed-in user's avatar, watchlist stats, account fields, and
+  favorite genre/studio preferences from the auth and content stores.
+-->
 <template>
   <div class="profile-page">
     <div class="container">
+      <!-- Page Header -->
       <div class="page-header">
         <h1>Profile</h1>
         <p>Check out this user's account</p>
       </div>
 
       <div class="profile-content">
+        <!-- Identity -->
         <div class="profile-card">
           <div class="profile-header">
+            <!-- Title: Avatar -->
             <div class="avatar">
               <img
                 v-if="authStore.user?.profilePicture"
@@ -27,6 +36,7 @@
             </div>
           </div>
 
+          <!-- Title: Stats -->
           <div class="profile-stats">
             <div class="stat-item">
               <div class="stat-number">{{ completedShows }}</div>
@@ -50,6 +60,7 @@
         </div>
 
         <div class="profile-sections">
+          <!-- Account -->
           <div class="section">
             <h3>Account Information</h3>
             <div class="info-grid">
@@ -64,9 +75,11 @@
             </div>
           </div>
 
+          <!-- Preferences -->
           <div class="section">
             <h3>Preferences</h3>
             <div class="preferences">
+              <!-- Title: Favorite Genres -->
               <div class="preference-item">
                 <label>Favorite Genres</label>
                 <div class="genre-tags">
@@ -78,6 +91,7 @@
                   </span>
                 </div>
               </div>
+              <!-- Title: Favorite Studios -->
               <div class="preference-item">
                 <label>Favorite Studios</label>
                 <div class="studio-tags">

@@ -1,11 +1,19 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  Chatbot.vue — AI recommendation chat (component).
+
+  Modal chat UI that sends queries to the AI assistant and can emit catalog
+  search results back to the parent view.
+-->
 <template>
   <div class="chatbot-container">
+    <!-- Title: Header -->
     <div class="chatbot-header">
       <h3>AI Assistant</h3>
       <button @click="toggleChatbot" class="close-btn">×</button>
     </div>
 
+    <!-- Title: Transcript -->
     <div class="chatbot-messages" ref="messagesContainer">
       <div v-for="message in messages" :key="message.id" :class="['message', message.type]">
         <div class="message-content">
@@ -27,6 +35,7 @@
       </div>
     </div>
 
+    <!-- Title: Composer -->
     <div class="chatbot-input">
       <input
         v-model="inputMessage"

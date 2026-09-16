@@ -1,14 +1,20 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  Search.vue — catalog search view.
+
+  Query form, type/genre/language/year/rating/sort filters, paginated results,
+  and an optional AI assistant overlay. Backed by the content store.
+-->
 <template>
   <div class="search-page">
     <div class="container">
-      <!-- Search Header -->
+      <!-- Page Header -->
       <div class="search-header">
         <h1 class="search-title">Search Animated Content</h1>
         <p class="search-subtitle">Find your next favorite animated movie or TV show</p>
       </div>
 
-      <!-- Search Form -->
+      <!-- Search -->
       <div class="search-form-container">
         <form @submit.prevent="handleSearch" class="search-form">
           <div class="search-input-group">
@@ -37,7 +43,7 @@
         </form>
       </div>
 
-      <!-- Filters Bar -->
+      <!-- Filters -->
       <div class="filters-container" v-if="!isAIMode">
         <div class="filters-header">
           <h3>Filters</h3>
@@ -135,13 +141,14 @@
         </div>
       </div>
 
-      <!-- Loading State -->
+      <!-- Results -->
+      <!-- Title: Loading State -->
       <div v-if="contentStore.isLoading" class="loading-container">
         <div class="spinner"></div>
         <p>Searching for amazing content...</p>
       </div>
 
-      <!-- Error State -->
+      <!-- Title: Error State -->
       <div v-else-if="contentStore.error" class="error-state">
         <div class="error-icon">⚠️</div>
         <h3>Search failed</h3>
@@ -149,7 +156,7 @@
         <button @click="handleSearch" class="btn btn-primary">Try Again</button>
       </div>
 
-      <!-- Search Results -->
+      <!-- Title: Results Grid -->
       <div
         v-else-if="hasSearched && filteredResults.length > 0 && !isAIMode"
         class="search-results"
@@ -217,11 +224,11 @@
           </div>
         </div>
 
-        <!-- Pagination -->
+        <!-- Title: Pagination -->
         <PaginationNav :current-page="currentPage" :total-pages="totalPages" @change="goToPage" />
       </div>
 
-      <!-- No Results -->
+      <!-- Title: Empty State -->
       <div v-else-if="hasSearched && filteredResults.length === 0" class="no-results">
         <div class="no-results-icon">🔍</div>
         <h3>No results found</h3>
@@ -229,14 +236,14 @@
         <button @click="clearSearch" class="btn btn-primary">Clear Search</button>
       </div>
 
-      <!-- Initial State -->
+      <!-- Title: Initial State -->
       <div v-else class="initial-state">
         <div class="initial-icon">🎬</div>
         <h3>Start your search</h3>
         <p>Enter a movie or TV show title to get started.</p>
       </div>
 
-      <!-- Chatbot Modal -->
+      <!-- Title: AI Chat -->
       <Chatbot
         v-if="isAIMode"
         :show-chatbot="isAIMode"

@@ -1,9 +1,17 @@
+/**
+ * Read-only diagnostic script: print catalog size, TMDB/MAL coverage, and the five newest rows.
+ * Run during populateUnified or after a sync to watch Atlas free-tier usage (250 MB). Does not mutate Content.
+ */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
 
 dotenv.config()
 
+/**
+ * Log totals by type/source mix, dataSize vs 250 MB, and the latest five inserts.
+ * @returns {Promise<void>}
+ */
 async function checkProgress() {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
@@ -19,7 +27,6 @@ async function checkProgress() {
     const movies = await Content.countDocuments({ contentType: 'movie' })
     const tvShows = await Content.countDocuments({ contentType: 'tv' })
 
-    // Get database size
     const stats = await mongoose.connection.db.stats()
     const sizeInMB = (stats.dataSize / (1024 * 1024)).toFixed(2)
 
@@ -37,7 +44,6 @@ async function checkProgress() {
     )
     console.log('='.repeat(50))
 
-    // Show latest 5 items added
     const latestItems = await Content.find({}).sort({ _id: -1 }).limit(5).lean()
 
     console.log('\nLatest 5 Items Added:')

@@ -1,17 +1,29 @@
+/**
+ * TMDB and MyAnimeList adapters that map animation catalog payloads into Content-shaped objects.
+ * Domain service: search, popular lists, type mapping (OVA/special → special), and live-search dedup.
+ * Does not persist; contentSyncService writes the converted documents.
+ *
+ * API references: https://developer.themoviedb.org/docs/getting-started
+ * https://myanimelist.net/apiconfig/references/api/v2
+ */
 import axios from 'axios'
 import dotenv from 'dotenv'
 import { buildTitleFields, uniqueTitles } from '../utils/titles.js'
 
 dotenv.config()
 
-// https://developer.themoviedb.org/docs/getting-started
-// https://myanimelist.net/apiconfig/references/api/v2
-
 const MAL_ANIME_FIELDS =
   'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users,num_scoring_users,media_type'
 
 const MAL_SPECIAL_TYPES = new Set(['ova', 'special'])
 
+/**
+ * Whether a converted item should appear in a typed search/popular request.
+ * `movie` includes MAL specials so they surface with movies in the UI.
+ * @param {{ contentType: string }} item
+ * @param {string} contentType - `all` | `movie` | `tv` | `special`
+ * @returns {boolean}
+ */
 const matchesRequestedType = (item, contentType) => {
   if (!contentType || contentType === 'all') return true
   if (contentType === 'movie') return item.contentType === 'movie' || item.contentType === 'special'
@@ -27,7 +39,6 @@ class UnifiedContentService {
     this.tmdbBaseURL = 'https://api.themoviedb.org/3'
     this.malBaseURL = 'https://api.myanimelist.net/v2'
 
-    // Configurable delays for rate limiting
     this.tmdbDelay = parseInt(process.env.TMDB_DELAY_MS) || 200
     this.malDelay = parseInt(process.env.MAL_DELAY_MS) || 300
 
@@ -48,7 +59,11 @@ class UnifiedContentService {
     this.hasMalKey = !!this.malClientId
   }
 
-  // Generate unique internal ID for content
+  /**
+   * Opaque catalog key. Uniqueness comes from timestamp + random suffix; not used for dedup.
+   * @param {{ englishTitle?: string, title?: string, nativeTitle?: string, originalTitle?: string, contentType?: string, tmdbId?: number, malId?: number }} contentData
+   * @returns {string}
+   */
   generateInternalId(contentData) {
     const titleSlug = (
       contentData.englishTitle ||
@@ -59,25 +74,33 @@ class UnifiedContentService {
     )
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '-')
-      .substring(0, 50) // Limit length
+      .substring(0, 50)
     const contentType = contentData.contentType || 'unknown'
     const tmdbPart = contentData.tmdbId ? `tmdb-${contentData.tmdbId}` : ''
     const malPart = contentData.malId ? `mal-${contentData.malId}` : ''
     const externalPart = [tmdbPart, malPart].filter(Boolean).join('-')
 
-    // Use timestamp and random string for uniqueness
     const timestamp = Date.now()
     const random = Math.random().toString(36).substring(2, 8)
 
     return `${contentType}-${titleSlug}${externalPart ? `-${externalPart}` : ''}-${timestamp}-${random}`
   }
 
-  // Delay utility for rate limiting
+  /**
+   * Pause between upstream calls to stay under TMDB/MAL rate limits.
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
   async delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  // TMDB Methods
+  /**
+   * Discover TMDB animation movies (genre 16), popularity descending.
+   * @param {number} [page=1]
+   * @param {number} [limit=20]
+   * @returns {Promise<object[]>}
+   */
   async getTmdbAnimatedMovies(page = 1, limit = 20) {
     if (!this.hasTmdbKey) {
       console.log('TMDB API key not configured')
@@ -103,6 +126,12 @@ class UnifiedContentService {
     }
   }
 
+  /**
+   * Discover TMDB animation TV (genre 16), popularity descending.
+   * @param {number} [page=1]
+   * @param {number} [limit=20]
+   * @returns {Promise<object[]>}
+   */
   async getTmdbAnimatedTVShows(page = 1, limit = 20) {
     if (!this.hasTmdbKey) {
       console.log('TMDB API key not configured')
@@ -128,6 +157,12 @@ class UnifiedContentService {
     }
   }
 
+  /**
+   * Full TMDB movie/TV document plus alternative_titles for English/native mapping.
+   * @param {number} tmdbId
+   * @param {'movie' | 'tv'} contentType
+   * @returns {Promise<object | null>}
+   */
   async getTmdbContentDetails(tmdbId, contentType) {
     if (!this.hasTmdbKey) return null
 
@@ -148,7 +183,12 @@ class UnifiedContentService {
     }
   }
 
-  // MAL Methods
+  /**
+   * MAL ranking page over-fetched then filtered to movies/OVA/specials by episode count and title keywords.
+   * @param {number} [limit=50]
+   * @param {number} [offset=0]
+   * @returns {Promise<object[]>}
+   */
   async getMalTopAnimeMovies(limit = 50, offset = 0) {
     if (!this.hasMalKey) {
       console.log('MAL API key not configured')
@@ -160,20 +200,19 @@ class UnifiedContentService {
       const response = await this.malClient.get('/anime/ranking', {
         params: {
           ranking_type: 'all',
-          limit: Math.min(limit * 3, 300), // Get more to filter for movies
+          limit: Math.min(limit * 3, 300),
           offset,
           fields: MAL_ANIME_FIELDS,
         },
       })
 
-      // Filter for anime movies (typically have 1 episode or are movies)
       const allAnime = response.data.data || []
       const movies = allAnime
         .filter((anime) => {
           const episodes = anime.num_episodes || 0
           const title = anime.title?.toLowerCase() || ''
 
-          // Movies typically have 1 episode, or are marked as movies
+          // MAL ranking is mixed; treat 1-episode, movie/film/ova/special titles, or finished 0-ep as movie-like
           return (
             episodes === 1 ||
             title.includes('movie') ||
@@ -192,6 +231,12 @@ class UnifiedContentService {
     }
   }
 
+  /**
+   * MAL overall ranking page (unfiltered by media type).
+   * @param {number} [limit=50]
+   * @param {number} [offset=0]
+   * @returns {Promise<object[]>}
+   */
   async getMalTopAnime(limit = 50, offset = 0) {
     if (!this.hasMalKey) {
       console.log('MAL API key not configured')
@@ -216,6 +261,11 @@ class UnifiedContentService {
     }
   }
 
+  /**
+   * Single MAL anime document for the configured field set.
+   * @param {number} malId
+   * @returns {Promise<object | null>}
+   */
   async getMalAnimeDetails(malId) {
     if (!this.hasMalKey) return null
 
@@ -234,6 +284,12 @@ class UnifiedContentService {
     }
   }
 
+  /**
+   * MAL title search.
+   * @param {string} query
+   * @param {number} [limit=20]
+   * @returns {Promise<object[]>}
+   */
   async searchMalAnime(query, limit = 20) {
     if (!this.hasMalKey) return []
 
@@ -254,6 +310,11 @@ class UnifiedContentService {
     }
   }
 
+  /**
+   * Flatten TMDB alternative_titles.titles or .results into strings.
+   * @param {object} tmdbData
+   * @returns {string[]}
+   */
   collectTmdbAlternativeTitles(tmdbData) {
     const block = tmdbData.alternative_titles
     if (!block) return []
@@ -261,9 +322,14 @@ class UnifiedContentService {
     return list.map((entry) => entry?.title).filter(Boolean)
   }
 
-  // Content Conversion Methods
+  /**
+   * Map a TMDB movie/TV payload onto a Content-shaped object.
+   * Drops titles with fewer than 50 votes or a missing vote average.
+   * @param {object} tmdbData
+   * @param {'movie' | 'tv'} contentType
+   * @returns {object | null}
+   */
   convertTmdbToContent(tmdbData, contentType) {
-    // Filter out TMDB content with less than 50 votes or null vote data
     if (!tmdbData.vote_count || tmdbData.vote_count < 50 || !tmdbData.vote_average) {
       return null
     }
@@ -296,7 +362,6 @@ class UnifiedContentService {
       },
     }
 
-    // Add runtime/episode info based on content type
     if (contentType === 'movie') {
       content.runtime = tmdbData.runtime
     } else {
@@ -304,16 +369,26 @@ class UnifiedContentService {
       content.seasonCount = tmdbData.number_of_seasons
     }
 
-    // Generate internal ID
     content.internalId = this.generateInternalId(content)
 
     return content
   }
 
+  /**
+   * MAL OVA and special media_type values collapse to contentType `special`.
+   * @param {string} mediaType
+   * @returns {boolean}
+   */
   isMalSpecialType(mediaType) {
     return MAL_SPECIAL_TYPES.has(String(mediaType || '').toLowerCase())
   }
 
+  /**
+   * Map MAL media_type / episode count onto movie, tv, or special.
+   * Unknown types with 1 finished episode are treated as movies; otherwise TV.
+   * @param {object} anime
+   * @returns {'movie' | 'tv' | 'special'}
+   */
   resolveMalContentType(anime) {
     const mediaType = String(anime.media_type || '').toLowerCase()
     if (this.isMalSpecialType(mediaType)) return 'special'
@@ -325,11 +400,15 @@ class UnifiedContentService {
     return isMovie ? 'movie' : 'tv'
   }
 
+  /**
+   * Map a MAL ranking/search node onto a Content-shaped object.
+   * Drops music videos. English/native come from alternative_titles.en/ja.
+   * @param {object} malData - Ranking wrapper `{ node }` or a raw anime document
+   * @returns {object | null}
+   */
   convertMalToContent(malData) {
-    // Handle MAL API response structure - data might be in malData.node
     const anime = malData.node || malData
 
-    // Filter out music videos
     if (anime.source === 'music' || String(anime.media_type || '').toLowerCase() === 'music') {
       return null
     }
@@ -375,7 +454,6 @@ class UnifiedContentService {
       },
     }
 
-    // Set release date from start season
     if (anime.start_season) {
       const year = anime.start_season.year
       const month =
@@ -389,23 +467,23 @@ class UnifiedContentService {
       content.releaseDate = new Date(year, month - 1, 1)
     }
 
-    // Add runtime/episode info based on determined content type
     if (finalContentType === 'movie') {
-      // Use more accurate runtime estimates for known anime movies
       content.runtime = this.getEstimatedRuntime(anime.title)
     } else {
       content.episodeCount = episodes
     }
 
-    // Generate internal ID
     content.internalId = this.generateInternalId(content)
 
     return content
   }
 
-  // Get estimated runtime for anime movies
+  /**
+   * Runtime for MAL movies when TMDB minutes are missing: known-title table, then studio-family defaults, else 90.
+   * @param {string} title
+   * @returns {number} Minutes
+   */
   getEstimatedRuntime(title) {
-    // Known anime movie runtimes (in minutes)
     const knownRuntimes = {
       'Gintama: The Final': 104,
       'Gintama: The Very Final': 104,
@@ -489,12 +567,10 @@ class UnifiedContentService {
       'Kokuriko-zaka Kara': 91,
     }
 
-    // Check for exact title match first
     if (knownRuntimes[title]) {
       return knownRuntimes[title]
     }
 
-    // Check for partial matches
     for (const [knownTitle, runtime] of Object.entries(knownRuntimes)) {
       if (
         title.toLowerCase().includes(knownTitle.toLowerCase()) ||
@@ -504,10 +580,8 @@ class UnifiedContentService {
       }
     }
 
-    // Default estimates based on common patterns
     const titleLower = title.toLowerCase()
 
-    // Studio Ghibli movies are typically longer
     if (
       titleLower.includes('ghibli') ||
       titleLower.includes('miyazaki') ||
@@ -524,20 +598,18 @@ class UnifiedContentService {
       titleLower.includes('kaguya') ||
       titleLower.includes('red turtle')
     ) {
-      return 110 // Average Ghibli movie length
+      return 110
     }
 
-    // Makoto Shinkai movies
     if (
       titleLower.includes('your name') ||
       titleLower.includes('weathering') ||
       titleLower.includes('suzume') ||
       titleLower.includes('shinkai')
     ) {
-      return 110 // Average Shinkai movie length
+      return 110
     }
 
-    // Satoshi Kon movies
     if (
       titleLower.includes('perfect blue') ||
       titleLower.includes('millennium actress') ||
@@ -545,10 +617,9 @@ class UnifiedContentService {
       titleLower.includes('paprika') ||
       titleLower.includes('kon')
     ) {
-      return 90 // Average Kon movie length
+      return 90
     }
 
-    // Mamoru Hosoda movies
     if (
       titleLower.includes('wolf children') ||
       titleLower.includes('summer wars') ||
@@ -556,37 +627,38 @@ class UnifiedContentService {
       titleLower.includes('boy and the heron') ||
       titleLower.includes('hosoda')
     ) {
-      return 110 // Average Hosoda movie length
+      return 110
     }
 
-    // Demon Slayer movies
     if (
       titleLower.includes('demon slayer') ||
       titleLower.includes('kimetsu no yaiba') ||
       titleLower.includes('mugen train')
     ) {
-      return 117 // Known Demon Slayer movie length
+      return 117
     }
 
-    // Gintama movies
     if (
       titleLower.includes('gintama') &&
       (titleLower.includes('final') || titleLower.includes('movie'))
     ) {
-      return 104 // Known Gintama movie length
+      return 104
     }
 
-    // Default estimate: 90 minutes for anime movies
     return 90
   }
 
-  // Unified Search Method
+  /**
+   * Live search across TMDB and MAL, then title/type dedup and relevance ranking.
+   * @param {string} query
+   * @param {{ contentType?: string, limit?: number, includeTmdb?: boolean, includeMal?: boolean }} [options={}]
+   * @returns {Promise<object[]>}
+   */
   async searchContent(query, options = {}) {
     const { contentType = 'all', limit = 20, includeTmdb = true, includeMal = true } = options
 
     const results = []
 
-    // Search TMDB
     if (includeTmdb && this.hasTmdbKey) {
       try {
         const tmdbResults = await this.searchTmdb(query, contentType, limit)
@@ -601,7 +673,6 @@ class UnifiedContentService {
       }
     }
 
-    // Search MAL
     if (includeMal && this.hasMalKey) {
       try {
         const malResults = await this.searchMalAnime(query, limit)
@@ -620,10 +691,16 @@ class UnifiedContentService {
       }
     }
 
-    // Remove duplicates and sort by relevance
     return this.deduplicateAndRank(results, query)
   }
 
+  /**
+   * TMDB movie/TV search limited to animation (genre id 16).
+   * @param {string} query
+   * @param {string} contentType
+   * @param {number} limit
+   * @returns {Promise<object[]>}
+   */
   async searchTmdb(query, contentType, limit) {
     if (!this.hasTmdbKey) return []
 
@@ -644,7 +721,7 @@ class UnifiedContentService {
         const movies = movieResponse.data.results
           .filter((movie) => this.isAnimatedContent(movie))
           .map((movie) => this.convertTmdbToContent(movie, 'movie'))
-          .filter((movie) => movie !== null) // Filter out null results
+          .filter((movie) => movie !== null)
           .slice(0, searchLimit)
 
         results.push(...movies)
@@ -663,7 +740,7 @@ class UnifiedContentService {
         const tvShows = tvResponse.data.results
           .filter((tv) => this.isAnimatedContent(tv))
           .map((tv) => this.convertTmdbToContent(tv, 'tv'))
-          .filter((tv) => tv !== null) // Filter out null results
+          .filter((tv) => tv !== null)
           .slice(0, searchLimit)
 
         results.push(...tvShows)
@@ -676,15 +753,23 @@ class UnifiedContentService {
     }
   }
 
-  // Helper method to check if content is animated
+  /**
+   * TMDB list/search items include genre_ids; 16 is Animation.
+   * @param {{ genre_ids?: number[] }} content
+   * @returns {boolean}
+   */
   isAnimatedContent(content) {
     if (!content.genre_ids) return false
 
-    // TMDB Animation genre ID is 16
     return content.genre_ids.includes(16)
   }
 
-  // Deduplicate and rank search results
+  /**
+   * Collapse live-search hits on englishTitle/title + contentType, then rank exact title match over score.
+   * @param {object[]} results
+   * @param {string} query
+   * @returns {object[]}
+   */
   deduplicateAndRank(results, query) {
     const seen = new Set()
     const deduplicated = []
@@ -707,7 +792,6 @@ class UnifiedContentService {
         item.alternativeTitles,
       ).some((title) => title.toLowerCase().includes(queryLower))
 
-    // Sort by relevance (exact title match first, then popularity)
     return deduplicated.sort((a, b) => {
       const aTitleMatch = matchesQuery(a)
       const bTitleMatch = matchesQuery(b)
@@ -715,20 +799,22 @@ class UnifiedContentService {
       if (aTitleMatch && !bTitleMatch) return -1
       if (!aTitleMatch && bTitleMatch) return 1
 
-      // Sort by popularity/score
       const aScore = a.malScore || a.voteAverage || 0
       const bScore = b.malScore || b.voteAverage || 0
       return bScore - aScore
     })
   }
 
-  // Get popular content from both sources
+  /**
+   * Mix TMDB discover + MAL ranking, sorted by TMDB popularity or MAL scored-by count.
+   * @param {{ contentType?: string, limit?: number, includeTmdb?: boolean, includeMal?: boolean }} [options={}]
+   * @returns {Promise<object[]>}
+   */
   async getPopularContent(options = {}) {
     const { contentType = 'all', limit = 20, includeTmdb = true, includeMal = true } = options
 
     const results = []
 
-    // Get TMDB popular content
     if (includeTmdb && this.hasTmdbKey) {
       try {
         if (contentType === 'all' || contentType === 'movie') {
@@ -736,7 +822,7 @@ class UnifiedContentService {
           results.push(
             ...movies
               .map((movie) => this.convertTmdbToContent(movie, 'movie'))
-              .filter((movie) => movie !== null) // Filter out null results
+              .filter((movie) => movie !== null)
               .map((movie) => ({
                 ...movie,
                 source: 'tmdb',
@@ -749,7 +835,7 @@ class UnifiedContentService {
           results.push(
             ...tvShows
               .map((tv) => this.convertTmdbToContent(tv, 'tv'))
-              .filter((tv) => tv !== null) // Filter out null results
+              .filter((tv) => tv !== null)
               .map((tv) => ({
                 ...tv,
                 source: 'tmdb',
@@ -761,7 +847,6 @@ class UnifiedContentService {
       }
     }
 
-    // Get MAL popular content
     if (includeMal && this.hasMalKey) {
       try {
         const malAnime = await this.getMalTopAnime(Math.ceil(limit / 2))
@@ -780,7 +865,6 @@ class UnifiedContentService {
       }
     }
 
-    // Sort by popularity and return
     return results
       .sort((a, b) => {
         const aPop = a.popularity || a.malScoredBy || 0

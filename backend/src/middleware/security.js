@@ -1,24 +1,35 @@
+/**
+ * Input sanitization, ObjectId checks, in-memory rate limits, and upload validation.
+ *
+ * Layer: middleware. HTML/XSS filters run globally; ObjectId and file checks
+ * are stacked on individual routes.
+ */
+
 import sanitizeHtml from 'sanitize-html'
 import xss from 'xss'
 
-// HTML sanitization options
 const sanitizeOptions = {
   allowedTags: [],
   allowedAttributes: {},
   disallowedTagsMode: 'discard',
 }
 
-// XSS filter options
 const xssOptions = {
   whiteList: {},
   stripIgnoreTag: true,
   stripIgnoreTagBody: ['script'],
 }
 
-// Sanitize HTML content
+/**
+ * Strip all HTML tags from string fields on `req.body` and `req.query`.
+ *
+ * @param {import('express').Request} req - Mutates string values in `body` and `query`.
+ * @param {import('express').Response} res - Unused; never sends a response.
+ * @param {import('express').NextFunction} next - Always continues after sanitizing.
+ * @returns {void}
+ */
 export const sanitizeHtmlInput = (req, res, next) => {
   if (req.body) {
-    // Sanitize all string fields in req.body
     Object.keys(req.body).forEach((key) => {
       if (typeof req.body[key] === 'string') {
         req.body[key] = sanitizeHtml(req.body[key], sanitizeOptions)
@@ -27,7 +38,6 @@ export const sanitizeHtmlInput = (req, res, next) => {
   }
 
   if (req.query) {
-    // Sanitize all string fields in req.query
     Object.keys(req.query).forEach((key) => {
       if (typeof req.query[key] === 'string') {
         req.query[key] = sanitizeHtml(req.query[key], sanitizeOptions)
@@ -38,10 +48,16 @@ export const sanitizeHtmlInput = (req, res, next) => {
   next()
 }
 
-// XSS protection for specific fields
+/**
+ * Run XSS filtering on username, email, notes, and review body fields only.
+ *
+ * @param {import('express').Request} req - Mutates matching string fields on `body`.
+ * @param {import('express').Response} res - Unused; never sends a response.
+ * @param {import('express').NextFunction} next - Always continues after filtering.
+ * @returns {void}
+ */
 export const sanitizeXSS = (req, res, next) => {
   if (req.body) {
-    // Apply XSS filtering to specific fields
     const fieldsToSanitize = ['username', 'email', 'notes', 'review']
 
     fieldsToSanitize.forEach((field) => {
@@ -54,7 +70,14 @@ export const sanitizeXSS = (req, res, next) => {
   next()
 }
 
-// Validate MongoDB ObjectId
+/**
+ * Reject `:id` or `:contentId` params that are not 24-char hex ObjectIds.
+ *
+ * @param {import('express').Request} req - Reads `params.id` or `params.contentId`.
+ * @param {import('express').Response} res - 400 `{ message: 'Invalid ID format' }` when the id is malformed.
+ * @param {import('express').NextFunction} next - Continues when missing (no param) or well-formed.
+ * @returns {void}
+ */
 export const validateObjectId = (req, res, next) => {
   const { id, contentId } = req.params
   const idToCheck = id || contentId
@@ -69,10 +92,16 @@ export const validateObjectId = (req, res, next) => {
   next()
 }
 
-// Rate limiting for specific endpoints
+/**
+ * Factory for a process-local IP+path rate limiter (not shared across instances).
+ *
+ * @param {number} windowMs - Window length in milliseconds before the counter resets.
+ * @param {number} max - Maximum hits per IP+path in that window.
+ * @param {string} [message] - JSON `message` on 429; defaults to `'Too many requests'`.
+ * @returns {import('express').RequestHandler} Middleware that 429s when `max` is exceeded.
+ */
 export const createRateLimit = (windowMs, max, message) => {
   return (req, res, next) => {
-    // Simple in-memory rate limiting (in production, use Redis)
     const key = `${req.ip}-${req.route?.path || req.path}`
     const now = Date.now()
 
@@ -102,10 +131,17 @@ export const createRateLimit = (windowMs, max, message) => {
   }
 }
 
-// File upload validation
+/**
+ * Reject uploaded files over 5MB, non-image MIME types, or executable-like names.
+ *
+ * @param {import('express').Request} req - Optional `req.file` from multer.
+ * @param {import('express').Response} res - 400 when size, type, or filename fails.
+ * @param {import('express').NextFunction} next - Continues when there is no file or it passes.
+ * @returns {void}
+ */
 export const validateFileUpload = (req, res, next) => {
   if (req.file) {
-    // Check file size (5MB limit)
+    // 5MB upload cap
     if (req.file.size > 5 * 1024 * 1024) {
       return res.status(400).json({
         success: false,
@@ -113,7 +149,6 @@ export const validateFileUpload = (req, res, next) => {
       })
     }
 
-    // Check file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
     if (!allowedTypes.includes(req.file.mimetype)) {
       return res.status(400).json({
@@ -122,7 +157,6 @@ export const validateFileUpload = (req, res, next) => {
       })
     }
 
-    // Check filename for suspicious patterns
     const suspiciousPatterns = /[<>:"/\\|?*]|\.(exe|bat|cmd|scr|pif|vbs|js|jar|php|asp|aspx)$/i
     if (suspiciousPatterns.test(req.file.originalname)) {
       return res.status(400).json({

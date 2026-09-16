@@ -1,9 +1,14 @@
+/**
+ * Gemini client for search-query expansion and (currently stubbed) chat.
+ * Domain service: wraps google generative AI with a 10s timeout and local genre fallbacks.
+ * Chat replies are hardcoded until the assistant ships; other methods still call the API when keyed.
+ *
+ * API reference: https://ai.google.dev/gemini-api/docs
+ */
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import dotenv from 'dotenv'
 
 dotenv.config()
-
-// https://ai.google.dev/gemini-api/docs
 
 class GeminiService {
   constructor() {
@@ -20,7 +25,12 @@ class GeminiService {
     }
   }
 
-  // Helper method to make API calls with timeout
+  /**
+   * gemini-2.5-flash generateContent racing a 10s timeout.
+   * @param {string} prompt
+   * @returns {Promise<object>}
+   * @throws {Error} When the API key is missing or the call times out
+   */
   async makeApiCall(prompt) {
     console.log('makeApiCall called with prompt length:', prompt.length)
 
@@ -38,10 +48,13 @@ class GeminiService {
     ])
   }
 
-  // Enhanced search with AI semantic understanding (optimized)
+  /**
+   * Suggest extra search terms for animated content. Queries shorter than 3 chars skip the API.
+   * @param {string} userQuery
+   * @returns {Promise<{ refinedQuery: string, suggestedGenres: string[], recommendations: unknown[], searchSuggestions: string[] }>}
+   */
   async enhanceSearchQuery(userQuery) {
     try {
-      // Only use AI if we have a client and the query is complex enough
       if (!this.hasApiKey || userQuery.length < 3) {
         return {
           refinedQuery: userQuery,
@@ -85,12 +98,15 @@ Respond as simple comma-separated terms: term1, term2, term3`
     }
   }
 
-  // Generate simple suggestions without AI
+  /**
+   * Keyword-based suggestion list used when Gemini is unavailable.
+   * @param {string} query
+   * @returns {string[]}
+   */
   generateSimpleSuggestions(query) {
     const queryLower = query.toLowerCase()
     const suggestions = []
 
-    // Genre-based suggestions
     if (queryLower.includes('action')) {
       suggestions.push('adventure anime', 'shounen', 'fighting anime', 'superhero anime')
     }
@@ -107,7 +123,11 @@ Respond as simple comma-separated terms: term1, term2, term3`
     return suggestions.slice(0, 5)
   }
 
-  // Extract genres from query
+  /**
+   * Map query substrings onto TMDB-style genre names.
+   * @param {string} query
+   * @returns {string[]}
+   */
   extractGenresFromQuery(query) {
     const genreMap = {
       action: 'Action',
@@ -128,12 +148,15 @@ Respond as simple comma-separated terms: term1, term2, term3`
       .map((genre) => genreMap[genre])
   }
 
-  // Chat with user (conversational AI)
+  /**
+   * Conversational assistant. Currently returns a static "coming soon" payload (API path is unreachable).
+   * @param {string} userMessage
+   * @returns {Promise<{ response: string, searchSuggestion: string | null }>}
+   */
   async chatWithUser(userMessage) {
     try {
       console.log('ChatWithUser called with message:', userMessage)
 
-      // Temporarily disabled - coming soon!
       return {
         response:
           "🚧 AI Assistant is coming soon! For now, you can use the search filters to find animated content. Try searching for genres like 'action', 'comedy', or 'fantasy'.",
@@ -166,10 +189,8 @@ Respond in 1-2 sentences max.`
       const response = await this.makeApiCall(prompt)
       const aiResponse = response.response.text()
 
-      // Extract search suggestion if present
       let searchSuggestion = null
       if (aiResponse.toLowerCase().includes('search') || aiResponse.toLowerCase().includes('try')) {
-        // Simple extraction - look for quoted terms or common patterns
         const searchMatch =
           aiResponse.match(/"(.*?)"/) || aiResponse.match(/search for (.*?)(?:\.|$)/i)
         if (searchMatch) {
@@ -191,7 +212,12 @@ Respond in 1-2 sentences max.`
     }
   }
 
-  // Generate content recommendations based on user preferences
+  /**
+   * Ask Gemini to pick titles from a preference object plus a content slice.
+   * @param {object} userPreferences
+   * @param {object[]} availableContent
+   * @returns {Promise<{ recommendations: Array<{ title: string, reason: string, matchScore: number }> }>}
+   */
   async generateRecommendations(userPreferences, availableContent) {
     try {
       const prompt = `You are an AI assistant that recommends animated movies and TV shows.
@@ -223,7 +249,11 @@ Respond in JSON format:
     }
   }
 
-  // Analyze content and extract key features
+  /**
+   * Extract themes, audience, mood, and tags from a catalog row.
+   * @param {{ title: string, overview?: string, genres?: string[] }} content
+   * @returns {Promise<{ keyThemes: string[], targetAudience: string, mood: string, similarContent: string[], tags: string[] }>}
+   */
   async analyzeContent(content) {
     try {
       const prompt = `Analyze this animated content and extract key features:
@@ -256,7 +286,12 @@ Extract and return in JSON format:
     }
   }
 
-  // Generate personalized content descriptions
+  /**
+   * Rewrite a title overview toward a user profile; falls back to the stored overview.
+   * @param {{ title: string, overview?: string, genres?: string[] }} content
+   * @param {object} userProfile
+   * @returns {Promise<string>}
+   */
   async generatePersonalizedDescription(content, userProfile) {
     try {
       const prompt = `Generate a personalized description for this animated content based on the user's profile:

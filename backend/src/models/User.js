@@ -1,9 +1,14 @@
+/**
+ * Mongoose schema for app accounts.
+ * Models layer: identity, login lockout, watchlist entries, and per-title ratings.
+ * Password is hashed on save and stripped from JSON serialization.
+ */
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 
 const userSchema = new mongoose.Schema(
   {
-    // User Information
+    // Identity
     username: {
       type: String,
       required: [true, 'Please provide a username'],
@@ -26,7 +31,7 @@ const userSchema = new mongoose.Schema(
       minlength: [8, 'Password must be at least 8 characters long'],
       validate: {
         validator: function (password) {
-          // Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character
+          // Uppercase, lowercase, digit, and special character required
           const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/
           return passwordRegex.test(password)
         },
@@ -39,7 +44,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Security fields
+    // Security (lockout after failed logins)
     failedLoginAttempts: {
       type: Number,
       default: 0,
@@ -51,7 +56,7 @@ const userSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // Watchlist information
+    // Watchlist and ratings
     watchlist: [
       {
         content: {
@@ -119,7 +124,7 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
-    // User preferences
+    // Preferences
     preferences: {
       favoriteGenres: [String],
       favoriteStudios: [String],
@@ -131,7 +136,6 @@ const userSchema = new mongoose.Schema(
   },
 )
 
-// Hash password before saving it in database
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next()
 
@@ -144,12 +148,19 @@ userSchema.pre('save', async function (next) {
   }
 })
 
-// Checks if password matches hash
+/**
+ * Compare a plaintext candidate against the stored bcrypt hash.
+ * @param {string} candidatePassword
+ * @returns {Promise<boolean>}
+ */
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password)
 }
 
-// Remove password from JSON output
+/**
+ * Serialize without the password hash.
+ * @returns {object}
+ */
 userSchema.methods.toJSON = function () {
   const userObject = this.toObject()
   delete userObject.password

@@ -1,14 +1,35 @@
+/**
+ * Title normalization helpers shared by catalog ingest and search.
+ * Utils layer: English/native/fallback mapping, merge of alternative titles, and Mongo $or matchers.
+ */
+
+/**
+ * Trim a title string; non-strings become empty.
+ * @param {unknown} value
+ * @returns {string}
+ */
 export function normalizeTitle(value) {
   if (typeof value !== 'string') return ''
   return value.trim()
 }
 
+/**
+ * Case-insensitive equality after trim; empty strings never match.
+ * @param {unknown} left
+ * @param {unknown} right
+ * @returns {boolean}
+ */
 export function titlesEqual(left, right) {
   const a = normalizeTitle(left).toLowerCase()
   const b = normalizeTitle(right).toLowerCase()
   return Boolean(a) && a === b
 }
 
+/**
+ * Flatten title groups and drop case-insensitive duplicates, preserving first-seen casing.
+ * @param {...(string | string[] | undefined)} groups
+ * @returns {string[]}
+ */
 export function uniqueTitles(...groups) {
   const seen = new Set()
   const result = []
@@ -28,6 +49,11 @@ export function uniqueTitles(...groups) {
   return result
 }
 
+/**
+ * All searchable title fields on a content document.
+ * @param {{ englishTitle?: string, title?: string, nativeTitle?: string, originalTitle?: string, alternativeTitles?: string[] }} [content={}]
+ * @returns {string[]}
+ */
 export function collectContentTitles(content = {}) {
   return uniqueTitles(
     content.englishTitle,
@@ -38,6 +64,13 @@ export function collectContentTitles(content = {}) {
   )
 }
 
+/**
+ * Map API title fields onto the Content schema.
+ * Canonical `title` prefers English, then fallback, then native. `originalTitle` mirrors native.
+ * Alternatives exclude values already stored as title/english/native.
+ * @param {{ englishTitle?: string, nativeTitle?: string, fallbackTitle?: string, alternativeTitles?: string[] }} [fields]
+ * @returns {{ title: string, englishTitle?: string, nativeTitle?: string, originalTitle?: string, alternativeTitles: string[] }}
+ */
 export function buildTitleFields({
   englishTitle,
   nativeTitle,
@@ -64,6 +97,14 @@ export function buildTitleFields({
   }
 }
 
+/**
+ * Merge incoming TMDB/MAL titles into an existing document.
+ * TMDB merges prefer incoming English; MAL merges prefer incoming native.
+ * @param {object} [existing={}]
+ * @param {object} [incoming={}]
+ * @param {{ preferIncomingEnglish?: boolean, preferIncomingNative?: boolean }} [options={}]
+ * @returns {ReturnType<typeof buildTitleFields>}
+ */
 export function applyTitleFields(existing = {}, incoming = {}, options = {}) {
   const preferIncomingEnglish = options.preferIncomingEnglish === true
   const preferIncomingNative = options.preferIncomingNative === true
@@ -94,6 +135,11 @@ export function applyTitleFields(existing = {}, incoming = {}, options = {}) {
   })
 }
 
+/**
+ * Mongo `$or` clauses that match a title matcher against every title field.
+ * @param {object} matcher - e.g. `{ $regex, $options }`
+ * @returns {object[]}
+ */
 export function contentTitleMatchOr(matcher) {
   return [
     { title: matcher },

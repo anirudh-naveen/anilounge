@@ -1,12 +1,19 @@
+<!--
+  App.vue — root application shell (view).
+
+  Owns site-wide chrome: beta banner, primary navigation, authenticated user
+  menu, router outlet, floating feedback overlay, and footer.
+-->
 <template>
   <div id="app" class="min-h-screen">
-    <!-- Beta Banner -->
+    <!-- Banner -->
     <BetaBanner />
 
-    <!-- Navigation Header -->
+    <!-- Navigation -->
     <header class="header">
       <div class="container">
         <div class="nav-content">
+          <!-- Title: Logo -->
           <div class="logo">
             <router-link to="/" class="logo-link">
               <div class="logo-icon">
@@ -17,7 +24,8 @@
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  <!-- TV Screen -->
+                  <!-- Logo artwork -->
+                  <!-- Title: Screen -->
                   <rect
                     x="4"
                     y="6"
@@ -28,10 +36,9 @@
                     stroke="var(--teal-primary)"
                     stroke-width="1"
                   />
-                  <!-- TV Stand -->
+                  <!-- Title: Stand -->
                   <rect x="12" y="22" width="8" height="2" fill="var(--teal-primary)" />
                   <rect x="14" y="24" width="4" height="1" fill="var(--teal-primary)" />
-                  <!-- Screen Content -->
                   <rect
                     x="6"
                     y="8"
@@ -41,7 +48,7 @@
                     fill="var(--blend-color)"
                     opacity="0.8"
                   />
-                  <!-- Squiggly Animation Lines -->
+                  <!-- Title: Animation -->
                   <path
                     d="M8 10 Q10 8 12 10 T16 10 T20 10 T24 10"
                     stroke="var(--coral-primary)"
@@ -90,6 +97,7 @@
             </router-link>
           </div>
 
+          <!-- Title: Primary Nav -->
           <nav class="nav-links">
             <router-link to="/" class="nav-link" aria-label="Home" title="Home">
               <span class="nav-icon" aria-hidden="true">
@@ -157,6 +165,7 @@
             </router-link>
           </nav>
 
+          <!-- Title: User Menu / Auth Actions -->
           <div class="nav-actions">
             <div v-if="authStore.isAuthenticated" class="user-menu">
               <div class="user-dropdown" :class="{ active: showDropdown }">
@@ -202,15 +211,18 @@
       </div>
     </header>
 
-    <!-- Main Content -->
+    <!-- Page -->
+    <!-- Title: Router Outlet -->
     <main class="main-content">
       <router-view :key="route.path" />
     </main>
 
-    <!-- Beta Feedback Component -->
+    <!-- Overlays -->
+    <!-- Title: Feedback -->
     <BetaFeedback />
 
     <!-- Footer -->
+    <!-- Title: Copyright -->
     <footer class="footer">
       <div class="container">
         <p>&copy; 2024 Find Animation. Discover your next favorite animated content!</p>

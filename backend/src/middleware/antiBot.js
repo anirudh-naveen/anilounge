@@ -1,7 +1,22 @@
+/**
+ * Request-level bot, brute-force, NoSQL-injection, and referer guards.
+ *
+ * Layer: middleware. Localhost and `NODE_ENV=development` skip bot/API checks
+ * so the SPA and tooling can call the API without a production User-Agent.
+ */
+
 import slowDown from 'express-slow-down'
 import { banIPForBot, banIPForSuspiciousActivity } from './ipBan.js'
 
-// Anti-bot protection middleware
+/**
+ * Block suspicious/minimal User-Agents and more than 10 requests per second per IP+UA.
+ * Skipped for localhost and development.
+ *
+ * @param {import('express').Request} req - Uses `req.ip`, hostname, and User-Agent.
+ * @param {import('express').Response} res - 429 on rapid fire, 403 on bot UA.
+ * @param {import('express').NextFunction} next - Continues when the request looks human.
+ * @returns {void}
+ */
 export const antiBotProtection = (req, res, next) => {
   const userAgent = req.get('User-Agent') || ''
   const ip = req.ip
@@ -18,7 +33,6 @@ export const antiBotProtection = (req, res, next) => {
     return next()
   }
 
-  // Detect suspicious user agents (more lenient for production)
   const suspiciousPatterns = [
     /bot/i,
     /crawler/i,
@@ -32,10 +46,8 @@ export const antiBotProtection = (req, res, next) => {
 
   const isSuspiciousUA = suspiciousPatterns.some((pattern) => pattern.test(userAgent))
 
-  // Detect missing or minimal user agent (more lenient)
   const isMinimalUA = userAgent.length < 5
 
-  // Detect rapid requests (more than 10 per second)
   const now = Date.now()
   if (!global.requestTimestamps) global.requestTimestamps = new Map()
 
@@ -44,7 +56,6 @@ export const antiBotProtection = (req, res, next) => {
   const recentRequests = timestamps.filter((t) => now - t < 1000) // Last 1 second
 
   if (recentRequests.length > 10) {
-    // Ban IP for rapid requests
     banIPForSuspiciousActivity(ip, userAgent, 'rapid_requests').catch(console.error)
 
     return res.status(429).json({
@@ -53,13 +64,10 @@ export const antiBotProtection = (req, res, next) => {
     })
   }
 
-  // Update timestamps
   recentRequests.push(now)
   global.requestTimestamps.set(key, recentRequests.slice(-20)) // Keep last 20
 
-  // Block suspicious requests
   if (isSuspiciousUA || isMinimalUA) {
-    // Ban the IP for bot detection
     banIPForBot(ip, userAgent, 'bot_detection').catch(console.error)
 
     return res.status(403).json({
@@ -71,7 +79,10 @@ export const antiBotProtection = (req, res, next) => {
   next()
 }
 
-// Progressive slowdown for repeated requests
+/**
+ * Delay responses after 50 requests in 15 minutes (500ms steps, cap 20s).
+ * Successful responses are not counted; failed ones are.
+ */
 export const progressiveSlowdown = slowDown({
   windowMs: 15 * 60 * 1000, // 15 minutes
   delayAfter: 50, // Allow 50 requests per windowMs
@@ -81,10 +92,17 @@ export const progressiveSlowdown = slowDown({
   skipFailedRequests: false,
 })
 
-// Brute force protection for auth endpoints (simplified)
 export const bruteForceProtection = {
+  /**
+   * Count auth attempts per IP in a 15-minute window; 5th+ attempt is 429.
+   * Entirely skipped when `NODE_ENV` is not `production`.
+   *
+   * @param {import('express').Request} req - Uses `req.ip` as the attempt key.
+   * @param {import('express').Response} res - 429 when the production cap is exceeded.
+   * @param {import('express').NextFunction} next - Continues when under the cap (or not production).
+   * @returns {void}
+   */
   prevent: (req, res, next) => {
-    // Simple brute force protection using our IP ban system
     const ip = req.ip
     const key = `brute-force-${ip}`
 
@@ -124,9 +142,16 @@ export const bruteForceProtection = {
   },
 }
 
-// Database query protection
+/**
+ * Recursively scan body/query/params strings for Mongo operator / eval patterns.
+ * On a hit, bans the IP and returns 400 without throwing to Express.
+ *
+ * @param {import('express').Request} req - Inspects `body`, `query`, and `params`.
+ * @param {import('express').Response} res - 400 `{ message: 'Invalid request format detected.' }` on injection.
+ * @param {import('express').NextFunction} next - Continues when no pattern matches.
+ * @returns {void}
+ */
 export const databaseProtection = (req, res, next) => {
-  // Prevent NoSQL injection attempts
   const dangerousPatterns = [
     /\$where/i,
     /\$ne/i,
@@ -144,6 +169,13 @@ export const databaseProtection = (req, res, next) => {
     /eval/i,
   ]
 
+  /**
+   * Walk a JSON-like value and throw if a string matches a dangerous pattern.
+   *
+   * @param {unknown} obj - Current node (string, object, or other).
+   * @param {string} [path=''] - Dotted path used in the thrown message.
+   * @returns {void}
+   */
   const checkForInjection = (obj, path = '') => {
     if (typeof obj === 'string') {
       for (const pattern of dangerousPatterns) {
@@ -163,7 +195,6 @@ export const databaseProtection = (req, res, next) => {
     if (req.query) checkForInjection(req.query, 'query')
     if (req.params) checkForInjection(req.params, 'params')
   } catch {
-    // Ban IP for injection attempts
     banIPForSuspiciousActivity(req.ip, req.get('User-Agent'), 'injection_attempt').catch(
       console.error,
     )
@@ -177,7 +208,15 @@ export const databaseProtection = (req, res, next) => {
   next()
 }
 
-// API endpoint protection
+/**
+ * Require User-Agent/Accept and, when a Referer is present, restrict it to known hosts.
+ * Skipped for localhost and development.
+ *
+ * @param {import('express').Request} req - Reads Origin, Referer, hostname, and `req.ip`.
+ * @param {import('express').Response} res - 400 missing headers, 403 invalid referer.
+ * @param {import('express').NextFunction} next - Continues when headers/referer pass (or skipped).
+ * @returns {void}
+ */
 export const apiProtection = (req, res, next) => {
   const origin = req.get('origin')
   const referer = req.get('referer') || req.get('referrer')
@@ -195,7 +234,6 @@ export const apiProtection = (req, res, next) => {
     return next()
   }
 
-  // Require proper headers for API requests
   const requiredHeaders = ['user-agent', 'accept']
   const missingHeaders = requiredHeaders.filter((header) => !req.get(header))
 

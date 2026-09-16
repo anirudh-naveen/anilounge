@@ -1,3 +1,9 @@
+/**
+ * One-off maintenance script: rebuild Find Animation rating aggregates on every Content row.
+ * Run after a ratings schema change or when userRatingAverage/Count/Sum drift from User documents.
+ * Mutates Content.userRatingAverage, userRatingCount, userRatingSum, and unifiedScore.
+ * Watchlist ratings win over the legacy `ratings` array for the same title.
+ */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import User from '../models/User.js'
@@ -6,6 +12,12 @@ import { calculateUnifiedScore, isValidUserRating } from '../utils/ratings.js'
 
 dotenv.config()
 
+/**
+ * Prefer watchlist.rating; fall back to User.ratings when the title is not on the list.
+ * @param {object} user
+ * @param {string} contentId
+ * @returns {number | null}
+ */
 function getEffectiveUserRating(user, contentId) {
   const watchlistItem = user.watchlist?.find((item) => item.content?.toString() === contentId)
   if (watchlistItem) {
@@ -16,6 +28,10 @@ function getEffectiveUserRating(user, contentId) {
   return isValidUserRating(legacyRating?.rating) ? legacyRating.rating : null
 }
 
+/**
+ * Zero user-rating fields, then rewrite them from all users and refresh unifiedScore.
+ * @returns {Promise<void>}
+ */
 async function calculateInitialUserRatings() {
   try {
     await mongoose.connect(process.env.MONGODB_URI)

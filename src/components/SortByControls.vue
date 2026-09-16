@@ -1,12 +1,20 @@
+<!--
+  SortByControls.vue — catalog sort controls (component).
+
+  Sort-by field and ascending/descending toggle used by list views.
+-->
 <template>
   <div class="sort-by-controls">
+    <!-- Title: Label -->
     <label class="sort-label">Sort by:</label>
     <div class="sort-row">
+      <!-- Title: Field -->
       <select class="sort-select" :value="sortBy" @change="onSortByChange">
         <option v-for="opt in options" :key="opt.value" :value="opt.value">
           {{ opt.label }}
         </option>
       </select>
+      <!-- Title: Direction Toggle -->
       <button
         type="button"
         class="sort-dir-btn"

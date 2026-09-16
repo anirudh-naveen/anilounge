@@ -1,13 +1,22 @@
+<!--
+  Login.vue — authentication view.
+
+  Email/password sign-in form against the auth store. Links to registration
+  when the user does not already have an account.
+-->
 <template>
   <div class="login-page">
     <div class="container">
       <div class="login-container">
+        <!-- Page Header -->
         <div class="login-header">
           <h1 class="login-title">Login</h1>
           <p class="login-subtitle">Welcome back! Sign in to your account</p>
         </div>
 
+        <!-- Form -->
         <form @submit.prevent="handleLogin" class="login-form">
+          <!-- Title: Email -->
           <div class="form-group">
             <label for="email" class="form-label">Email</label>
             <input
@@ -20,6 +29,7 @@
             />
           </div>
 
+          <!-- Title: Password -->
           <div class="form-group">
             <label for="password" class="form-label">Password</label>
             <input
@@ -37,11 +47,13 @@
             {{ authStore.isLoading ? 'Signing in...' : 'Sign In' }}
           </button>
 
+          <!-- Title: Error -->
           <div v-if="authStore.error" class="error-message">
             {{ authStore.error }}
           </div>
         </form>
 
+        <!-- Footer -->
         <div class="login-footer">
           <p>
             Don't have an account? <router-link to="/register" class="link">Sign up</router-link>

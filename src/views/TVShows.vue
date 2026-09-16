@@ -1,4 +1,10 @@
 <!-- eslint-disable vue/multi-word-component-names -->
+<!--
+  TVShows.vue — TV catalog view.
+
+  Lists paginated animated series from the content store as poster cards.
+  Loading, error, and empty states sit above the pager.
+-->
 <template>
   <div class="tvshows-page">
     <div class="container">
@@ -8,13 +14,14 @@
         <p class="page-subtitle">Discover amazing animated series from around the world</p>
       </div>
 
-      <!-- Loading State -->
+      <!-- Catalog -->
+      <!-- Title: Loading State -->
       <div v-if="contentStore.tvShowsLoading" class="loading-container">
         <div class="spinner"></div>
         <p>Loading amazing TV shows...</p>
       </div>
 
-      <!-- Error State -->
+      <!-- Title: Error State -->
       <div v-else-if="contentStore.error" class="error-state">
         <div class="error-icon">⚠️</div>
         <h3>Failed to load TV shows</h3>
@@ -22,7 +29,7 @@
         <button @click="loadTVShows(1)" class="btn btn-primary">Try Again</button>
       </div>
 
-      <!-- TV Shows Grid -->
+      <!-- Title: Content Card -->
       <div v-else-if="tvShows.length > 0" class="tvshows-grid">
         <div
           v-for="show in tvShows"
@@ -68,7 +75,7 @@
         </div>
       </div>
 
-      <!-- Empty State -->
+      <!-- Title: Empty State -->
       <div v-else class="empty-state">
         <div class="empty-icon">📺</div>
         <h3>No TV shows found</h3>
@@ -76,6 +83,7 @@
         <button @click="loadTVShows(1)" class="btn btn-primary">Refresh</button>
       </div>
 
+      <!-- Pagination -->
       <PaginationNav
         :current-page="contentStore.tvShowsPagination.currentPage"
         :total-pages="contentStore.tvShowsPagination.totalPages"

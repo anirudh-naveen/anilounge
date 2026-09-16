@@ -1,3 +1,10 @@
+/**
+ * Catalog, search, AI, watchlist, and rating HTTP handlers.
+ *
+ * Layer: controller. Talks to Content/User models, unified/Gemini/relationship
+ * services, and rating helpers. Watchlist and vote writes run in a Mongo session.
+ */
+
 import Content from '../models/Content.js'
 import { getContentSyncStatus } from '../services/contentSyncScheduler.js'
 import User from '../models/User.js'
@@ -11,13 +18,27 @@ import mongoose from 'mongoose'
 
 const movieLikeTypes = ['movie', 'special']
 
+/**
+ * Build a Mongo filter for the public content-type query param.
+ * `movie` includes `special` so specials appear in the movie catalog.
+ *
+ * @param {string|undefined} contentType - `all`, `movie`, `tv`, `special`, or omitted.
+ * @returns {object} Empty object for all types; otherwise a `contentType` match.
+ */
 const matchContentType = (contentType) => {
   if (!contentType || contentType === 'all') return {}
   if (contentType === 'movie') return { contentType: { $in: movieLikeTypes } }
   return { contentType }
 }
 
-// Get all content with pagination
+/**
+ * List catalog titles with pagination. Sort uses a hidden TMDB visibility boost
+ * that is stripped from the JSON so displayed scores stay unboosted.
+ *
+ * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`.
+ * @param {import('express').Response} res - 200 `{ success, data, pagination }` or 500.
+ * @returns {Promise<void>}
+ */
 export const getContent = async (req, res) => {
   const startTime = Date.now()
   try {
@@ -28,25 +49,20 @@ export const getContent = async (req, res) => {
 
     const query = matchContentType(contentType)
 
-    // Get total count for pagination
     const total = await Content.countDocuments(query)
 
     const totalPages = Math.ceil(total / limit)
 
-    // Use aggregation to add TMDB boost for visibility without overshadowing MAL content
+    // Hidden TMDB sort boost (+1.0 and 5% of popularity) is projected out so clients never see it.
     const content = await Content.aggregate([
       { $match: query },
       {
         $addFields: {
-          // Keep original scores unchanged for user display
           boostedScore: { $ifNull: ['$unifiedScore', 0] },
-          // Create a hidden sorting score that boosts TMDB content visibility
           hiddenSortScore: {
             $add: [
               { $ifNull: ['$unifiedScore', 0] },
-              // Add significant boost to TMDB content for better visibility (user cannot see this)
               { $cond: [{ $ne: ['$tmdbId', null] }, 1.0, 0] },
-              // Add popularity boost for TMDB content
               {
                 $cond: [
                   { $ne: ['$tmdbId', null] },
@@ -63,8 +79,8 @@ export const getContent = async (req, res) => {
       { $limit: limit },
       {
         $project: {
-          boostedScore: 0, // Remove the temporary field from output
-          hiddenSortScore: 0, // Remove the hidden sorting field from output
+          boostedScore: 0,
+          hiddenSortScore: 0,
         },
       },
     ])
@@ -92,7 +108,13 @@ export const getContent = async (req, res) => {
   }
 }
 
-// Get content by ID
+/**
+ * Fetch one catalog document by Mongo ObjectId.
+ *
+ * @param {import('express').Request} req - Reads `params.id`.
+ * @param {import('express').Response} res - 200 `{ data }`, 404 if missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const getContentById = async (req, res) => {
   try {
     const { id } = req.params
@@ -118,13 +140,18 @@ export const getContentById = async (req, res) => {
   }
 }
 
-// Get content by external ID (TMDB or MAL)
+/**
+ * Fetch one catalog document by TMDB or MAL numeric id.
+ *
+ * @param {import('express').Request} req - Reads `params.id` and optional `query.source` (`tmdb`|`mal`).
+ * @param {import('express').Response} res - 200 `{ data }`, 400 if id is not numeric, 404, or 500.
+ * @returns {Promise<void>}
+ */
 export const getContentByExternalId = async (req, res) => {
   try {
     const { id } = req.params
     const { source } = req.query
 
-    // Validate ID is a number
     const parsedId = parseInt(id)
     if (isNaN(parsedId)) {
       return res.status(400).json({
@@ -139,7 +166,6 @@ export const getContentByExternalId = async (req, res) => {
     } else if (source === 'mal') {
       content = await Content.findOne({ malId: parsedId })
     } else {
-      // Try both sources
       content = await Content.findOne({
         $or: [{ tmdbId: parsedId }, { malId: parsedId }],
       })
@@ -165,7 +191,14 @@ export const getContentByExternalId = async (req, res) => {
   }
 }
 
-// Search content
+/**
+ * Regex-search titles and overviews, then fill remaining slots from external APIs.
+ * Dedupes by internal/TMDB/MAL ids and title+type.
+ *
+ * @param {import('express').Request} req - Reads `query.query`, `query.type`, `query.limit`, `query.page`.
+ * @param {import('express').Response} res - 200 `{ data: { content, pagination } }`, 400 if query missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const searchContent = async (req, res) => {
   try {
     const { query, type, limit = 20, page = 1 } = req.query
@@ -179,7 +212,6 @@ export const searchContent = async (req, res) => {
 
     const skip = (page - 1) * limit
 
-    // Search in database first
     const dbResults = await Content.find({
       $or: [
         ...contentTitleMatchOr({ $regex: query, $options: 'i' }),
@@ -191,7 +223,6 @@ export const searchContent = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit))
 
-    // If not enough results, search external APIs
     let externalResults = []
     if (dbResults.length < limit) {
       try {
@@ -204,13 +235,11 @@ export const searchContent = async (req, res) => {
       }
     }
 
-    // Combine and deduplicate results with improved logic
     const allResults = [...dbResults, ...externalResults]
     const uniqueResults = []
     const seen = new Map()
 
     for (const result of allResults) {
-      // Check multiple identifiers for better deduplication
       const keys = [
         result.internalId,
         result.tmdbId ? `tmdb-${result.tmdbId}` : null,
@@ -225,7 +254,6 @@ export const searchContent = async (req, res) => {
       }
     }
 
-    // Recalculate total after deduplication
     const total = uniqueResults.length
     const totalPages = Math.ceil(total / limit)
 
@@ -236,7 +264,7 @@ export const searchContent = async (req, res) => {
         pagination: {
           currentPage: parseInt(page),
           totalPages,
-          totalItems: total, // Use actual unique count
+          totalItems: total,
           itemsPerPage: parseInt(limit),
           hasNextPage: parseInt(page) < totalPages,
           hasPrevPage: parseInt(page) > 1,
@@ -252,28 +280,30 @@ export const searchContent = async (req, res) => {
   }
 }
 
-// Get popular content
+/**
+ * Return the highest-ranked titles, using the same hidden TMDB sort boost as `getContent`.
+ * Fills remaining slots from external APIs when the local set is short.
+ *
+ * @param {import('express').Request} req - Reads `query.type` and `query.limit` (default 20).
+ * @param {import('express').Response} res - 200 `{ data }` array or 500.
+ * @returns {Promise<void>}
+ */
 export const getPopularContent = async (req, res) => {
   try {
     const { type, limit = 20 } = req.query
 
-    // Get from database first
     const query = matchContentType(type)
 
-    // Use aggregation to add TMDB boost for popular content
+    // Same hidden TMDB visibility boost as getContent; stripped from the response payload.
     const dbContent = await Content.aggregate([
       { $match: query },
       {
         $addFields: {
-          // Keep original scores unchanged for user display
           boostedScore: { $ifNull: ['$unifiedScore', 0] },
-          // Create a hidden sorting score that boosts TMDB content visibility
           hiddenSortScore: {
             $add: [
               { $ifNull: ['$unifiedScore', 0] },
-              // Add significant boost to TMDB content for better visibility (user cannot see this)
               { $cond: [{ $ne: ['$tmdbId', null] }, 1.0, 0] },
-              // Add popularity boost for TMDB content
               {
                 $cond: [
                   { $ne: ['$tmdbId', null] },
@@ -289,13 +319,12 @@ export const getPopularContent = async (req, res) => {
       { $limit: parseInt(limit) },
       {
         $project: {
-          boostedScore: 0, // Remove the temporary field from output
-          hiddenSortScore: 0, // Remove the hidden sorting field from output
+          boostedScore: 0,
+          hiddenSortScore: 0,
         },
       },
     ])
 
-    // If not enough content, get from external APIs
     let externalContent = []
     if (dbContent.length < limit) {
       try {
@@ -308,13 +337,11 @@ export const getPopularContent = async (req, res) => {
       }
     }
 
-    // Combine results with improved deduplication
     const allContent = [...dbContent, ...externalContent]
     const uniqueContent = []
     const seen = new Map()
 
     for (const content of allContent) {
-      // Check multiple identifiers for better deduplication
       const keys = [
         content.internalId,
         content.tmdbId ? `tmdb-${content.tmdbId}` : null,
@@ -342,7 +369,13 @@ export const getPopularContent = async (req, res) => {
   }
 }
 
-// Get similar content
+/**
+ * Return titles similar to a catalog item via `Content.findSimilar`.
+ *
+ * @param {import('express').Request} req - Reads `params.id` and `query.limit` (default 10).
+ * @param {import('express').Response} res - 200 `{ data }`, 404 if the source title is missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const getSimilarContent = async (req, res) => {
   try {
     const { id } = req.params
@@ -371,7 +404,13 @@ export const getSimilarContent = async (req, res) => {
   }
 }
 
-// AI-powered search
+/**
+ * Run a Gemini-backed natural-language search against the catalog.
+ *
+ * @param {import('express').Request} req - Reads `body.query`.
+ * @param {import('express').Response} res - 200 `{ data: { results, query, timestamp } }`, 400, or 500.
+ * @returns {Promise<void>}
+ */
 export const aiSearch = async (req, res) => {
   try {
     const { query } = req.body
@@ -383,7 +422,6 @@ export const aiSearch = async (req, res) => {
       })
     }
 
-    // Use Gemini for AI search
     const aiResults = await geminiService.searchContent(query)
 
     res.json({
@@ -403,6 +441,13 @@ export const aiSearch = async (req, res) => {
   }
 }
 
+/**
+ * Relay a user message to Gemini chat and return the reply plus optional search hint.
+ *
+ * @param {import('express').Request} req - Reads `body.message`.
+ * @param {import('express').Response} res - 200 `{ data: { response, searchSuggestion, timestamp } }`, 400, or 500.
+ * @returns {Promise<void>}
+ */
 export const aiChat = async (req, res) => {
   try {
     console.log('aiChat controller called with body:', req.body)
@@ -417,7 +462,6 @@ export const aiChat = async (req, res) => {
     }
 
     console.log('Calling geminiService.chatWithUser with:', message)
-    // Use Gemini for AI chat
     const chatResponse = await geminiService.chatWithUser(message)
     console.log('Received response from Gemini:', chatResponse)
 
@@ -438,7 +482,13 @@ export const aiChat = async (req, res) => {
   }
 }
 
-// Add to watchlist
+/**
+ * Add or update a watchlist row in a Mongo transaction, syncing user ratings onto the content document.
+ *
+ * @param {import('express').Request} req - `req.user._id`; `body` has contentId, status, rating, episode/season, notes.
+ * @param {import('express').Response} res - 200 on success; 400 validation/episode bounds; 404 user/content; 500.
+ * @returns {Promise<void>}
+ */
 export const addToWatchlist = async (req, res) => {
   const session = await mongoose.startSession()
   session.startTransaction()
@@ -475,14 +525,12 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
-    // Get max episodes from content
+    // Movies without episodeCount/malEpisodes are treated as a single episode.
     const maxEpisodes =
       content.episodeCount || content.malEpisodes || (content.contentType === 'movie' ? 1 : 0)
 
-    // Get max seasons from content (default to 1 if not specified)
     const maxSeasons = content.seasonCount || 1
 
-    // Validate currentEpisode doesn't exceed max episodes
     if (currentEpisode !== undefined && currentEpisode > maxEpisodes) {
       await session.abortTransaction()
       return res.status(400).json({
@@ -491,7 +539,6 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
-    // Validate currentSeason doesn't exceed max seasons
     if (currentSeason !== undefined && currentSeason > maxSeasons) {
       await session.abortTransaction()
       return res.status(400).json({
@@ -500,12 +547,10 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
-    // Check if already in watchlist
     const existingItem = user.watchlist.find((item) => item.content.toString() === contentId)
     const previousRating = getEffectiveUserRating(user, contentId)
 
     if (existingItem) {
-      // Update existing item
       existingItem.status = status || existingItem.status
       existingItem.rating = rating !== undefined ? rating : existingItem.rating
       existingItem.currentEpisode =
@@ -517,7 +562,6 @@ export const addToWatchlist = async (req, res) => {
       existingItem.notes = notes || existingItem.notes
       existingItem.updatedAt = new Date()
     } else {
-      // Add new item
       user.watchlist.push({
         content: contentId,
         status: status || 'plan_to_watch',
@@ -563,7 +607,13 @@ export const addToWatchlist = async (req, res) => {
   }
 }
 
-// Get user watchlist
+/**
+ * Return the authenticated user's watchlist with populated catalog fields.
+ *
+ * @param {import('express').Request} req - Reads `req.user._id` from auth middleware.
+ * @param {import('express').Response} res - 200 `{ data: watchlist }`, 404 if user missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const getWatchlist = async (req, res) => {
   try {
     const userId = req.user._id
@@ -571,11 +621,10 @@ export const getWatchlist = async (req, res) => {
       .populate({
         path: 'watchlist.content',
         model: 'Content',
-        // Add select to limit fields for better performance
         select:
           'title posterPath contentType releaseDate overview genres unifiedScore voteAverage voteCount malScore malScoredBy userRatingAverage userRatingCount episodeCount malEpisodes seasonCount',
       })
-      .lean() // Use lean() for better performance if not modifying
+      .lean()
 
     if (!user) {
       return res.status(404).json({
@@ -597,7 +646,13 @@ export const getWatchlist = async (req, res) => {
   }
 }
 
-// Remove from watchlist
+/**
+ * Remove a title from the watchlist and roll back its contribution to content aggregates.
+ *
+ * @param {import('express').Request} req - `req.user._id`; `params.contentId` is the catalog ObjectId.
+ * @param {import('express').Response} res - 200 on success, 404 if user missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const removeFromWatchlist = async (req, res) => {
   const session = await mongoose.startSession()
   session.startTransaction()
@@ -649,7 +704,13 @@ export const removeFromWatchlist = async (req, res) => {
   }
 }
 
-// Update watchlist item
+/**
+ * Patch an existing watchlist row (status, rating, progress) inside a transaction.
+ *
+ * @param {import('express').Request} req - `params.contentId`; `body` status/rating/episode/season/notes.
+ * @param {import('express').Response} res - 200 `{ data: item }`, 400 bounds, 404 missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const updateWatchlistItem = async (req, res) => {
   const session = await mongoose.startSession()
   session.startTransaction()
@@ -677,7 +738,6 @@ export const updateWatchlistItem = async (req, res) => {
       })
     }
 
-    // Get the content to validate episode count
     const content = await Content.findById(contentId).session(session)
     if (!content) {
       await session.abortTransaction()
@@ -687,14 +747,12 @@ export const updateWatchlistItem = async (req, res) => {
       })
     }
 
-    // Get max episodes from content
+    // Movies without episodeCount/malEpisodes are treated as a single episode.
     const maxEpisodes =
       content.episodeCount || content.malEpisodes || (content.contentType === 'movie' ? 1 : 0)
 
-    // Get max seasons from content (default to 1 if not specified)
     const maxSeasons = content.seasonCount || 1
 
-    // Validate currentEpisode doesn't exceed max episodes
     if (currentEpisode !== undefined && currentEpisode > maxEpisodes) {
       await session.abortTransaction()
       return res.status(400).json({
@@ -703,7 +761,6 @@ export const updateWatchlistItem = async (req, res) => {
       })
     }
 
-    // Validate currentSeason doesn't exceed max seasons
     if (currentSeason !== undefined && currentSeason > maxSeasons) {
       await session.abortTransaction()
       return res.status(400).json({
@@ -720,7 +777,6 @@ export const updateWatchlistItem = async (req, res) => {
     if (currentSeason !== undefined) watchlistItem.currentSeason = currentSeason
     if (notes !== undefined) watchlistItem.notes = notes
 
-    // Update total episodes and seasons if not set
     if (!watchlistItem.totalEpisodes) watchlistItem.totalEpisodes = maxEpisodes
     if (!watchlistItem.totalSeasons) watchlistItem.totalSeasons = maxSeasons
 
@@ -754,6 +810,13 @@ export const updateWatchlistItem = async (req, res) => {
   }
 }
 
+/**
+ * Resolve the user's current rating for a title: watchlist rating first, then legacy `user.ratings`.
+ *
+ * @param {object} user - User document with `watchlist` and optional `ratings`.
+ * @param {string} contentId - Content ObjectId string.
+ * @returns {number|null} Valid rating or null if none.
+ */
 function getEffectiveUserRating(user, contentId) {
   const watchlistItem = user.watchlist?.find((item) => item.content?.toString() === contentId)
   if (watchlistItem) {
@@ -764,6 +827,14 @@ function getEffectiveUserRating(user, contentId) {
   return isValidUserRating(legacyRating?.rating) ? legacyRating.rating : null
 }
 
+/**
+ * Mirror a watchlist rating onto the legacy `user.ratings` array (insert, update, or remove).
+ *
+ * @param {object} user - User document whose `ratings` array is mutated in place.
+ * @param {string} contentId - Content ObjectId string.
+ * @param {number|null} rating - New rating; invalid/null removes the legacy row.
+ * @returns {void}
+ */
 function syncLegacyUserRating(user, contentId, rating) {
   const existingIndex = user.ratings.findIndex((item) => item.content?.toString() === contentId)
 
@@ -787,12 +858,27 @@ function syncLegacyUserRating(user, contentId, rating) {
   })
 }
 
+/**
+ * Apply a rating delta to the content aggregate scores and persist inside the open session.
+ *
+ * @param {object} content - Content document to mutate and save.
+ * @param {number|null} oldRating - Previous effective rating.
+ * @param {number|null} newRating - New effective rating.
+ * @param {import('mongoose').ClientSession} session - Transaction session.
+ * @returns {Promise<void>}
+ */
 async function applyContentRatingChange(content, oldRating, newRating, session) {
   applyUserRatingDelta(content, oldRating, newRating)
   await content.save({ session })
 }
 
-// Submit a vote/rating for content
+/**
+ * Submit or update a 1–10 rating, writing both watchlist and legacy rating rows.
+ *
+ * @param {import('express').Request} req - `params.contentId`, `body.rating`, `req.user._id`.
+ * @param {import('express').Response} res - 200 with updated aggregates, 400/404, or 500.
+ * @returns {Promise<void>}
+ */
 export const voteContent = async (req, res) => {
   const session = await mongoose.startSession()
   session.startTransaction()
@@ -812,7 +898,6 @@ export const voteContent = async (req, res) => {
     const { rating } = req.body
     const userId = req.user._id
 
-    // Validate rating
     if (!rating || rating < 1 || rating > 10) {
       await session.abortTransaction()
       return res.status(400).json({
@@ -821,7 +906,6 @@ export const voteContent = async (req, res) => {
       })
     }
 
-    // Get user and content
     const user = await User.findById(userId).session(session)
     const content = await Content.findById(contentId).session(session)
 
@@ -845,11 +929,9 @@ export const voteContent = async (req, res) => {
     syncLegacyUserRating(user, contentId, rating)
     await applyContentRatingChange(content, previousRating, rating, session)
 
-    // Save user
     await user.save({ session })
     await session.commitTransaction()
 
-    // Get updated content
     const updatedContent = await Content.findById(contentId)
 
     res.json({
@@ -876,7 +958,13 @@ export const voteContent = async (req, res) => {
   }
 }
 
-// Get current user's rating for a specific content
+/**
+ * Return the authenticated user's legacy `ratings` row for one title (not the watchlist rating).
+ *
+ * @param {import('express').Request} req - `params.contentId`, `req.user._id`.
+ * @param {import('express').Response} res - 200 `{ hasRated, rating, watchedAt }`, 404, or 500.
+ * @returns {Promise<void>}
+ */
 export const getMyRating = async (req, res) => {
   try {
     const { contentId } = req.params
@@ -909,7 +997,13 @@ export const getMyRating = async (req, res) => {
   }
 }
 
-// Get database statistics
+/**
+ * Count catalog documents by source (TMDB/MAL/merged) and type, plus last sync timestamp.
+ *
+ * @param {import('express').Request} req - Unused; public stats endpoint.
+ * @param {import('express').Response} res - 200 `{ data }` counts and `contentSync`, or 500.
+ * @returns {Promise<void>}
+ */
 export const getDatabaseStats = async (req, res) => {
   try {
     const totalContent = await Content.countDocuments()
@@ -954,8 +1048,13 @@ export const getDatabaseStats = async (req, res) => {
   }
 }
 
-// Default export for backward compatibility
-// Get related content (sequels, prequels, related)
+/**
+ * Return sequel/prequel/related links for a catalog id via the relationship service.
+ *
+ * @param {import('express').Request} req - Reads `params.contentId`.
+ * @param {import('express').Response} res - 200 `{ data }`, 400 if id missing, or 500 with `error`.
+ * @returns {Promise<void>}
+ */
 export const getRelatedContent = async (req, res) => {
   try {
     const { contentId } = req.params
@@ -983,7 +1082,13 @@ export const getRelatedContent = async (req, res) => {
   }
 }
 
-// Get franchise content
+/**
+ * List all catalog rows sharing a franchise name, ordered by release date.
+ *
+ * @param {import('express').Request} req - Reads `params.franchiseName`.
+ * @param {import('express').Response} res - 200 `{ data }` array, 400 if name missing, or 500.
+ * @returns {Promise<void>}
+ */
 export const getFranchiseContent = async (req, res) => {
   try {
     const { franchiseName } = req.params
@@ -995,11 +1100,10 @@ export const getFranchiseContent = async (req, res) => {
       })
     }
 
-    // Find all content in the franchise
     const franchiseContent = await Content.find({
       franchise: franchiseName,
     })
-      .sort({ releaseDate: 1 }) // Sort by release date
+      .sort({ releaseDate: 1 })
       .exec()
 
     res.json({

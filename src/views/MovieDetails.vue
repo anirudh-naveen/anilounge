@@ -1,15 +1,25 @@
+<!--
+  MovieDetails.vue — movie detail view.
+
+  Loads one movie by route id and shows poster, titles, meta, watchlist
+  actions, overview, and related sequels/prequels from the content store.
+-->
 <template>
   <div class="movie-details">
+    <!-- Navigation -->
     <div class="back-button" @click="goBack">
       <i class="fas fa-arrow-left"></i>
       Back
     </div>
 
+    <!-- Status -->
+    <!-- Title: Loading State -->
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
       <p>Loading movie details...</p>
     </div>
 
+    <!-- Title: Error State -->
     <div v-else-if="error" class="error">
       <h2>Error loading movie</h2>
       <p>{{ error }}</p>
@@ -17,7 +27,9 @@
     </div>
 
     <div v-else-if="movie" class="movie-content">
+      <!-- Header -->
       <div class="movie-header">
+        <!-- Title: Poster -->
         <div class="movie-poster">
           <img
             v-if="movie.posterPath"
@@ -32,11 +44,13 @@
         </div>
 
         <div class="movie-info">
+          <!-- Title: Titles -->
           <h1 class="movie-title">{{ getDisplayTitle(movie) }}</h1>
           <p v-if="getNativeTitle(movie)" class="original-title">
             Native Title: {{ getNativeTitle(movie) }}
           </p>
 
+          <!-- Title: Meta -->
           <div class="movie-meta">
             <div class="rating">
               <i class="fas fa-star"></i>
@@ -67,6 +81,7 @@
             </span>
           </div>
 
+          <!-- Title: Actions -->
           <div class="movie-actions">
             <button
               v-if="authStore.isAuthenticated && !isInWatchlist"
@@ -90,11 +105,14 @@
         </div>
       </div>
 
+      <!-- Body -->
+      <!-- Title: Overview -->
       <div class="movie-description">
         <h2>Overview</h2>
         <p>{{ movie.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Production Companies -->
       <div v-if="movie.productionCompanies?.length" class="production-info">
         <h3>Production Companies</h3>
         <div class="companies">
@@ -108,6 +126,7 @@
         </div>
       </div>
 
+      <!-- Title: Alternative Titles -->
       <div v-if="getAlternativeTitles(movie).length" class="alternative-titles">
         <h3>Alternative Titles</h3>
         <div class="titles">
@@ -121,7 +140,7 @@
         </div>
       </div>
 
-      <!-- Related Content Loading State -->
+      <!-- Title: Related Loading -->
       <div v-if="relatedContentLoading" class="related-content-loading">
         <h3>Loading Related Content...</h3>
         <div class="loading-spinner">
@@ -130,7 +149,7 @@
         </div>
       </div>
 
-      <!-- Related Content Section -->
+      <!-- Title: Related Content -->
       <div
         v-else-if="
           relatedContent &&
@@ -142,12 +161,12 @@
       >
         <h3>Related Content</h3>
 
-        <!-- Franchise Info -->
+        <!-- Title: Franchise -->
         <div v-if="movie.franchise" class="franchise-info">
           <h4>Part of the {{ movie.franchise }} franchise</h4>
         </div>
 
-        <!-- Sequels -->
+        <!-- Title: Sequels -->
         <div v-if="relatedContent.sequels.length > 0" class="relationship-section">
           <h4>Sequels</h4>
           <div class="content-grid">
@@ -180,7 +199,7 @@
           </div>
         </div>
 
-        <!-- Prequels -->
+        <!-- Title: Prequels -->
         <div v-if="relatedContent.prequels.length > 0" class="relationship-section">
           <h4>Prequels</h4>
           <div class="content-grid">
@@ -213,7 +232,7 @@
           </div>
         </div>
 
-        <!-- Related -->
+        <!-- Title: Related -->
         <div v-if="relatedContent.related.length > 0" class="relationship-section">
           <h4>Related</h4>
           <div class="content-grid">
@@ -248,7 +267,7 @@
       </div>
     </div>
 
-    <!-- Status Dropdown -->
+    <!-- Title: Watchlist -->
     <StatusDropdown
       v-if="showStatusDropdown"
       :show-dropdown="showStatusDropdown"

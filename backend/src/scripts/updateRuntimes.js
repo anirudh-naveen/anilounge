@@ -1,24 +1,30 @@
+/**
+ * One-off maintenance script: fill MAL movie runtimes from the known-title estimator.
+ * Run when MAL-only movies show null or sub-60-minute runtimes. Mutates Content.runtime
+ * using unifiedContentService.getEstimatedRuntime (does not call TMDB).
+ */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 
-// Load environment variables
 dotenv.config()
 
+/**
+ * Rewrite runtime on MAL movies missing a duration or under 60 minutes.
+ * @returns {Promise<void>}
+ */
 async function updateRuntimes() {
   try {
-    // Connect to database
     await mongoose.connect(process.env.MONGODB_URI)
     console.log('Database connected')
 
-    // Get all MAL content that are movies
     const malMovies = await Content.find({
       malId: { $exists: true },
       contentType: 'movie',
       $or: [
         { runtime: null },
-        { runtime: { $lt: 60 } }, // Update movies with runtime less than 60 minutes
+        { runtime: { $lt: 60 } },
       ],
     })
 
@@ -52,5 +58,4 @@ async function updateRuntimes() {
   }
 }
 
-// Run the update
 updateRuntimes()

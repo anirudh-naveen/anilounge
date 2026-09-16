@@ -1,3 +1,10 @@
+/**
+ * index.ts — shared frontend types.
+ *
+ * Domain and API request/response shapes used by Pinia stores, the Axios
+ * client, and Vue views.
+ */
+
 import type { UnifiedContent } from './content'
 
 export interface Network {
@@ -141,7 +148,6 @@ export interface TVShow {
 
 export type Content = Movie | TVShow
 
-// API Types
 export interface LoginCredentials {
   email: string
   password: string
