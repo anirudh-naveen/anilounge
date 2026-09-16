@@ -246,6 +246,17 @@ class UnifiedContentService {
    * @returns {Promise<object[]>}
    */
   async getMalTopAnime(limit = 50, offset = 0) {
+    return this.getMalRanking('all', limit, offset)
+  }
+
+  /**
+   * MAL anime ranking page (`all`, `airing`, `upcoming`, `tv`, …).
+   * @param {string} [rankingType='all']
+   * @param {number} [limit=50]
+   * @param {number} [offset=0]
+   * @returns {Promise<object[]>}
+   */
+  async getMalRanking(rankingType = 'all', limit = 50, offset = 0) {
     if (!this.hasMalKey) {
       console.log('MAL API key not configured')
       return []
@@ -255,7 +266,7 @@ class UnifiedContentService {
       await this.delay(this.malDelay)
       const response = await this.malClient.get('/anime/ranking', {
         params: {
-          ranking_type: 'all',
+          ranking_type: rankingType,
           limit: Math.min(limit, 100),
           offset,
           fields: MAL_ANIME_FIELDS,
@@ -264,7 +275,7 @@ class UnifiedContentService {
 
       return response.data.data || []
     } catch (error) {
-      console.error('MAL top anime error:', error.response?.data || error.message)
+      console.error(`MAL ${rankingType} ranking error:`, error.response?.data || error.message)
       return []
     }
   }
@@ -1014,10 +1025,7 @@ class UnifiedContentService {
       })
       return response.data
     } catch (error) {
-      console.error(
-        `TMDB season ${seasonNumber} error:`,
-        error.response?.data || error.message,
-      )
+      console.error(`TMDB season ${seasonNumber} error:`, error.response?.data || error.message)
       return null
     }
   }

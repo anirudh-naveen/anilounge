@@ -8,19 +8,21 @@
 2. Separate English title with Native title (and make both searchable). ✅
 3. Collapse MAL specials (OVA/special) into Movies; label them Specials on hover. ✅
 4. Include a content subgroup for TV shows called Episode, with its own title, cast, and description. ✅
-    - These should not be clickable into its own page, just expanded when clicked on the show's content page.
-    - the Episodes can be a line of content there that can be scrolled through from left to right.
-    - Place it under Overview
+   - These should not be clickable into its own page, just expanded when clicked on the show's content page.
+   - the Episodes can be a line of content there that can be scrolled through from left to right.
+   - Place it under Overview
 5. Include a currently airing tag and timer for new episode updates for airing shows. ✅
-6. Have the TV Shows Page have tabs for "Popular Right Now", "Currently Airing", and Upcoming Highlights
+6. Have the TV Shows Page have tabs for "Popular Right Now", "Currently Airing", and Upcoming Highlights ✅
 7. Add voice actors as a type of content.
-   - They will not have their own screen but will be searchable and favoritable for the profile.
+   - They will not have their own tab but will have their own screen and can be clicked and will be searchable and favoritable for the profile.
    - Additionally if the API has pictures for them, include them.
-   - Update content and episodes to use this new feature.
+   - Make sure they appear under every content theyre in with a role, whether they were introduced then or not.
+   - Update content and episodes to use this new feature on click.
 8. Add animation studios as a type of content.
-   - They will not have their own screen but will be searchable and favoritable for the profile.
+   - They will not have their own tab but will have their own screen and can be clicked and will be searchable and favoritable for the profile.
+   - On their screen, they should show all the movies/shows they have worked on. (not episodes)
    - Additionally if the API has pictures for them, include them.
-   - Update content and episodes to use this new feature.
+   - Update content and episodes to use this new feature on click.
 
 ### Bug Fixes
 
@@ -80,6 +82,11 @@
    - Maybe include the seasons like anime does?
 3. Add filter for country of origin.
 
+### Bug Fixes
+
+1. Fix search to allow confirmation of search even if no words are types as long as filters are set.
+   - Only way search shouldn't be allowed are if both no words in search bar AND no filters set.
+
 ## Communication
 
 ### Additions
@@ -87,6 +94,7 @@
 1. Add ability for friending others, and add a friends tab to the profile
 2. Add review system and discussion features for users in a new tab called Forum.
    - Allow users to tag the specified content or "franchise" (not sure if this is a current content table yet, if not make it one.)
+   - Episodes should be able to be created a forum under.
    - For any associated forums, allow some of the leading forum posts and a few highlighted comments to the associated content's screen.
    - Make sure any public forum post/comments have a strict censorship.
 3. Add an inbox next to the profile to see any site news, friend invites, comments on a post/comment

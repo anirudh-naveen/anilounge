@@ -269,12 +269,11 @@ export const isMovieLike = (contentType?: string) =>
   contentType === 'movie' || contentType === 'special'
 
 /**
- * Card badge label: specials display as `"Movie"` (full `"Special"` is hover-only).
+ * Card badge label. Specials keep their own tag even though they live in Movies.
  * @param contentType - `movie`, `tv`, or `special`.
- * @returns `"Movie"` or `"TV Show"`.
+ * @returns `"Movie"`, `"TV Show"`, or `"Special"`.
  */
-export const getCardContentTypeDisplay = (contentType: string) =>
-  isMovieLike(contentType) ? 'Movie' : 'TV Show'
+export const getCardContentTypeDisplay = (contentType: string) => getContentTypeDisplay(contentType)
 
 /**
  * Whether an item matches a Movies/TV/All filter; `"movie"` includes specials.
@@ -289,12 +288,14 @@ export const matchesContentTypeFilter = (itemType: string | undefined, filter?: 
 }
 
 /**
- * CSS class for movie vs TV type badges.
+ * CSS class for poster type badges.
  * @param contentType - `movie`, `tv`, or `special`.
- * @returns `'tv-badge'` or `'movie-badge'` (specials use the movie class).
+ * @returns `'movie-badge'`, `'tv-badge'`, or `'special-badge'`.
  */
 export const getContentTypeBadgeClass = (contentType: string) => {
-  return contentType === 'tv' ? 'tv-badge' : 'movie-badge'
+  if (contentType === 'tv') return 'tv-badge'
+  if (contentType === 'special') return 'special-badge'
+  return 'movie-badge'
 }
 
 /**

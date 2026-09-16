@@ -196,4 +196,6 @@ export interface RateContentData {
 export interface ContentParams {
   page?: number
   limit?: number
+  type?: string
+  tab?: string
 }

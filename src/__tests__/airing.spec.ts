@@ -4,7 +4,9 @@ import {
   formatCountdown,
   getAiringTimerLabel,
   getNextAirInfo,
+  getUpcomingTimerLabel,
   isCurrentlyAiring,
+  isUpcoming,
   nextWeeklyAirDate,
   type AiringFields,
 } from '@/utils/airing'
@@ -47,6 +49,32 @@ describe('isCurrentlyAiring', () => {
   })
 })
 
+describe('isUpcoming', () => {
+  it('is true for TV that has not yet aired', () => {
+    expect(isUpcoming({ contentType: 'tv', malStatus: 'not_yet_aired' })).toBe(true)
+  })
+
+  it('is true for movies and specials that have not yet aired', () => {
+    expect(isUpcoming({ contentType: 'movie', malStatus: 'not_yet_aired' })).toBe(true)
+    expect(isUpcoming({ contentType: 'special', malStatus: 'not_yet_aired' })).toBe(true)
+  })
+
+  it('is false for currently airing or finished titles', () => {
+    expect(isUpcoming({ contentType: 'tv', malStatus: 'currently_airing' })).toBe(false)
+    expect(
+      isUpcoming({ contentType: 'movie', malStatus: 'finished_airing', releaseDate: '2026-10-01' }),
+    ).toBe(false)
+  })
+
+  it('falls back to a future premiere date when MAL status is missing', () => {
+    const from = new Date('2026-09-16T12:00:00.000Z')
+    expect(isUpcoming({ contentType: 'tv', releaseDate: '2026-10-01' }, from)).toBe(true)
+    expect(isUpcoming({ contentType: 'movie', releaseDate: '2026-10-01' }, from)).toBe(true)
+    expect(isUpcoming({ contentType: 'tv', releaseDate: '2026-01-01' }, from)).toBe(false)
+    expect(isUpcoming({ contentType: 'movie', releaseDate: '2026-01-01' }, from)).toBe(false)
+  })
+})
+
 describe('nextWeeklyAirDate', () => {
   it('returns the next JST weekly slot', () => {
     // Wednesday 12:00 UTC = Wednesday 21:00 JST. Sunday 01:00 JST is 4 days later.
@@ -55,7 +83,7 @@ describe('nextWeeklyAirDate', () => {
     expect(next?.toISOString()).toBe('2026-09-19T16:00:00.000Z')
   })
 
-  it('rolls forward a week when this week\'s slot already passed', () => {
+  it("rolls forward a week when this week's slot already passed", () => {
     // Sunday 02:00 JST, slot is Sunday 01:00 JST → next Sunday.
     const from = new Date('2026-09-19T17:00:00.000Z')
     const next = nextWeeklyAirDate('sunday', '01:00', from)
@@ -115,5 +143,24 @@ describe('getAiringTimerLabel', () => {
         from,
       ),
     ).toBe('Episode 8 in 3d 4h 25m')
+  })
+})
+
+describe('getUpcomingTimerLabel', () => {
+  it('counts down to a TV premiere', () => {
+    const from = new Date('2026-09-16T12:00:00.000Z')
+    expect(
+      getUpcomingTimerLabel(
+        { contentType: 'tv', malStatus: 'not_yet_aired', releaseDate: '2026-10-01' },
+        from,
+      ),
+    ).toBe('Premieres in 14d 12h 0m')
+  })
+
+  it('counts down to a movie release', () => {
+    const from = new Date('2026-09-16T12:00:00.000Z')
+    expect(getUpcomingTimerLabel({ contentType: 'movie', releaseDate: '2026-10-01' }, from)).toBe(
+      'Releases in 14d 12h 0m',
+    )
   })
 })

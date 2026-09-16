@@ -474,9 +474,7 @@ class DatabasePopulator {
     if (newGenres.length > 0 && existingGenres.length > 0) {
       const commonGenres = newGenres.filter((g) => existingGenres.includes(g))
       if (commonGenres.length === 0) {
-        console.log(
-          `No common genres: ${newContent.title} vs ${existingContent.title}`,
-        )
+        console.log(`No common genres: ${newContent.title} vs ${existingContent.title}`)
         console.log(`   New genres: ${newGenres.join(', ')}`)
         console.log(`   Existing genres: ${existingGenres.join(', ')}`)
         return false
@@ -867,6 +865,48 @@ class DatabasePopulator {
     console.log(`   TV Shows: ${tvShows}`)
     console.log(`   Specials: ${specials}`)
   }
+}
+
+/**
+ * Upsert MAL ranking TV rows (upcoming/airing) so catalog tabs have titles
+ * that overall popularity sync does not ingest.
+ * @param {string} rankingType - MAL `ranking_type` (`upcoming` or `airing`).
+ * @param {number} [limit=50]
+ * @returns {Promise<number>} Newly inserted TV documents.
+ */
+export async function ingestMalRankingTv(rankingType, limit = 50) {
+  const rows = await unifiedContentService.getMalRanking(rankingType, limit)
+  let inserted = 0
+
+  for (const row of rows) {
+    const contentData = unifiedContentService.convertMalToContent(row)
+    if (!contentData || contentData.contentType !== 'tv' || !contentData.malId) continue
+
+    const existing = await Content.findOne({ malId: contentData.malId })
+    if (existing) {
+      let changed = false
+      if (contentData.malStatus && existing.malStatus !== contentData.malStatus) {
+        existing.malStatus = contentData.malStatus
+        changed = true
+      }
+      if (contentData.releaseDate && !existing.releaseDate) {
+        existing.releaseDate = contentData.releaseDate
+        changed = true
+      }
+      if (changed) await existing.save()
+      continue
+    }
+
+    contentData.userRatingAverage = null
+    contentData.userRatingCount = 0
+    contentData.userRatingSum = 0
+    if (contentData.malScore) contentData.unifiedScore = contentData.malScore
+
+    await Content.create(contentData)
+    inserted++
+  }
+
+  return inserted
 }
 
 export default DatabasePopulator

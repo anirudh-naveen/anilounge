@@ -53,7 +53,10 @@
                 :alt="getDisplayTitle(item)"
                 @error="handleImageError"
               />
-              <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
+              <div
+                class="content-type-badge poster-corner-tag poster-corner-tag-right"
+                :class="getContentTypeBadgeClass(item.contentType)"
+              >
                 {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
               <AiringBadge :content="item" variant="card" />
@@ -353,33 +356,7 @@ onMounted(async () => {
 }
 
 .content-type-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 600;
   z-index: 2;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0;
-  transform: translateY(-5px);
-  transition: all 0.3s ease;
-}
-
-.movie-badge {
-  background: var(--teal-primary);
-}
-
-.tv-badge {
-  background: var(--coral-primary);
-}
-
-.content-card:hover .content-type-badge {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .content-card:hover .content-poster img {
