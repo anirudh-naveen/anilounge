@@ -5,7 +5,7 @@
  * after failed logins, and writes profile pictures under `uploads/profiles`.
  */
 
-import User from '../models/User.js'
+import User, { DEMO_USER_EMAIL } from '../models/User.js'
 import { generateAccessToken, generateRefreshToken, generateToken } from '../middleware/auth.js'
 import { validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
@@ -143,6 +143,9 @@ export const login = async (req, res) => {
     user.failedLoginAttempts = 0
     user.lockUntil = undefined
     user.lastLogin = new Date()
+    if (user.email === DEMO_USER_EMAIL) {
+      user.isDemoAccount = true
+    }
     await user.save()
 
     logLoginAttempt(normalizedEmail, true, req.ip, req.get('User-Agent'), user._id)
@@ -158,6 +161,7 @@ export const login = async (req, res) => {
           id: user._id,
           username: user.username,
           email: user.email,
+          isDemoAccount: user.isDemo(),
           watchlist: user.watchlist,
           preferences: user.preferences,
         },
@@ -197,6 +201,7 @@ export const getProfile = async (req, res) => {
           id: user._id,
           username: user.username,
           email: user.email,
+          isDemoAccount: user.isDemo(),
           profilePicture: user.profilePicture,
           createdAt: user.createdAt,
           watchlist: user.watchlist,
@@ -278,13 +283,21 @@ export const updateProfile = async (req, res) => {
 /**
  * Replace the authenticated user's password after verifying the current one.
  * Complexity rules match registration (8+ chars, mixed case, number, special).
+ * The shared demo account cannot change its password.
  *
  * @param {import('express').Request} req - `body.currentPassword`, `body.newPassword`.
- * @param {import('express').Response} res - 200 on success, 400 invalid, 404 user missing, or 500.
+ * @param {import('express').Response} res - 200 on success, 400 invalid, 403 demo, 404 user missing, or 500.
  * @returns {Promise<void>}
  */
 export const changePassword = async (req, res) => {
   try {
+    if (req.user.isDemo()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Password cannot be changed for the demo account.',
+      })
+    }
+
     const { currentPassword, newPassword } = req.body
 
     if (!currentPassword || !newPassword) {

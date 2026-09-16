@@ -11,12 +11,35 @@ import User from '../models/User.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
 import relationshipService from '../services/relationshipService.js'
+import { ingestMalRankingTv } from '../services/contentSyncService.js'
 import { applyUserRatingDelta, isValidUserRating } from '../utils/ratings.js'
 import { contentTitleMatchOr } from '../utils/titles.js'
+import {
+  catalogTabDateFields,
+  matchTvCatalogTab,
+  mergeCatalogQuery,
+  normalizeTvCatalogTab,
+  sortForTvCatalogTab,
+} from '../utils/catalogTabs.js'
 import { validationResult } from 'express-validator'
 import mongoose from 'mongoose'
 
 const movieLikeTypes = ['movie', 'special']
+
+/**
+ * Fetch MAL/TMDB airing schedule onto a TV document when the stored slot is missing or stale.
+ * Failures are logged; callers still return the existing catalog row.
+ * @param {import('mongoose').Document} content
+ * @returns {Promise<void>}
+ */
+const refreshAiringIfNeeded = async (content) => {
+  try {
+    const changed = await unifiedContentService.refreshAiringSchedule(content)
+    if (changed) await content.save()
+  } catch (error) {
+    console.error('Airing schedule refresh failed:', error.message)
+  }
+}
 
 /**
  * Build a Mongo filter for the public content-type query param.
@@ -31,11 +54,29 @@ const matchContentType = (contentType) => {
   return { contentType }
 }
 
+const hiddenSortAddFields = {
+  boostedScore: { $ifNull: ['$unifiedScore', 0] },
+  hiddenSortScore: {
+    $add: [
+      { $ifNull: ['$unifiedScore', 0] },
+      { $cond: [{ $ne: ['$tmdbId', null] }, 1.0, 0] },
+      {
+        $cond: [
+          { $ne: ['$tmdbId', null] },
+          { $multiply: [{ $ifNull: ['$popularity', 0] }, 0.05] },
+          0,
+        ],
+      },
+    ],
+  },
+}
+
 /**
  * List catalog titles with pagination. Sort uses a hidden TMDB visibility boost
  * that is stripped from the JSON so displayed scores stay unboosted.
+ * `tab` filters TV lists into popular, currently airing, or upcoming.
  *
- * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`.
+ * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`, `query.tab`.
  * @param {import('express').Response} res - 200 `{ success, data, pagination }` or 500.
  * @returns {Promise<void>}
  */
@@ -45,9 +86,21 @@ export const getContent = async (req, res) => {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 20
     const contentType = req.query.type || 'all'
+    const tab = contentType === 'tv' ? normalizeTvCatalogTab(req.query.tab) : 'popular'
     const skip = (page - 1) * limit
 
-    const query = matchContentType(contentType)
+    const query = mergeCatalogQuery(matchContentType(contentType), matchTvCatalogTab(tab))
+
+    if (tab === 'upcoming') {
+      const existingUpcoming = await Content.countDocuments(query)
+      if (existingUpcoming === 0) {
+        try {
+          await ingestMalRankingTv('upcoming', 50)
+        } catch (error) {
+          console.error('Upcoming catalog ingest failed:', error.message)
+        }
+      }
+    }
 
     const total = await Content.countDocuments(query)
 
@@ -58,29 +111,18 @@ export const getContent = async (req, res) => {
       { $match: query },
       {
         $addFields: {
-          boostedScore: { $ifNull: ['$unifiedScore', 0] },
-          hiddenSortScore: {
-            $add: [
-              { $ifNull: ['$unifiedScore', 0] },
-              { $cond: [{ $ne: ['$tmdbId', null] }, 1.0, 0] },
-              {
-                $cond: [
-                  { $ne: ['$tmdbId', null] },
-                  { $multiply: [{ $ifNull: ['$popularity', 0] }, 0.05] },
-                  0,
-                ],
-              },
-            ],
-          },
+          ...hiddenSortAddFields,
+          ...catalogTabDateFields(tab),
         },
       },
-      { $sort: { hiddenSortScore: -1, _id: -1 } },
+      { $sort: sortForTvCatalogTab(tab) },
       { $skip: skip },
       { $limit: limit },
       {
         $project: {
           boostedScore: 0,
           hiddenSortScore: 0,
+          hasScheduleDate: 0,
         },
       },
     ])
@@ -127,6 +169,8 @@ export const getContentById = async (req, res) => {
       })
     }
 
+    await refreshAiringIfNeeded(content)
+
     res.json({
       success: true,
       data: content,
@@ -136,6 +180,42 @@ export const getContentById = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching content',
+    })
+  }
+}
+
+/**
+ * Episode cards for a TV catalog title (title, description, still, cast).
+ * Movies and specials return an empty list. Episodes are not separate pages.
+ *
+ * @param {import('express').Request} req - Reads `params.id`.
+ * @param {import('express').Response} res - 200 `{ data: { episodes } }`, 404 if missing, or 500.
+ * @returns {Promise<void>}
+ */
+export const getContentEpisodes = async (req, res) => {
+  try {
+    const { id } = req.params
+    const content = await Content.findById(id)
+
+    if (!content) {
+      return res.status(404).json({
+        success: false,
+        message: 'Content not found',
+      })
+    }
+
+    const episodes =
+      content.contentType === 'tv' ? await unifiedContentService.getTvShowEpisodes(content) : []
+
+    res.json({
+      success: true,
+      data: { episodes },
+    })
+  } catch (error) {
+    console.error('Error fetching content episodes:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching episodes',
     })
   }
 }
@@ -177,6 +257,8 @@ export const getContentByExternalId = async (req, res) => {
         message: 'Content not found',
       })
     }
+
+    await refreshAiringIfNeeded(content)
 
     res.json({
       success: true,
@@ -622,7 +704,7 @@ export const getWatchlist = async (req, res) => {
         path: 'watchlist.content',
         model: 'Content',
         select:
-          'title posterPath contentType releaseDate overview genres unifiedScore voteAverage voteCount malScore malScoredBy userRatingAverage userRatingCount episodeCount malEpisodes seasonCount',
+          'title posterPath contentType releaseDate overview genres unifiedScore voteAverage voteCount malScore malScoredBy userRatingAverage userRatingCount episodeCount malEpisodes seasonCount malStatus broadcastDay broadcastTime nextEpisodeAirDate nextEpisodeNumber nextEpisodeSeason',
       })
       .lean()
 
@@ -1123,6 +1205,7 @@ export const getFranchiseContent = async (req, res) => {
 export default {
   getContent,
   getContentById,
+  getContentEpisodes,
   getContentByExternalId,
   searchContent,
   getPopularContent,

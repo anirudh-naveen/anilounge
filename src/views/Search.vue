@@ -181,9 +181,13 @@
                 :alt="getDisplayTitle(item)"
                 @error="handleImageError"
               />
-              <div class="content-type-badge" :class="getContentTypeBadgeClass(item.contentType)">
+              <div
+                class="content-type-badge poster-corner-tag poster-corner-tag-right"
+                :class="getContentTypeBadgeClass(item.contentType)"
+              >
                 {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
+              <AiringBadge :content="item" variant="card" />
             </div>
             <div class="result-info">
               <h3 class="result-title">{{ getDisplayTitle(item) }}</h3>
@@ -275,6 +279,7 @@ import type { UnifiedContent } from '@/types/content'
 import Chatbot from '@/components/Chatbot.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
@@ -294,8 +299,11 @@ const hasSearched = ref(
 const isAIMode = ref(false)
 const itemsPerPage = 20
 
-const { searchFilters: filters, searchAppliedFilters: appliedFilters, searchPage: currentPage } =
-  storeToRefs(contentStore)
+const {
+  searchFilters: filters,
+  searchAppliedFilters: appliedFilters,
+  searchPage: currentPage,
+} = storeToRefs(contentStore)
 
 // Computed properties
 const searchResults = computed(() => contentStore.searchResults)
@@ -834,33 +842,7 @@ onMounted(() => {
 }
 
 .content-type-badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  color: white;
-  padding: 2px 5px;
-  border-radius: 3px;
-  font-size: 0.65rem;
-  font-weight: 600;
   z-index: 2;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0;
-  transform: translateY(-5px);
-  transition: all 0.3s ease;
-}
-
-.movie-badge {
-  background: var(--teal-primary);
-}
-
-.tv-badge {
-  background: var(--coral-primary);
-}
-
-.result-card:hover .content-type-badge {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .result-info {

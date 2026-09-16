@@ -76,6 +76,11 @@
                 <span v-if="getContentYear(item)" class="item-year">{{
                   getContentYear(item)
                 }}</span>
+                <AiringBadge
+                  v-if="typeof item.content !== 'string' && item.content"
+                  :content="item.content"
+                  variant="inline"
+                />
               </div>
             </div>
 
@@ -308,6 +313,7 @@ import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { useToast } from 'vue-toastification'
 import type { WatchlistItem, TVShow } from '@/types'
 import SortByControls from '@/components/SortByControls.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
 import { getDisplayTitle } from '@/utils/titles'
 

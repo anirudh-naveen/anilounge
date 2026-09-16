@@ -107,6 +107,14 @@ const ContentSchema = new mongoose.Schema(
       enum: ['g', 'pg', 'pg_13', 'r', 'r+', 'rx'],
     },
 
+    // Airing schedule: MAL weekly slot (JST) plus TMDB's next episode when known
+    broadcastDay: String,
+    broadcastTime: String,
+    nextEpisodeAirDate: Date,
+    nextEpisodeNumber: Number,
+    nextEpisodeSeason: Number,
+    airingUpdatedAt: Date,
+
     // Classification (genres merged from TMDB and MAL)
     genres: [
       {

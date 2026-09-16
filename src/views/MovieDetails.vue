@@ -69,6 +69,10 @@
               <i class="fas fa-clock"></i>
               <span>{{ movie.runtime }} minutes</span>
             </div>
+
+            <div v-if="isUpcoming(movie)" class="status airing-status">
+              <AiringBadge :content="movie" variant="detail" />
+            </div>
           </div>
 
           <div class="genres">
@@ -92,7 +96,11 @@
               Add to Watchlist
             </button>
 
-            <button v-if="authStore.isAuthenticated && isInWatchlist" @click="removeFromWatchlist" class="btn-secondary remove-from-watchlist">
+            <button
+              v-if="authStore.isAuthenticated && isInWatchlist"
+              @click="removeFromWatchlist"
+              class="btn-secondary remove-from-watchlist"
+            >
               <i class="fas fa-check"></i>
               In Watchlist
             </button>
@@ -122,20 +130,6 @@
             class="company-tag"
           >
             {{ company }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Title: Alternative Titles -->
-      <div v-if="getAlternativeTitles(movie).length" class="alternative-titles">
-        <h3>Alternative Titles</h3>
-        <div class="titles">
-          <span
-            v-for="title in getAlternativeTitles(movie)"
-            :key="title"
-            class="company-tag title-tag"
-          >
-            {{ title }}
           </span>
         </div>
       </div>
@@ -189,6 +183,7 @@
                 <h5>{{ getDisplayTitle(sequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(sequel.contentType) }}
+                  <AiringBadge :content="sequel" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -222,6 +217,7 @@
                 <h5>{{ getDisplayTitle(prequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(prequel.contentType) }}
+                  <AiringBadge :content="prequel" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -255,6 +251,7 @@
                 <h5>{{ getDisplayTitle(related) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(related.contentType) }}
+                  <AiringBadge :content="related" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -290,9 +287,12 @@ import {
   getDetailsRouteName,
 } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
-import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { isUpcoming } from '@/utils/airing'
+import { isTvCatalogPath, tvCatalogLocationFromUrl } from '@/utils/catalogTabs'
 
 const route = useRoute()
 const router = useRouter()
@@ -385,13 +385,11 @@ const goBack = () => {
           contentStore.scrollToTop()
         })
       }
-    } else if (pathname === '/tv-shows') {
-      // Coming from TV shows page - handle pagination
-      const page = url.searchParams.get('page') || '1'
-      const scrollKey = `tv-shows-page-${page}`
-      const restored = contentStore.restoreScrollPosition(scrollKey)
+    } else if (isTvCatalogPath(pathname)) {
+      const location = tvCatalogLocationFromUrl(url)
+      const restored = contentStore.restoreScrollPosition(location.scrollKey)
 
-      router.push({ path: '/tv-shows', query: { page } })
+      router.push({ path: location.path, query: location.query })
 
       if (!restored) {
         nextTick(() => {
@@ -669,6 +667,10 @@ const handleImageError = (event: Event) => {
   font-size: 1rem;
 }
 
+.airing-status {
+  padding: 0;
+}
+
 .movie-meta i {
   color: var(--highlight-color);
   width: 16px;
@@ -763,21 +765,18 @@ const handleImageError = (event: Event) => {
   color: var(--text-muted);
 }
 
-.production-info,
-.alternative-titles {
+.production-info {
   margin-bottom: 2rem;
 }
 
-.production-info h3,
-.alternative-titles h3 {
+.production-info h3 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
 }
 
 .companies,
-.countries,
-.titles {
+.countries {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -1000,8 +999,7 @@ const handleImageError = (event: Event) => {
 }
 
 .company-tag,
-.country-tag,
-.title-tag {
+.country-tag {
   color: #ffffff !important; /* White text */
 }
 

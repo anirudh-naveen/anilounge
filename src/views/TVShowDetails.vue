@@ -2,7 +2,8 @@
   TVShowDetails.vue — TV show detail view.
 
   Loads one series by route id and shows poster, titles, season/episode meta,
-  watchlist actions, overview, studios, and related sequels/prequels.
+  watchlist actions, overview, an expandable episode row, studios, and related
+  sequels/prequels.
 -->
 <template>
   <div class="tv-details">
@@ -79,9 +80,12 @@
               >
             </div>
 
-            <div v-if="show.malStatus" class="status">
+            <div v-if="isCurrentlyAiring(show) || isUpcoming(show)" class="status airing-status">
+              <AiringBadge :content="show" variant="detail" />
+            </div>
+            <div v-else-if="show.malStatus" class="status">
               <i class="fas fa-info-circle"></i>
-              <span>{{ show.malStatus }}</span>
+              <span>{{ formatAiringStatus(show.malStatus) }}</span>
             </div>
           </div>
 
@@ -130,6 +134,9 @@
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Episodes -->
+      <EpisodeRow :episodes="episodes" :loading="episodesLoading" />
+
       <!-- Title: Studios -->
       <div v-if="show.studios?.length" class="network-info">
         <h3>Studios</h3>
@@ -146,16 +153,6 @@
         <div class="companies">
           <span v-for="company in show.productionCompanies" :key="company" class="company-tag">
             {{ company }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Title: Alternative Titles -->
-      <div v-if="getAlternativeTitles(show).length" class="alternative-titles">
-        <h3>Alternative Titles</h3>
-        <div class="titles">
-          <span v-for="title in getAlternativeTitles(show)" :key="title" class="title-tag">
-            {{ title }}
           </span>
         </div>
       </div>
@@ -209,6 +206,7 @@
                 <h5>{{ getDisplayTitle(sequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(sequel.contentType) }}
+                  <AiringBadge :content="sequel" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -242,6 +240,7 @@
                 <h5>{{ getDisplayTitle(prequel) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(prequel.contentType) }}
+                  <AiringBadge :content="prequel" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -275,6 +274,7 @@
                 <h5>{{ getDisplayTitle(related) }}</h5>
                 <p class="content-type">
                   {{ getCardContentTypeDisplay(related.contentType) }}
+                  <AiringBadge :content="related" variant="inline" />
                 </p>
                 <div class="rating">
                   <i class="fas fa-star"></i>
@@ -310,9 +310,13 @@ import {
   getDetailsRouteName,
 } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
-import type { UnifiedContent } from '@/types/content'
+import AiringBadge from '@/components/AiringBadge.vue'
+import EpisodeRow from '@/components/EpisodeRow.vue'
+import type { Episode, UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
-import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airing'
+import { isTvCatalogPath, tvCatalogLocationFromUrl } from '@/utils/catalogTabs'
 
 const route = useRoute()
 const router = useRouter()
@@ -329,8 +333,11 @@ const relatedContent = ref<{
   related: UnifiedContent[]
 } | null>(null)
 const relatedContentLoading = ref(false)
+const episodes = ref<Episode[]>([])
+const episodesLoading = ref(false)
 let detailsRequestId = 0
 let relatedRequestId = 0
+let episodesRequestId = 0
 
 const isInWatchlist = computed(() => {
   if (!show.value || !authStore.user?.watchlist) return false
@@ -356,19 +363,19 @@ const loadShow = async (showId: string) => {
   error.value = ''
   relatedContent.value = null
   relatedContentLoading.value = false
+  episodes.value = []
   contentStore.scrollToTop()
 
   const cached = contentStore.findContentById(showId)
+  fetchEpisodes(showId)
   if (cached) {
     show.value = cached
-    contentStore.cacheContent(cached, true)
     loading.value = false
     fetchRelatedContent(showId)
-    return
+  } else {
+    loading.value = true
+    show.value = null
   }
-
-  loading.value = true
-  show.value = null
 
   try {
     const response = await contentAPI.getContentById(showId)
@@ -376,10 +383,12 @@ const loadShow = async (showId: string) => {
     show.value = response.data.data
     contentStore.cacheContent(show.value, true)
     loading.value = false
-    fetchRelatedContent(showId)
+    if (!cached) fetchRelatedContent(showId)
   } catch (err) {
     if (requestId !== detailsRequestId) return
-    error.value = err instanceof Error ? err.message : 'Failed to load TV show'
+    if (!cached) {
+      error.value = err instanceof Error ? err.message : 'Failed to load TV show'
+    }
     loading.value = false
   }
 }
@@ -405,13 +414,11 @@ const goBack = () => {
           contentStore.scrollToTop()
         })
       }
-    } else if (pathname === '/tv-shows') {
-      // Coming from TV shows page - handle pagination
-      const page = url.searchParams.get('page') || '1'
-      const scrollKey = `tv-shows-page-${page}`
-      const restored = contentStore.restoreScrollPosition(scrollKey)
+    } else if (isTvCatalogPath(pathname)) {
+      const location = tvCatalogLocationFromUrl(url)
+      const restored = contentStore.restoreScrollPosition(location.scrollKey)
 
-      router.push({ path: '/tv-shows', query: { page } })
+      router.push({ path: location.path, query: location.query })
 
       if (!restored) {
         nextTick(() => {
@@ -496,6 +503,24 @@ const formatDate = (date: string | Date) => {
     month: 'long',
     day: 'numeric',
   })
+}
+
+const fetchEpisodes = async (contentId: string) => {
+  const requestId = ++episodesRequestId
+  episodesLoading.value = true
+  try {
+    const response = await contentAPI.getContentEpisodes(contentId)
+    if (requestId !== episodesRequestId) return
+    episodes.value = (response.data as { data: { episodes: Episode[] } }).data.episodes || []
+  } catch (err) {
+    if (requestId !== episodesRequestId) return
+    console.error('Failed to fetch episodes:', err)
+    episodes.value = []
+  } finally {
+    if (requestId === episodesRequestId) {
+      episodesLoading.value = false
+    }
+  }
 }
 
 const fetchRelatedContent = async (contentId: string) => {
@@ -689,6 +714,10 @@ const handleImageError = (event: Event) => {
   font-size: 1rem;
 }
 
+.airing-status {
+  padding: 0;
+}
+
 .show-meta i {
   color: var(--highlight-color);
   width: 16px;
@@ -785,15 +814,13 @@ const handleImageError = (event: Event) => {
 
 .network-info,
 .production-info,
-.creator-info,
-.alternative-titles {
+.creator-info {
   margin-bottom: 2rem;
 }
 
 .network-info h3,
 .production-info h3,
-.creator-info h3,
-.alternative-titles h3 {
+.creator-info h3 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
@@ -802,8 +829,7 @@ const handleImageError = (event: Event) => {
 .networks,
 .companies,
 .countries,
-.creators,
-.titles {
+.creators {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -812,8 +838,7 @@ const handleImageError = (event: Event) => {
 .network-tag,
 .company-tag,
 .country-tag,
-.creator-tag,
-.title-tag {
+.creator-tag {
   background: var(--bg-card);
   color: var(--text-primary);
   padding: 0.25rem 0.75rem;
@@ -1022,8 +1047,7 @@ const handleImageError = (event: Event) => {
 .company-tag,
 .network-tag,
 .country-tag,
-.creator-tag,
-.title-tag {
+.creator-tag {
   color: #ffffff !important; /* White text */
 }
 </style>

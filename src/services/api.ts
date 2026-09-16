@@ -75,6 +75,8 @@ export const contentAPI = {
 
   getContentById: (id: string) => api.get(`/content/${id}`),
 
+  getContentEpisodes: (id: string) => api.get(`/content/${id}/episodes`),
+
   getContentByExternalId: (id: string, source?: 'tmdb' | 'mal') =>
     api.get(`/content/external/${id}`, {
       params: source ? { source } : {},
@@ -148,6 +150,20 @@ export const getPosterUrl = (path: string) => getImageUrl(path, 'w500')
  */
 export const getBackdropUrl = (path: string) => getImageUrl(path, 'w1280')
 
+/**
+ * Episode still TMDB image URL (`w300`).
+ * @param path - Still path or absolute URL.
+ * @returns Image URL or placeholder.
+ */
+export const getStillUrl = (path: string) => getImageUrl(path, 'w300')
+
+/**
+ * Cast profile TMDB image URL (`w185`).
+ * @param path - Profile path or absolute URL.
+ * @returns Image URL or placeholder.
+ */
+export const getProfileUrl = (path: string) => getImageUrl(path, 'w185')
+
 /** Local loose shape for display helpers; distinct from `UnifiedContent`. */
 interface ContentData {
   _id?: string
@@ -202,8 +218,7 @@ export const getContentDisplayInfo = (content: ContentData) => {
     genres: content.genres || [],
     rating: {
       score: content.unifiedScore || 0,
-      count:
-        (content.voteCount || 0) + (content.malScoredBy || 0) + (content.userRatingCount || 0),
+      count: (content.voteCount || 0) + (content.malScoredBy || 0) + (content.userRatingCount || 0),
     },
     runtime: content.runtime,
     episodeCount: content.episodeCount || content.malEpisodes,
@@ -254,12 +269,11 @@ export const isMovieLike = (contentType?: string) =>
   contentType === 'movie' || contentType === 'special'
 
 /**
- * Card badge label: specials display as `"Movie"` (full `"Special"` is hover-only).
+ * Card badge label. Specials keep their own tag even though they live in Movies.
  * @param contentType - `movie`, `tv`, or `special`.
- * @returns `"Movie"` or `"TV Show"`.
+ * @returns `"Movie"`, `"TV Show"`, or `"Special"`.
  */
-export const getCardContentTypeDisplay = (contentType: string) =>
-  isMovieLike(contentType) ? 'Movie' : 'TV Show'
+export const getCardContentTypeDisplay = (contentType: string) => getContentTypeDisplay(contentType)
 
 /**
  * Whether an item matches a Movies/TV/All filter; `"movie"` includes specials.
@@ -274,12 +288,14 @@ export const matchesContentTypeFilter = (itemType: string | undefined, filter?: 
 }
 
 /**
- * CSS class for movie vs TV type badges.
+ * CSS class for poster type badges.
  * @param contentType - `movie`, `tv`, or `special`.
- * @returns `'tv-badge'` or `'movie-badge'` (specials use the movie class).
+ * @returns `'movie-badge'`, `'tv-badge'`, or `'special-badge'`.
  */
 export const getContentTypeBadgeClass = (contentType: string) => {
-  return contentType === 'tv' ? 'tv-badge' : 'movie-badge'
+  if (contentType === 'tv') return 'tv-badge'
+  if (contentType === 'special') return 'special-badge'
+  return 'movie-badge'
 }
 
 /**

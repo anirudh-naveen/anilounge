@@ -22,6 +22,13 @@ export interface UnifiedContent {
   /** Vote-weighted average of MAL, TMDB, and Find Animation. */
   unifiedScore?: number
   malStatus?: string
+  /** MAL weekly air day (`sunday` … `saturday`, or `other`). */
+  broadcastDay?: string
+  /** MAL weekly air time (`HH:MM`) in JST. */
+  broadcastTime?: string
+  nextEpisodeAirDate?: string | Date
+  nextEpisodeNumber?: number
+  nextEpisodeSeason?: number
   voteCount?: number
   malScoredBy?: number
   userRatingAverage?: number
@@ -49,6 +56,28 @@ export interface UnifiedContent {
     related: string[]
     franchise: string
   }
+}
+
+/** Voice/acting credit on a single TV episode. */
+export interface EpisodeCastMember {
+  name: string
+  character: string
+  profilePath: string
+}
+
+/**
+ * Episode card shown on a TV details page (not a standalone catalog type).
+ * Expanded in place; there is no episode route.
+ */
+export interface Episode {
+  seasonNumber: number
+  episodeNumber: number
+  title: string
+  overview: string
+  stillPath: string
+  airDate?: string | null
+  runtime?: number | null
+  cast: EpisodeCastMember[]
 }
 
 export interface UnifiedContentWithScore extends UnifiedContent {

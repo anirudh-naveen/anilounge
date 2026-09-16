@@ -43,7 +43,13 @@
               :alt="getDisplayTitle(movie)"
               @error="handleImageError"
             />
-            <div class="content-type-badge movie-badge">Movie</div>
+            <div
+              class="content-type-badge poster-corner-tag poster-corner-tag-right"
+              :class="getContentTypeBadgeClass(movie.contentType)"
+            >
+              {{ getCardContentTypeDisplay(movie.contentType) }}
+            </div>
+            <AiringBadge :content="movie" variant="card" />
           </div>
           <div class="movie-info">
             <h3 class="movie-title">{{ getDisplayTitle(movie) }}</h3>
@@ -95,10 +101,16 @@ import { onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import { getPosterUrl, formatGenres } from '@/services/api'
+import {
+  getPosterUrl,
+  formatGenres,
+  getCardContentTypeDisplay,
+  getContentTypeBadgeClass,
+} from '@/services/api'
 import { useToast } from 'vue-toastification'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
+import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle } from '@/utils/titles'
 
@@ -365,33 +377,7 @@ onMounted(async () => {
 }
 
 .content-type-badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  color: white;
-  padding: 2px 5px;
-  border-radius: 3px;
-  font-size: 0.65rem;
-  font-weight: 600;
   z-index: 2;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0;
-  transform: translateY(-5px);
-  transition: all 0.3s ease;
-}
-
-.movie-badge {
-  background: var(--teal-primary);
-}
-
-.tv-badge {
-  background: var(--coral-primary);
-}
-
-.movie-card:hover .content-type-badge {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 @media (max-width: 768px) {
