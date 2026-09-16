@@ -1,5 +1,5 @@
 <!--
-  TVShowDetails.vue — TV show detail view.
+  TVShowDetails.vue — series detail view.
 
   Loads one series by route id and shows poster, titles, season/episode meta,
   watchlist actions, overview, an expandable episode row, studios, and related
@@ -17,12 +17,12 @@
     <!-- Title: Loading State -->
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
-      <p>Loading TV show details...</p>
+      <p>Loading series details...</p>
     </div>
 
     <!-- Title: Error State -->
     <div v-else-if="error" class="error">
-      <h2>Error loading TV show</h2>
+      <h2>Error loading series</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>
@@ -360,7 +360,7 @@ const loadShow = async (showId: string) => {
   const requestId = ++detailsRequestId
 
   if (!showId) {
-    error.value = 'No TV show ID provided'
+    error.value = 'No series ID provided'
     loading.value = false
     return
   }
@@ -392,7 +392,7 @@ const loadShow = async (showId: string) => {
   } catch (err) {
     if (requestId !== detailsRequestId) return
     if (!cached) {
-      error.value = err instanceof Error ? err.message : 'Failed to load TV show'
+      error.value = err instanceof Error ? err.message : 'Failed to load series'
     }
     loading.value = false
   }
@@ -928,7 +928,7 @@ const handleImageError = (event: Event) => {
 .franchise-info {
   margin-bottom: 1.5rem;
   padding: 1rem;
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  background: linear-gradient(90deg, var(--coral-light), var(--tan-primary));
   border-radius: 8px;
 }
 
@@ -1002,7 +1002,7 @@ const handleImageError = (event: Event) => {
 .content-type {
   margin: 0 0 0.5rem 0;
   font-size: 0.8rem;
-  color: #ffd4a3; /* Lighter orange for better readability */
+  color: var(--coral-deep);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1024,33 +1024,33 @@ const handleImageError = (event: Event) => {
 .show-description h2,
 .show-description h3,
 .show-description h4 {
-  color: #ffffff; /* White text for better readability */
+  color: var(--text-primary);
 }
 
 .show-description p {
-  color: #ffd4a3; /* Lighter orange for paragraph text */
+  color: var(--text-secondary);
 }
 
 .original-title {
-  color: #ffd4a3 !important; /* Lighter orange */
+  color: var(--text-muted) !important;
 }
 
 .vote-count {
-  color: #ffffff !important; /* White */
+  color: var(--text-muted) !important;
 }
 
 .show-meta span {
-  color: #ffffff !important; /* White */
+  color: var(--text-primary) !important;
 }
 
 .genre-tag {
-  color: #ffffff !important; /* White text */
+  color: var(--text-on-accent) !important;
 }
 
 .company-tag,
 .network-tag,
 .country-tag,
 .creator-tag {
-  color: #ffffff !important; /* White text */
+  color: var(--text-on-accent) !important;
 }
 </style>

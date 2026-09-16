@@ -10,13 +10,13 @@
     <div class="container">
       <!-- Page Header -->
       <div class="page-header">
-        <h1 class="page-title">Animated TV Shows</h1>
+        <h1 class="page-title">Animated Series</h1>
         <p class="page-subtitle">{{ activeTabMeta.subtitle }}</p>
       </div>
 
       <!-- Tabs -->
       <!-- Title: Catalog Tabs -->
-      <div class="catalog-tabs" role="tablist" aria-label="TV show lists">
+      <div class="catalog-tabs" role="tablist" aria-label="Series lists">
         <button
           v-for="tab in TV_CATALOG_TABS"
           :key="tab.id"
@@ -36,13 +36,13 @@
       <!-- Title: Loading State -->
       <div v-if="contentStore.tvShowsLoading" class="loading-container">
         <div class="spinner"></div>
-        <p>Loading amazing TV shows...</p>
+        <p>Loading series...</p>
       </div>
 
       <!-- Title: Error State -->
       <div v-else-if="contentStore.error" class="error-state">
         <div class="error-icon">⚠️</div>
-        <h3>Failed to load TV shows</h3>
+        <h3>Failed to load series</h3>
         <p>{{ contentStore.error }}</p>
         <button @click="reloadCurrent" class="btn btn-primary">Try Again</button>
       </div>
@@ -52,7 +52,7 @@
         <div
           v-for="show in tvShows"
           :key="show._id"
-          class="show-card"
+          class="show-card poster-frame"
           @click="viewShowDetails(show)"
         >
           <div class="show-poster">
@@ -62,7 +62,7 @@
               @error="handleImageError"
             />
             <div class="content-type-badge tv-badge poster-corner-tag poster-corner-tag-right">
-              TV Show
+              Series
             </div>
             <AiringBadge :content="show" variant="card" />
           </div>
@@ -150,7 +150,7 @@ const activeTab = computed(() => normalizeTvCatalogTab(route.query.tab))
 const activeTabMeta = computed(() => getTvCatalogTab(activeTab.value))
 const catalogPage = computed(() => parseTvCatalogPage(route.query.page, activeTab.value))
 
-// Get TV shows from unified store
+// Get series from unified store
 const tvShows = computed(() => {
   return contentStore.tvShows
 })
@@ -209,8 +209,8 @@ const fetchCatalog = async (tab: TvCatalogTab, page: number) => {
     }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (error) {
-    console.error('Error loading TV shows:', error)
-    toast.error('Failed to load TV shows. Please try again.')
+    console.error('Error loading series:', error)
+    toast.error('Failed to load series. Please try again.')
   }
 }
 
@@ -229,7 +229,7 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error('Error in TVShows component:', error)
-    toast.error('Failed to load TV shows. Please try again.')
+    toast.error('Failed to load series. Please try again.')
   }
 })
 </script>
@@ -237,7 +237,7 @@ onMounted(async () => {
 <style scoped>
 .tvshows-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  background: transparent;
   padding: 2rem 0;
 }
 
@@ -250,7 +250,7 @@ onMounted(async () => {
 .page-header {
   text-align: center;
   margin-bottom: 1.5rem;
-  color: white;
+  color: var(--text-primary);
 }
 
 .catalog-tabs {
@@ -262,31 +262,36 @@ onMounted(async () => {
 }
 
 .tab-btn {
-  padding: 0.75rem 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  border-radius: 8px;
+  padding: 0.7rem 1.35rem;
+  border: 1px solid var(--border-color);
+  background: var(--bg-parchment);
+  color: var(--text-secondary);
+  border-radius: 999px;
   cursor: pointer;
   transition: all 0.2s ease;
   font-weight: 600;
+  font-family: inherit;
 }
 
 .tab-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--navbar-accent);
+  color: var(--text-primary);
   transform: translateY(-1px);
 }
 
 .tab-btn.active {
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-on-accent);
   border-color: transparent;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.22);
 }
 
 .page-title {
+  font-family: var(--font-display);
   font-size: 3rem;
-  font-weight: 700;
+  font-weight: 650;
   margin-bottom: 1rem;
+  letter-spacing: -0.03em;
 }
 
 .page-subtitle {
@@ -303,18 +308,20 @@ onMounted(async () => {
 
 .show-card {
   position: relative;
-  background: white;
-  border-radius: 8px;
+  background: #fff;
+  border-radius: 14px;
   overflow: visible;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
   transition: all 0.3s ease;
   cursor: pointer;
   z-index: 1;
+  border: 1px solid var(--border-color);
 }
 
 .show-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-spot), var(--shadow-md);
+  border-color: var(--coral-primary);
   z-index: 20;
 }
 
@@ -345,7 +352,7 @@ onMounted(async () => {
   font-size: 0.85rem;
   font-weight: 600;
   margin-bottom: 0.35rem;
-  color: #333;
+  color: var(--text-ink);
   line-height: 1.25;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -365,12 +372,12 @@ onMounted(async () => {
 }
 
 .genre-tag {
-  background: #f0f0f0;
-  color: #666;
+  background: rgba(224, 122, 95, 0.14);
+  color: var(--coral-deep);
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: 999px;
   font-size: 0.65rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .genre-tag:nth-child(n + 2) {
@@ -398,14 +405,14 @@ onMounted(async () => {
 .empty-state {
   text-align: center;
   padding: 4rem 0;
-  color: white;
+  color: var(--text-primary);
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top: 4px solid #4ecdc4;
+  border: 4px solid var(--border-color);
+  border-top: 4px solid var(--coral-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 1rem;
@@ -438,15 +445,15 @@ onMounted(async () => {
 }
 
 .btn-primary {
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
-  color: white;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.22);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--bg-parchment);
+  color: var(--coral-deep);
+  border: 1px solid var(--border-color);
 }
 
 .btn:hover {

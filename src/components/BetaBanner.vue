@@ -9,7 +9,7 @@
     <div class="beta-content">
       <span class="beta-badge">BETA</span>
       <span class="beta-text">
-        Welcome to Find Animation Beta! This is a preview version.
+        Welcome to AniLounge Beta! This is a preview version.
         <button @click="showFeedback = true" class="feedback-link">
           Report bugs or suggestions
         </button>
@@ -45,7 +45,7 @@ onMounted(() => {
 
 <style scoped>
 .beta-banner {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  background: linear-gradient(90deg, #152238, #e07a5f 70%, #2bbbad);
   color: white;
   padding: 12px 0;
   position: relative;
@@ -79,7 +79,7 @@ onMounted(() => {
 .feedback-link {
   background: none;
   border: none;
-  color: #fbbf24;
+  color: var(--tan-light);
   text-decoration: underline;
   cursor: pointer;
   font-size: inherit;
@@ -88,7 +88,7 @@ onMounted(() => {
 }
 
 .feedback-link:hover {
-  color: #f59e0b;
+  color: var(--tan-primary);
 }
 
 .dismiss-btn {
