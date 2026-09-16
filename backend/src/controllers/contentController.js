@@ -11,15 +11,21 @@ import User from '../models/User.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
 import relationshipService from '../services/relationshipService.js'
-import { ingestMalRankingTv } from '../services/contentSyncService.js'
+import {
+  ingestMalRankingByTypes,
+  ingestTmdbNowPlayingMovies,
+} from '../services/contentSyncService.js'
 import { applyUserRatingDelta, isValidUserRating } from '../utils/ratings.js'
 import { contentTitleMatchOr } from '../utils/titles.js'
 import {
   catalogTabDateFields,
+  catalogTabIsSinglePage,
+  matchMovieCatalogTab,
   matchTvCatalogTab,
   mergeCatalogQuery,
+  normalizeMovieCatalogTab,
   normalizeTvCatalogTab,
-  sortForTvCatalogTab,
+  sortForCatalogTab,
 } from '../utils/catalogTabs.js'
 import { validationResult } from 'express-validator'
 import mongoose from 'mongoose'
@@ -74,7 +80,8 @@ const hiddenSortAddFields = {
 /**
  * List catalog titles with pagination. Sort uses a hidden TMDB visibility boost
  * that is stripped from the JSON so displayed scores stay unboosted.
- * `tab` filters TV lists into popular, currently airing, or upcoming.
+ * `tab` filters TV into popular/airing/upcoming and movies into popular/theatres/upcoming.
+ * Popular Right Now on movie and TV catalogs is a single page.
  *
  * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`, `query.tab`.
  * @param {import('express').Response} res - 200 `{ success, data, pagination }` or 500.
@@ -83,28 +90,52 @@ const hiddenSortAddFields = {
 export const getContent = async (req, res) => {
   const startTime = Date.now()
   try {
-    const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 20
     const contentType = req.query.type || 'all'
-    const tab = contentType === 'tv' ? normalizeTvCatalogTab(req.query.tab) : 'popular'
+    const tab =
+      contentType === 'tv'
+        ? normalizeTvCatalogTab(req.query.tab)
+        : contentType === 'movie'
+          ? normalizeMovieCatalogTab(req.query.tab)
+          : 'popular'
+    const singlePage =
+      catalogTabIsSinglePage(tab) && (contentType === 'tv' || contentType === 'movie')
+    const page = singlePage ? 1 : parseInt(req.query.page) || 1
     const skip = (page - 1) * limit
 
-    const query = mergeCatalogQuery(matchContentType(contentType), matchTvCatalogTab(tab))
+    const tabQuery =
+      contentType === 'tv'
+        ? matchTvCatalogTab(tab)
+        : contentType === 'movie'
+          ? matchMovieCatalogTab(tab)
+          : {}
+    const query = mergeCatalogQuery(matchContentType(contentType), tabQuery)
 
-    if (tab === 'upcoming') {
+    if (tab === 'upcoming' && (contentType === 'tv' || contentType === 'movie')) {
       const existingUpcoming = await Content.countDocuments(query)
       if (existingUpcoming === 0) {
         try {
-          await ingestMalRankingTv('upcoming', 50)
+          const types = contentType === 'tv' ? ['tv'] : ['movie', 'special']
+          await ingestMalRankingByTypes('upcoming', 50, types)
         } catch (error) {
           console.error('Upcoming catalog ingest failed:', error.message)
         }
       }
     }
 
-    const total = await Content.countDocuments(query)
+    if (tab === 'theatres' && contentType === 'movie') {
+      const existingTheatres = await Content.countDocuments(query)
+      if (existingTheatres === 0) {
+        try {
+          await ingestTmdbNowPlayingMovies(40)
+        } catch (error) {
+          console.error('Now-in-theatres catalog ingest failed:', error.message)
+        }
+      }
+    }
 
-    const totalPages = Math.ceil(total / limit)
+    const total = await Content.countDocuments(query)
+    const totalPages = singlePage ? (total > 0 ? 1 : 0) : Math.ceil(total / limit)
 
     // Hidden TMDB sort boost (+1.0 and 5% of popularity) is projected out so clients never see it.
     const content = await Content.aggregate([
@@ -115,7 +146,7 @@ export const getContent = async (req, res) => {
           ...catalogTabDateFields(tab),
         },
       },
-      { $sort: sortForTvCatalogTab(tab) },
+      { $sort: sortForCatalogTab(tab) },
       { $skip: skip },
       { $limit: limit },
       {
@@ -133,10 +164,10 @@ export const getContent = async (req, res) => {
       pagination: {
         currentPage: page,
         totalPages,
-        totalItems: total,
+        totalItems: singlePage ? Math.min(total, limit) : total,
         itemsPerPage: limit,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
+        hasNextPage: !singlePage && page < totalPages,
+        hasPrevPage: !singlePage && page > 1,
       },
     })
   } catch (error) {
