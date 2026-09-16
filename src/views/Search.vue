@@ -112,7 +112,7 @@
           <div class="filter-group rating-filter">
             <label>Rating: {{ filters.ratingMin }} – {{ filters.ratingMax }}</label>
             <div class="rating-slider">
-              <div class="rating-slider-track">
+              <div class="rating-slider-track" :style="{ backgroundImage: ratingTrackGradient }">
                 <div class="rating-slider-range" :style="ratingFillStyle"></div>
               </div>
               <input
@@ -283,6 +283,7 @@ import AiringBadge from '@/components/AiringBadge.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
+import { getRatingScaleGradient } from '@/utils/ratingColors'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 
 const router = useRouter()
@@ -417,14 +418,21 @@ const clampRatingMax = () => {
   }
 }
 
+const ratingTrackGradient = getRatingScaleGradient(0.32)
+const ratingRangeGradient = getRatingScaleGradient(1)
+
 const ratingFillStyle = computed(() => {
   const min = filters.value.ratingMin
   const max = filters.value.ratingMax
   const left = ((min - 1) / 9) * 100
   const right = ((max - 1) / 9) * 100
+  const width = Math.max(right - left, 0.01)
   return {
     left: `${left}%`,
-    width: `${right - left}%`,
+    width: `${width}%`,
+    backgroundImage: ratingRangeGradient,
+    backgroundSize: `${10000 / width}% 100%`,
+    backgroundPosition: `${-(left / width) * 100}% 0`,
   }
 })
 
@@ -673,9 +681,9 @@ onMounted(() => {
 
 .filter-group select {
   padding: 0.5rem;
-  border: none;
+  border: 2px solid var(--text-primary);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.9);
+  background: #fff;
   color: #333;
   font-size: 0.9rem;
   transition: all 0.3s ease;
@@ -684,7 +692,8 @@ onMounted(() => {
 .filter-group select:focus {
   outline: none;
   background: white;
-  box-shadow: 0 0 0 2px var(--coral-primary);
+  border-color: var(--coral-primary);
+  box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
 }
 
 .rating-slider {
@@ -700,7 +709,6 @@ onMounted(() => {
   right: 0;
   height: 6px;
   border-radius: 999px;
-  background: rgba(201, 163, 107, 0.35);
 }
 
 .rating-slider-range {
@@ -708,7 +716,7 @@ onMounted(() => {
   top: 0;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--coral-light), var(--coral-primary));
+  background-repeat: no-repeat;
 }
 
 .rating-slider input[type='range'] {

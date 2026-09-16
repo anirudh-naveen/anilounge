@@ -100,9 +100,9 @@ const toggleDirection = () => {
   flex: 1;
   min-width: 0;
   padding: 0.5rem;
-  border: none;
+  border: 2px solid var(--text-primary);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.9);
+  background: #fff;
   color: #333;
   font-size: 0.9rem;
 }
@@ -110,15 +110,16 @@ const toggleDirection = () => {
 .sort-select:focus {
   outline: none;
   background: white;
-  box-shadow: 0 0 0 2px var(--teal-primary);
+  border-color: var(--coral-primary);
+  box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
 }
 
 .sort-dir-btn {
   flex: 0 0 38px;
   width: 38px;
-  border: none;
+  border: 2px solid var(--text-primary);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.9);
+  background: #fff;
   color: #8a8a8a;
   cursor: pointer;
   display: flex;
