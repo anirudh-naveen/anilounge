@@ -12,7 +12,7 @@
         <!-- Page Header -->
         <div class="register-header">
           <h1 class="register-title">Sign Up</h1>
-          <p class="register-subtitle">Create your AniScribe account to start tracking animation</p>
+          <p class="register-subtitle">Create your AniLounge account and take a seat</p>
         </div>
 
         <!-- Form -->

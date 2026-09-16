@@ -52,7 +52,7 @@
         <div
           v-for="show in tvShows"
           :key="show._id"
-          class="show-card"
+          class="show-card poster-frame"
           @click="viewShowDetails(show)"
         >
           <div class="show-poster">
@@ -281,9 +281,9 @@ onMounted(async () => {
 
 .tab-btn.active {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
+  color: var(--text-on-accent);
   border-color: transparent;
-  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.25);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.22);
 }
 
 .page-title {
@@ -308,19 +308,19 @@ onMounted(async () => {
 
 .show-card {
   position: relative;
-  background: var(--bg-parchment);
+  background: #fff;
   border-radius: 14px;
   overflow: visible;
   box-shadow: var(--shadow-sm);
   transition: all 0.3s ease;
   cursor: pointer;
   z-index: 1;
-  border: 1px solid rgba(232, 213, 181, 0.28);
+  border: 1px solid var(--border-color);
 }
 
 .show-card:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-spot), var(--shadow-md);
   border-color: var(--coral-primary);
   z-index: 20;
 }
@@ -372,7 +372,7 @@ onMounted(async () => {
 }
 
 .genre-tag {
-  background: rgba(224, 122, 95, 0.16);
+  background: rgba(224, 122, 95, 0.14);
   color: var(--coral-deep);
   padding: 2px 5px;
   border-radius: 999px;
@@ -446,8 +446,8 @@ onMounted(async () => {
 
 .btn-primary {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
-  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.25);
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 18px rgba(224, 122, 95, 0.22);
 }
 
 .btn-secondary {

@@ -1,31 +1,31 @@
-/* AniScribe — Studio Parchment with coral, mint, gold, and violet accents. */
+/* AniLounge — Poster Wall Café: light grey gallery, ink navy, colorful accents. */
 :root {
   --font-body:
     'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
 
   /* Canvas */
-  --primary-color: #f8f0e4;
-  --secondary-color: #efe3d4;
-  --accent-color: #e7d4c2;
+  --primary-color: #f4f5f7;
+  --secondary-color: #e6e8ed;
+  --accent-color: #dfe3ea;
   --highlight-color: #e07a5f;
 
-  /* Navbar */
-  --navbar-primary: #fffbf6;
-  --navbar-secondary: #f6ede3;
-  --navbar-accent: rgba(224, 122, 95, 0.16);
+  /* Navbar — ink navy */
+  --navbar-primary: #152238;
+  --navbar-secondary: #1b2a4a;
+  --navbar-accent: rgba(224, 122, 95, 0.22);
 
-  /* Brand accents */
+  /* Colorful poster accents */
   --coral-primary: #e07a5f;
   --coral-light: #f2a488;
   --coral-deep: #c45c45;
   --tan-primary: #c9a36b;
-  --tan-light: #e8d5b5;
+  --tan-light: #f7f8fa;
   --teal-primary: #2bbbad;
   --teal-light: #7ed9cf;
   --gold-accent: #e8a317;
   --blend-color: #d4896c;
-  --purple-accent: #9b6ad9;
+  --purple-accent: #7b6bb0;
   --upcoming-color: #e8a317;
   --upcoming-light: #f0c14d;
   --movie-badge: #d94a4a;
@@ -33,22 +33,22 @@
   --special-badge: #9b6ad9;
 
   /* Text */
-  --text-primary: #2a1c18;
-  --text-secondary: #5e463c;
-  --text-muted: #8a6e60;
-  --text-ink: #2a1c18;
-  --text-on-accent: #fffbf6;
+  --text-primary: #152238;
+  --text-secondary: #5b6578;
+  --text-muted: #8b93a6;
+  --text-ink: #152238;
+  --text-on-accent: #ffffff;
 
   /* Surfaces */
-  --bg-primary: #fbf6ee;
-  --bg-secondary: #f3e8da;
-  --bg-card: rgba(255, 251, 246, 0.94);
-  --bg-hover: rgba(224, 122, 95, 0.12);
-  --bg-parchment: #fffbf6;
+  --bg-primary: #f4f5f7;
+  --bg-secondary: #eceef2;
+  --bg-card: #ffffff;
+  --bg-hover: rgba(224, 122, 95, 0.1);
+  --bg-parchment: #ffffff;
 
   /* Borders */
-  --border-color: rgba(90, 58, 46, 0.14);
-  --border-hover: rgba(224, 122, 95, 0.55);
+  --border-color: rgba(21, 34, 56, 0.1);
+  --border-hover: rgba(224, 122, 95, 0.5);
 
   /* Status */
   --success-color: #4caf50;
@@ -57,10 +57,11 @@
   --info-color: #2196f3;
 
   /* Shadows */
-  --shadow-sm: 0 2px 8px rgba(90, 50, 36, 0.08);
-  --shadow-md: 0 10px 28px rgba(90, 50, 36, 0.12);
-  --shadow-lg: 0 18px 40px rgba(90, 50, 36, 0.16);
-  --shadow-glow: 0 0 24px rgba(224, 122, 95, 0.22);
+  --shadow-sm: 0 2px 8px rgba(21, 34, 56, 0.06);
+  --shadow-md: 0 12px 28px rgba(21, 34, 56, 0.1);
+  --shadow-lg: 0 20px 44px rgba(21, 34, 56, 0.14);
+  --shadow-glow: 0 0 28px rgba(224, 122, 95, 0.22);
+  --shadow-spot: 0 -12px 28px rgba(255, 252, 240, 0.9);
 }
 
 * {
@@ -72,11 +73,11 @@
 body {
   font-family: var(--font-body);
   background:
-    radial-gradient(980px 460px at 8% -10%, rgba(224, 122, 95, 0.28), transparent 58%),
-    radial-gradient(760px 400px at 94% 2%, rgba(43, 187, 173, 0.2), transparent 52%),
-    radial-gradient(640px 360px at 78% 100%, rgba(232, 163, 23, 0.18), transparent 55%),
-    radial-gradient(520px 300px at 12% 92%, rgba(155, 106, 217, 0.14), transparent 50%),
-    linear-gradient(180deg, #fbf6ee 0%, #f3e6d6 100%);
+    radial-gradient(720px 280px at 18% 0%, rgba(255, 255, 255, 0.9), transparent 58%),
+    radial-gradient(560px 240px at 78% 8%, rgba(255, 248, 230, 0.55), transparent 52%),
+    radial-gradient(640px 320px at 8% 88%, rgba(224, 122, 95, 0.08), transparent 50%),
+    radial-gradient(580px 280px at 96% 86%, rgba(43, 187, 173, 0.08), transparent 48%),
+    linear-gradient(180deg, #f7f8fa 0%, #e9ecf1 100%);
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
@@ -94,7 +95,7 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(90, 58, 46, 0.08);
+  background: rgba(21, 34, 56, 0.06);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -185,6 +186,37 @@ html {
   transform: translateY(-2px);
 }
 
+/* Gallery poster mount + ceiling spotlight */
+.poster-frame {
+  position: relative;
+  background: #fff;
+  overflow: visible;
+}
+
+.poster-frame::before {
+  content: '';
+  position: absolute;
+  top: -22px;
+  left: 18%;
+  right: 18%;
+  height: 28px;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0.55;
+  background: radial-gradient(ellipse at center, rgba(255, 252, 240, 0.95), transparent 72%);
+  transition: opacity 0.25s ease;
+}
+
+.poster-frame:hover::before {
+  opacity: 1;
+}
+
+.poster-frame:hover {
+  box-shadow:
+    var(--shadow-spot),
+    var(--shadow-lg);
+}
+
 /* Button Styles */
 .btn {
   padding: 0.75rem 1.5rem;
@@ -202,8 +234,8 @@ html {
 
 .btn-primary {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
-  box-shadow: 0 8px 20px rgba(224, 122, 95, 0.28);
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 20px rgba(224, 122, 95, 0.24);
 }
 
 .btn-primary:hover {

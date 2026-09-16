@@ -10,7 +10,7 @@
     <div class="container">
       <section class="forum-lock fade-in">
         <div class="lock-mark" aria-hidden="true">
-          <img src="/aniscribe-logo.png" alt="" class="lock-logo" width="88" height="88" />
+          <img src="/anilounge-logo.png" alt="" class="lock-logo" width="88" height="88" />
           <span class="lock-badge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <rect x="5" y="11" width="14" height="10" rx="2" />
@@ -19,10 +19,9 @@
           </span>
         </div>
         <p class="kicker">Coming soon</p>
-        <h1 class="forum-title">Forum</h1>
+        <h1 class="forum-title">The Forums</h1>
         <p class="forum-copy">
-          Reviews, episode threads, and franchise discussions are still being inked. This tab stays
-          locked until the community features are ready.
+          Reviews, episode threads, and franchise talk is coming soon. Stay tuned.
         </p>
         <router-link to="/" class="btn btn-primary">Back to Home</router-link>
       </section>
@@ -82,7 +81,7 @@ defineOptions({
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--text-ink);
+  background: var(--navbar-primary);
   border: 2px solid var(--coral-primary);
   color: var(--tan-light);
   display: flex;

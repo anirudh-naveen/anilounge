@@ -13,17 +13,18 @@
         <div class="hero-content fade-in">
           <!-- Title: Headline -->
           <h1 class="hero-title">
-            Discover
-            <span class="gradient-text">Animated Worlds</span>
+            Welcome to the
+            <br />
+            <span class="gradient-text">Animation Lounge.</span>
           </h1>
           <p class="hero-subtitle">
-            AniScribe is your studio notebook for animation — find films and series, rate them,
-            and keep a living watchlist.
+            AniLounge is a space filled with passion for animated media - find new favorites, record
+            all you've watched, and connect with people across the globe.
           </p>
           <!-- Title: Primary CTA -->
           <div class="hero-actions">
             <router-link to="/search" class="btn btn-primary btn-large">
-              Search Content
+              Browse the space
             </router-link>
           </div>
         </div>
@@ -33,7 +34,7 @@
     <!-- Catalog -->
     <section class="featured-section">
       <div class="container">
-        <h2 class="section-title">Trending Now</h2>
+        <h2 class="section-title">Spotlight</h2>
         <!-- Title: Loading State -->
         <div v-if="contentStore.isLoading" class="loading-container">
           <div class="spinner"></div>
@@ -44,7 +45,7 @@
           <div
             v-for="item in featuredContent.slice(0, 8)"
             :key="item._id"
-            class="content-card"
+            class="content-card poster-frame"
             @click="viewContentDetails(item)"
           >
             <div class="content-poster">
@@ -237,7 +238,7 @@ onMounted(async () => {
 }
 
 .gradient-text {
-  background: linear-gradient(90deg, var(--coral-light), var(--tan-primary), var(--teal-primary));
+  background: linear-gradient(90deg, var(--coral-primary), var(--gold-accent), var(--teal-primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -267,8 +268,8 @@ onMounted(async () => {
 
 .btn-primary {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-ink);
-  box-shadow: 0 8px 20px rgba(224, 122, 95, 0.28);
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 20px rgba(224, 122, 95, 0.24);
 }
 
 .btn-large {
@@ -294,7 +295,7 @@ onMounted(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: radial-gradient(ellipse at top, rgba(224, 122, 95, 0.1), transparent 62%);
+  background: radial-gradient(ellipse at top, rgba(255, 252, 240, 0.85), transparent 62%);
   z-index: 1;
 }
 
@@ -328,19 +329,19 @@ onMounted(async () => {
 
 .content-card {
   position: relative;
-  background: var(--bg-parchment);
+  background: #fff;
   border-radius: 16px;
   overflow: visible;
   box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
   cursor: pointer;
-  border: 1px solid rgba(232, 213, 181, 0.35);
+  border: 1px solid var(--border-color);
   z-index: 1;
 }
 
 .content-card:hover {
   transform: translateY(-8px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-spot), var(--shadow-lg);
   border-color: var(--coral-primary);
   z-index: 20;
 }
@@ -394,7 +395,7 @@ onMounted(async () => {
 }
 
 .genre-tag {
-  background: rgba(224, 122, 95, 0.18);
+  background: rgba(224, 122, 95, 0.14);
   color: var(--coral-deep);
   padding: 4px 8px;
   border-radius: 999px;
