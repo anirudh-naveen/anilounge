@@ -75,6 +75,8 @@ export const contentAPI = {
 
   getContentById: (id: string) => api.get(`/content/${id}`),
 
+  getContentEpisodes: (id: string) => api.get(`/content/${id}/episodes`),
+
   getContentByExternalId: (id: string, source?: 'tmdb' | 'mal') =>
     api.get(`/content/external/${id}`, {
       params: source ? { source } : {},
@@ -148,6 +150,20 @@ export const getPosterUrl = (path: string) => getImageUrl(path, 'w500')
  */
 export const getBackdropUrl = (path: string) => getImageUrl(path, 'w1280')
 
+/**
+ * Episode still TMDB image URL (`w300`).
+ * @param path - Still path or absolute URL.
+ * @returns Image URL or placeholder.
+ */
+export const getStillUrl = (path: string) => getImageUrl(path, 'w300')
+
+/**
+ * Cast profile TMDB image URL (`w185`).
+ * @param path - Profile path or absolute URL.
+ * @returns Image URL or placeholder.
+ */
+export const getProfileUrl = (path: string) => getImageUrl(path, 'w185')
+
 /** Local loose shape for display helpers; distinct from `UnifiedContent`. */
 interface ContentData {
   _id?: string
@@ -202,8 +218,7 @@ export const getContentDisplayInfo = (content: ContentData) => {
     genres: content.genres || [],
     rating: {
       score: content.unifiedScore || 0,
-      count:
-        (content.voteCount || 0) + (content.malScoredBy || 0) + (content.userRatingCount || 0),
+      count: (content.voteCount || 0) + (content.malScoredBy || 0) + (content.userRatingCount || 0),
     },
     runtime: content.runtime,
     episodeCount: content.episodeCount || content.malEpisodes,

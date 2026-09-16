@@ -92,7 +92,11 @@
               Add to Watchlist
             </button>
 
-            <button v-if="authStore.isAuthenticated && isInWatchlist" @click="removeFromWatchlist" class="btn-secondary remove-from-watchlist">
+            <button
+              v-if="authStore.isAuthenticated && isInWatchlist"
+              @click="removeFromWatchlist"
+              class="btn-secondary remove-from-watchlist"
+            >
               <i class="fas fa-check"></i>
               In Watchlist
             </button>
@@ -122,20 +126,6 @@
             class="company-tag"
           >
             {{ company }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Title: Alternative Titles -->
-      <div v-if="getAlternativeTitles(movie).length" class="alternative-titles">
-        <h3>Alternative Titles</h3>
-        <div class="titles">
-          <span
-            v-for="title in getAlternativeTitles(movie)"
-            :key="title"
-            class="company-tag title-tag"
-          >
-            {{ title }}
           </span>
         </div>
       </div>
@@ -296,7 +286,7 @@ import StatusDropdown from '@/components/StatusDropdown.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
-import { getAlternativeTitles, getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 
 const route = useRoute()
 const router = useRouter()
@@ -767,21 +757,18 @@ const handleImageError = (event: Event) => {
   color: var(--text-muted);
 }
 
-.production-info,
-.alternative-titles {
+.production-info {
   margin-bottom: 2rem;
 }
 
-.production-info h3,
-.alternative-titles h3 {
+.production-info h3 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
 }
 
 .companies,
-.countries,
-.titles {
+.countries {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -1004,8 +991,7 @@ const handleImageError = (event: Event) => {
 }
 
 .company-tag,
-.country-tag,
-.title-tag {
+.country-tag {
   color: #ffffff !important; /* White text */
 }
 

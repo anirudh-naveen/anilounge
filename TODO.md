@@ -7,15 +7,20 @@
 1. Refine the search feature. ✅
 2. Separate English title with Native title (and make both searchable). ✅
 3. Collapse MAL specials (OVA/special) into Movies; label them Specials on hover. ✅
-4. Include episode content subgroup for TV shows, with its own cast and description.
+4. Include a content subgroup for TV shows called Episode, with its own title, cast, and description. ✅
+    - These should not be clickable into its own page, just expanded when clicked on the show's content page.
+    - the Episodes can be a line of content there that can be scrolled through from left to right.
+    - Place it under Overview
 5. Include a currently airing tag and timer for new episode updates for airing shows. ✅
-   - Have the TV Shows have tabs for "Popular Right Now", "Currently Airing", and Upcoming Highlights
-6. Add voice actors as a type of content.
+6. Have the TV Shows Page have tabs for "Popular Right Now", "Currently Airing", and Upcoming Highlights
+7. Add voice actors as a type of content.
    - They will not have their own screen but will be searchable and favoritable for the profile.
    - Additionally if the API has pictures for them, include them.
-7. Add animation studios as a type of content.
+   - Update content and episodes to use this new feature.
+8. Add animation studios as a type of content.
    - They will not have their own screen but will be searchable and favoritable for the profile.
    - Additionally if the API has pictures for them, include them.
+   - Update content and episodes to use this new feature.
 
 ### Bug Fixes
 
@@ -33,9 +38,11 @@
    - Right now for example, filtering between 3-7 is including ratings of 8.0.
    - Even out the filters. ✅
 6. Fix the duplication of content (is it TMDB?).
+   - When checking if the content is the same for duplicates, check if any of the names are the same with any of the names from each of the different sources. An example of this issue is with 'The Fragrant Flower Blooms With Dignity', where the native title of one matches the English title of another.
 7. Fix the accidental deletion of content (in merge or original filtering?).
 8. Fix the text for "Add to Watchlist" and "Share" on content pages to be centered.
 9. Fix the tabs (Home, Movies, TV Shows, etc) to have icons when the screen is small (like on phone dimensions). ✅
+10. Do not display all alternative titles for content. ✅
 
 ## Watchlist
 

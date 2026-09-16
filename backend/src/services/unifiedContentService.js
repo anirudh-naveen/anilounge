@@ -8,6 +8,12 @@
  */
 import axios from 'axios'
 import dotenv from 'dotenv'
+import {
+  mapMalEpisode,
+  mapSeriesCast,
+  mapTmdbEpisode,
+  tmdbSeasonNumbers,
+} from '../utils/episodes.js'
 import { buildTitleFields, uniqueTitles } from '../utils/titles.js'
 
 dotenv.config()
@@ -57,6 +63,7 @@ class UnifiedContentService {
 
     this.hasTmdbKey = !!this.tmdbApiKey
     this.hasMalKey = !!this.malClientId
+    this.episodeCache = new Map()
   }
 
   /**
@@ -944,6 +951,190 @@ class UnifiedContentService {
     }
 
     return updated
+  }
+
+  /**
+   * Run async work over items with a fixed parallel batch size.
+   * @template T, R
+   * @param {T[]} items
+   * @param {number} concurrency
+   * @param {(item: T) => Promise<R>} mapper
+   * @returns {Promise<R[]>}
+   */
+  async mapWithConcurrency(items, concurrency, mapper) {
+    const results = []
+    const size = Math.max(1, concurrency)
+    for (let index = 0; index < items.length; index += size) {
+      const batch = items.slice(index, index + size)
+      results.push(...(await Promise.all(batch.map(mapper))))
+    }
+    return results
+  }
+
+  /**
+   * Cached episode list for a catalog id, or null when missing/expired.
+   * @param {string} contentId
+   * @returns {object[] | null}
+   */
+  getCachedEpisodes(contentId) {
+    const entry = this.episodeCache.get(String(contentId))
+    if (!entry) return null
+    if (Date.now() > entry.expiresAt) {
+      this.episodeCache.delete(String(contentId))
+      return null
+    }
+    return entry.data
+  }
+
+  /**
+   * Store an episode list until `ttlMs` elapses.
+   * @param {string} contentId
+   * @param {object[]} data
+   * @param {number} ttlMs
+   */
+  setCachedEpisodes(contentId, data, ttlMs) {
+    this.episodeCache.set(String(contentId), {
+      data,
+      expiresAt: Date.now() + ttlMs,
+    })
+  }
+
+  /**
+   * TMDB season document (episodes, stills, guest stars).
+   * @param {number} tmdbId
+   * @param {number} seasonNumber
+   * @returns {Promise<object | null>}
+   */
+  async getTmdbSeasonDetails(tmdbId, seasonNumber) {
+    if (!this.hasTmdbKey) return null
+
+    try {
+      const response = await this.tmdbClient.get(`/tv/${tmdbId}/season/${seasonNumber}`, {
+        params: { api_key: this.tmdbApiKey },
+      })
+      return response.data
+    } catch (error) {
+      console.error(
+        `TMDB season ${seasonNumber} error:`,
+        error.response?.data || error.message,
+      )
+      return null
+    }
+  }
+
+  /**
+   * TMDB aggregate TV credits (series regulars / voice cast).
+   * @param {number} tmdbId
+   * @returns {Promise<object | null>}
+   */
+  async getTmdbAggregateCredits(tmdbId) {
+    if (!this.hasTmdbKey) return null
+
+    try {
+      const response = await this.tmdbClient.get(`/tv/${tmdbId}/aggregate_credits`, {
+        params: { api_key: this.tmdbApiKey },
+      })
+      return response.data
+    } catch (error) {
+      console.error('TMDB aggregate credits error:', error.response?.data || error.message)
+      return null
+    }
+  }
+
+  /**
+   * Paginated MAL episode list for an anime id.
+   * @param {number} malId
+   * @returns {Promise<object[]>}
+   */
+  async getMalAnimeEpisodes(malId) {
+    if (!this.hasMalKey) return []
+
+    const episodes = []
+    const limit = 100
+    let offset = 0
+
+    try {
+      while (offset < 2000) {
+        const response = await this.malClient.get(`/anime/${malId}/episodes`, {
+          params: { offset, limit },
+        })
+        const batch = response.data?.data || []
+        if (!batch.length) break
+        episodes.push(...batch)
+        if (batch.length < limit) break
+        offset += limit
+      }
+    } catch (error) {
+      console.error('MAL episodes error:', error.response?.data || error.message)
+    }
+
+    return episodes
+  }
+
+  /**
+   * TMDB episodes across seasons, with series cast as a fallback when guests are missing.
+   * @param {number} tmdbId
+   * @param {number} [seasonCount]
+   * @returns {Promise<object[]>}
+   */
+  async fetchTmdbEpisodes(tmdbId, seasonCount) {
+    const [tvDetails, credits] = await Promise.all([
+      this.getTmdbContentDetails(tmdbId, 'tv', { skipDelay: true }),
+      this.getTmdbAggregateCredits(tmdbId),
+    ])
+    const seriesCast = mapSeriesCast(credits)
+    const seasonNumbers = tmdbSeasonNumbers(tvDetails, seasonCount)
+    const seasons = await this.mapWithConcurrency(seasonNumbers, 4, (seasonNumber) =>
+      this.getTmdbSeasonDetails(tmdbId, seasonNumber),
+    )
+
+    const episodes = []
+    for (const season of seasons) {
+      if (!Array.isArray(season?.episodes)) continue
+      for (const episode of season.episodes) {
+        const mapped = mapTmdbEpisode(episode, seriesCast)
+        if (mapped) episodes.push(mapped)
+      }
+    }
+
+    return episodes
+  }
+
+  /**
+   * MAL episode titles for shows without usable TMDB season data.
+   * @param {number} malId
+   * @returns {Promise<object[]>}
+   */
+  async fetchMalEpisodes(malId) {
+    const raw = await this.getMalAnimeEpisodes(malId)
+    return raw.map((episode, index) => mapMalEpisode(episode, index)).filter(Boolean)
+  }
+
+  /**
+   * Episode cards for a TV catalog document: TMDB first, MAL if TMDB is empty.
+   * Results are cached in-process (6h while airing, 7d otherwise).
+   * @param {object} content - Mongoose Content document or plain catalog row.
+   * @returns {Promise<object[]>}
+   */
+  async getTvShowEpisodes(content) {
+    if (!content || content.contentType !== 'tv') return []
+
+    const cacheKey = String(content._id)
+    const cached = this.getCachedEpisodes(cacheKey)
+    if (cached) return cached
+
+    let episodes = []
+    if (content.tmdbId) {
+      episodes = await this.fetchTmdbEpisodes(content.tmdbId, content.seasonCount)
+    }
+    if (!episodes.length && content.malId) {
+      episodes = await this.fetchMalEpisodes(content.malId)
+    }
+
+    const airing = content.malStatus === 'currently_airing'
+    const ttlMs = airing ? 6 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000
+    this.setCachedEpisodes(cacheKey, episodes, ttlMs)
+    return episodes
   }
 }
 
