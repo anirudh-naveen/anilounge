@@ -11,8 +11,16 @@ import User from '../models/User.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
 import relationshipService from '../services/relationshipService.js'
+import { ingestMalRankingTv } from '../services/contentSyncService.js'
 import { applyUserRatingDelta, isValidUserRating } from '../utils/ratings.js'
 import { contentTitleMatchOr } from '../utils/titles.js'
+import {
+  catalogTabDateFields,
+  matchTvCatalogTab,
+  mergeCatalogQuery,
+  normalizeTvCatalogTab,
+  sortForTvCatalogTab,
+} from '../utils/catalogTabs.js'
 import { validationResult } from 'express-validator'
 import mongoose from 'mongoose'
 
@@ -46,11 +54,29 @@ const matchContentType = (contentType) => {
   return { contentType }
 }
 
+const hiddenSortAddFields = {
+  boostedScore: { $ifNull: ['$unifiedScore', 0] },
+  hiddenSortScore: {
+    $add: [
+      { $ifNull: ['$unifiedScore', 0] },
+      { $cond: [{ $ne: ['$tmdbId', null] }, 1.0, 0] },
+      {
+        $cond: [
+          { $ne: ['$tmdbId', null] },
+          { $multiply: [{ $ifNull: ['$popularity', 0] }, 0.05] },
+          0,
+        ],
+      },
+    ],
+  },
+}
+
 /**
  * List catalog titles with pagination. Sort uses a hidden TMDB visibility boost
  * that is stripped from the JSON so displayed scores stay unboosted.
+ * `tab` filters TV lists into popular, currently airing, or upcoming.
  *
- * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`.
+ * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`, `query.tab`.
  * @param {import('express').Response} res - 200 `{ success, data, pagination }` or 500.
  * @returns {Promise<void>}
  */
@@ -60,9 +86,21 @@ export const getContent = async (req, res) => {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 20
     const contentType = req.query.type || 'all'
+    const tab = contentType === 'tv' ? normalizeTvCatalogTab(req.query.tab) : 'popular'
     const skip = (page - 1) * limit
 
-    const query = matchContentType(contentType)
+    const query = mergeCatalogQuery(matchContentType(contentType), matchTvCatalogTab(tab))
+
+    if (tab === 'upcoming') {
+      const existingUpcoming = await Content.countDocuments(query)
+      if (existingUpcoming === 0) {
+        try {
+          await ingestMalRankingTv('upcoming', 50)
+        } catch (error) {
+          console.error('Upcoming catalog ingest failed:', error.message)
+        }
+      }
+    }
 
     const total = await Content.countDocuments(query)
 
@@ -73,29 +111,18 @@ export const getContent = async (req, res) => {
       { $match: query },
       {
         $addFields: {
-          boostedScore: { $ifNull: ['$unifiedScore', 0] },
-          hiddenSortScore: {
-            $add: [
-              { $ifNull: ['$unifiedScore', 0] },
-              { $cond: [{ $ne: ['$tmdbId', null] }, 1.0, 0] },
-              {
-                $cond: [
-                  { $ne: ['$tmdbId', null] },
-                  { $multiply: [{ $ifNull: ['$popularity', 0] }, 0.05] },
-                  0,
-                ],
-              },
-            ],
-          },
+          ...hiddenSortAddFields,
+          ...catalogTabDateFields(tab),
         },
       },
-      { $sort: { hiddenSortScore: -1, _id: -1 } },
+      { $sort: sortForTvCatalogTab(tab) },
       { $skip: skip },
       { $limit: limit },
       {
         $project: {
           boostedScore: 0,
           hiddenSortScore: 0,
+          hasScheduleDate: 0,
         },
       },
     ])

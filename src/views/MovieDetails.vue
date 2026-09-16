@@ -69,6 +69,10 @@
               <i class="fas fa-clock"></i>
               <span>{{ movie.runtime }} minutes</span>
             </div>
+
+            <div v-if="isUpcoming(movie)" class="status airing-status">
+              <AiringBadge :content="movie" variant="detail" />
+            </div>
           </div>
 
           <div class="genres">
@@ -287,6 +291,8 @@ import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { isUpcoming } from '@/utils/airing'
+import { isTvCatalogPath, tvCatalogLocationFromUrl } from '@/utils/catalogTabs'
 
 const route = useRoute()
 const router = useRouter()
@@ -379,13 +385,11 @@ const goBack = () => {
           contentStore.scrollToTop()
         })
       }
-    } else if (pathname === '/tv-shows') {
-      // Coming from TV shows page - handle pagination
-      const page = url.searchParams.get('page') || '1'
-      const scrollKey = `tv-shows-page-${page}`
-      const restored = contentStore.restoreScrollPosition(scrollKey)
+    } else if (isTvCatalogPath(pathname)) {
+      const location = tvCatalogLocationFromUrl(url)
+      const restored = contentStore.restoreScrollPosition(location.scrollKey)
 
-      router.push({ path: '/tv-shows', query: { page } })
+      router.push({ path: location.path, query: location.query })
 
       if (!restored) {
         nextTick(() => {
@@ -661,6 +665,10 @@ const handleImageError = (event: Event) => {
   align-items: center;
   gap: 0.5rem;
   font-size: 1rem;
+}
+
+.airing-status {
+  padding: 0;
 }
 
 .movie-meta i {

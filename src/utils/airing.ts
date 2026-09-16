@@ -1,19 +1,23 @@
 /**
- * airing.ts — currently-airing detection and next-episode countdown.
+ * airing.ts — currently-airing / upcoming tags and next-episode countdown.
  *
- * MAL `currently_airing` is the source of truth for the tag. The timer prefers
- * TMDB `nextEpisodeAirDate`, then rolls MAL's weekly JST broadcast forward.
+ * MAL `currently_airing` is the source of truth for the airing tag. Upcoming
+ * uses `not_yet_aired` or a future `releaseDate` for movies, TV, and specials.
+ * The airing timer prefers TMDB `nextEpisodeAirDate`, then MAL's weekly JST slot.
  */
 
 export interface AiringFields {
   contentType?: string
   malStatus?: string
+  releaseDate?: string | Date | null
   broadcastDay?: string
   broadcastTime?: string
   nextEpisodeAirDate?: string | Date | null
   nextEpisodeNumber?: number | null
   nextEpisodeSeason?: number | null
 }
+
+export type UpcomingFields = Pick<AiringFields, 'contentType' | 'malStatus' | 'releaseDate'>
 
 export interface NextAirInfo {
   at: Date
@@ -102,6 +106,40 @@ export const isCurrentlyAiring = (content: AiringFields | null | undefined, from
 }
 
 /**
+ * Premiere/release instant used for the upcoming countdown.
+ * @param content - Catalog fields used for upcoming.
+ */
+export const getUpcomingReleaseAt = (content: UpcomingFields | null | undefined): Date | null => {
+  if (!content?.releaseDate) return null
+  const premiere = new Date(content.releaseDate)
+  return Number.isNaN(premiere.getTime()) ? null : premiere
+}
+
+/**
+ * Whether a title should show the upcoming tag.
+ * Movies, TV, and specials with MAL `not_yet_aired`, or a future premiere/release
+ * date and no finished/airing MAL status. Currently airing TV is never upcoming.
+ * Date-only premieres stay upcoming through the end of that UTC day.
+ * @param content - Catalog fields used for upcoming.
+ * @param from - Clock used for "future premiere" fallback (defaults to now).
+ */
+export const isUpcoming = (content: UpcomingFields | null | undefined, from = new Date()) => {
+  if (!content) return false
+  const type = content.contentType
+  if (type !== 'tv' && type !== 'movie' && type !== 'special') return false
+  if (content.malStatus === 'currently_airing' || content.malStatus === 'finished_airing') {
+    return false
+  }
+  if (content.malStatus === 'not_yet_aired') return true
+  const premiere = getUpcomingReleaseAt(content)
+  if (!premiere) return false
+  const until = isUtcMidnight(premiere)
+    ? premiere.getTime() + 24 * 60 * 60 * 1000 - 1
+    : premiere.getTime()
+  return until > from.getTime()
+}
+
+/**
  * Next occurrence of a MAL weekly JST air slot.
  * @param broadcastDay - `sunday` … `saturday`.
  * @param broadcastTime - Optional `HH:MM` in JST (defaults to 00:00).
@@ -186,10 +224,11 @@ export const getNextAirInfo = (
 
 /**
  * Compact remaining-time label (`2d 5h 12m`, `5h 12m 03s`, or `Airing now`).
- * @param ms - Milliseconds remaining. Values <= 0 become `Airing now`.
+ * @param ms - Milliseconds remaining. Values <= 0 become `zeroLabel`.
+ * @param zeroLabel - Copy when time is up (default `Airing now`).
  */
-export const formatCountdown = (ms: number) => {
-  if (!Number.isFinite(ms) || ms <= 0) return 'Airing now'
+export const formatCountdown = (ms: number, zeroLabel = 'Airing now') => {
+  if (!Number.isFinite(ms) || ms <= 0) return zeroLabel
   const totalSeconds = Math.floor(ms / 1000)
   const days = Math.floor(totalSeconds / 86400)
   const hours = Math.floor((totalSeconds % 86400) / 3600)
@@ -207,11 +246,33 @@ export const formatCountdown = (ms: number) => {
  * @param content - Catalog airing fields.
  * @param from - Instant used for remaining time.
  */
-export const getAiringTimerLabel = (content: AiringFields | null | undefined, from = new Date()) => {
+export const getAiringTimerLabel = (
+  content: AiringFields | null | undefined,
+  from = new Date(),
+) => {
   const next = getNextAirInfo(content, from)
   if (!next) return ''
   if (next.airingNow) return 'Airing now'
   const countdown = formatCountdown(next.at.getTime() - from.getTime())
   if (next.episodeNumber) return `Episode ${next.episodeNumber} in ${countdown}`
   return `Next episode in ${countdown}`
+}
+
+/**
+ * Detail/hover countdown to premiere or theatrical release, e.g. `Premieres in 14d 5h`.
+ * @param content - Catalog fields used for upcoming.
+ * @param from - Instant used for remaining time.
+ */
+export const getUpcomingTimerLabel = (
+  content: UpcomingFields | null | undefined,
+  from = new Date(),
+) => {
+  if (!isUpcoming(content, from)) return ''
+  const at = getUpcomingReleaseAt(content)
+  if (!at) return ''
+  const remaining = at.getTime() - from.getTime()
+  const isTv = content?.contentType === 'tv'
+  if (remaining <= 0) return isTv ? 'Premiering now' : 'Out now'
+  const countdown = formatCountdown(remaining, isTv ? 'Premiering now' : 'Out now')
+  return `${isTv ? 'Premieres' : 'Releases'} in ${countdown}`
 }

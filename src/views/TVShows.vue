@@ -2,8 +2,8 @@
 <!--
   TVShows.vue — TV catalog view.
 
-  Lists paginated animated series from the content store as poster cards.
-  Loading, error, and empty states sit above the pager.
+  Tabbed, paginated series lists (popular, currently airing, upcoming) from the
+  content store as poster cards. Loading, error, and empty states sit above the pager.
 -->
 <template>
   <div class="tvshows-page">
@@ -11,7 +11,25 @@
       <!-- Page Header -->
       <div class="page-header">
         <h1 class="page-title">Animated TV Shows</h1>
-        <p class="page-subtitle">Discover amazing animated series from around the world</p>
+        <p class="page-subtitle">{{ activeTabMeta.subtitle }}</p>
+      </div>
+
+      <!-- Tabs -->
+      <!-- Title: Catalog Tabs -->
+      <div class="catalog-tabs" role="tablist" aria-label="TV show lists">
+        <button
+          v-for="tab in TV_CATALOG_TABS"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          class="tab-btn"
+          :class="{ active: activeTab === tab.id }"
+          :aria-selected="activeTab === tab.id"
+          :data-testid="`tv-tab-${tab.id}`"
+          @click="selectTab(tab.id)"
+        >
+          {{ tab.label }}
+        </button>
       </div>
 
       <!-- Catalog -->
@@ -26,7 +44,7 @@
         <div class="error-icon">⚠️</div>
         <h3>Failed to load TV shows</h3>
         <p>{{ contentStore.error }}</p>
-        <button @click="loadTVShows(1)" class="btn btn-primary">Try Again</button>
+        <button @click="reloadCurrent" class="btn btn-primary">Try Again</button>
       </div>
 
       <!-- Title: Content Card -->
@@ -43,7 +61,9 @@
               :alt="getDisplayTitle(show)"
               @error="handleImageError"
             />
-            <div class="content-type-badge tv-badge">TV Show</div>
+            <div class="content-type-badge tv-badge poster-corner-tag poster-corner-tag-right">
+              TV Show
+            </div>
             <AiringBadge :content="show" variant="card" />
           </div>
           <div class="show-info">
@@ -79,9 +99,9 @@
       <!-- Title: Empty State -->
       <div v-else class="empty-state">
         <div class="empty-icon">📺</div>
-        <h3>No TV shows found</h3>
-        <p>We couldn't find any animated TV shows at the moment.</p>
-        <button @click="loadTVShows(1)" class="btn btn-primary">Refresh</button>
+        <h3>{{ activeTabMeta.emptyTitle }}</h3>
+        <p>{{ activeTabMeta.emptyBody }}</p>
+        <button @click="reloadCurrent" class="btn btn-primary">Refresh</button>
       </div>
 
       <!-- Pagination -->
@@ -95,8 +115,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { getPosterUrl, formatGenres } from '@/services/api'
@@ -106,11 +126,27 @@ import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle } from '@/utils/titles'
+import {
+  TV_CATALOG_TABS,
+  getTvCatalogTab,
+  normalizeTvCatalogTab,
+  parseTvCatalogPage,
+  tvCatalogPath,
+  tvCatalogRouteQuery,
+  tvCatalogScrollKey,
+  type TvCatalogTab,
+} from '@/utils/catalogTabs'
 
 const router = useRouter()
+const route = useRoute()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
+const skipScroll = ref(true)
+
+const activeTab = computed(() => normalizeTvCatalogTab(route.query.tab))
+const activeTabMeta = computed(() => getTvCatalogTab(activeTab.value))
+const catalogPage = computed(() => parseTvCatalogPage(route.query.page))
 
 // Get TV shows from unified store
 const tvShows = computed(() => {
@@ -138,20 +174,37 @@ const handleImageError = (event: Event) => {
 }
 
 const viewShowDetails = (show: UnifiedContent) => {
-  // Save current scroll position before navigating
-  const scrollKey = `tv-shows-page-${contentStore.tvShowsPagination.currentPage}`
-  contentStore.saveScrollPosition(scrollKey)
+  const tab = activeTab.value
+  const page = contentStore.tvShowsPagination.currentPage
+  contentStore.saveScrollPosition(tvCatalogScrollKey(tab, page))
 
   router.push({
     name: 'TVShowDetails',
     params: { id: show._id },
-    query: { from: `/tv-shows?page=${contentStore.tvShowsPagination.currentPage}` },
+    query: { from: tvCatalogPath(tab, page) },
   })
 }
 
-const loadTVShows = async (page: number) => {
+const selectTab = (tab: TvCatalogTab) => {
+  if (tab === activeTab.value) return
+  router.replace({ query: tvCatalogRouteQuery(tab, 1) })
+}
+
+const loadTVShows = (page: number) => {
+  router.replace({ query: tvCatalogRouteQuery(activeTab.value, page) })
+}
+
+const reloadCurrent = () => {
+  void fetchCatalog(activeTab.value, catalogPage.value)
+}
+
+const fetchCatalog = async (tab: TvCatalogTab, page: number) => {
   try {
-    await contentStore.getContent(page, 'tv', 20)
+    await contentStore.getContent(page, 'tv', 20, tab)
+    if (skipScroll.value) {
+      skipScroll.value = false
+      return
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (error) {
     console.error('Error loading TV shows:', error)
@@ -159,12 +212,16 @@ const loadTVShows = async (page: number) => {
   }
 }
 
+watch(
+  () => [activeTab.value, catalogPage.value] as const,
+  ([tab, page]) => {
+    void fetchCatalog(tab, page)
+  },
+  { immediate: true },
+)
+
 onMounted(async () => {
   try {
-    // Always load TV shows when mounting the component to ensure fresh data
-    await contentStore.getContent(1, 'tv', 20)
-
-    // Load watchlist if user is authenticated (now optimized to skip if already loaded)
     if (authStore.isAuthenticated) {
       await contentStore.loadWatchlist()
     }
@@ -190,8 +247,38 @@ onMounted(async () => {
 
 .page-header {
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 1.5rem;
   color: white;
+}
+
+.catalog-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.tab-btn {
+  padding: 0.75rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.tab-btn.active {
+  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
+  border-color: transparent;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .page-title {
@@ -372,38 +459,17 @@ onMounted(async () => {
 }
 
 .content-type-badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  color: white;
-  padding: 2px 5px;
-  border-radius: 3px;
-  font-size: 0.65rem;
-  font-weight: 600;
   z-index: 2;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0;
-  transform: translateY(-5px);
-  transition: all 0.3s ease;
-}
-
-.movie-badge {
-  background: var(--teal-primary);
-}
-
-.tv-badge {
-  background: var(--coral-primary);
-}
-
-.show-card:hover .content-type-badge {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 @media (max-width: 768px) {
   .page-title {
     font-size: 2rem;
+  }
+
+  .tab-btn {
+    padding: 0.6rem 0.9rem;
+    font-size: 0.85rem;
   }
 
   .tvshows-grid {

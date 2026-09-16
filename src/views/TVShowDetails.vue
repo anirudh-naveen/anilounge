@@ -80,7 +80,7 @@
               >
             </div>
 
-            <div v-if="isCurrentlyAiring(show)" class="status airing-status">
+            <div v-if="isCurrentlyAiring(show) || isUpcoming(show)" class="status airing-status">
               <AiringBadge :content="show" variant="detail" />
             </div>
             <div v-else-if="show.malStatus" class="status">
@@ -315,7 +315,8 @@ import EpisodeRow from '@/components/EpisodeRow.vue'
 import type { Episode, UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
-import { formatAiringStatus, isCurrentlyAiring } from '@/utils/airing'
+import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airing'
+import { isTvCatalogPath, tvCatalogLocationFromUrl } from '@/utils/catalogTabs'
 
 const route = useRoute()
 const router = useRouter()
@@ -413,13 +414,11 @@ const goBack = () => {
           contentStore.scrollToTop()
         })
       }
-    } else if (pathname === '/tv-shows') {
-      // Coming from TV shows page - handle pagination
-      const page = url.searchParams.get('page') || '1'
-      const scrollKey = `tv-shows-page-${page}`
-      const restored = contentStore.restoreScrollPosition(scrollKey)
+    } else if (isTvCatalogPath(pathname)) {
+      const location = tvCatalogLocationFromUrl(url)
+      const restored = contentStore.restoreScrollPosition(location.scrollKey)
 
-      router.push({ path: '/tv-shows', query: { page } })
+      router.push({ path: location.path, query: location.query })
 
       if (!restored) {
         nextTick(() => {
