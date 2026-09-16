@@ -51,6 +51,7 @@
           <span class="meta-chip type-chip">
             {{ getContentTypeDisplay(item.contentType) }}
           </span>
+          <AiringBadge :content="item" variant="chip" />
         </div>
         <!-- Title: Genres -->
         <div v-if="displayGenres.length" class="hover-preview-genres">
@@ -140,6 +141,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import AiringBadge from '@/components/AiringBadge.vue'
 
 const PREVIEW_WIDTH = 420
 

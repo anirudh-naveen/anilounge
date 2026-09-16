@@ -19,6 +19,21 @@ import mongoose from 'mongoose'
 const movieLikeTypes = ['movie', 'special']
 
 /**
+ * Fetch MAL/TMDB airing schedule onto a TV document when the stored slot is missing or stale.
+ * Failures are logged; callers still return the existing catalog row.
+ * @param {import('mongoose').Document} content
+ * @returns {Promise<void>}
+ */
+const refreshAiringIfNeeded = async (content) => {
+  try {
+    const changed = await unifiedContentService.refreshAiringSchedule(content)
+    if (changed) await content.save()
+  } catch (error) {
+    console.error('Airing schedule refresh failed:', error.message)
+  }
+}
+
+/**
  * Build a Mongo filter for the public content-type query param.
  * `movie` includes `special` so specials appear in the movie catalog.
  *
@@ -127,6 +142,8 @@ export const getContentById = async (req, res) => {
       })
     }
 
+    await refreshAiringIfNeeded(content)
+
     res.json({
       success: true,
       data: content,
@@ -177,6 +194,8 @@ export const getContentByExternalId = async (req, res) => {
         message: 'Content not found',
       })
     }
+
+    await refreshAiringIfNeeded(content)
 
     res.json({
       success: true,
@@ -622,7 +641,7 @@ export const getWatchlist = async (req, res) => {
         path: 'watchlist.content',
         model: 'Content',
         select:
-          'title posterPath contentType releaseDate overview genres unifiedScore voteAverage voteCount malScore malScoredBy userRatingAverage userRatingCount episodeCount malEpisodes seasonCount',
+          'title posterPath contentType releaseDate overview genres unifiedScore voteAverage voteCount malScore malScoredBy userRatingAverage userRatingCount episodeCount malEpisodes seasonCount malStatus broadcastDay broadcastTime nextEpisodeAirDate nextEpisodeNumber nextEpisodeSeason',
       })
       .lean()
 

@@ -22,6 +22,13 @@ export interface UnifiedContent {
   /** Vote-weighted average of MAL, TMDB, and Find Animation. */
   unifiedScore?: number
   malStatus?: string
+  /** MAL weekly air day (`sunday` … `saturday`, or `other`). */
+  broadcastDay?: string
+  /** MAL weekly air time (`HH:MM`) in JST. */
+  broadcastTime?: string
+  nextEpisodeAirDate?: string | Date
+  nextEpisodeNumber?: number
+  nextEpisodeSeason?: number
   voteCount?: number
   malScoredBy?: number
   userRatingAverage?: number

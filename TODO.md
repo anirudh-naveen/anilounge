@@ -8,7 +8,8 @@
 2. Separate English title with Native title (and make both searchable). ✅
 3. Collapse MAL specials (OVA/special) into Movies; label them Specials on hover. ✅
 4. Include episode content subgroup for TV shows, with its own cast and description.
-5. Include a currently airing tag and timer for new episode updates for airing shows.
+5. Include a currently airing tag and timer for new episode updates for airing shows. ✅
+   - Have the TV Shows have tabs for "Popular Right Now", "Currently Airing", and Upcoming Highlights
 6. Add voice actors as a type of content.
    - They will not have their own screen but will be searchable and favoritable for the profile.
    - Additionally if the API has pictures for them, include them.
@@ -62,12 +63,27 @@
 
 1. Fix duplication email login. ✅
 
+## Search
+
+### Additions
+
+1. Rework Gemini chatbot functionality.
+2. Allow search to filter by "Currently Airing" in the "Year" section.
+   - Rename the "Year" filter to something more descriptive and have a more effective filter.
+   - Maybe include the seasons like anime does?
+3. Add filter for country of origin.
+
 ## Communication
 
 ### Additions
 
-1. Add review system and discussion features for users.
-2. Rework Gemini chatbot functionality.
+1. Add ability for friending others, and add a friends tab to the profile
+2. Add review system and discussion features for users in a new tab called Forum.
+   - Allow users to tag the specified content or "franchise" (not sure if this is a current content table yet, if not make it one.)
+   - For any associated forums, allow some of the leading forum posts and a few highlighted comments to the associated content's screen.
+   - Make sure any public forum post/comments have a strict censorship.
+3. Add an inbox next to the profile to see any site news, friend invites, comments on a post/comment
+4. Rework Gemini chatbot functionality.
 
 ## Infrastructure
 

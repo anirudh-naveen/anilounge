@@ -664,6 +664,11 @@ class DatabasePopulator {
     if (tmdbData.runtime != null) existingContent.runtime = tmdbData.runtime
     if (tmdbData.episodeCount != null) existingContent.episodeCount = tmdbData.episodeCount
     if (tmdbData.seasonCount != null) existingContent.seasonCount = tmdbData.seasonCount
+    if (tmdbData.contentType === 'tv') {
+      existingContent.nextEpisodeAirDate = tmdbData.nextEpisodeAirDate || null
+      existingContent.nextEpisodeNumber = tmdbData.nextEpisodeNumber ?? null
+      existingContent.nextEpisodeSeason = tmdbData.nextEpisodeSeason ?? null
+    }
 
     existingContent.tmdbId = tmdbData.tmdbId
     existingContent.voteAverage = tmdbData.voteAverage
@@ -756,6 +761,8 @@ class DatabasePopulator {
     existingContent.malRank = malData.malRank
     existingContent.malStatus = malData.malStatus
     existingContent.malEpisodes = malData.malEpisodes
+    existingContent.broadcastDay = malData.broadcastDay || null
+    existingContent.broadcastTime = malData.broadcastTime || null
     existingContent.malMediaType = malData.malMediaType || existingContent.malMediaType
     existingContent.malSource = malData.malSource
     existingContent.malRating = malData.malRating
