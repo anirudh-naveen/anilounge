@@ -643,10 +643,12 @@ onMounted(() => {
 }
 
 .page-header h1 {
+  font-family: var(--font-display);
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 650;
   color: var(--text-primary);
   margin-bottom: 0.5rem;
+  letter-spacing: -0.03em;
 }
 
 .page-header p {
@@ -668,10 +670,10 @@ onMounted(() => {
 
 .settings-card {
   background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
 }
 
 .setting-item {
@@ -706,19 +708,18 @@ onMounted(() => {
 
 .form-input {
   padding: 0.75rem;
-  border: 2px solid var(--text-muted);
+  border: 2px solid var(--border-color);
   border-radius: 8px;
   font-size: 1rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-parchment);
   color: var(--text-primary);
-  backdrop-filter: blur(10px);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: var(--blend-color);
-  box-shadow: 0 0 0 3px rgba(179, 153, 154, 0.2);
-  background: rgba(255, 255, 255, 0.2);
+  border-color: var(--coral-primary);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.2);
+  background: var(--bg-parchment);
 }
 
 .form-input::placeholder {

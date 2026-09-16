@@ -10,8 +10,8 @@ export const TV_CATALOG_TABS = [
     id: 'popular',
     label: 'Popular Right Now',
     subtitle: 'Discover amazing animated series from around the world',
-    emptyTitle: 'No TV shows found',
-    emptyBody: "We couldn't find any animated TV shows at the moment.",
+    emptyTitle: 'No series found',
+    emptyBody: "We couldn't find any animated series at the moment.",
   },
   {
     id: 'airing',
@@ -172,7 +172,7 @@ export function movieCatalogRouteQuery(tab: MovieCatalogTab, page: number): Reco
 }
 
 /**
- * Path plus query used as the `from` param when opening a TV show from the catalog.
+ * Path plus query used as the `from` param when opening a series from the catalog.
  * @param tab - Active tab.
  * @param page - 1-based page index.
  */

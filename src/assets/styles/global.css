@@ -1,54 +1,67 @@
-/* Global Styles - Beautiful Gradient Theme with Deep Purple Navbar */
+/* AniLounge — Poster Wall Café: light grey gallery, ink navy, colorful accents. */
 :root {
-  /* Main Background Gradient Colors */
-  --primary-color: #8080e6; /* Lavender-blue top */
-  --secondary-color: #6a6ac2; /* Purple-blue bottom */
-  --accent-color: #7a7ad6; /* Middle gradient */
-  --highlight-color: #e68080; /* Coral/orange accent */
+  --font-body:
+    'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
 
-  /* Deep Purple Navbar Colors */
-  --navbar-primary: #2d1b69; /* Deep purple */
-  --navbar-secondary: #1a0b3d; /* Darker purple */
-  --navbar-accent: #4a148c; /* Purple accent */
+  /* Canvas */
+  --primary-color: #f4f5f7;
+  --secondary-color: #e6e8ed;
+  --accent-color: #dfe3ea;
+  --highlight-color: #e07a5f;
 
-  /* Complementary Colors */
-  --coral-primary: #e68080; /* Coral/orange */
-  --coral-light: #e69980; /* Light coral */
-  --teal-primary: #80e6b3; /* Teal/green */
-  --teal-light: #99e6b3; /* Light teal */
-  --blend-color: #b3999a; /* Blend between coral and teal */
-  --upcoming-color: #e8a317; /* Sunflower yellow/orange */
-  --upcoming-light: #f0c14d; /* Light sunflower */
-  --movie-badge: #d94a4a; /* Cinema red / red carpet */
-  --tv-badge: #3d8bd9; /* Broadcast / CRT screen blue */
-  --special-badge: #9b6ad9; /* Event / premium purple */
+  /* Navbar — ink navy */
+  --navbar-primary: #152238;
+  --navbar-secondary: #1b2a4a;
+  --navbar-accent: rgba(224, 122, 95, 0.22);
 
-  /* Text Colors */
-  --text-primary: #ffffff; /* Pure white */
-  --text-secondary: #e0e0e0; /* Light gray */
-  --text-muted: #8f8ff0; /* Muted orange */
+  /* Colorful poster accents */
+  --coral-primary: #e07a5f;
+  --coral-light: #f2a488;
+  --coral-deep: #c45c45;
+  --tan-primary: #c9a36b;
+  --tan-light: #f7f8fa;
+  --teal-primary: #2bbbad;
+  --teal-light: #7ed9cf;
+  --gold-accent: #e8a317;
+  --blend-color: #d4896c;
+  --purple-accent: #7b6bb0;
+  --upcoming-color: #e8a317;
+  --upcoming-light: #f0c14d;
+  --movie-badge: #d94a4a;
+  --tv-badge: #3d8bd9;
+  --special-badge: #9b6ad9;
 
-  /* Background Colors */
-  --bg-primary: #8080e6; /* Start of gradient */
-  --bg-secondary: #6a6ac2; /* End of gradient */
-  --bg-card: rgba(255, 255, 255, 0.1); /* Semi-transparent white */
-  --bg-hover: rgba(255, 255, 255, 0.2); /* Hover state */
+  /* Text */
+  --text-primary: #152238;
+  --text-secondary: #5b6578;
+  --text-muted: #8b93a6;
+  --text-ink: #152238;
+  --text-on-accent: #ffffff;
 
-  /* Border Colors */
-  --border-color: rgba(255, 255, 255, 0.2);
-  --border-hover: rgba(255, 255, 255, 0.4);
+  /* Surfaces */
+  --bg-primary: #f4f5f7;
+  --bg-secondary: #eceef2;
+  --bg-card: #ffffff;
+  --bg-hover: rgba(224, 122, 95, 0.1);
+  --bg-parchment: #ffffff;
 
-  /* Status Colors */
+  /* Borders */
+  --border-color: rgba(21, 34, 56, 0.1);
+  --border-hover: rgba(224, 122, 95, 0.5);
+
+  /* Status */
   --success-color: #4caf50;
   --warning-color: #ff9800;
   --error-color: #f44336;
   --info-color: #2196f3;
 
   /* Shadows */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px rgba(83, 52, 131, 0.3);
+  --shadow-sm: 0 2px 8px rgba(21, 34, 56, 0.06);
+  --shadow-md: 0 12px 28px rgba(21, 34, 56, 0.1);
+  --shadow-lg: 0 20px 44px rgba(21, 34, 56, 0.14);
+  --shadow-glow: 0 0 28px rgba(224, 122, 95, 0.22);
+  --shadow-spot: 0 -12px 28px rgba(255, 252, 240, 0.9);
 }
 
 * {
@@ -58,14 +71,13 @@
 }
 
 body {
-  font-family:
-    'Inter',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(720px 280px at 18% 0%, rgba(255, 255, 255, 0.9), transparent 58%),
+    radial-gradient(560px 240px at 78% 8%, rgba(255, 248, 230, 0.55), transparent 52%),
+    radial-gradient(640px 320px at 8% 88%, rgba(224, 122, 95, 0.08), transparent 50%),
+    radial-gradient(580px 280px at 96% 86%, rgba(43, 187, 173, 0.08), transparent 48%),
+    linear-gradient(180deg, #f7f8fa 0%, #e9ecf1 100%);
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
@@ -83,7 +95,7 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(21, 34, 56, 0.06);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -92,7 +104,7 @@ html {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--teal-primary);
+  background: var(--tan-primary);
 }
 
 /* Animations */
@@ -161,16 +173,48 @@ html {
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 1.5rem;
   box-shadow: var(--shadow-md);
   transition: all 0.3s ease;
+  backdrop-filter: blur(12px);
 }
 
 .card:hover {
   border-color: var(--border-hover);
   box-shadow: var(--shadow-lg);
   transform: translateY(-2px);
+}
+
+/* Gallery poster mount + ceiling spotlight */
+.poster-frame {
+  position: relative;
+  background: #fff;
+  overflow: visible;
+}
+
+.poster-frame::before {
+  content: '';
+  position: absolute;
+  top: -22px;
+  left: 18%;
+  right: 18%;
+  height: 28px;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0.55;
+  background: radial-gradient(ellipse at center, rgba(255, 252, 240, 0.95), transparent 72%);
+  transition: opacity 0.25s ease;
+}
+
+.poster-frame:hover::before {
+  opacity: 1;
+}
+
+.poster-frame:hover {
+  box-shadow:
+    var(--shadow-spot),
+    var(--shadow-lg);
 }
 
 /* Button Styles */
@@ -189,9 +233,9 @@ html {
 }
 
 .btn-primary {
-  background: linear-gradient(90deg, var(--coral-light), var(--teal-light));
-  color: var(--text-primary);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 20px rgba(224, 122, 95, 0.24);
 }
 
 .btn-primary:hover {
@@ -200,8 +244,8 @@ html {
 }
 
 .btn-secondary {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: var(--bg-parchment);
+  color: var(--coral-deep);
   border: 1px solid var(--border-color);
 }
 
@@ -214,7 +258,7 @@ html {
 .input {
   width: 100%;
   padding: 0.75rem 1rem;
-  background: var(--bg-secondary);
+  background: var(--bg-parchment);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-primary);
@@ -225,7 +269,7 @@ html {
 .input:focus {
   outline: none;
   border-color: var(--highlight-color);
-  box-shadow: 0 0 0 3px rgba(83, 52, 131, 0.1);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.22);
 }
 
 .input::placeholder {

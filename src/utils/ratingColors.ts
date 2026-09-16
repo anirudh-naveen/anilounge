@@ -55,11 +55,15 @@ export const getRatingColorHSL = (rating: number | null | undefined): string => 
 /**
  * Darker HSL color for rating badge backgrounds (lower saturation/lightness).
  * @param rating - Score on a 0–10 scale.
- * @returns CSS `hsl()` color, or darker red when missing/zero.
+ * @param alpha - Optional opacity from 0–1.
+ * @returns CSS `hsla()` color, or darker red when missing/zero.
  */
-export const getRatingColorHSLBackground = (rating: number | null | undefined): string => {
+export const getRatingColorHSLBackground = (
+  rating: number | null | undefined,
+  alpha = 1,
+): string => {
   if (!rating || rating === 0) {
-    return 'hsl(0, 70%, 40%)'
+    return `hsla(0, 70%, 40%, ${alpha})`
   }
 
   const clampedRating = Math.max(0, Math.min(10, rating))
@@ -69,7 +73,7 @@ export const getRatingColorHSLBackground = (rating: number | null | undefined): 
   const saturation = 70
   const lightness = 40
 
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+  return `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`
 }
 
 /**
@@ -85,4 +89,17 @@ export const getRatingTextStyle = (rating: number | null | undefined) => {
     fontWeight: 'bold',
     borderRadius: '4px',
   }
+}
+
+/**
+ * 1–10 CSS gradient using the same HSL badge colors as content preview ratings.
+ * @param alpha - Optional opacity for unselected slider tracks.
+ */
+export const getRatingScaleGradient = (alpha = 1): string => {
+  const stops = Array.from({ length: 10 }, (_, index) => {
+    const rating = index + 1
+    const position = (index / 9) * 100
+    return `${getRatingColorHSLBackground(rating, alpha)} ${position}%`
+  })
+  return `linear-gradient(90deg, ${stops.join(', ')})`
 }
