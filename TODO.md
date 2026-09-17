@@ -43,7 +43,7 @@
 6. Fix the duplication of content (is it TMDB?).
    - When checking if the content is the same for duplicates, check if any of the names are the same with any of the names from each of the different sources. An example of this issue is with 'The Fragrant Flower Blooms With Dignity', where the native title of one matches the English title of another.
 7. Fix the accidental deletion of content (in merge or original filtering?).
-8. Fix the text for "Add to Watchlist" and "Share" on content pages to be centered.
+8. Fix the text for all buttons on pages to be properly centered.
 9. Fix the tabs (Home, Movies, TV Shows, etc) to have icons when the screen is small (like on phone dimensions). ✅
 10. Do not display all alternative titles for content. ✅
 
@@ -79,7 +79,7 @@
 
 ### Additions
 
-1. Rework Gemini chatbot functionality.
+1. Rework Gemini chatbot functionality. ✅
 2. Allow search to filter by "Currently Airing" in the "Year" section. ✅
    - Rename the "Year" filter to something more descriptive and have a more effective filter. ✅
    - Maybe include the seasons like anime does? ✅
@@ -101,7 +101,7 @@
    - For any associated forums, allow some of the leading forum posts and a few highlighted comments to the associated content's screen.
    - Make sure any public forum post/comments have a strict censorship.
 3. Add an inbox next to the profile to see any site news, friend invites, comments on a post/comment
-4. Rework Gemini chatbot functionality.
+4. Rework Gemini chatbot functionality. ✅
 
 ## Infrastructure
 

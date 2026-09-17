@@ -518,7 +518,31 @@ export const getSimilarContent = async (req, res) => {
 }
 
 /**
- * Run a Gemini-backed natural-language search against the catalog.
+ * Watchlist/preference hints for catalog chat. Missing user means anonymous.
+ * @param {object|null|undefined} user
+ * @returns {object|null}
+ */
+function chatUserContext(user) {
+  if (!user) return null
+  const watchlist = (user.watchlist || [])
+    .filter((item) => item.content)
+    .map((item) => ({
+      id: item.content._id,
+      title: item.content.englishTitle || item.content.title,
+      status: item.status,
+    }))
+  return {
+    favoriteGenres: user.preferences?.favoriteGenres || [],
+    favoriteStudios: user.preferences?.favoriteStudios || [],
+    watchlist: watchlist.map(({ title, status }) => ({ title, status })),
+    excludeIds: watchlist
+      .filter((item) => item.status === 'completed' || item.status === 'dropped')
+      .map((item) => item.id),
+  }
+}
+
+/**
+ * Run a catalog-grounded natural-language search against Mongo Content.
  *
  * @param {import('express').Request} req - Reads `body.query`.
  * @param {import('express').Response} res - 200 `{ data: { results, query, timestamp } }`, 400, or 500.
@@ -535,7 +559,9 @@ export const aiSearch = async (req, res) => {
       })
     }
 
-    const aiResults = await geminiService.searchContent(query)
+    const aiResults = await geminiService.searchContent(query, {
+      excludeIds: chatUserContext(req.user)?.excludeIds,
+    })
 
     res.json({
       success: true,
@@ -555,33 +581,34 @@ export const aiSearch = async (req, res) => {
 }
 
 /**
- * Relay a user message to Gemini chat and return the reply plus optional search hint.
+ * Relay a user message to catalog-grounded Gemini chat.
  *
- * @param {import('express').Request} req - Reads `body.message`.
- * @param {import('express').Response} res - 200 `{ data: { response, searchSuggestion, timestamp } }`, 400, or 500.
+ * @param {import('express').Request} req - Reads `body.message` and optional `body.history`.
+ * @param {import('express').Response} res - 200 `{ data: { response, results, searchSuggestion, timestamp } }`, 400, or 500.
  * @returns {Promise<void>}
  */
 export const aiChat = async (req, res) => {
   try {
-    console.log('aiChat controller called with body:', req.body)
-    const { message } = req.body
-
-    if (!message) {
-      console.log('No message provided')
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Message is required',
+        message: 'Validation failed',
+        errors: errors.array(),
       })
     }
 
-    console.log('Calling geminiService.chatWithUser with:', message)
-    const chatResponse = await geminiService.chatWithUser(message)
-    console.log('Received response from Gemini:', chatResponse)
+    const { message, history } = req.body
+    const chatResponse = await geminiService.chatWithUser(message, {
+      history,
+      userContext: chatUserContext(req.user),
+    })
 
     res.json({
       success: true,
       data: {
         response: chatResponse.response,
+        results: chatResponse.results || [],
         searchSuggestion: chatResponse.searchSuggestion,
         timestamp: new Date(),
       },

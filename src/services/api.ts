@@ -21,8 +21,7 @@ const STALE_RAILWAY_HOST = 'find-animation-production.up.railway.app'
 
 function resolveApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_URL as string | undefined
-  const usable =
-    configured && !configured.includes(STALE_RAILWAY_HOST) ? configured : undefined
+  const usable = configured && !configured.includes(STALE_RAILWAY_HOST) ? configured : undefined
 
   if (usable) return usable
   if (import.meta.env.DEV) return 'http://localhost:5001/api'
@@ -121,7 +120,8 @@ export const aiAPI = {
   // Legacy endpoints kept for older chatbot/recommendation callers.
   getRecommendations: (userId: string) => api.get(`/ai/recommendations/${userId}`),
   analyzeContent: (contentId: string) => api.get(`/ai/analyze/${contentId}`),
-  chat: (message: string) => api.post('/ai/chat', { message }),
+  chat: (message: string, history: Array<{ role: string; text: string }> = []) =>
+    api.post('/ai/chat', { message, history }),
 }
 
 export const watchlistAPI = {

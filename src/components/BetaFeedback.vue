@@ -1,69 +1,48 @@
-<!-- eslint-disable vue/multi-word-component-names -->
 <!--
-  BetaFeedback.vue — beta feedback widget (component).
+  BetaFeedback.vue — beta feedback form (component).
 
-  Floating trigger that opens a modal for bug reports, feature requests,
-  and other feedback submitted to the backend.
+  Bug reports, feature requests, and other feedback posted to the backend.
+  Used on the dedicated Feedback page (linked from the beta banner).
 -->
 <template>
-  <div class="beta-feedback">
-    <!-- Title: Trigger -->
-    <button @click="showModal = true" class="feedback-trigger" title="Send Feedback">💬</button>
+  <form @submit.prevent="submitFeedback" class="feedback-form" data-testid="feedback-form">
+    <div class="form-group">
+      <label for="feedbackType">Feedback type</label>
+      <select id="feedbackType" v-model="form.type" required class="form-control">
+        <option value="bug">Bug report</option>
+        <option value="feature">Feature request</option>
+        <option value="improvement">Improvement</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
 
-    <!-- Title: Modal -->
-    <transition name="modal">
-      <div v-if="showModal" class="modal-overlay" @click="closeModal">
-        <div class="modal-content" @click.stop>
-          <!-- Title: Header -->
-          <div class="modal-header">
-            <h2>Beta Feedback</h2>
-            <button @click="closeModal" class="close-btn">&times;</button>
-          </div>
+    <div class="form-group">
+      <label for="message">Message</label>
+      <textarea
+        id="message"
+        v-model="form.message"
+        required
+        rows="6"
+        class="form-control"
+        placeholder="Tell us what you think..."
+      ></textarea>
+    </div>
 
-          <form @submit.prevent="submitFeedback" class="feedback-form">
-            <!-- Title: Fields -->
-            <div class="form-group">
-              <label for="feedbackType">Feedback Type</label>
-              <select id="feedbackType" v-model="form.type" required class="form-control">
-                <option value="bug">Bug Report</option>
-                <option value="feature">Feature Request</option>
-                <option value="improvement">Improvement</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
+    <div class="form-group">
+      <label for="email">Email (optional)</label>
+      <input
+        id="email"
+        v-model="form.email"
+        type="email"
+        class="form-control"
+        placeholder="your@email.com"
+      />
+    </div>
 
-            <div class="form-group">
-              <label for="message">Message</label>
-              <textarea
-                id="message"
-                v-model="form.message"
-                required
-                rows="6"
-                class="form-control"
-                placeholder="Tell us what you think..."
-              ></textarea>
-            </div>
-
-            <div class="form-group">
-              <label for="email">Email (optional)</label>
-              <input
-                id="email"
-                v-model="form.email"
-                type="email"
-                class="form-control"
-                placeholder="your@email.com"
-              />
-            </div>
-
-            <!-- Title: Submit -->
-            <button type="submit" class="btn-submit" :disabled="isSubmitting">
-              {{ isSubmitting ? 'Sending...' : 'Send Feedback' }}
-            </button>
-          </form>
-        </div>
-      </div>
-    </transition>
-  </div>
+    <button type="submit" class="btn-submit" :disabled="isSubmitting">
+      {{ isSubmitting ? 'Sending...' : 'Send feedback' }}
+    </button>
+  </form>
 </template>
 
 <script setup lang="ts">
@@ -72,7 +51,6 @@ import { useToast } from 'vue-toastification'
 import { API_BASE_URL } from '@/services/api'
 
 const toast = useToast()
-const showModal = ref(false)
 const isSubmitting = ref(false)
 
 const form = ref({
@@ -80,10 +58,6 @@ const form = ref({
   message: '',
   email: '',
 })
-
-const closeModal = () => {
-  showModal.value = false
-}
 
 const submitFeedback = async () => {
   try {
@@ -97,15 +71,12 @@ const submitFeedback = async () => {
       body: JSON.stringify(form.value),
     })
 
-    toast.success('Thank you for your feedback! 🙏')
-
-    // Reset form
+    toast.success('Thank you for your feedback!')
     form.value = {
       type: 'bug',
       message: '',
       email: '',
     }
-    closeModal()
   } catch {
     toast.error('Failed to send feedback. Please try again.')
   } finally {
@@ -115,84 +86,6 @@ const submitFeedback = async () => {
 </script>
 
 <style scoped>
-.beta-feedback {
-  position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  z-index: 999;
-}
-
-.feedback-trigger {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.feedback-trigger:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4);
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: var(--bg-card);
-  border-radius: 16px;
-  padding: 2rem;
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.modal-header h2 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 1.5rem;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 2rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: color 0.3s ease;
-  line-height: 1;
-}
-
-.close-btn:hover {
-  color: var(--text-primary);
-}
-
 .feedback-form {
   display: flex;
   flex-direction: column;
@@ -255,32 +148,5 @@ textarea.form-control {
 .btn-submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-
-@media (max-width: 768px) {
-  .beta-feedback {
-    bottom: 1rem;
-    right: 1rem;
-  }
-
-  .feedback-trigger {
-    width: 50px;
-    height: 50px;
-    font-size: 1.2rem;
-  }
-
-  .modal-content {
-    padding: 1.5rem;
-  }
 }
 </style>

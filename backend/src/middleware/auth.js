@@ -71,6 +71,34 @@ export const authenticateToken = async (req, res, next) => {
 }
 
 /**
+ * Attach `req.user` when a valid Bearer token is present; otherwise continue.
+ * Invalid or expired tokens do not fail the request (chat stays public).
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {Promise<void>}
+ */
+export const optionalAuthenticate = async (req, res, next) => {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+  if (!token || !process.env.JWT_SECRET) {
+    return next()
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const user = await User.findById(decoded.userId)
+      .select('-password')
+      .populate({ path: 'watchlist.content', select: 'title englishTitle contentType' })
+    if (user) req.user = user
+  } catch {
+    // Public chat: ignore bad tokens instead of 401.
+  }
+  next()
+}
+
+/**
  * Sign a short-lived access JWT for `userId`.
  *
  * @param {import('mongoose').Types.ObjectId|string} userId - Subject stored as `userId` in the payload.
