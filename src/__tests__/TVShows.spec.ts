@@ -56,8 +56,8 @@ describe('TVShows catalog tabs', () => {
   it('renders the three catalog tabs and loads popular by default', async () => {
     const { wrapper } = await mountPage()
 
-    expect(wrapper.text()).toContain('Popular Right Now')
-    expect(wrapper.text()).toContain('Currently Airing')
+    expect(wrapper.text()).toContain('Currently Trending')
+    expect(wrapper.text()).toContain('Airing Right Now')
     expect(wrapper.text()).toContain('Upcoming Highlights')
     expect(wrapper.get('[data-testid="tv-tab-popular"]').attributes('aria-selected')).toBe('true')
     expect(getContent).toHaveBeenCalledWith(1, 'tv', 20, 'popular')

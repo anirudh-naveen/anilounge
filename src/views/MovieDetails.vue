@@ -400,12 +400,15 @@ const goBack = () => {
         })
       }
     } else if (pathname === '/search') {
-      // Coming from search page - handle pagination
+      // Coming from search page - handle pagination and browse type
       const page = url.searchParams.get('page') || '1'
+      const type = url.searchParams.get('type')
       const scrollKey = `search-page-${page}`
       const restored = contentStore.restoreScrollPosition(scrollKey)
+      const query: Record<string, string> = { page }
+      if (type) query.type = type
 
-      router.push({ path: '/search', query: { page } })
+      router.push({ path: '/search', query })
 
       if (!restored) {
         nextTick(() => {

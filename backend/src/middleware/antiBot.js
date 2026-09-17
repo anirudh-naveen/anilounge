@@ -7,6 +7,7 @@
 
 import slowDown from 'express-slow-down'
 import { banIPForBot, banIPForSuspiciousActivity } from './ipBan.js'
+import { isAllowedReferer } from '../utils/allowedFrontends.js'
 
 /**
  * Block suspicious/minimal User-Agents and more than 10 requests per second per IP+UA.
@@ -244,21 +245,12 @@ export const apiProtection = (req, res, next) => {
     })
   }
 
-  // Allow requests from known domains or without referer (for proxied requests)
-  if (referer) {
-    const isAllowedReferer =
-      referer.includes('vercel.app') ||
-      referer.includes('netlify.app') ||
-      referer.includes('github.io') ||
-      referer.includes('herokuapp.com') ||
-      referer.includes('railway.app')
-
-    if (!isAllowedReferer) {
-      return res.status(403).json({
-        success: false,
-        message: 'Invalid referer detected.',
-      })
-    }
+  // Known frontends, or no referer (privacy browsers / Vercel `/api` rewrites).
+  if (!isAllowedReferer(referer)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Invalid referer detected.',
+    })
   }
 
   next()

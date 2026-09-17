@@ -59,40 +59,6 @@
                 </svg>
               </span>
             </router-link>
-            <router-link to="/movies" class="nav-link" aria-label="Movies" title="Movies">
-              <span class="nav-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <path
-                    stroke-linecap="round"
-                    d="M8 5v14M16 5v14M3 9.5h5M3 14.5h5M16 9.5h5M16 14.5h5"
-                  />
-                </svg>
-              </span>
-              <span class="nav-text">Movies</span>
-            </router-link>
-            <router-link to="/tv" class="nav-link" aria-label="Series" title="Series">
-              <span class="nav-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <rect x="2.5" y="6.5" width="19" height="12.5" rx="2" />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M8 3.5 12 6.5 16 3.5M8 22.5h8"
-                  />
-                </svg>
-              </span>
-              <span class="nav-text">Series</span>
-            </router-link>
-            <router-link to="/search" class="nav-link" aria-label="Search" title="Search">
-              <span class="nav-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <circle cx="11" cy="11" r="6.25" />
-                  <path stroke-linecap="round" d="m16 16 4.25 4.25" />
-                </svg>
-              </span>
-              <span class="nav-text">Search</span>
-            </router-link>
             <router-link
               to="/watchlist"
               class="nav-link"
@@ -110,6 +76,15 @@
                 </svg>
               </span>
               <span class="nav-text">Watchlist</span>
+            </router-link>
+            <router-link to="/search" class="nav-link" aria-label="Search" title="Search">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <circle cx="11" cy="11" r="6.25" />
+                  <path stroke-linecap="round" d="m16 16 4.25 4.25" />
+                </svg>
+              </span>
+              <span class="nav-text">Search</span>
             </router-link>
           </nav>
 
