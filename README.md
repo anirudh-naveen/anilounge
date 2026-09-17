@@ -1,4 +1,4 @@
-## Find-Animation - Beta Release
+## AniLounge - Beta Release
 A full-stack web application for discovering, filtering, rating, and tracking animated television shows and films.
 
 Beta Release: https://anilounge.net
