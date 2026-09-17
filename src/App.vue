@@ -16,13 +16,7 @@
           <!-- Title: Logo -->
           <div class="logo">
             <router-link to="/" class="logo-link">
-              <img
-                src="/anilounge-logo.png"
-                alt=""
-                class="logo-mark"
-                width="44"
-                height="44"
-              />
+              <img src="/anilounge-logo.png" alt="" class="logo-mark" width="44" height="44" />
               <h1 class="logo-text"><span>Ani</span>Lounge</h1>
             </router-link>
           </div>
@@ -179,7 +173,7 @@
     <!-- Title: Copyright -->
     <footer class="footer">
       <div class="container">
-        <p>&copy; 2026 AniLounge. Stay as long as the credits roll.</p>
+        <p>&copy; 2026 AniLounge. Created by Anirudh Naveen.</p>
       </div>
     </footer>
   </div>

@@ -666,6 +666,13 @@ class DatabasePopulator {
       existingContent.nextEpisodeAirDate = tmdbData.nextEpisodeAirDate || null
       existingContent.nextEpisodeNumber = tmdbData.nextEpisodeNumber ?? null
       existingContent.nextEpisodeSeason = tmdbData.nextEpisodeSeason ?? null
+      if (tmdbData.lastAirDate) {
+        const existing = existingContent.lastAirDate
+          ? new Date(existingContent.lastAirDate).getTime()
+          : 0
+        const incoming = new Date(tmdbData.lastAirDate).getTime()
+        if (!existing || incoming > existing) existingContent.lastAirDate = tmdbData.lastAirDate
+      }
     }
 
     existingContent.tmdbId = tmdbData.tmdbId
@@ -675,6 +682,9 @@ class DatabasePopulator {
 
     existingContent.studios = [
       ...new Set([...(existingContent.studios || []), ...(tmdbData.studios || [])]),
+    ]
+    existingContent.originCountries = [
+      ...new Set([...(existingContent.originCountries || []), ...(tmdbData.originCountries || [])]),
     ]
     existingContent.genres = this.deduplicateGenres([
       ...(existingContent.genres || []),
@@ -764,6 +774,15 @@ class DatabasePopulator {
     existingContent.malMediaType = malData.malMediaType || existingContent.malMediaType
     existingContent.malSource = malData.malSource
     existingContent.malRating = malData.malRating
+    if (malData.startSeasonYear) existingContent.startSeasonYear = malData.startSeasonYear
+    if (malData.startSeason) existingContent.startSeason = malData.startSeason
+    if (malData.lastAirDate) {
+      const existing = existingContent.lastAirDate
+        ? new Date(existingContent.lastAirDate).getTime()
+        : 0
+      const incoming = new Date(malData.lastAirDate).getTime()
+      if (!existing || incoming > existing) existingContent.lastAirDate = malData.lastAirDate
+    }
 
     if (malData.contentType === 'special') {
       existingContent.contentType = 'special'
@@ -771,6 +790,9 @@ class DatabasePopulator {
 
     existingContent.studios = [
       ...new Set([...(existingContent.studios || []), ...(malData.studios || [])]),
+    ]
+    existingContent.originCountries = [
+      ...new Set([...(existingContent.originCountries || []), ...(malData.originCountries || [])]),
     ]
     existingContent.genres = this.deduplicateGenres([
       ...(existingContent.genres || []),
