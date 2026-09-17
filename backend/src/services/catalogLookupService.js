@@ -12,6 +12,7 @@ import {
   catalogGenreNames,
   catalogStudioNames,
   sortByRecommendationRank,
+  withRecommendationRankMeta,
 } from '../utils/recommendationRank.js'
 
 const DEFAULT_LIMIT = 8
@@ -63,8 +64,9 @@ const CATALOG_PROJECTION = {
  */
 export function serializeCatalogDoc(doc) {
   if (!doc) return null
+  const { _recommendationRank, ...rest } = doc
   return {
-    ...doc,
+    ...rest,
     _id: String(doc._id),
   }
 }
@@ -222,10 +224,13 @@ async function findSimilarTo(title, filters, limit) {
     { $limit: candidateLimit(limit) },
     { $project: CATALOG_PROJECTION },
   ])
-  return sortByRecommendationRank(
-    docs,
-    rankingContext(filters, { similarTo: title, seedGenres, seedStudios }),
-  ).slice(0, limit)
+  return withRecommendationRankMeta(
+    sortByRecommendationRank(
+      docs,
+      rankingContext(filters, { similarTo: title, seedGenres, seedStudios }),
+    ).slice(0, limit),
+    { similarTo: title, seedGenres, seedStudios },
+  )
 }
 
 /**

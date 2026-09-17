@@ -79,4 +79,25 @@ describe('sortByRecommendationRank', () => {
     )
     assert.equal(ranked[0].title, 'Two genre studio hit')
   })
+
+  it('keeps similar-to ranking after a later re-sort without seed filters', () => {
+    const first = sortByRecommendationRank(
+      [
+        {
+          title: 'High rated one genre',
+          genres: [{ name: 'Action' }],
+          unifiedScore: 9.9,
+          _recommendationRank: { seedGenres: ['Action', 'Drama'] },
+        },
+        {
+          title: 'Lower rated two genres',
+          genres: [{ name: 'Action' }, { name: 'Drama' }],
+          unifiedScore: 6.1,
+          _recommendationRank: { seedGenres: ['Action', 'Drama'] },
+        },
+      ],
+      {},
+    )
+    assert.equal(first[0].title, 'Lower rated two genres')
+  })
 })
