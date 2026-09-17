@@ -1,17 +1,42 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <!--
-  Search.vue — catalog search view.
+  Search.vue — catalog browse and search view.
 
-  Query form, type/genre/language/country/year/season/status/rating/sort filters, paginated results.
-  Backed by the content store. The site-wide AI assistant can also fill these results.
+  Movies/Series toggle, search field, collapsible filters, and horizontal
+  catalog rails (trending, in theatres / airing, upcoming). Search results
+  replace the rails. Backed by the content store. The site-wide AI assistant
+  can also fill these results.
 -->
 <template>
   <div class="search-page">
     <div class="container">
-      <!-- Page Header -->
-      <div class="search-header">
-        <h1 class="search-title">Search the Catalog</h1>
-        <p class="search-subtitle">What are you in the mood for?</p>
+      <!-- Browse Header -->
+      <div class="browse-header">
+        <h1 class="browse-title">Search for</h1>
+        <div class="type-toggle" role="tablist" aria-label="Content type">
+          <button
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            data-testid="browse-type-movie"
+            :class="{ active: browseType === 'movie' }"
+            :aria-selected="browseType === 'movie'"
+            @click="setBrowseType('movie')"
+          >
+            Movies
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            data-testid="browse-type-tv"
+            :class="{ active: browseType === 'tv' }"
+            :aria-selected="browseType === 'tv'"
+            @click="setBrowseType('tv')"
+          >
+            Series
+          </button>
+        </div>
       </div>
 
       <!-- Search -->
@@ -23,7 +48,7 @@
               type="text"
               class="search-input"
               data-testid="search-query"
-              placeholder="Search for movies or series..."
+              :placeholder="browseType === 'tv' ? 'Search for series...' : 'Search for movies...'"
             />
             <button
               type="submit"
@@ -34,12 +59,26 @@
               <span v-if="contentStore.isLoading" class="spinner"></span>
               {{ contentStore.isLoading ? 'Searching...' : 'Search' }}
             </button>
+            <button
+              type="button"
+              class="filters-toggle-btn"
+              data-testid="search-filters-toggle"
+              :class="{ active: filtersOpen, filled: hasExtraFilters }"
+              :aria-expanded="filtersOpen"
+              aria-controls="search-filters"
+              @click="filtersOpen = !filtersOpen"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" d="M4 7h16M7 12h10M10 17h4" />
+              </svg>
+              <span>Filters</span>
+            </button>
           </div>
         </form>
       </div>
 
       <!-- Filters -->
-      <div class="filters-container">
+      <div v-if="filtersOpen" id="search-filters" class="filters-container">
         <div class="filters-header">
           <h3>Filters</h3>
           <button @click="clearFilters" class="clear-filters-btn">
@@ -48,14 +87,6 @@
           </button>
         </div>
         <div class="filters-bar">
-          <div class="filter-group">
-            <label>Type:</label>
-            <select v-model="filters.type">
-              <option value="all">All</option>
-              <option value="movie">Movies</option>
-              <option value="tv">Series</option>
-            </select>
-          </div>
           <div class="filter-group">
             <label>Genre:</label>
             <select v-model="filters.genre" data-testid="filter-genre">
@@ -177,13 +208,13 @@
 
       <!-- Results -->
       <!-- Title: Loading State -->
-      <div v-if="contentStore.isLoading" class="loading-container">
+      <div v-if="contentStore.isLoading && hasSearched" class="loading-container">
         <div class="spinner"></div>
         <p>Searching for amazing content...</p>
       </div>
 
       <!-- Title: Error State -->
-      <div v-else-if="contentStore.error" class="error-state">
+      <div v-else-if="contentStore.error && hasSearched" class="error-state">
         <div class="error-icon">⚠️</div>
         <h3>Search failed</h3>
         <p>{{ contentStore.error }}</p>
@@ -271,11 +302,21 @@
         <button @click="clearSearch" class="btn btn-primary">Clear Search</button>
       </div>
 
-      <!-- Title: Initial State -->
-      <div v-else class="initial-state">
-        <div class="initial-icon">🎬</div>
-        <h3>Start your search</h3>
-        <p>Enter a title or set filters to get started.</p>
+      <!-- Title: Browse Rails -->
+      <div v-else class="browse-rails">
+        <ContentRail
+          v-for="rail in browseRails"
+          :key="`${browseType}-${rail.id}`"
+          :rail-id="rail.id"
+          :title="rail.title"
+          :items="railItems(rail.id)"
+          :loading="railsLoading"
+          :view-all="rail.viewAll"
+          :empty-text="railEmptyText(rail.id)"
+          :is-authenticated="authStore.isAuthenticated"
+          :in-watchlist="contentStore.isInWatchlist"
+          @select="viewContentDetails"
+        />
       </div>
     </div>
   </div>
@@ -302,6 +343,7 @@ import type { UnifiedContent } from '@/types/content'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
+import ContentRail from '@/components/ContentRail.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
@@ -317,6 +359,12 @@ import {
   matchesStatusFilter,
   matchesYearFilter,
 } from '@/utils/searchFilters'
+import {
+  MOVIE_BROWSE_RAILS,
+  TV_BROWSE_RAILS,
+  normalizeBrowseType,
+  type BrowseContentType,
+} from '@/utils/catalogTabs'
 
 const router = useRouter()
 const route = useRoute()
@@ -329,6 +377,7 @@ const searchQuery = ref(contentStore.lastSearchQuery)
 const hasSearched = ref(
   contentStore.searchResults.length > 0 || Boolean(contentStore.lastSearchQuery),
 )
+const filtersOpen = ref(false)
 const itemsPerPage = 20
 
 const {
@@ -336,6 +385,15 @@ const {
   searchAppliedFilters: appliedFilters,
   searchPage: currentPage,
 } = storeToRefs(contentStore)
+
+const browseType = computed(() => normalizeBrowseType(route.query.type))
+const hasExtraFilters = computed(() => hasActiveSearchFilters(filters.value))
+const browseRails = computed(() =>
+  browseType.value === 'tv' ? TV_BROWSE_RAILS : MOVIE_BROWSE_RAILS,
+)
+const railsLoading = computed(() =>
+  browseType.value === 'tv' ? contentStore.tvRailsLoading : contentStore.movieRailsLoading,
+)
 
 // Computed properties
 const searchResults = computed(() => contentStore.searchResults)
@@ -437,6 +495,54 @@ const canSearch = computed(
 
 const yearFilterOptions = computed(() => buildYearFilterOptions(contentStore.allContent))
 
+const railItems = (id: string): UnifiedContent[] => {
+  if (browseType.value === 'tv') {
+    if (id === 'airing') return contentStore.tvRails.airing
+    if (id === 'upcoming') return contentStore.tvRails.upcoming
+    return contentStore.tvRails.popular
+  }
+  if (id === 'theatres') return contentStore.movieRails.theatres
+  if (id === 'upcoming') return contentStore.movieRails.upcoming
+  return contentStore.movieRails.popular
+}
+
+const railEmptyText = (id: string) => {
+  if (browseType.value === 'tv') {
+    if (id === 'airing') return 'Nothing is airing right now.'
+    if (id === 'upcoming') return 'No upcoming series to highlight yet.'
+    return 'No trending series right now.'
+  }
+  if (id === 'theatres') return 'Nothing looks like it is in theatres right now.'
+  if (id === 'upcoming') return 'No upcoming movies to highlight yet.'
+  return 'No trending movies right now.'
+}
+
+const setBrowseType = (type: BrowseContentType) => {
+  if (type === browseType.value) return
+  const query = { ...route.query }
+  if (type === 'tv') {
+    query.type = 'tv'
+  } else {
+    delete query.type
+  }
+  void router.replace({ query })
+}
+
+watch(
+  browseType,
+  (type, previous) => {
+    filters.value = { ...filters.value, type }
+    if (previous !== undefined) {
+      appliedFilters.value = { ...appliedFilters.value, type }
+    }
+    void contentStore.loadCatalogRails(type).catch((error) => {
+      console.error('Error loading browse rails:', error)
+      toast.error(type === 'tv' ? 'Failed to load series.' : 'Failed to load movies.')
+    })
+  },
+  { immediate: true },
+)
+
 // Helper functions
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
   return formatGenres(genres)
@@ -523,7 +629,7 @@ watch(
 )
 
 const clearFilters = () => {
-  const reset = defaultSearchFilters()
+  const reset = { ...defaultSearchFilters(), type: browseType.value }
   filters.value = reset
   appliedFilters.value = { ...reset }
   currentPage.value = 1
@@ -533,6 +639,8 @@ const clearSearch = () => {
   searchQuery.value = ''
   hasSearched.value = false
   contentStore.clearSearchResults()
+  filters.value = { ...defaultSearchFilters(), type: browseType.value }
+  appliedFilters.value = { ...filters.value }
 }
 
 const goToPage = (page: number) => {
@@ -549,7 +657,15 @@ onMounted(() => {
     }
   }
 
+  if (hasActiveSearchFilters(filters.value)) {
+    filtersOpen.value = true
+  }
+
   void contentStore.ensureFullCatalog()
+
+  if (authStore.isAuthenticated) {
+    void contentStore.loadWatchlist()
+  }
 
   const scrollKey = `search-page-${currentPage.value}`
   const restored = contentStore.restoreScrollPosition(scrollKey)
@@ -574,37 +690,66 @@ onMounted(() => {
   padding: 0 20px;
 }
 
-.search-header {
-  text-align: center;
-  margin-bottom: 3rem;
+.browse-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.25rem;
+  margin-bottom: 1.5rem;
   color: var(--text-primary);
 }
 
-.search-title {
+.browse-title {
   font-family: var(--font-display);
-  font-size: 3rem;
+  font-size: 2.4rem;
   font-weight: 650;
-  margin-bottom: 1rem;
+  margin: 0;
   letter-spacing: -0.03em;
 }
 
-.search-subtitle {
-  font-size: 1.25rem;
-  opacity: 0.9;
+.type-toggle {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--bg-parchment);
+  border: 1px solid var(--border-color);
+  gap: 2px;
+}
+
+.type-toggle-btn {
+  padding: 0.5rem 1.1rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 650;
+  font-family: inherit;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.type-toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.type-toggle-btn.active {
+  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
+  color: var(--text-on-accent);
+  box-shadow: 0 6px 14px rgba(224, 122, 95, 0.22);
 }
 
 .search-form-container {
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .search-form {
-  max-width: 800px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .search-input-group {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   align-items: center;
 }
 
@@ -647,6 +792,40 @@ onMounted(() => {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.filters-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-parchment);
+  color: var(--text-secondary);
+  font-weight: 650;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.filters-toggle-btn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.filters-toggle-btn:hover,
+.filters-toggle-btn.active {
+  color: var(--text-primary);
+  border-color: var(--coral-primary);
+  background: var(--bg-hover);
+}
+
+.filters-toggle-btn.filled {
+  color: var(--coral-deep);
+  border-color: var(--coral-primary);
 }
 
 .filters-container {
@@ -1057,12 +1236,23 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
-  .search-title {
-    font-size: 2rem;
+  .browse-title {
+    font-size: 1.85rem;
   }
 
   .search-input-group {
-    flex-direction: column;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .search-btn,
+  .filters-toggle-btn {
+    flex: 1;
+    justify-content: center;
   }
 
   .filters-bar {

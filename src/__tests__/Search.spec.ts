@@ -24,15 +24,19 @@ vi.mock('@/services/api', async (importOriginal) => {
   }
 })
 
-const mountPage = async () => {
+const mountPage = async (path = '/search') => {
   const pinia = createPinia()
   setActivePinia(pinia)
 
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/search', name: 'search', component: Search }],
+    routes: [
+      { path: '/search', name: 'search', component: Search },
+      { path: '/movies', name: 'movies', component: { template: '<div />' } },
+      { path: '/tv', name: 'tv', component: { template: '<div />' } },
+    ],
   })
-  await router.push('/search')
+  await router.push(path)
   await router.isReady()
 
   const wrapper = mount(Search, {
@@ -46,7 +50,11 @@ const mountPage = async () => {
     },
   })
   await flushPromises()
-  return { wrapper, store: useContentStore() }
+  return { wrapper, store: useContentStore(), router }
+}
+
+const openFilters = async (wrapper: Awaited<ReturnType<typeof mountPage>>['wrapper']) => {
+  await wrapper.get('[data-testid="search-filters-toggle"]').trigger('click')
 }
 
 describe('hasActiveSearchFilters', () => {
@@ -62,6 +70,8 @@ describe('hasActiveSearchFilters', () => {
     expect(hasActiveSearchFilters({ ...defaultSearchFilters(), season: 'summer' })).toBe(true)
     expect(hasActiveSearchFilters({ ...defaultSearchFilters(), status: 'airing' })).toBe(true)
     expect(hasActiveSearchFilters({ ...defaultSearchFilters(), country: 'JP' })).toBe(true)
+    expect(hasActiveSearchFilters({ ...defaultSearchFilters(), type: 'movie' })).toBe(false)
+    expect(hasActiveSearchFilters({ ...defaultSearchFilters(), type: 'tv' })).toBe(false)
   })
 })
 
@@ -91,6 +101,7 @@ describe('Search empty query gating', () => {
       data: { content: [], pagination: store.pagination },
     })
 
+    await openFilters(wrapper)
     await wrapper.get('[data-testid="filter-genre"]').setValue('Action')
     expect(wrapper.get('[data-testid="search-submit"]').attributes('disabled')).toBeUndefined()
 
@@ -124,6 +135,7 @@ describe('Search empty query gating', () => {
       data: { content: [], pagination: store.pagination },
     })
 
+    await openFilters(wrapper)
     expect(wrapper.get('[data-testid="filter-status"]').text()).toContain('Airing')
     expect(wrapper.get('[data-testid="filter-country"]').text()).toContain('Japan')
 
@@ -147,6 +159,7 @@ describe('Search empty query gating', () => {
 
   it('lets year, season, and status be combined', async () => {
     const { wrapper } = await mountPage()
+    await openFilters(wrapper)
     const yearSelect = wrapper.get('[data-testid="filter-year"]')
     const yearValue = yearSelect.findAll('option')[1]?.element.value
     expect(yearValue).toBeTruthy()
@@ -170,6 +183,7 @@ describe('Search empty query gating', () => {
 
   it('filters results by status and country of origin', async () => {
     const { wrapper, store } = await mountPage()
+    await openFilters(wrapper)
     const catalog = [
       {
         _id: 'airing-jp',
@@ -205,6 +219,7 @@ describe('Search empty query gating', () => {
       return { success: true, data: { content: catalog, pagination: store.pagination } }
     })
 
+    await wrapper.get('[data-testid="browse-type-tv"]').trigger('click')
     await wrapper.get('[data-testid="filter-status"]').setValue('airing')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -225,5 +240,52 @@ describe('Search empty query gating', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Finished US Show')
     expect(wrapper.text()).not.toContain('Airing Japan Show')
+  })
+})
+
+describe('Search browse rails', () => {
+  beforeEach(() => {
+    window.scrollTo = vi.fn()
+  })
+
+  it('shows movie rails and keeps filters collapsed by default', async () => {
+    const { wrapper } = await mountPage()
+
+    expect(wrapper.get('[data-testid="browse-type-movie"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+    expect(wrapper.get('[data-testid="browse-rail-popular"]').text()).toContain('Currently Trending')
+    expect(wrapper.get('[data-testid="browse-rail-theatres"]').text()).toContain('In Theatres Now')
+    expect(wrapper.get('[data-testid="browse-rail-upcoming"]').text()).toContain(
+      'Upcoming Highlights',
+    )
+    expect(wrapper.find('[data-testid="filter-genre"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="search-filters-toggle"]').attributes('aria-expanded')).toBe(
+      'false',
+    )
+  })
+
+  it('switches to series rails immediately', async () => {
+    const { wrapper, router } = await mountPage()
+
+    await wrapper.get('[data-testid="browse-type-tv"]').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.type).toBe('tv')
+    expect(wrapper.get('[data-testid="browse-type-tv"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="browse-rail-airing"]').text()).toContain('Airing Right Now')
+    expect(wrapper.find('[data-testid="browse-rail-theatres"]').exists()).toBe(false)
+  })
+
+  it('reveals filters from the toolbar toggle', async () => {
+    const { wrapper } = await mountPage()
+
+    await openFilters(wrapper)
+
+    expect(wrapper.get('[data-testid="search-filters-toggle"]').attributes('aria-expanded')).toBe(
+      'true',
+    )
+    expect(wrapper.find('[data-testid="filter-genre"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Type:')
   })
 })
