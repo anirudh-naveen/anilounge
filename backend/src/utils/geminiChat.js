@@ -5,6 +5,8 @@
  * can be unit-tested. The model must only name titles returned by catalog tools.
  */
 
+import { recommendationWhy } from './recommendationWhy.js'
+
 /**
  * Convert UI/API chat turns into Gemini `startChat` history.
  * Drops leading model turns (Gemini requires user-first history).
@@ -82,20 +84,35 @@ export function getResponseText(response) {
  */
 export function buildSystemInstruction(userContext) {
   const lines = [
-    "You are AniLounge's assistant for finding animated movies, series, and specials.",
+    "You are AniLounge's assistant for animated movies, series, animation studios, voice actors, and genres.",
+    'Stay on those topics. Decline news, weather, politics, live-action celebrities, sports, and other unrelated questions.',
     'You must call search_catalog or get_title_details before naming any title.',
-    'Only recommend titles those tools return. Never invent titles, scores, studios, or air dates.',
+    'Only recommend titles those tools return. Never invent titles, scores, studios, air dates, or voice-actor credits.',
+    'When recommending, pick the strongest catalog matches instead of dumping every hit.',
+    'Rank picks by this hierarchy: matching genres first, then animation studios, then high ratings, then other catalog facts such as airing status or origin.',
+    'Never prefer a higher-rated title over a better genre match. When genres are equal, never prefer a higher-rated title over a better studio match.',
+    'Do not set minRating unless the user asked for highly rated or top titles.',
+    'Each recommended title already includes a `why` field from the catalog — use it or refine it. Do not recommend a title without saying why.',
+    'lookup_public_info is optional encyclopedia background for a catalog title, studio, voice actor, or genre. It is not a general web search.',
+    'Never recommend a title because Wikipedia mentioned it. Confirm titles with search_catalog.',
+    'Catalog scores, studios, air dates, and whether a title exists always win over web text.',
     'If the catalog is empty, say so and suggest a different genre, studio, country, or title.',
-    'Keep replies to 2-4 sentences. The app shows poster cards for the returned titles.',
-    'Prefer specific catalog facts (rating, studio, airing status, origin) over generic hype.',
+    'Write a one-sentence overview, then one short reason per pick (about 3-5 titles). The app also shows poster cards.',
+    'Prefer genre and studio facts over ratings, and prefer specific catalog facts over generic hype.',
   ]
 
   if (userContext) {
     const genres = (userContext.favoriteGenres || []).filter(Boolean)
     const studios = (userContext.favoriteStudios || []).filter(Boolean)
     const watchlist = (userContext.watchlist || []).slice(0, 15)
-    if (genres.length) lines.push(`Favorite genres: ${genres.join(', ')}.`)
-    if (studios.length) lines.push(`Favorite studios: ${studios.join(', ')}.`)
+    if (genres.length) {
+      lines.push(`Favorite genres: ${genres.join(', ')}. Prefer titles in these genres when recommending.`)
+    }
+    if (studios.length) {
+      lines.push(
+        `Favorite studios: ${studios.join(', ')}. Use studio match after genre and before ratings.`,
+      )
+    }
     if (watchlist.length) {
       lines.push(
         `Watchlist: ${watchlist
@@ -117,10 +134,16 @@ export function fallbackChatReply(results) {
   if (!results?.length) {
     return "I couldn't find matching titles in the AniLounge catalog. Try a different genre, studio, country, or title."
   }
-  const names = results
-    .slice(0, 5)
-    .map((doc) => doc.englishTitle || doc.title)
-    .filter(Boolean)
-    .join(', ')
-  return `Here are titles from the catalog that match that: ${names}.`
+  const picks = results.slice(0, 4)
+  const lines = picks.map((doc) => {
+    const name = doc.englishTitle || doc.title
+    const why = doc.why || recommendationWhy(doc)
+    return `• ${name}: ${why}`
+  })
+  if (picks.length === 1) {
+    const name = picks[0].englishTitle || picks[0].title
+    const why = picks[0].why || recommendationWhy(picks[0])
+    return `I'd recommend ${name} because ${why}.`
+  }
+  return `Here are catalog picks and why they fit:\n${lines.join('\n')}`
 }

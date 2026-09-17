@@ -24,6 +24,7 @@ const catalogHit = {
   contentType: 'movie' as const,
   posterPath: '/spirited.jpg',
   genres: [{ name: 'Fantasy' }],
+  why: 'from Studio Ghibli, strongly rated (8.6)',
 }
 
 const mountChat = async () => {
@@ -77,6 +78,7 @@ describe('Chatbot', () => {
 
     expect(aiAPI.chat).toHaveBeenCalledWith('Studio Ghibli movies', [])
     expect(wrapper.get('[data-testid="chat-results"]').text()).toContain('Spirited Away')
+    expect(wrapper.get('[data-testid="chat-results"]').text()).toContain('from Studio Ghibli')
     expect(wrapper.emitted('search-results')?.[0]?.[0]).toEqual([catalogHit])
   })
 

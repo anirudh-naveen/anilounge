@@ -9,22 +9,22 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import dotenv from 'dotenv'
 import {
-  hasCatalogIntent,
-  inferCatalogFiltersFromMessage,
-} from '../utils/catalogChatQuery.js'
-import {
   buildSystemInstruction,
   fallbackChatReply,
   getFunctionCalls,
   getResponseText,
   toGeminiHistory,
 } from '../utils/geminiChat.js'
+import { inferCatalogFiltersFromMessage, hasCatalogIntent } from '../utils/catalogChatQuery.js'
+import { withRecommendationWhy } from '../utils/recommendationWhy.js'
+import { sortByRecommendationRank } from '../utils/recommendationRank.js'
 import {
   findByTitle,
   searchCatalog,
   serializeCatalogDoc,
   summarizeForModel,
 } from './catalogLookupService.js'
+import { lookupPublicInfo } from './publicInfoLookupService.js'
 
 dotenv.config()
 
@@ -34,7 +34,7 @@ const CHAT_TOOLS = [
       {
         name: 'search_catalog',
         description:
-          'Search the AniLounge animated catalog. Call this before recommending titles. Only returned titles exist in the app.',
+          'Search the AniLounge animated catalog. Call this before recommending titles. Only returned titles exist in the app. Results are ranked by genre match, then animation studio, then rating.',
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
@@ -62,7 +62,11 @@ const CHAT_TOOLS = [
               enum: ['winter', 'spring', 'summer', 'fall'],
             },
             year: { type: SchemaType.NUMBER, description: 'Calendar year' },
-            minRating: { type: SchemaType.NUMBER, description: 'Minimum unified score 1-10' },
+            minRating: {
+              type: SchemaType.NUMBER,
+              description:
+                'Minimum unified score 1-10. Only set this when the user asked for highly rated or top titles.',
+            },
             similarTo: {
               type: SchemaType.STRING,
               description: 'Find catalog titles similar to this title',
@@ -81,6 +85,29 @@ const CHAT_TOOLS = [
             title: { type: SchemaType.STRING, description: 'Title to look up' },
           },
           required: ['title'],
+        },
+      },
+      {
+        name: 'lookup_public_info',
+        description:
+          'Fetch a short Wikipedia summary for an animated movie/series already in the catalog, an animation studio, a voice actor, or a genre. Never use this for unrelated topics or to discover titles to recommend.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            name: {
+              type: SchemaType.STRING,
+              description: 'Title, studio, voice actor, or genre name',
+            },
+            title: {
+              type: SchemaType.STRING,
+              description: 'Alias of name for catalog titles',
+            },
+            kind: {
+              type: SchemaType.STRING,
+              enum: ['title', 'studio', 'voice_actor', 'genre'],
+              description: 'What the name refers to',
+            },
+          },
         },
       },
     ],
@@ -235,6 +262,24 @@ Respond as simple comma-separated terms: term1, term2, term3`
       .map((genre) => genreMap[genre])
   }
 
+  catalogSearchFilters(args = {}, userContext = null) {
+    return {
+      ...args,
+      excludeIds: userContext?.excludeIds || [],
+      favoriteGenres: userContext?.favoriteGenres || [],
+      favoriteStudios: userContext?.favoriteStudios || [],
+    }
+  }
+
+  rankChatResults(docs, filters = {}, userContext = null) {
+    const context = {
+      ...filters,
+      favoriteGenres: userContext?.favoriteGenres || filters.favoriteGenres || [],
+      favoriteStudios: userContext?.favoriteStudios || filters.favoriteStudios || [],
+    }
+    return withRecommendationWhy(sortByRecommendationRank(docs, context), context)
+  }
+
   /**
    * Run a catalog tool and return both UI documents and a compact model payload.
    * @param {string} name
@@ -243,22 +288,36 @@ Respond as simple comma-separated terms: term1, term2, term3`
    * @returns {Promise<{ docs: object[], payload: object }>}
    */
   async executeCatalogTool(name, args = {}, userContext = null) {
-    const excludeIds = userContext?.excludeIds || []
+    const filters = this.catalogSearchFilters(args, userContext)
     if (name === 'get_title_details') {
       const doc = await findByTitle(args.title)
+      const explained = withRecommendationWhy(doc ? [doc] : [], { lookupTitle: args.title })
       return {
-        docs: doc ? [doc] : [],
-        payload: doc
-          ? summarizeForModel(doc, { fullOverview: true })
+        docs: explained,
+        payload: explained[0]
+          ? summarizeForModel(explained[0], { fullOverview: true })
           : { found: false, message: 'No catalog title matched that name.' },
       }
     }
     if (name === 'search_catalog') {
-      const docs = await searchCatalog({ ...args, excludeIds })
+      const docs = this.rankChatResults(await searchCatalog(filters), filters, userContext)
       return {
         docs,
         payload: { count: docs.length, titles: docs.map((doc) => summarizeForModel(doc)) },
       }
+    }
+    if (name === 'lookup_public_info') {
+      const { docs, payload } = await lookupPublicInfo({
+        name: args.name,
+        title: args.title,
+        kind: args.kind,
+      })
+      const context = {
+        studio: args.kind === 'studio' ? args.name || args.title : undefined,
+        genre: args.kind === 'genre' ? args.name || args.title : undefined,
+        lookupTitle: args.kind === 'title' || !args.kind ? args.name || args.title : undefined,
+      }
+      return { docs: this.rankChatResults(docs, context, userContext), payload }
     }
     return { docs: [], payload: { error: `Unknown tool: ${name}` } }
   }
@@ -281,12 +340,16 @@ Respond as simple comma-separated terms: term1, term2, term3`
   async groundedCatalogReply(message, userContext) {
     const filters = inferCatalogFiltersFromMessage(message)
     const docs = hasCatalogIntent(message)
-      ? await searchCatalog({ ...filters, excludeIds: userContext?.excludeIds })
+      ? this.rankChatResults(
+          await searchCatalog(this.catalogSearchFilters(filters, userContext)),
+          filters,
+          userContext,
+        )
       : []
     return {
       response: hasCatalogIntent(message)
         ? fallbackChatReply(docs)
-        : 'I can help you find animated movies and series in the AniLounge catalog. Try a genre, studio, country, or title.',
+        : 'I can help with animated movies, series, studios, voice actors, and genres in the AniLounge catalog.',
       results: docs.map(serializeCatalogDoc),
       searchSuggestion: null,
     }
@@ -302,7 +365,7 @@ Respond as simple comma-separated terms: term1, term2, term3`
     const message = String(userMessage || '').trim()
     if (!message) {
       return {
-        response: 'Ask me for a genre, studio, or title and I will search the catalog.',
+        response: 'Ask about an animated movie, series, studio, voice actor, or genre.',
         results: [],
         searchSuggestion: null,
       }
@@ -323,11 +386,27 @@ Respond as simple comma-separated terms: term1, term2, term3`
       let result = await this.withTimeout(chat.sendMessage(message), 20000)
       let response = result.response
 
-      for (let round = 0; round < 3; round += 1) {
+      let publicLookups = 0
+      for (let round = 0; round < 4; round += 1) {
         const calls = getFunctionCalls(response)
         if (!calls.length) break
         const functionResponses = []
         for (const call of calls) {
+          if (call.name === 'lookup_public_info') {
+            publicLookups += 1
+            if (publicLookups > 2) {
+              functionResponses.push({
+                functionResponse: {
+                  name: call.name,
+                  response: {
+                    allowed: false,
+                    reason: 'Public lookup limit reached for this turn. Use catalog fields.',
+                  },
+                },
+              })
+              continue
+            }
+          }
           const { docs, payload } = await this.executeCatalogTool(call.name, call.args, userContext)
           for (const doc of docs) {
             found.set(String(doc._id), doc)
@@ -341,10 +420,11 @@ Respond as simple comma-separated terms: term1, term2, term3`
       }
 
       let results = [...found.values()]
+      const filters = inferCatalogFiltersFromMessage(message)
       if (!results.length && hasCatalogIntent(message)) {
-        const filters = inferCatalogFiltersFromMessage(message)
-        results = await searchCatalog({ ...filters, excludeIds: userContext?.excludeIds })
+        results = await searchCatalog(this.catalogSearchFilters(filters, userContext))
       }
+      results = this.rankChatResults(results, filters, userContext)
 
       const text = getResponseText(response) || fallbackChatReply(results)
       return {

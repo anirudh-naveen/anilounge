@@ -43,7 +43,7 @@
 6. Fix the duplication of content (is it TMDB?).
    - When checking if the content is the same for duplicates, check if any of the names are the same with any of the names from each of the different sources. An example of this issue is with 'The Fragrant Flower Blooms With Dignity', where the native title of one matches the English title of another.
 7. Fix the accidental deletion of content (in merge or original filtering?).
-8. Fix the text for "Add to Watchlist" and "Share" on content pages to be centered.
+8. Fix the text for all buttons on pages to be properly centered.
 9. Fix the tabs (Home, Movies, TV Shows, etc) to have icons when the screen is small (like on phone dimensions). ✅
 10. Do not display all alternative titles for content. ✅
 

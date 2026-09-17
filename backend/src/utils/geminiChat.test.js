@@ -73,7 +73,14 @@ describe('grounded copy', () => {
     assert.match(fallbackChatReply([]), /couldn't find matching titles/i)
     assert.match(
       fallbackChatReply([{ title: 'Nausicaa', englishTitle: 'Nausicaä of the Valley of the Wind' }]),
-      /Nausicaä of the Valley of the Wind/,
+      /I'd recommend Nausicaä of the Valley of the Wind because/,
+    )
+    assert.match(
+      fallbackChatReply([
+        { title: 'Totoro', englishTitle: 'My Neighbor Totoro', why: 'from Studio Ghibli' },
+        { title: 'Kiki', englishTitle: "Kiki's Delivery Service", why: 'Fantasy and Family' },
+      ]),
+      /why they fit/,
     )
   })
 
@@ -83,7 +90,11 @@ describe('grounded copy', () => {
       watchlist: [{ title: 'Frieren', status: 'watching' }],
     })
     assert.match(instruction, /must call search_catalog/)
+    assert.match(instruction, /Do not recommend a title without saying why/)
+    assert.match(instruction, /lookup_public_info is optional encyclopedia background/)
+    assert.match(instruction, /not a general web search/)
     assert.match(instruction, /Favorite genres: Action/)
+    assert.match(instruction, /matching genres first/)
     assert.match(instruction, /Frieren \(watching\)/)
   })
 })

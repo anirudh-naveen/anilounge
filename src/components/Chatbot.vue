@@ -52,6 +52,7 @@
             <span v-if="getNativeTitle(item)" class="chat-result-native">{{
               getNativeTitle(item)
             }}</span>
+            <span v-if="item.why" class="chat-result-why">{{ item.why }}</span>
           </button>
         </div>
         <div class="message-time">{{ formatTime(message.timestamp) }}</div>
@@ -75,7 +76,7 @@
         v-model="inputMessage"
         data-testid="chat-input"
         @keyup.enter="sendMessage"
-        placeholder="Ask for a genre, studio, or title..."
+        placeholder="Ask about a title, studio, voice actor, or genre..."
         :disabled="isTyping"
       />
       <button
@@ -219,7 +220,7 @@ onMounted(() => {
   const welcomeMessage: Message = {
     id: 'welcome',
     type: 'bot',
-    text: 'Hi! I search the AniLounge catalog for animated movies and series. Ask for a genre, studio, country, airing show, or a title like "Studio Ghibli movies" or "something like Frieren".',
+    text: 'Hi! I can talk about animated movies, series, studios, voice actors, and genres in the AniLounge catalog. Try "Studio Ghibli movies", "what is isekai", or "something like Frieren".',
     timestamp: new Date(),
   }
   messages.value.push(welcomeMessage)
@@ -322,6 +323,7 @@ onMounted(() => {
   color: var(--text-primary);
   font-size: 0.9rem;
   line-height: 1.4;
+  white-space: pre-wrap;
 }
 
 .message.user .message-text {
@@ -344,8 +346,8 @@ onMounted(() => {
 }
 
 .chat-result-card {
-  flex: 0 0 132px;
-  width: 132px;
+  flex: 0 0 168px;
+  width: 168px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -386,9 +388,21 @@ onMounted(() => {
 }
 
 .chat-result-native {
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.15rem;
   color: var(--text-secondary);
   font-size: 0.72rem;
+}
+
+.chat-result-why {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding: 0.15rem 0.5rem 0.55rem;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.3;
 }
 
 .typing-indicator {
