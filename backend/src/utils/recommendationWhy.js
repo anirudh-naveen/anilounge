@@ -9,6 +9,7 @@ import {
   catalogGenreNames,
   catalogRatingScore,
   catalogStudioNames,
+  resolveRecommendationContext,
 } from './recommendationRank.js'
 
 function matchedFavoriteGenre(genres, context = {}) {
@@ -91,8 +92,9 @@ export function recommendationWhy(doc, context = {}) {
  * @returns {object[]}
  */
 export function withRecommendationWhy(docs, context = {}) {
+  const resolved = resolveRecommendationContext(docs, context)
   return (docs || []).map((doc) => ({
     ...doc,
-    why: doc.why || recommendationWhy(doc, context),
+    why: doc.why || recommendationWhy(doc, resolved),
   }))
 }
