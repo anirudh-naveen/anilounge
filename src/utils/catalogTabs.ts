@@ -1,21 +1,22 @@
 /**
  * catalogTabs.ts — movie and TV catalog tab helpers.
  *
- * Tab ids, labels, and `/movies` `/tv` query/path builders used by catalog
- * pages and detail-view back navigation. Popular Right Now is a single page.
+ * Tab ids, labels, `/movies` `/tv` query/path builders, and Search browse
+ * rails used by catalog pages and detail-view back navigation. Currently Trending
+ * (popular) is a single page.
  */
 
 export const TV_CATALOG_TABS = [
   {
     id: 'popular',
-    label: 'Popular Right Now',
+    label: 'Currently Trending',
     subtitle: 'Discover amazing animated series from around the world',
     emptyTitle: 'No series found',
     emptyBody: "We couldn't find any animated series at the moment.",
   },
   {
     id: 'airing',
-    label: 'Currently Airing',
+    label: 'Airing Right Now',
     subtitle: 'Series broadcasting new episodes right now',
     emptyTitle: 'No currently airing shows',
     emptyBody: 'Nothing is marked as currently airing right now. Check back soon.',
@@ -32,14 +33,14 @@ export const TV_CATALOG_TABS = [
 export const MOVIE_CATALOG_TABS = [
   {
     id: 'popular',
-    label: 'Popular Right Now',
+    label: 'Currently Trending',
     subtitle: 'Discover amazing animated films from around the world',
     emptyTitle: 'No movies found',
     emptyBody: "We couldn't find any animated movies at the moment.",
   },
   {
     id: 'theatres',
-    label: 'Now in Theatres',
+    label: 'In Theatres Now',
     subtitle: 'Animated films currently showing in theatres',
     emptyTitle: 'No movies in theatres',
     emptyBody: 'Nothing looks like it is in theatres right now. Check back soon.',
@@ -61,7 +62,7 @@ const TV_TAB_IDS = new Set<string>(TV_CATALOG_TABS.map((tab) => tab.id))
 const MOVIE_TAB_IDS = new Set<string>(MOVIE_CATALOG_TABS.map((tab) => tab.id))
 
 /**
- * Popular Right Now is a single highlight page; other tabs paginate.
+ * Currently Trending is a single highlight page; other tabs paginate.
  * @param tab - Normalized tab id.
  */
 export function catalogTabHasPagination(tab: string) {
@@ -255,4 +256,52 @@ export function movieCatalogLocationFromUrl(url: URL) {
     query: movieCatalogRouteQuery(tab, page),
     scrollKey: movieCatalogScrollKey(tab, page),
   }
+}
+
+export type BrowseContentType = 'movie' | 'tv'
+
+export const MOVIE_BROWSE_RAILS = [
+  {
+    id: 'popular' as const,
+    title: 'Currently Trending',
+    viewAll: movieCatalogPath('popular', 1),
+  },
+  {
+    id: 'theatres' as const,
+    title: 'In Theatres Now',
+    viewAll: movieCatalogPath('theatres', 1),
+  },
+  {
+    id: 'upcoming' as const,
+    title: 'Upcoming Highlights',
+    viewAll: movieCatalogPath('upcoming', 1),
+  },
+]
+
+export const TV_BROWSE_RAILS = [
+  {
+    id: 'popular' as const,
+    title: 'Currently Trending',
+    viewAll: tvCatalogPath('popular', 1),
+  },
+  {
+    id: 'airing' as const,
+    title: 'Airing Right Now',
+    viewAll: tvCatalogPath('airing', 1),
+  },
+  {
+    id: 'upcoming' as const,
+    title: 'Upcoming Highlights',
+    viewAll: tvCatalogPath('upcoming', 1),
+  },
+]
+
+/**
+ * Coerce an unknown query value to the Search browse type. Movies are default.
+ * @param value - Raw `type` query string (or array from Vue Router).
+ * @returns `movie` or `tv`.
+ */
+export function normalizeBrowseType(value: unknown): BrowseContentType {
+  const raw = Array.isArray(value) ? value[0] : value
+  return raw === 'tv' ? 'tv' : 'movie'
 }

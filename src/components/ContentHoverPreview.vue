@@ -1,8 +1,8 @@
 <!--
   ContentHoverPreview.vue — catalog hover card (component).
 
-  Shows poster, titles, rating, overview, and watchlist add controls when a
-  content card is hovered.
+  Shows titles, rating, overview, and watchlist add controls when a
+  content card is hovered. The card poster is not repeated here.
 -->
 <template>
   <div
@@ -11,14 +11,6 @@
     :class="{ 'open-left': openLeft, 'is-adding': showForm }"
     @click.stop
   >
-    <!-- Poster -->
-    <div class="hover-preview-poster">
-      <img
-        :src="getPosterUrl(item.posterPath || '')"
-        :alt="displayTitle"
-        @error="handleImageError"
-      />
-    </div>
     <!-- Body -->
     <div class="hover-preview-body">
       <div class="hover-preview-header">
@@ -128,7 +120,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
-  getPosterUrl,
   formatGenres,
   getContentTypeDisplay,
   isMovieLike,
@@ -143,7 +134,7 @@ import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import AiringBadge from '@/components/AiringBadge.vue'
 
-const PREVIEW_WIDTH = 420
+const PREVIEW_WIDTH = 300
 
 const props = withDefaults(
   defineProps<{
@@ -192,11 +183,6 @@ const releaseYear = computed(() => {
 const displayGenres = computed(() => formatGenres(props.item.genres)?.slice(0, 3) || [])
 
 const maxEpisodes = computed(() => props.item.episodeCount || props.item.malEpisodes || undefined)
-
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.src = '/placeholder-movie.jpg'
-}
 
 const resetForm = () => {
   selectedStatus.value = 'plan_to_watch'
@@ -281,9 +267,9 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 0;
   left: calc(100% + 10px);
-  width: 400px;
+  width: 280px;
   display: none;
-  flex-direction: row;
+  flex-direction: column;
   align-items: stretch;
   background: white;
   border-radius: 10px;
@@ -318,22 +304,6 @@ onBeforeUnmount(() => {
   right: -14px;
 }
 
-.hover-preview-poster {
-  flex: 0 0 140px;
-  width: 140px;
-  min-height: 210px;
-  background: #eee;
-  overflow: hidden;
-  border-radius: 10px 0 0 10px;
-}
-
-.hover-preview-poster img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
 .hover-preview-body {
   flex: 1;
   padding: 0.85rem 0.9rem 1rem;
@@ -342,7 +312,7 @@ onBeforeUnmount(() => {
   gap: 0.45rem;
   min-width: 0;
   background: white;
-  border-radius: 0 10px 10px 0;
+  border-radius: 10px;
 }
 
 .hover-preview-header {
@@ -516,12 +486,14 @@ onBeforeUnmount(() => {
 .show-card:hover > .hover-preview,
 .result-card:hover > .hover-preview,
 .content-card:hover > .hover-preview,
+.rail-card:hover > .hover-preview,
 .movie-card:has(.hover-preview.is-adding) > .hover-preview,
 .show-card:has(.hover-preview.is-adding) > .hover-preview,
 .result-card:has(.hover-preview.is-adding) > .hover-preview,
-.content-card:has(.hover-preview.is-adding) > .hover-preview {
+.content-card:has(.hover-preview.is-adding) > .hover-preview,
+.rail-card:has(.hover-preview.is-adding) > .hover-preview {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
 }
 
 @media (hover: none) {
