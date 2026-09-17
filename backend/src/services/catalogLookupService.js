@@ -8,9 +8,15 @@
 import Content from '../models/Content.js'
 import { contentTitleMatchOr } from '../utils/titles.js'
 import { buildCatalogChatQuery, escapeRegex } from '../utils/catalogChatQuery.js'
+import {
+  catalogGenreNames,
+  catalogStudioNames,
+  sortByRecommendationRank,
+} from '../utils/recommendationRank.js'
 
 const DEFAULT_LIMIT = 8
 const MAX_LIMIT = 20
+const MAX_CANDIDATES = 40
 
 const CATALOG_PROJECTION = {
   title: 1,
@@ -69,6 +75,43 @@ function clampLimit(value) {
   return Math.min(Math.max(Math.trunc(parsed), 1), MAX_LIMIT)
 }
 
+function candidateLimit(limit) {
+  return Math.min(MAX_CANDIDATES, Math.max(limit * 5, 24))
+}
+
+function mergeMatch(parts) {
+  const cleaned = parts.filter((part) => part && Object.keys(part).length > 0)
+  if (cleaned.length === 0) return {}
+  if (cleaned.length === 1) return cleaned[0]
+  return { $and: cleaned }
+}
+
+function rankingContext(filters = {}, extras = {}) {
+  return {
+    genre: filters.genre,
+    studio: filters.studio,
+    similarTo: filters.similarTo,
+    query: filters.query,
+    favoriteGenres: filters.favoriteGenres,
+    favoriteStudios: filters.favoriteStudios,
+    ...extras,
+  }
+}
+
+function hasExplicitCatalogConstraint(filters = {}) {
+  return Boolean(
+    filters.query ||
+      filters.genre ||
+      filters.studio ||
+      filters.status ||
+      filters.year ||
+      filters.season ||
+      filters.originCountry ||
+      (filters.contentType && filters.contentType !== 'all') ||
+      (Number(filters.minRating) > 0),
+  )
+}
+
 /**
  * Compact title card the model may cite; never a substitute for a catalog row.
  * @param {object} doc
@@ -87,6 +130,7 @@ export function summarizeForModel(doc, options = {}) {
     originCountries: doc.originCountries || [],
     score: doc.unifiedScore || doc.malScore || doc.voteAverage || null,
     malStatus: doc.malStatus || undefined,
+    why: doc.why || undefined,
     releaseDate: doc.releaseDate || undefined,
     startSeasonYear: doc.startSeasonYear || undefined,
     startSeason: doc.startSeason || undefined,
@@ -112,7 +156,8 @@ export async function findByTitle(title) {
 async function findSimilarTo(title, filters, limit) {
   const seed = await findByTitle(title)
   if (!seed) return []
-  const names = (seed.genres || []).map((genre) => genre.name).filter(Boolean)
+  const seedGenres = catalogGenreNames(seed)
+  const seedStudios = catalogStudioNames(seed)
   const typeFilter =
     seed.contentType === 'special'
       ? { contentType: { $in: ['movie', 'special'] } }
@@ -128,21 +173,63 @@ async function findSimilarTo(title, filters, limit) {
     },
     filters.from,
   )
-  const similarQuery = {
-    ...typeFilter,
-    ...(names.length ? { 'genres.name': { $in: names } } : {}),
-    ...query,
-    _id: { $nin: [seed._id, ...(filters.excludeIds || [])] },
+  const overlap = []
+  if (seedGenres.length) overlap.push({ 'genres.name': { $in: seedGenres } })
+  if (seedStudios.length) {
+    overlap.push({ studios: { $in: seedStudios } })
+    overlap.push({ productionCompanies: { $in: seedStudios } })
   }
-  return Content.find(similarQuery)
-    .select(CATALOG_PROJECTION)
-    .sort({ unifiedScore: -1, popularity: -1 })
-    .limit(limit)
-    .lean()
+  const similarQuery = mergeMatch([
+    typeFilter,
+    overlap.length ? { $or: overlap } : {},
+    query,
+    { _id: { $nin: [seed._id, ...(filters.excludeIds || [])] } },
+  ])
+  const docs = await Content.aggregate([
+    { $match: similarQuery },
+    {
+      $addFields: {
+        genreOverlap: {
+          $size: {
+            $setIntersection: [
+              {
+                $map: {
+                  input: { $ifNull: ['$genres', []] },
+                  as: 'genre',
+                  in: { $ifNull: ['$$genre.name', '$$genre'] },
+                },
+              },
+              seedGenres,
+            ],
+          },
+        },
+        studioOverlap: {
+          $size: {
+            $setIntersection: [
+              {
+                $setUnion: [
+                  { $ifNull: ['$studios', []] },
+                  { $ifNull: ['$productionCompanies', []] },
+                ],
+              },
+              seedStudios,
+            ],
+          },
+        },
+      },
+    },
+    { $sort: { genreOverlap: -1, studioOverlap: -1, unifiedScore: -1, popularity: -1 } },
+    { $limit: candidateLimit(limit) },
+    { $project: CATALOG_PROJECTION },
+  ])
+  return sortByRecommendationRank(
+    docs,
+    rankingContext(filters, { similarTo: title, seedGenres, seedStudios }),
+  ).slice(0, limit)
 }
 
 /**
- * Search the animated catalog. `similarTo` ranks titles sharing the seed's type/genres.
+ * Search the animated catalog. Recommendations rank by genre, then studio, then rating.
  * @param {object} [filters]
  * @returns {Promise<object[]>}
  */
@@ -155,9 +242,17 @@ export async function searchCatalog(filters = {}) {
   if (filters.similarTo) {
     return findSimilarTo(filters.similarTo, filters, limit)
   }
-  return Content.find(buildCatalogChatQuery(filters, filters.from))
+
+  const parts = [buildCatalogChatQuery(filters, filters.from)]
+  const favoriteGenres = (filters.favoriteGenres || []).filter(Boolean)
+  if (!hasExplicitCatalogConstraint(filters) && favoriteGenres.length) {
+    parts.push({ 'genres.name': { $in: favoriteGenres } })
+  }
+
+  const docs = await Content.find(mergeMatch(parts))
     .select(CATALOG_PROJECTION)
     .sort({ unifiedScore: -1, popularity: -1 })
-    .limit(limit)
+    .limit(candidateLimit(limit))
     .lean()
+  return sortByRecommendationRank(docs, rankingContext(filters)).slice(0, limit)
 }

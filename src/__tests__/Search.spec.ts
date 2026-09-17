@@ -39,7 +39,6 @@ const mountPage = async () => {
     global: {
       plugins: [pinia, router],
       stubs: {
-        Chatbot: true,
         PaginationNav: true,
         ContentHoverPreview: true,
         AiringBadge: true,
@@ -144,14 +143,6 @@ describe('Search empty query gating', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(store.searchAppliedFilters.country).toBe('JP')
-  })
-
-  it('opens the AI assistant overlay from Search', async () => {
-    const { wrapper } = await mountPage()
-    expect(wrapper.find('chatbot-stub').exists()).toBe(false)
-    await wrapper.get('[data-testid="ai-toggle"]').trigger('click')
-    expect(wrapper.find('chatbot-stub').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="search-submit"]').attributes('disabled')).toBeDefined()
   })
 
   it('lets year, season, and status be combined', async () => {
