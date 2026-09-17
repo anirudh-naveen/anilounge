@@ -56,8 +56,8 @@ describe('Movies catalog tabs', () => {
   it('renders the three catalog tabs and loads popular by default', async () => {
     const { wrapper } = await mountPage()
 
-    expect(wrapper.text()).toContain('Popular Right Now')
-    expect(wrapper.text()).toContain('Now in Theatres')
+    expect(wrapper.text()).toContain('Currently Trending')
+    expect(wrapper.text()).toContain('In Theatres Now')
     expect(wrapper.text()).toContain('Upcoming Highlights')
     expect(wrapper.get('[data-testid="movie-tab-popular"]').attributes('aria-selected')).toBe(
       'true',

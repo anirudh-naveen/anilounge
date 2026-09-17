@@ -288,7 +288,7 @@
         <div class="empty-icon">Watchlist</div>
         <h3>No items in your watchlist</h3>
         <p>Start adding movies and series to track your progress!</p>
-        <router-link to="/movies" class="btn btn-primary">Browse Movies</router-link>
+        <router-link to="/search" class="btn btn-primary">Browse the catalog</router-link>
       </div>
     </div>
   </div>

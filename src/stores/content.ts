@@ -54,13 +54,13 @@ export const defaultSearchFilters = (): SearchFilters => ({
 
 /**
  * Whether any Search filter differs from `defaultSearchFilters()` (including sort).
+ * Browse type is the Movies/Series toggle, so it is not treated as a filter.
  * @param filters - Current Search filter values.
  * @returns True when at least one filter is not at its default.
  */
 export const hasActiveSearchFilters = (filters: SearchFilters): boolean => {
   const defaults = defaultSearchFilters()
   return (
-    filters.type !== defaults.type ||
     filters.ratingMin !== defaults.ratingMin ||
     filters.ratingMax !== defaults.ratingMax ||
     filters.year !== defaults.year ||
@@ -115,6 +115,21 @@ export const useContentStore = defineStore('content', () => {
     hasNextPage: false,
     hasPrevPage: false,
   })
+
+  const movieRails = ref({
+    popular: [] as UnifiedContent[],
+    theatres: [] as UnifiedContent[],
+    upcoming: [] as UnifiedContent[],
+  })
+  const tvRails = ref({
+    popular: [] as UnifiedContent[],
+    airing: [] as UnifiedContent[],
+    upcoming: [] as UnifiedContent[],
+  })
+  const movieRailsLoading = ref(false)
+  const tvRailsLoading = ref(false)
+  const movieRailsLoaded = ref(false)
+  const tvRailsLoaded = ref(false)
 
   const lastSearchQuery = ref('')
   const searchFilters = ref<SearchFilters>(defaultSearchFilters())
@@ -196,6 +211,61 @@ export const useContentStore = defineStore('content', () => {
       } else if (contentType === 'tv') {
         tvShowsLoading.value = false
       }
+    }
+  }
+
+  const RAIL_LIMIT = 16
+
+  const fetchCatalogList = async (
+    contentType: 'movie' | 'tv',
+    tab?: MovieCatalogTab | TvCatalogTab,
+  ) => {
+    const params: Record<string, string | number> = {
+      page: 1,
+      limit: RAIL_LIMIT,
+      type: contentType,
+    }
+    if (tab && tab !== 'popular') params.tab = tab
+    const response = await contentAPI.getContent(params)
+    return response.data.success ? (response.data.data as UnifiedContent[]) : []
+  }
+
+  /**
+   * Loads the three Search browse rails for movies or series without overwriting
+   * the paginated Movies/TV catalog lists.
+   * @param contentType - Which rails to fill (`movie` or `tv`).
+   * @param force - When true, refetch even if that type is already cached.
+   */
+  const loadCatalogRails = async (contentType: 'movie' | 'tv', force = false) => {
+    if (contentType === 'movie') {
+      if (movieRailsLoaded.value && !force) return
+      movieRailsLoading.value = true
+      try {
+        const [popular, theatres, upcoming] = await Promise.all([
+          fetchCatalogList('movie'),
+          fetchCatalogList('movie', 'theatres'),
+          fetchCatalogList('movie', 'upcoming'),
+        ])
+        movieRails.value = { popular, theatres, upcoming }
+        movieRailsLoaded.value = true
+      } finally {
+        movieRailsLoading.value = false
+      }
+      return
+    }
+
+    if (tvRailsLoaded.value && !force) return
+    tvRailsLoading.value = true
+    try {
+      const [popular, airing, upcoming] = await Promise.all([
+        fetchCatalogList('tv'),
+        fetchCatalogList('tv', 'airing'),
+        fetchCatalogList('tv', 'upcoming'),
+      ])
+      tvRails.value = { popular, airing, upcoming }
+      tvRailsLoaded.value = true
+    } finally {
+      tvRailsLoading.value = false
     }
   }
 
@@ -699,6 +769,12 @@ export const useContentStore = defineStore('content', () => {
       contentDetailsCache.get(id) ||
       movies.value.find((item) => item._id === id) ||
       tvShows.value.find((item) => item._id === id) ||
+      movieRails.value.popular.find((item) => item._id === id) ||
+      movieRails.value.theatres.find((item) => item._id === id) ||
+      movieRails.value.upcoming.find((item) => item._id === id) ||
+      tvRails.value.popular.find((item) => item._id === id) ||
+      tvRails.value.airing.find((item) => item._id === id) ||
+      tvRails.value.upcoming.find((item) => item._id === id) ||
       searchResults.value.find((item) => item._id === id) ||
       allContent.value.find((item) => item._id === id)
     )
@@ -723,12 +799,18 @@ export const useContentStore = defineStore('content', () => {
     searchPage.value = 1
     catalogSize.value = 0
     error.value = null
+    movieRails.value = { popular: [], theatres: [], upcoming: [] }
+    tvRails.value = { popular: [], airing: [], upcoming: [] }
+    movieRailsLoaded.value = false
+    tvRailsLoaded.value = false
   }
 
   return {
     allContent,
     movies,
     tvShows,
+    movieRails,
+    tvRails,
     searchResults,
     currentContent,
     watchlist,
@@ -736,6 +818,8 @@ export const useContentStore = defineStore('content', () => {
     isLoading,
     moviesLoading,
     tvShowsLoading,
+    movieRailsLoading,
+    tvRailsLoading,
     searchLoading,
     error,
     pagination,
@@ -747,6 +831,7 @@ export const useContentStore = defineStore('content', () => {
     searchPage,
 
     getContent,
+    loadCatalogRails,
     getPopularContent,
     searchContent,
     ensureFullCatalog,

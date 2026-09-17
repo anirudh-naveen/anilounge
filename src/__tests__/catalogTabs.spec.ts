@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   MOVIE_CATALOG_TABS,
+  MOVIE_BROWSE_RAILS,
   TV_CATALOG_TABS,
+  TV_BROWSE_RAILS,
   catalogTabHasPagination,
   getMovieCatalogTab,
   getTvCatalogTab,
@@ -11,6 +13,7 @@ import {
   movieCatalogPath,
   movieCatalogRouteQuery,
   movieCatalogScrollKey,
+  normalizeBrowseType,
   normalizeMovieCatalogTab,
   normalizeTvCatalogTab,
   parseMovieCatalogPage,
@@ -22,10 +25,10 @@ import {
 } from '@/utils/catalogTabs'
 
 describe('TV catalog tabs', () => {
-  it('exposes Popular Right Now, Currently Airing, and Upcoming Highlights', () => {
+  it('exposes Currently Trending, Airing Right Now, and Upcoming Highlights', () => {
     expect(TV_CATALOG_TABS.map((tab) => tab.label)).toEqual([
-      'Popular Right Now',
-      'Currently Airing',
+      'Currently Trending',
+      'Airing Right Now',
       'Upcoming Highlights',
     ])
   })
@@ -58,7 +61,7 @@ describe('TV catalog tabs', () => {
     expect(location.path).toBe('/tv')
     expect(location.query).toEqual({ tab: 'upcoming', page: '3' })
     expect(location.scrollKey).toBe('tv-page-upcoming-3')
-    expect(getTvCatalogTab('airing').label).toBe('Currently Airing')
+    expect(getTvCatalogTab('airing').label).toBe('Airing Right Now')
   })
 
   it('treats popular as a single page', () => {
@@ -68,10 +71,10 @@ describe('TV catalog tabs', () => {
 })
 
 describe('Movie catalog tabs', () => {
-  it('exposes Popular Right Now, Now in Theatres, and Upcoming Highlights', () => {
+  it('exposes Currently Trending, In Theatres Now, and Upcoming Highlights', () => {
     expect(MOVIE_CATALOG_TABS.map((tab) => tab.label)).toEqual([
-      'Popular Right Now',
-      'Now in Theatres',
+      'Currently Trending',
+      'In Theatres Now',
       'Upcoming Highlights',
     ])
   })
@@ -101,6 +104,28 @@ describe('Movie catalog tabs', () => {
     expect(location.path).toBe('/movies')
     expect(location.query).toEqual({ tab: 'theatres', page: '2' })
     expect(location.scrollKey).toBe('movies-page-theatres-2')
-    expect(getMovieCatalogTab('theatres').label).toBe('Now in Theatres')
+    expect(getMovieCatalogTab('theatres').label).toBe('In Theatres Now')
+  })
+})
+
+describe('Search browse type', () => {
+  it('defaults to movies and treats tv as series', () => {
+    expect(normalizeBrowseType(undefined)).toBe('movie')
+    expect(normalizeBrowseType('tv')).toBe('tv')
+    expect(normalizeBrowseType(['tv'])).toBe('tv')
+    expect(normalizeBrowseType('movie')).toBe('movie')
+  })
+
+  it('builds view-all links for the three rails', () => {
+    expect(MOVIE_BROWSE_RAILS.map((rail) => rail.title)).toEqual([
+      'Currently Trending',
+      'In Theatres Now',
+      'Upcoming Highlights',
+    ])
+    expect(TV_BROWSE_RAILS.map((rail) => [rail.title, rail.viewAll])).toEqual([
+      ['Currently Trending', '/tv'],
+      ['Airing Right Now', '/tv?tab=airing'],
+      ['Upcoming Highlights', '/tv?tab=upcoming'],
+    ])
   })
 })
