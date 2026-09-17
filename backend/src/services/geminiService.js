@@ -262,6 +262,12 @@ Respond as simple comma-separated terms: term1, term2, term3`
       .map((genre) => genreMap[genre])
   }
 
+  /**
+   * Merge tool args with the signed-in user's favorite genres/studios and watchlist exclusions.
+   * @param {object} [args]
+   * @param {object|null} [userContext]
+   * @returns {object}
+   */
   catalogSearchFilters(args = {}, userContext = null) {
     return {
       ...args,
@@ -271,6 +277,13 @@ Respond as simple comma-separated terms: term1, term2, term3`
     }
   }
 
+  /**
+   * Order chat cards by genre, then studio, then rating, and attach a why clause.
+   * @param {object[]} docs
+   * @param {object} [filters]
+   * @param {object|null} [userContext]
+   * @returns {object[]}
+   */
   rankChatResults(docs, filters = {}, userContext = null) {
     const context = {
       ...filters,

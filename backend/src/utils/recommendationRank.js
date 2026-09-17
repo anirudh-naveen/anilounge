@@ -85,6 +85,28 @@ function studioOverlapCount(haystack, needles) {
 }
 
 /**
+ * Merge explicit chat filters with seed metadata stashed on similar-to rows.
+ * @param {object[]} [docs]
+ * @param {object} [context]
+ * @returns {object}
+ */
+export function resolveRecommendationContext(docs = [], context = {}) {
+  const seeded = (docs || []).find((doc) => doc?._recommendationRank)?._recommendationRank
+  return { ...context, ...(seeded || {}) }
+}
+
+/**
+ * Stash ranking needles on rows so a later re-sort keeps the same hierarchy.
+ * @param {object[]} docs
+ * @param {object} [meta]
+ * @returns {object[]}
+ */
+export function withRecommendationRankMeta(docs, meta) {
+  if (!meta) return docs || []
+  return (docs || []).map((doc) => ({ ...doc, _recommendationRank: meta }))
+}
+
+/**
  * Comparable ranking signals. Higher values rank first at each level.
  * @param {object} doc
  * @param {object} [context]
@@ -130,5 +152,6 @@ export function compareRecommendationRank(a, b, context = {}) {
  * @returns {object[]}
  */
 export function sortByRecommendationRank(docs, context = {}) {
-  return [...(docs || [])].sort((a, b) => compareRecommendationRank(a, b, context))
+  const resolved = resolveRecommendationContext(docs, context)
+  return [...(docs || [])].sort((a, b) => compareRecommendationRank(a, b, resolved))
 }
