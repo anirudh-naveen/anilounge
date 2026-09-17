@@ -1,16 +1,23 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <!--
-  Chatbot.vue — AI recommendation chat (component).
+  Chatbot.vue — catalog-grounded AI recommendation chat.
 
-  Modal chat UI that sends queries to the AI assistant and can emit catalog
-  search results back to the parent view.
+  Modal chat UI that sends queries to /ai/chat and renders returned catalog
+  rows with the same poster-card fields Search uses.
 -->
 <template>
-  <div class="chatbot-container">
+  <div class="chatbot-container" data-testid="chatbot">
     <!-- Title: Header -->
     <div class="chatbot-header">
       <h3>AI Assistant</h3>
-      <button @click="toggleChatbot" class="close-btn">×</button>
+      <button
+        @click="toggleChatbot"
+        class="close-btn"
+        type="button"
+        aria-label="Close AI assistant"
+      >
+        ×
+      </button>
     </div>
 
     <!-- Title: Transcript -->
@@ -19,6 +26,33 @@
         <div class="message-content">
           <div v-if="message.type === 'bot'" class="bot-avatar">AI</div>
           <div class="message-text">{{ message.text }}</div>
+        </div>
+        <div v-if="message.results?.length" class="chat-results" data-testid="chat-results">
+          <button
+            v-for="item in message.results"
+            :key="item._id"
+            type="button"
+            class="chat-result-card poster-frame"
+            @click="openDetails(item)"
+          >
+            <div class="chat-result-poster">
+              <img
+                :src="getPosterUrl(item.posterPath || '')"
+                :alt="getDisplayTitle(item)"
+                @error="handleImageError"
+              />
+              <div
+                class="content-type-badge poster-corner-tag poster-corner-tag-right"
+                :class="getContentTypeBadgeClass(item.contentType)"
+              >
+                {{ getCardContentTypeDisplay(item.contentType) }}
+              </div>
+            </div>
+            <span class="chat-result-title">{{ getDisplayTitle(item) }}</span>
+            <span v-if="getNativeTitle(item)" class="chat-result-native">{{
+              getNativeTitle(item)
+            }}</span>
+          </button>
         </div>
         <div class="message-time">{{ formatTime(message.timestamp) }}</div>
       </div>
@@ -39,19 +73,34 @@
     <div class="chatbot-input">
       <input
         v-model="inputMessage"
+        data-testid="chat-input"
         @keyup.enter="sendMessage"
-        placeholder="Ask me about anime recommendations..."
+        placeholder="Ask for a genre, studio, or title..."
         :disabled="isTyping"
       />
-      <button @click="sendMessage" :disabled="!inputMessage.trim() || isTyping">Send</button>
+      <button
+        data-testid="chat-send"
+        type="button"
+        @click="sendMessage"
+        :disabled="!inputMessage.trim() || isTyping"
+      >
+        Send
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
-import { useContentStore } from '@/stores/content'
-import { aiAPI } from '@/services/api'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  aiAPI,
+  getCardContentTypeDisplay,
+  getContentTypeBadgeClass,
+  getDetailsRouteName,
+  getPosterUrl,
+} from '@/services/api'
+import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import type { UnifiedContent } from '@/types/content'
 
 interface Message {
@@ -59,6 +108,7 @@ interface Message {
   type: 'user' | 'bot'
   text: string
   timestamp: Date
+  results?: UnifiedContent[]
 }
 
 defineProps<{
@@ -70,7 +120,8 @@ const emit = defineEmits<{
   'search-results': [results: UnifiedContent[]]
 }>()
 
-const contentStore = useContentStore()
+const router = useRouter()
+const route = useRoute()
 
 const messages = ref<Message[]>([])
 const inputMessage = ref('')
@@ -79,6 +130,19 @@ const messagesContainer = ref<HTMLElement>()
 
 const toggleChatbot = () => {
   emit('close')
+}
+
+const handleImageError = (event: Event) => {
+  const img = event.target as HTMLImageElement
+  img.src = '/placeholder-movie.jpg'
+}
+
+const openDetails = (item: UnifiedContent) => {
+  router.push({
+    name: getDetailsRouteName(item),
+    params: { id: item._id },
+    query: { from: route.fullPath },
+  })
 }
 
 const sendMessage = async () => {
@@ -92,32 +156,38 @@ const sendMessage = async () => {
   }
 
   messages.value.push(userMessage)
-  const query = inputMessage.value.trim()
+  const query = userMessage.text
   inputMessage.value = ''
 
   isTyping.value = true
   await nextTick()
   scrollToBottom()
 
+  const history = messages.value
+    .filter((message) => message.id !== 'welcome' && message.id !== userMessage.id)
+    .slice(-12)
+    .map((message) => ({
+      role: message.type === 'user' ? 'user' : 'model',
+      text: message.text,
+    }))
+
   try {
-    // Get AI response
-    const response = await aiAPI.chat(query)
-    const data = response.data
+    const response = await aiAPI.chat(query, history)
+    const data = response.data?.data ?? response.data
+    const results: UnifiedContent[] = Array.isArray(data.results) ? data.results : []
 
     const botMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'bot',
       text: data.response || "Sorry, I couldn't process your request.",
       timestamp: new Date(),
+      results,
     }
 
     messages.value.push(botMessage)
 
-    // If the AI suggests searching for something, trigger a search
-    if (data.searchSuggestion) {
-      await contentStore.searchContent(data.searchSuggestion)
-      // Emit the search results to the parent component
-      emit('search-results', contentStore.searchResults)
+    if (results.length) {
+      emit('search-results', results)
     }
   } catch (error) {
     console.error('Chatbot error:', error)
@@ -146,11 +216,10 @@ const formatTime = (date: Date) => {
 }
 
 onMounted(() => {
-  // Add welcome message
   const welcomeMessage: Message = {
     id: 'welcome',
     type: 'bot',
-    text: 'Hi! I\'m your AI assistant for finding animated content. I can help you discover anime, movies, and series from our database. Try asking me things like "Find me some action anime" or "What are the best Studio Ghibli movies?" and I\'ll search our database to show you specific recommendations!',
+    text: 'Hi! I search the AniLounge catalog for animated movies and series. Ask for a genre, studio, country, airing show, or a title like "Studio Ghibli movies" or "something like Frieren".',
     timestamp: new Date(),
   }
   messages.value.push(welcomeMessage)
@@ -264,6 +333,62 @@ onMounted(() => {
   font-size: 0.75rem;
   color: var(--text-secondary);
   margin-top: 0.25rem;
+}
+
+.chat-results {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.chat-result-card {
+  flex: 0 0 132px;
+  width: 132px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.chat-result-card:hover {
+  border-color: var(--highlight-color);
+}
+
+.chat-result-poster {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 10px 10px 0 0;
+}
+
+.chat-result-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-result-title,
+.chat-result-native {
+  display: block;
+  padding: 0.4rem 0.5rem 0;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.chat-result-title {
+  font-weight: 600;
+}
+
+.chat-result-native {
+  padding-bottom: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
 }
 
 .typing-indicator {

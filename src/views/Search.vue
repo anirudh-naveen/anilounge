@@ -35,12 +35,7 @@
               <span v-if="contentStore.isLoading" class="spinner"></span>
               {{ contentStore.isLoading ? 'Searching...' : 'Search' }}
             </button>
-            <button
-              type="button"
-              class="ai-btn"
-              @click="toggleAIMode"
-              :disabled="!authStore.isAuthenticated"
-            >
+            <button type="button" class="ai-btn" data-testid="ai-toggle" @click="toggleAIMode">
               {{ isAIMode ? 'Filters' : 'AI Assistant' }}
             </button>
           </div>
@@ -547,9 +542,11 @@ const toggleAIMode = () => {
 }
 
 const handleAISearchResults = (results: UnifiedContent[]) => {
+  const reset = defaultSearchFilters()
   contentStore.searchResults = results
   hasSearched.value = true
-  appliedFilters.value = { ...filters.value }
+  filters.value = reset
+  appliedFilters.value = { ...reset }
 }
 
 const clearFilters = () => {

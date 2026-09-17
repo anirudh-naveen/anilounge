@@ -10,7 +10,11 @@ import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
 import * as authController from '../controllers/authController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
-import authMiddleware, { refreshAccessToken, revokeRefreshToken } from '../middleware/auth.js'
+import authMiddleware, {
+  optionalAuthenticate,
+  refreshAccessToken,
+  revokeRefreshToken,
+} from '../middleware/auth.js'
 import upload, { handleUploadError } from '../middleware/upload.js'
 import { bruteForceProtection } from '../middleware/antiBot.js'
 import { validateObjectId } from '../middleware/security.js'
@@ -76,16 +80,29 @@ router.get('/content/:id/similar', validateObjectId, contentController.getSimila
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
 router.get('/franchise/:franchiseName', contentController.getFranchiseContent)
 
-/** Gemini-backed search and chat. */
+/** Gemini-backed search and chat. Optional auth personalizes from watchlist/preferences. */
 router.post(
   '/ai-search',
+  optionalAuthenticate,
   [body('query').notEmpty().withMessage('Search query is required')],
   contentController.aiSearch,
 )
 
 router.post(
   '/ai/chat',
-  [body('message').notEmpty().withMessage('Message is required')],
+  optionalAuthenticate,
+  [
+    body('message')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('Message is required')
+      .isLength({ max: 2000 })
+      .withMessage('Message must be 2000 characters or fewer'),
+    body('history').optional().isArray({ max: 20 }),
+    body('history.*.role').optional().isIn(['user', 'model', 'bot']),
+    body('history.*.text').optional().isString().isLength({ max: 2000 }),
+  ],
   contentController.aiChat,
 )
 
