@@ -26,6 +26,10 @@ import {
   startContentSyncScheduler,
   getContentSyncStatus,
 } from './services/contentSyncScheduler.js'
+import {
+  extraFrontendOriginsFromEnv,
+  isAllowedCorsOrigin,
+} from './utils/allowedFrontends.js'
 
 dotenv.config()
 
@@ -139,40 +143,15 @@ const uploadLimiter = rateLimit({
 app.use(generalLimiter)
 
 /**
- * CORS allowlist: production hosts, local Vite ports, `FRONTEND_URL` /
- * `ALLOWED_ORIGINS` from env, and any `*.vercel.app` preview.
+ * CORS allowlist: AniLounge, Vercel/Netlify, local Vite ports,
+ * `FRONTEND_URL` / `ALLOWED_ORIGINS`, and `*.vercel.app` previews.
  * Requests with no Origin (curl, mobile) are allowed.
  */
-const extraOrigins = [
-  process.env.FRONTEND_URL,
-  ...(process.env.ALLOWED_ORIGINS || '').split(','),
-]
-  .map((origin) => origin?.trim())
-  .filter(Boolean)
+const extraOrigins = extraFrontendOriginsFromEnv()
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, curl)
-    if (!origin) {
-      return callback(null, true)
-    }
-
-    const allowedOrigins = [
-      'https://find-animation.vercel.app',
-      'https://find-animation.netlify.app',
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:5175',
-      'http://localhost:5176',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:5174',
-      ...extraOrigins,
-    ]
-
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true)
-    } else if (origin.match(/^https:\/\/.*\.vercel\.app$/)) {
-      // Allow all Vercel preview and renamed project URLs
+    if (isAllowedCorsOrigin(origin, extraOrigins)) {
       callback(null, true)
     } else {
       console.log('CORS blocked origin:', origin)
