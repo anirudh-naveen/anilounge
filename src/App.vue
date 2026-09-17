@@ -16,13 +16,7 @@
           <!-- Title: Logo -->
           <div class="logo">
             <router-link to="/" class="logo-link">
-              <img
-                src="/anilounge-logo.png"
-                alt=""
-                class="logo-mark"
-                width="44"
-                height="44"
-              />
+              <img src="/anilounge-logo.png" alt="" class="logo-mark" width="44" height="44" />
               <h1 class="logo-text"><span>Ani</span>Lounge</h1>
             </router-link>
           </div>
@@ -179,7 +173,7 @@
     <!-- Title: Copyright -->
     <footer class="footer">
       <div class="container">
-        <p>&copy; 2026 AniLounge. Stay as long as the credits roll.</p>
+        <p>&copy; 2026 AniLounge. Created by Anirudh Naveen.</p>
       </div>
     </footer>
   </div>
@@ -192,6 +186,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import BetaFeedback from '@/components/BetaFeedback.vue'
 import BetaBanner from '@/components/BetaBanner.vue'
+import { API_HOST } from '@/services/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -222,7 +217,7 @@ const getProfilePictureUrl = (profilePicture: string) => {
   if (profilePicture.startsWith('http')) {
     return profilePicture
   }
-  return `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}${profilePicture}`
+  return `${API_HOST}${profilePicture}`
 }
 
 const handleClickOutside = (event: Event) => {

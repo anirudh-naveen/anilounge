@@ -25,14 +25,17 @@ export type SearchFilters = {
   ratingMin: number
   ratingMax: number
   year: string
+  season: string
+  status: string
   genre: string
   language: string
+  country: string
   sortBy: SortByOption
   sortDirection: SortDirection
 }
 
 /**
- * Default Search view filters (all types, 1–10 rating, relevance descending).
+ * Default Search view filters (all types, 1–10 rating, any year/season/status/country, relevance descending).
  * @returns A fresh filter object (not shared across callers).
  */
 export const defaultSearchFilters = (): SearchFilters => ({
@@ -40,11 +43,36 @@ export const defaultSearchFilters = (): SearchFilters => ({
   ratingMin: 1,
   ratingMax: 10,
   year: 'all',
+  season: 'all',
+  status: 'all',
   genre: 'all',
   language: 'all',
+  country: 'all',
   sortBy: 'relevance',
   sortDirection: 'desc',
 })
+
+/**
+ * Whether any Search filter differs from `defaultSearchFilters()` (including sort).
+ * @param filters - Current Search filter values.
+ * @returns True when at least one filter is not at its default.
+ */
+export const hasActiveSearchFilters = (filters: SearchFilters): boolean => {
+  const defaults = defaultSearchFilters()
+  return (
+    filters.type !== defaults.type ||
+    filters.ratingMin !== defaults.ratingMin ||
+    filters.ratingMax !== defaults.ratingMax ||
+    filters.year !== defaults.year ||
+    filters.season !== defaults.season ||
+    filters.status !== defaults.status ||
+    filters.genre !== defaults.genre ||
+    filters.language !== defaults.language ||
+    filters.country !== defaults.country ||
+    filters.sortBy !== defaults.sortBy ||
+    filters.sortDirection !== defaults.sortDirection
+  )
+}
 
 export const useContentStore = defineStore('content', () => {
   const allContent = ref<UnifiedContent[]>([])
@@ -721,6 +749,7 @@ export const useContentStore = defineStore('content', () => {
     getContent,
     getPopularContent,
     searchContent,
+    ensureFullCatalog,
     getContentDetails,
     getSimilarContent,
     addToWatchlist,

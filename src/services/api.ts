@@ -17,11 +17,26 @@ import type {
 } from '@/types'
 import { getDisplayTitle } from '@/utils/titles'
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.DEV
-    ? 'http://localhost:5001/api'
-    : 'https://find-animation-production.up.railway.app/api')
+const STALE_RAILWAY_HOST = 'find-animation-production.up.railway.app'
+
+function resolveApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_URL as string | undefined
+  const usable =
+    configured && !configured.includes(STALE_RAILWAY_HOST) ? configured : undefined
+
+  if (usable) return usable
+  if (import.meta.env.DEV) return 'http://localhost:5001/api'
+  // Same-origin `/api` is proxied to Railway by vercel.json, so preview
+  // deployments do not hit CORS or a renamed Railway hostname.
+  return '/api'
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
+
+export { API_BASE_URL }
+
+/** Origin for `/uploads` and other backend files (empty in production when using `/api`). */
+export const API_HOST = API_BASE_URL.replace(/\/api\/?$/, '')
 
 const api = axios.create({
   baseURL: API_BASE_URL,

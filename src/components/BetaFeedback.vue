@@ -69,6 +69,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useToast } from 'vue-toastification'
+import { API_BASE_URL } from '@/services/api'
 
 const toast = useToast()
 const showModal = ref(false)
@@ -87,10 +88,6 @@ const closeModal = () => {
 const submitFeedback = async () => {
   try {
     isSubmitting.value = true
-
-    // Send feedback to backend
-    const API_BASE_URL =
-      import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5001/api' : '/api')
 
     await fetch(`${API_BASE_URL}/feedback`, {
       method: 'POST',

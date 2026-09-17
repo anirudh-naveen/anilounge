@@ -139,9 +139,17 @@ const uploadLimiter = rateLimit({
 app.use(generalLimiter)
 
 /**
- * CORS allowlist: production Find Animation hosts, local Vite ports, and any
- * `*.vercel.app` preview. Requests with no Origin (curl, mobile) are allowed.
+ * CORS allowlist: production hosts, local Vite ports, `FRONTEND_URL` /
+ * `ALLOWED_ORIGINS` from env, and any `*.vercel.app` preview.
+ * Requests with no Origin (curl, mobile) are allowed.
  */
+const extraOrigins = [
+  process.env.FRONTEND_URL,
+  ...(process.env.ALLOWED_ORIGINS || '').split(','),
+]
+  .map((origin) => origin?.trim())
+  .filter(Boolean)
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, Postman, curl)
@@ -150,22 +158,21 @@ const corsOptions = {
     }
 
     const allowedOrigins = [
-      // Production domains
       'https://find-animation.vercel.app',
       'https://find-animation.netlify.app',
-      // Development
       'http://localhost:5173',
       'http://localhost:5174',
       'http://localhost:5175',
       'http://localhost:5176',
       'http://127.0.0.1:5173',
       'http://127.0.0.1:5174',
+      ...extraOrigins,
     ]
 
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true)
     } else if (origin.match(/^https:\/\/.*\.vercel\.app$/)) {
-      // Allow all Vercel preview deployments
+      // Allow all Vercel preview and renamed project URLs
       callback(null, true)
     } else {
       console.log('CORS blocked origin:', origin)
