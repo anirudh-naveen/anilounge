@@ -68,6 +68,8 @@
 2. Add option to delete account.
    - Deny this option for the demo account.
 3. Add email verification for sign up and password lockouts.
+   - Additionally give option to set up 2FA
+4. Make sure accounts are safe from basic cyber attacks.
 
 ### Bug Fixes
 
@@ -78,14 +80,14 @@
 ### Additions
 
 1. Rework Gemini chatbot functionality.
-2. Allow search to filter by "Currently Airing" in the "Year" section.
-   - Rename the "Year" filter to something more descriptive and have a more effective filter.
-   - Maybe include the seasons like anime does?
-3. Add filter for country of origin.
+2. Allow search to filter by "Currently Airing" in the "Year" section. ✅
+   - Rename the "Year" filter to something more descriptive and have a more effective filter. ✅
+   - Maybe include the seasons like anime does? ✅
+3. Add filter for country of origin. ✅
 
 ### Bug Fixes
 
-1. Fix search to allow confirmation of search even if no words are types as long as filters are set.
+1. Fix search to allow confirmation of search even if no words are types as long as filters are set. ✅
    - Only way search shouldn't be allowed are if both no words in search bar AND no filters set.
 
 ## Communication

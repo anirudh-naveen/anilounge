@@ -40,6 +40,12 @@ export interface UnifiedContent {
   seasonCount?: number
   studios?: string[]
   productionCompanies?: string[]
+  /** ISO 3166-1 alpha-2 origin countries (`JP`, `US`, …). */
+  originCountries?: string[]
+  startSeasonYear?: number
+  startSeason?: 'winter' | 'spring' | 'summer' | 'fall'
+  /** Last known air/end date (TMDB `last_air_date` or MAL `end_date`). */
+  lastAirDate?: string | Date
   alternativeTitles?: string[]
   tmdbId?: number
   malId?: number

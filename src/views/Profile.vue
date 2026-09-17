@@ -115,7 +115,7 @@
 import { computed, defineOptions } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
-import { isMovieLike } from '@/services/api'
+import { isMovieLike, API_HOST } from '@/services/api'
 import { getRatingColorHSL } from '@/utils/ratingColors'
 import type { WatchlistItem } from '@/types'
 
@@ -233,7 +233,7 @@ const getProfilePictureUrl = (profilePicture: string) => {
   if (profilePicture.startsWith('http')) {
     return profilePicture
   }
-  return `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}${profilePicture}`
+  return `${API_HOST}${profilePicture}`
 }
 </script>
 

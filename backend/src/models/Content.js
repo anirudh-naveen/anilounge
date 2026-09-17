@@ -125,6 +125,15 @@ const ContentSchema = new mongoose.Schema(
 
     studios: [String],
     productionCompanies: [String],
+    /** ISO 3166-1 alpha-2 origin countries (`JP`, `US`, …). */
+    originCountries: [String],
+    startSeasonYear: Number,
+    startSeason: {
+      type: String,
+      enum: ['winter', 'spring', 'summer', 'fall'],
+    },
+    /** Last known air/end date (TMDB `last_air_date` or MAL `end_date`). */
+    lastAirDate: Date,
 
     alternativeTitles: [String],
 
@@ -182,7 +191,9 @@ ContentSchema.index({ contentType: 1, originalTitle: 1 })
  * @returns {string}
  */
 ContentSchema.virtual('displayTitle').get(function () {
-  return this.englishTitle || this.title || this.nativeTitle || this.originalTitle || 'Unknown Title'
+  return (
+    this.englishTitle || this.title || this.nativeTitle || this.originalTitle || 'Unknown Title'
+  )
 })
 
 /**

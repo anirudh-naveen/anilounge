@@ -284,6 +284,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+import { API_HOST } from '@/services/api'
 import VueCropper from 'vue-cropperjs'
 import 'vue-cropperjs/node_modules/cropperjs/dist/cropper.css'
 
@@ -486,7 +487,7 @@ const getProfilePictureUrl = (profilePicture: string) => {
   if (profilePicture.startsWith('http')) {
     return profilePicture
   }
-  return `${import.meta.env.VITE_API_URL || 'http://localhost:5001'}${profilePicture}`
+  return `${API_HOST}${profilePicture}`
 }
 
 const handleFileSelect = async (event: Event) => {
