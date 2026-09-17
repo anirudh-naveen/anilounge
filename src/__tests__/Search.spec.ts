@@ -146,6 +146,14 @@ describe('Search empty query gating', () => {
     expect(store.searchAppliedFilters.country).toBe('JP')
   })
 
+  it('opens the AI assistant overlay from Search', async () => {
+    const { wrapper } = await mountPage()
+    expect(wrapper.find('chatbot-stub').exists()).toBe(false)
+    await wrapper.get('[data-testid="ai-toggle"]').trigger('click')
+    expect(wrapper.find('chatbot-stub').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="search-submit"]').attributes('disabled')).toBeDefined()
+  })
+
   it('lets year, season, and status be combined', async () => {
     const { wrapper } = await mountPage()
     const yearSelect = wrapper.get('[data-testid="filter-year"]')

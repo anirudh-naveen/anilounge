@@ -79,7 +79,7 @@
 
 ### Additions
 
-1. Rework Gemini chatbot functionality.
+1. Rework Gemini chatbot functionality. ✅
 2. Allow search to filter by "Currently Airing" in the "Year" section. ✅
    - Rename the "Year" filter to something more descriptive and have a more effective filter. ✅
    - Maybe include the seasons like anime does? ✅
@@ -101,7 +101,7 @@
    - For any associated forums, allow some of the leading forum posts and a few highlighted comments to the associated content's screen.
    - Make sure any public forum post/comments have a strict censorship.
 3. Add an inbox next to the profile to see any site news, friend invites, comments on a post/comment
-4. Rework Gemini chatbot functionality.
+4. Rework Gemini chatbot functionality. ✅
 
 ## Infrastructure
 
