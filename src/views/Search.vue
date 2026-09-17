@@ -2,7 +2,7 @@
 <!--
   Search.vue — catalog search view.
 
-  Query form, type/genre/language/year/rating/sort filters, paginated results,
+  Query form, type/genre/language/country/year/season/status/rating/sort filters, paginated results,
   and an optional AI assistant overlay. Backed by the content store.
 -->
 <template>
@@ -22,12 +22,16 @@
               v-model="searchQuery"
               type="text"
               class="search-input"
+              data-testid="search-query"
               placeholder="Search for movies or series..."
-              @keydown.enter="handleSearch"
               :disabled="isAIMode"
-              required
             />
-            <button type="submit" class="search-btn" :disabled="contentStore.isLoading || isAIMode">
+            <button
+              type="submit"
+              class="search-btn"
+              data-testid="search-submit"
+              :disabled="contentStore.isLoading || isAIMode || !canSearch"
+            >
               <span v-if="contentStore.isLoading" class="spinner"></span>
               {{ contentStore.isLoading ? 'Searching...' : 'Search' }}
             </button>
@@ -63,7 +67,7 @@
           </div>
           <div class="filter-group">
             <label>Genre:</label>
-            <select v-model="filters.genre">
+            <select v-model="filters.genre" data-testid="filter-genre">
               <option value="all">All Genres</option>
               <option value="Action">Action</option>
               <option value="Adventure">Adventure</option>
@@ -92,16 +96,55 @@
             </select>
           </div>
           <div class="filter-group">
-            <label>Year:</label>
-            <select v-model="filters.year">
-              <option value="all">All Years</option>
-              <option value="2024">2024</option>
-              <option value="2023">2023</option>
-              <option value="2022">2022</option>
-              <option value="2021">2021</option>
-              <option value="2020">2020</option>
-              <option value="older">Older</option>
+            <label>Country:</label>
+            <select v-model="filters.country" data-testid="filter-country">
+              <option value="all">All Countries</option>
+              <option
+                v-for="country in ORIGIN_COUNTRY_OPTIONS"
+                :key="country.value"
+                :value="country.value"
+              >
+                {{ country.label }}
+              </option>
             </select>
+          </div>
+          <div class="filter-row-time">
+            <div class="filter-group">
+              <label>Year:</label>
+              <select v-model="filters.year" data-testid="filter-year">
+                <option
+                  v-for="option in yearFilterOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Season:</label>
+              <select v-model="filters.season" data-testid="filter-season">
+                <option
+                  v-for="option in SEASON_FILTER_OPTIONS"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Status:</label>
+              <select v-model="filters.status" data-testid="filter-status">
+                <option
+                  v-for="option in STATUS_FILTER_OPTIONS"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
           </div>
           <div class="filter-group sort-filter">
             <SortByControls
@@ -244,7 +287,7 @@
       <div v-else class="initial-state">
         <div class="initial-icon">🎬</div>
         <h3>Start your search</h3>
-        <p>Enter a movie or series title to get started.</p>
+        <p>Enter a title or set filters to get started.</p>
       </div>
 
       <!-- Title: AI Chat -->
@@ -262,7 +305,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
-import { useContentStore, defaultSearchFilters } from '@/stores/content'
+import { useContentStore, defaultSearchFilters, hasActiveSearchFilters } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import {
   getPosterUrl,
@@ -284,6 +327,17 @@ import SortByControls from '@/components/SortByControls.vue'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import {
+  ORIGIN_COUNTRY_OPTIONS,
+  SEASON_FILTER_OPTIONS,
+  STATUS_FILTER_OPTIONS,
+  buildYearFilterOptions,
+  getSearchCategoryDate,
+  matchesCountryFilter,
+  matchesSeasonFilter,
+  matchesStatusFilter,
+  matchesYearFilter,
+} from '@/utils/searchFilters'
 
 const router = useRouter()
 const route = useRoute()
@@ -326,15 +380,17 @@ const filteredResults = computed(() => {
 
   // Apply year filter
   if (active.year !== 'all') {
-    results = results.filter((item) => {
-      if (!item.releaseDate) return false
-      const year = new Date(item.releaseDate).getFullYear()
+    results = results.filter((item) => matchesYearFilter(item, active.year))
+  }
 
-      if (active.year === 'older') {
-        return year < 2020
-      }
-      return year === parseInt(active.year)
-    })
+  // Apply season filter (movies and series)
+  if (active.season !== 'all') {
+    results = results.filter((item) => matchesSeasonFilter(item, active.season))
+  }
+
+  // Apply status filter (completed / airing / upcoming)
+  if (active.status !== 'all') {
+    results = results.filter((item) => matchesStatusFilter(item, active.status))
   }
 
   // Apply genre filter
@@ -370,6 +426,11 @@ const filteredResults = computed(() => {
     })
   }
 
+  // Apply country of origin
+  if (active.country !== 'all') {
+    results = results.filter((item) => matchesCountryFilter(item, active.country))
+  }
+
   return applySort(
     results,
     active.sortBy,
@@ -377,6 +438,8 @@ const filteredResults = computed(() => {
     (item) => getDisplayTitle(item),
     (item) => getWeightedAverage(item) || 0,
     (item) => getTotalVoteCount(item),
+    undefined,
+    (item) => getSearchCategoryDate(item)?.getTime() ?? 0,
   )
 })
 
@@ -389,6 +452,12 @@ const paginatedResults = computed(() => {
   const end = start + itemsPerPage
   return filteredResults.value.slice(start, end)
 })
+
+const canSearch = computed(
+  () => Boolean(searchQuery.value.trim()) || hasActiveSearchFilters(filters.value),
+)
+
+const yearFilterOptions = computed(() => buildYearFilterOptions(contentStore.allContent))
 
 // Helper functions
 const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
@@ -422,12 +491,8 @@ const ratingFillStyle = computed(() => {
   const max = filters.value.ratingMax
   const left = ((min - 1) / 9) * 100
   const right = ((max - 1) / 9) * 100
-  const width = Math.max(right - left, 0.01)
   return {
-    left: `${left}%`,
-    width: `${width}%`,
-    backgroundSize: `${10000 / width}% 100%`,
-    backgroundPosition: `${-(left / width) * 100}% 0`,
+    clipPath: `inset(0 ${Math.max(0, 100 - right)}% 0 ${Math.max(0, left)}% round 999px)`,
   }
 })
 
@@ -450,7 +515,10 @@ const viewContentDetails = (item: UnifiedContent) => {
 }
 
 const handleSearch = async () => {
-  if (!searchQuery.value.trim()) return
+  if (!canSearch.value) {
+    toast.info('Enter a search term or set a filter to search.')
+    return
+  }
 
   appliedFilters.value = { ...filters.value }
   hasSearched.value = true
@@ -510,6 +578,8 @@ onMounted(() => {
       searchQuery.value = contentStore.lastSearchQuery
     }
   }
+
+  void contentStore.ensureFullCatalog()
 
   const scrollKey = `search-page-${currentPage.value}`
   const restored = contentStore.restoreScrollPosition(scrollKey)
@@ -643,7 +713,7 @@ onMounted(() => {
 
 .filters-bar {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem 1rem;
   align-items: start;
   background: var(--bg-card);
@@ -662,6 +732,13 @@ onMounted(() => {
 
 .rating-filter {
   grid-column: 1 / -1;
+}
+
+.filter-row-time {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
 }
 
 .sort-filter :deep(.sort-by-controls) {
@@ -691,6 +768,12 @@ onMounted(() => {
   box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
 }
 
+.filter-group select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f3f3f3;
+}
+
 .rating-slider {
   position: relative;
   height: 28px;
@@ -709,11 +792,9 @@ onMounted(() => {
 
 .rating-slider-range {
   position: absolute;
-  top: 0;
-  height: 100%;
+  inset: 0;
   border-radius: 999px;
   background: linear-gradient(90deg, #ef4444 0%, #facc15 50%, #22c55e 100%);
-  background-repeat: no-repeat;
 }
 
 .rating-slider input[type='range'] {
@@ -1011,7 +1092,8 @@ onMounted(() => {
   }
 
   .sort-filter,
-  .rating-filter {
+  .rating-filter,
+  .filter-row-time {
     grid-column: 1 / -1;
   }
 }
@@ -1032,8 +1114,13 @@ onMounted(() => {
   }
 
   .sort-filter,
-  .rating-filter {
+  .rating-filter,
+  .filter-row-time {
     grid-column: 1;
+  }
+
+  .filter-row-time {
+    grid-template-columns: 1fr;
   }
 
   .clear-filters-btn {

@@ -15,11 +15,13 @@ import {
   tmdbSeasonNumbers,
 } from '../utils/episodes.js'
 import { buildTitleFields, uniqueTitles } from '../utils/titles.js'
+import { MAL_ORIGIN_COUNTRIES, extractOriginCountries } from '../utils/originCountries.js'
+import { parseMalDate } from '../utils/malDates.js'
 
 dotenv.config()
 
 const MAL_ANIME_FIELDS =
-  'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,studios,genres,rating,source,num_list_users,num_scoring_users,media_type,broadcast'
+  'id,title,main_picture,alternative_titles,synopsis,mean,rank,popularity,num_episodes,status,start_season,start_date,end_date,studios,genres,rating,source,num_list_users,num_scoring_users,media_type,broadcast'
 
 const MAL_SPECIAL_TYPES = new Set(['ova', 'special'])
 
@@ -163,7 +165,10 @@ class UnifiedContentService {
         if (page >= (response.data.total_pages || 1)) break
       }
     } catch (error) {
-      console.error('TMDB now-playing animated movies error:', error.response?.data || error.message)
+      console.error(
+        'TMDB now-playing animated movies error:',
+        error.response?.data || error.message,
+      )
     }
 
     return collected.slice(0, limit)
@@ -414,6 +419,7 @@ class UnifiedContentService {
       tmdbId: tmdbData.id,
       genres: tmdbData.genres || [],
       productionCompanies: tmdbData.production_companies?.map((company) => company.name) || [],
+      originCountries: extractOriginCountries(tmdbData),
       dataSources: {
         tmdb: {
           hasData: true,
@@ -427,6 +433,7 @@ class UnifiedContentService {
     } else {
       content.episodeCount = tmdbData.number_of_episodes
       content.seasonCount = tmdbData.number_of_seasons
+      content.lastAirDate = tmdbData.last_air_date || null
       const nextEpisode = tmdbData.next_episode_to_air
       content.nextEpisodeAirDate = nextEpisode?.air_date || null
       content.nextEpisodeNumber = nextEpisode?.episode_number ?? null
@@ -512,6 +519,7 @@ class UnifiedContentService {
       malRating: anime.rating,
       genres: anime.genres?.map((genre) => ({ id: genre.id, name: genre.name })) || [],
       studios: anime.studios?.map((studio) => studio.name) || [],
+      originCountries: [...MAL_ORIGIN_COUNTRIES],
       dataSources: {
         mal: {
           hasData: true,
@@ -522,16 +530,19 @@ class UnifiedContentService {
 
     if (anime.start_season) {
       const year = anime.start_season.year
-      const month =
-        anime.start_season.season === 'winter'
-          ? 1
-          : anime.start_season.season === 'spring'
-            ? 4
-            : anime.start_season.season === 'summer'
-              ? 7
-              : 10
-      content.releaseDate = new Date(year, month - 1, 1)
+      const season = String(anime.start_season.season || '').toLowerCase()
+      if (year) {
+        content.startSeasonYear = year
+        if (['winter', 'spring', 'summer', 'fall'].includes(season)) {
+          content.startSeason = season
+        }
+      }
     }
+
+    const malStart = parseMalDate(anime.start_date)
+    if (malStart) content.releaseDate = malStart
+    const malEnd = parseMalDate(anime.end_date, { bound: 'end' })
+    if (malEnd) content.lastAirDate = malEnd
 
     if (finalContentType === 'movie') {
       content.runtime = this.getEstimatedRuntime(anime.title)

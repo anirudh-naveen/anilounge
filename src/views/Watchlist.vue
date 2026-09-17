@@ -210,10 +210,7 @@
                     />
                   </div>
 
-                  <div
-                    v-if="isTvContent(item) && getTotalSeasons(item) > 1"
-                    class="season-control"
-                  >
+                  <div v-if="isTvContent(item) && getTotalSeasons(item) > 1" class="season-control">
                     <label>Current Season:</label>
                     <select
                       :value="getLocalFormData(item).currentSeason || 1"
@@ -316,6 +313,7 @@ import SortByControls from '@/components/SortByControls.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
 import { getDisplayTitle } from '@/utils/titles'
+import { getSearchCategoryDate } from '@/utils/searchFilters'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -496,6 +494,11 @@ const getWatchlistAddedAt = (item: WatchlistItem) => {
   return item.addedAt ? new Date(item.addedAt).getTime() : 0
 }
 
+const getWatchlistSearchDate = (item: WatchlistItem) => {
+  if (typeof item.content === 'string' || !item.content) return 0
+  return getSearchCategoryDate(item.content)?.getTime() ?? 0
+}
+
 const filteredWatchlist = computed(() => {
   const items =
     selectedStatus.value === 'all'
@@ -510,6 +513,7 @@ const filteredWatchlist = computed(() => {
     getWatchlistRatingValue,
     getWatchlistPopularity,
     getWatchlistAddedAt,
+    getWatchlistSearchDate,
   )
 })
 

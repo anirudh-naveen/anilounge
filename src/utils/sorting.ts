@@ -1,11 +1,11 @@
 /**
  * sorting.ts — catalog sort helpers.
  *
- * Applies relevance, alphabetical, rating, and popularity order to catalog
+ * Applies relevance, alphabetical, rating, popularity, and date order to catalog
  * lists used by search, movies, and TV views.
  */
 
-export type SortByOption = 'relevance' | 'alphabetical' | 'rating' | 'popularity'
+export type SortByOption = 'relevance' | 'alphabetical' | 'rating' | 'popularity' | 'date'
 export type SortDirection = 'asc' | 'desc'
 
 export const DEFAULT_SORT_OPTIONS: { value: SortByOption; label: string }[] = [
@@ -13,6 +13,7 @@ export const DEFAULT_SORT_OPTIONS: { value: SortByOption; label: string }[] = [
   { value: 'alphabetical', label: 'Alphabetical' },
   { value: 'rating', label: 'Rating' },
   { value: 'popularity', label: 'Popularity' },
+  { value: 'date', label: 'Date' },
 ]
 
 /**
@@ -25,6 +26,7 @@ export const DEFAULT_SORT_OPTIONS: { value: SortByOption; label: string }[] = [
  * @param getRating - Numeric rating used for rating sort.
  * @param getPopularity - Numeric popularity used for popularity sort.
  * @param getRelevance - Optional score used for relevance sort.
+ * @param getDate - Optional timestamp used for date sort.
  * @returns A new sorted array; the original is not mutated.
  */
 export function applySort<T>(
@@ -35,6 +37,7 @@ export function applySort<T>(
   getRating: (item: T) => number,
   getPopularity: (item: T) => number,
   getRelevance?: (item: T) => number,
+  getDate?: (item: T) => number,
 ): T[] {
   const results = [...items]
   const dir = direction === 'asc' ? 1 : -1
@@ -57,6 +60,9 @@ export function applySort<T>(
         break
       case 'relevance':
         cmp = (getRelevance?.(a) ?? 0) - (getRelevance?.(b) ?? 0)
+        break
+      case 'date':
+        cmp = (getDate?.(a) ?? 0) - (getDate?.(b) ?? 0)
         break
     }
     return cmp * dir
