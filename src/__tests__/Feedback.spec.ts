@@ -11,7 +11,7 @@ describe('Feedback page', () => {
   it('renders the bug and suggestion form', () => {
     const wrapper = mount(Feedback)
     expect(wrapper.text()).toContain('Report bugs or suggestions')
-    expect(wrapper.get('[data-testid="feedback-form"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="feedback-form"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Bug report')
   })
 })
