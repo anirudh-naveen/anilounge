@@ -46,6 +46,8 @@ export interface UnifiedContent {
   startSeason?: 'winter' | 'spring' | 'summer' | 'fall'
   /** Last known air/end date (TMDB `last_air_date` or MAL `end_date`). */
   lastAirDate?: string | Date
+  /** Chat recommendation reason grounded in catalog fields. */
+  why?: string
   alternativeTitles?: string[]
   tmdbId?: number
   malId?: number

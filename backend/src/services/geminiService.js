@@ -1,14 +1,118 @@
 /**
- * Gemini client for search-query expansion and (currently stubbed) chat.
- * Domain service: wraps google generative AI with a 10s timeout and local genre fallbacks.
- * Chat replies are hardcoded until the assistant ships; other methods still call the API when keyed.
+ * Gemini client for search-query expansion and catalog-grounded chat.
+ * Domain service: wraps google generative AI with timeouts and local genre fallbacks.
+ * Chat must look up Mongo Content via tools; replies never invent titles.
+ * Custom model training does not belong in this product repo.
  *
  * API reference: https://ai.google.dev/gemini-api/docs
  */
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import dotenv from 'dotenv'
+import {
+  buildSystemInstruction,
+  fallbackChatReply,
+  getFunctionCalls,
+  getResponseText,
+  toGeminiHistory,
+} from '../utils/geminiChat.js'
+import { inferCatalogFiltersFromMessage, hasCatalogIntent } from '../utils/catalogChatQuery.js'
+import { withRecommendationWhy } from '../utils/recommendationWhy.js'
+import { sortByRecommendationRank } from '../utils/recommendationRank.js'
+import {
+  findByTitle,
+  searchCatalog,
+  serializeCatalogDoc,
+  summarizeForModel,
+} from './catalogLookupService.js'
+import { lookupPublicInfo } from './publicInfoLookupService.js'
 
 dotenv.config()
+
+const CHAT_TOOLS = [
+  {
+    functionDeclarations: [
+      {
+        name: 'search_catalog',
+        description:
+          'Search the AniLounge animated catalog. Call this before recommending titles. Only returned titles exist in the app. Results are ranked by genre match, then animation studio, then rating.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            query: {
+              type: SchemaType.STRING,
+              description: 'Title keywords, themes, or character names',
+            },
+            contentType: {
+              type: SchemaType.STRING,
+              enum: ['all', 'movie', 'tv'],
+              description: 'movie includes theatrical films and specials',
+            },
+            genre: { type: SchemaType.STRING, description: 'Single genre name such as Action' },
+            studio: { type: SchemaType.STRING, description: 'Animation studio name' },
+            originCountry: {
+              type: SchemaType.STRING,
+              description: 'ISO 3166-1 alpha-2 code such as JP, US, KR',
+            },
+            status: {
+              type: SchemaType.STRING,
+              enum: ['all', 'airing', 'upcoming', 'completed'],
+            },
+            season: {
+              type: SchemaType.STRING,
+              enum: ['winter', 'spring', 'summer', 'fall'],
+            },
+            year: { type: SchemaType.NUMBER, description: 'Calendar year' },
+            minRating: {
+              type: SchemaType.NUMBER,
+              description:
+                'Minimum unified score 1-10. Only set this when the user asked for highly rated or top titles.',
+            },
+            similarTo: {
+              type: SchemaType.STRING,
+              description: 'Find catalog titles similar to this title',
+            },
+            limit: { type: SchemaType.NUMBER, description: 'Max titles, default 8' },
+          },
+        },
+      },
+      {
+        name: 'get_title_details',
+        description:
+          'Look up one catalog title by name and return overview, studios, genres, ratings, and airing info.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            title: { type: SchemaType.STRING, description: 'Title to look up' },
+          },
+          required: ['title'],
+        },
+      },
+      {
+        name: 'lookup_public_info',
+        description:
+          'Fetch a short Wikipedia summary for an animated movie/series already in the catalog, an animation studio, a voice actor, or a genre. Never use this for unrelated topics or to discover titles to recommend.',
+        parameters: {
+          type: SchemaType.OBJECT,
+          properties: {
+            name: {
+              type: SchemaType.STRING,
+              description: 'Title, studio, voice actor, or genre name',
+            },
+            title: {
+              type: SchemaType.STRING,
+              description: 'Alias of name for catalog titles',
+            },
+            kind: {
+              type: SchemaType.STRING,
+              enum: ['title', 'studio', 'voice_actor', 'genre'],
+              description: 'What the name refers to',
+            },
+          },
+        },
+      },
+    ],
+  },
+]
 
 class GeminiService {
   constructor() {
@@ -23,6 +127,19 @@ class GeminiService {
     if (this.hasApiKey) {
       this.client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
     }
+  }
+
+  /**
+   * Race a promise against a timeout.
+   * @param {Promise} promise
+   * @param {number} [ms=10000]
+   * @returns {Promise}
+   */
+  withTimeout(promise, ms = 10000) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), ms)),
+    ])
   }
 
   /**
@@ -42,10 +159,7 @@ class GeminiService {
     const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' })
     console.log('Model created, making API call...')
 
-    return Promise.race([
-      model.generateContent(prompt),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), 10000)),
-    ])
+    return this.withTimeout(model.generateContent(prompt), 10000)
   }
 
   /**
@@ -148,67 +262,179 @@ Respond as simple comma-separated terms: term1, term2, term3`
       .map((genre) => genreMap[genre])
   }
 
-  /**
-   * Conversational assistant. Currently returns a static "coming soon" payload (API path is unreachable).
-   * @param {string} userMessage
-   * @returns {Promise<{ response: string, searchSuggestion: string | null }>}
-   */
-  async chatWithUser(userMessage) {
-    try {
-      console.log('ChatWithUser called with message:', userMessage)
+  catalogSearchFilters(args = {}, userContext = null) {
+    return {
+      ...args,
+      excludeIds: userContext?.excludeIds || [],
+      favoriteGenres: userContext?.favoriteGenres || [],
+      favoriteStudios: userContext?.favoriteStudios || [],
+    }
+  }
 
+  rankChatResults(docs, filters = {}, userContext = null) {
+    const context = {
+      ...filters,
+      favoriteGenres: userContext?.favoriteGenres || filters.favoriteGenres || [],
+      favoriteStudios: userContext?.favoriteStudios || filters.favoriteStudios || [],
+    }
+    return withRecommendationWhy(sortByRecommendationRank(docs, context), context)
+  }
+
+  /**
+   * Run a catalog tool and return both UI documents and a compact model payload.
+   * @param {string} name
+   * @param {object} args
+   * @param {object|null} [userContext]
+   * @returns {Promise<{ docs: object[], payload: object }>}
+   */
+  async executeCatalogTool(name, args = {}, userContext = null) {
+    const filters = this.catalogSearchFilters(args, userContext)
+    if (name === 'get_title_details') {
+      const doc = await findByTitle(args.title)
+      const explained = withRecommendationWhy(doc ? [doc] : [], { lookupTitle: args.title })
       return {
-        response:
-          "🚧 AI Assistant is coming soon! For now, you can use the search filters to find animated content. Try searching for genres like 'action', 'comedy', or 'fantasy'.",
+        docs: explained,
+        payload: explained[0]
+          ? summarizeForModel(explained[0], { fullOverview: true })
+          : { found: false, message: 'No catalog title matched that name.' },
+      }
+    }
+    if (name === 'search_catalog') {
+      const docs = this.rankChatResults(await searchCatalog(filters), filters, userContext)
+      return {
+        docs,
+        payload: { count: docs.length, titles: docs.map((doc) => summarizeForModel(doc)) },
+      }
+    }
+    if (name === 'lookup_public_info') {
+      const { docs, payload } = await lookupPublicInfo({
+        name: args.name,
+        title: args.title,
+        kind: args.kind,
+      })
+      const context = {
+        studio: args.kind === 'studio' ? args.name || args.title : undefined,
+        genre: args.kind === 'genre' ? args.name || args.title : undefined,
+        lookupTitle: args.kind === 'title' || !args.kind ? args.name || args.title : undefined,
+      }
+      return { docs: this.rankChatResults(docs, context, userContext), payload }
+    }
+    return { docs: [], payload: { error: `Unknown tool: ${name}` } }
+  }
+
+  /**
+   * Catalog search used by `/ai-search` and as a Gemini-less chat fallback.
+   * @param {string} query
+   * @param {object} [extraFilters]
+   * @returns {Promise<object[]>}
+   */
+  async searchContent(query, extraFilters = {}) {
+    const filters = {
+      ...inferCatalogFiltersFromMessage(query),
+      ...extraFilters,
+    }
+    const docs = await searchCatalog(filters)
+    return docs.map(serializeCatalogDoc)
+  }
+
+  async groundedCatalogReply(message, userContext) {
+    const filters = inferCatalogFiltersFromMessage(message)
+    const docs = hasCatalogIntent(message)
+      ? this.rankChatResults(
+          await searchCatalog(this.catalogSearchFilters(filters, userContext)),
+          filters,
+          userContext,
+        )
+      : []
+    return {
+      response: hasCatalogIntent(message)
+        ? fallbackChatReply(docs)
+        : 'I can help with animated movies, series, studios, voice actors, and genres in the AniLounge catalog.',
+      results: docs.map(serializeCatalogDoc),
+      searchSuggestion: null,
+    }
+  }
+
+  /**
+   * Conversational assistant grounded in the Mongo catalog via Gemini function calls.
+   * @param {string} userMessage
+   * @param {{ history?: object[], userContext?: object|null }} [options]
+   * @returns {Promise<{ response: string, results: object[], searchSuggestion: string | null }>}
+   */
+  async chatWithUser(userMessage, { history = [], userContext = null } = {}) {
+    const message = String(userMessage || '').trim()
+    if (!message) {
+      return {
+        response: 'Ask about an animated movie, series, studio, voice actor, or genre.',
+        results: [],
         searchSuggestion: null,
       }
+    }
 
-      if (!this.hasApiKey) {
-        console.log('No API key available')
-        return {
-          response: "I'm sorry, but I'm not available right now. Please try again later.",
-          searchSuggestion: null,
+    if (!this.hasApiKey || !this.client) {
+      return this.groundedCatalogReply(message, userContext)
+    }
+
+    try {
+      const found = new Map()
+      const model = this.client.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        tools: CHAT_TOOLS,
+        systemInstruction: buildSystemInstruction(userContext),
+      })
+      const chat = model.startChat({ history: toGeminiHistory(history) })
+      let result = await this.withTimeout(chat.sendMessage(message), 20000)
+      let response = result.response
+
+      let publicLookups = 0
+      for (let round = 0; round < 4; round += 1) {
+        const calls = getFunctionCalls(response)
+        if (!calls.length) break
+        const functionResponses = []
+        for (const call of calls) {
+          if (call.name === 'lookup_public_info') {
+            publicLookups += 1
+            if (publicLookups > 2) {
+              functionResponses.push({
+                functionResponse: {
+                  name: call.name,
+                  response: {
+                    allowed: false,
+                    reason: 'Public lookup limit reached for this turn. Use catalog fields.',
+                  },
+                },
+              })
+              continue
+            }
+          }
+          const { docs, payload } = await this.executeCatalogTool(call.name, call.args, userContext)
+          for (const doc of docs) {
+            found.set(String(doc._id), doc)
+          }
+          functionResponses.push({
+            functionResponse: { name: call.name, response: payload },
+          })
         }
+        result = await this.withTimeout(chat.sendMessage(functionResponses), 20000)
+        response = result.response
       }
 
-      const prompt = `You are an AI assistant for an animated content discovery app. Help users find anime, movies, and series.
-
-User message: "${userMessage}"
-
-Respond as a helpful assistant. If the user is asking for recommendations or searching for content, suggest a search term they can use.
-
-Examples:
-- "I want action anime" → suggest searching "action anime"
-- "Best Studio Ghibli movies" → suggest searching "studio ghibli"
-- "Something like Naruto" → suggest searching "shounen anime"
-
-Keep responses conversational and helpful. If you suggest a search, mention it clearly.
-
-Respond in 1-2 sentences max.`
-
-      const response = await this.makeApiCall(prompt)
-      const aiResponse = response.response.text()
-
-      let searchSuggestion = null
-      if (aiResponse.toLowerCase().includes('search') || aiResponse.toLowerCase().includes('try')) {
-        const searchMatch =
-          aiResponse.match(/"(.*?)"/) || aiResponse.match(/search for (.*?)(?:\.|$)/i)
-        if (searchMatch) {
-          searchSuggestion = searchMatch[1].toLowerCase()
-        }
+      let results = [...found.values()]
+      const filters = inferCatalogFiltersFromMessage(message)
+      if (!results.length && hasCatalogIntent(message)) {
+        results = await searchCatalog(this.catalogSearchFilters(filters, userContext))
       }
+      results = this.rankChatResults(results, filters, userContext)
 
+      const text = getResponseText(response) || fallbackChatReply(results)
       return {
-        response: aiResponse,
-        searchSuggestion,
+        response: text,
+        results: results.map(serializeCatalogDoc),
+        searchSuggestion: null,
       }
     } catch (error) {
       console.error('Gemini chat error:', error)
-      return {
-        response:
-          "I'm having trouble processing your request right now. Please try asking me about anime recommendations or searching for specific content.",
-        searchSuggestion: null,
-      }
+      return this.groundedCatalogReply(message, userContext)
     }
   }
 

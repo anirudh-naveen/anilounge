@@ -39,7 +39,6 @@ const mountPage = async () => {
     global: {
       plugins: [pinia, router],
       stubs: {
-        Chatbot: true,
         PaginationNav: true,
         ContentHoverPreview: true,
         AiringBadge: true,

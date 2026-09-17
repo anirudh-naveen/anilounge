@@ -2,8 +2,8 @@
 <!--
   Search.vue — catalog search view.
 
-  Query form, type/genre/language/country/year/season/status/rating/sort filters, paginated results,
-  and an optional AI assistant overlay. Backed by the content store.
+  Query form, type/genre/language/country/year/season/status/rating/sort filters, paginated results.
+  Backed by the content store. The site-wide AI assistant can also fill these results.
 -->
 <template>
   <div class="search-page">
@@ -24,31 +24,22 @@
               class="search-input"
               data-testid="search-query"
               placeholder="Search for movies or series..."
-              :disabled="isAIMode"
             />
             <button
               type="submit"
               class="search-btn"
               data-testid="search-submit"
-              :disabled="contentStore.isLoading || isAIMode || !canSearch"
+              :disabled="contentStore.isLoading || !canSearch"
             >
               <span v-if="contentStore.isLoading" class="spinner"></span>
               {{ contentStore.isLoading ? 'Searching...' : 'Search' }}
-            </button>
-            <button
-              type="button"
-              class="ai-btn"
-              @click="toggleAIMode"
-              :disabled="!authStore.isAuthenticated"
-            >
-              {{ isAIMode ? 'Filters' : 'AI Assistant' }}
             </button>
           </div>
         </form>
       </div>
 
       <!-- Filters -->
-      <div class="filters-container" v-if="!isAIMode">
+      <div class="filters-container">
         <div class="filters-header">
           <h3>Filters</h3>
           <button @click="clearFilters" class="clear-filters-btn">
@@ -200,10 +191,7 @@
       </div>
 
       <!-- Title: Results Grid -->
-      <div
-        v-else-if="hasSearched && filteredResults.length > 0 && !isAIMode"
-        class="search-results"
-      >
+      <div v-else-if="hasSearched && filteredResults.length > 0" class="search-results">
         <div class="results-header">
           <h2>Search Results</h2>
           <p>
@@ -289,20 +277,12 @@
         <h3>Start your search</h3>
         <p>Enter a title or set filters to get started.</p>
       </div>
-
-      <!-- Title: AI Chat -->
-      <Chatbot
-        v-if="isAIMode"
-        :show-chatbot="isAIMode"
-        @close="toggleAIMode"
-        @search-results="handleAISearchResults"
-      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
 import { useContentStore, defaultSearchFilters, hasActiveSearchFilters } from '@/stores/content'
@@ -319,7 +299,6 @@ import {
 } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
-import Chatbot from '@/components/Chatbot.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
@@ -350,7 +329,6 @@ const searchQuery = ref(contentStore.lastSearchQuery)
 const hasSearched = ref(
   contentStore.searchResults.length > 0 || Boolean(contentStore.lastSearchQuery),
 )
-const isAIMode = ref(false)
 const itemsPerPage = 20
 
 const {
@@ -537,20 +515,12 @@ const handleSearch = async () => {
   }
 }
 
-const toggleAIMode = () => {
-  isAIMode.value = !isAIMode.value
-  if (!isAIMode.value) {
-    // Reset search when exiting AI mode
-    hasSearched.value = false
-    searchQuery.value = ''
-  }
-}
-
-const handleAISearchResults = (results: UnifiedContent[]) => {
-  contentStore.searchResults = results
-  hasSearched.value = true
-  appliedFilters.value = { ...filters.value }
-}
+watch(
+  () => contentStore.searchResults.length,
+  (count) => {
+    if (count > 0) hasSearched.value = true
+  },
+)
 
 const clearFilters = () => {
   const reset = defaultSearchFilters()
@@ -653,8 +623,7 @@ onMounted(() => {
   box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.35);
 }
 
-.search-btn,
-.ai-btn {
+.search-btn {
   padding: 1rem 2rem;
   border: none;
   border-radius: 8px;
@@ -664,28 +633,17 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.search-btn {
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
   color: var(--text-on-accent);
   box-shadow: 0 8px 18px rgba(224, 122, 95, 0.22);
 }
 
-.ai-btn {
-  background: var(--teal-primary);
-  color: var(--text-on-accent);
-  border: 1px solid transparent;
-}
-
-.search-btn:hover,
-.ai-btn:hover {
+.search-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
 
-.search-btn:disabled,
-.ai-btn:disabled {
+.search-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;

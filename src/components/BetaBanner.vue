@@ -1,7 +1,7 @@
 <!--
   BetaBanner.vue — site-wide beta notice (component).
 
-  Displays a dismissible preview banner and hosts the inline feedback modal.
+  Displays a dismissible preview banner with a link to the feedback page.
 -->
 <template>
   <div v-if="showBanner" class="beta-banner">
@@ -10,24 +10,17 @@
       <span class="beta-badge">BETA</span>
       <span class="beta-text">
         Welcome to AniLounge Beta! This is a preview version.
-        <button @click="showFeedback = true" class="feedback-link">
-          Report bugs or suggestions
-        </button>
+        <router-link to="/feedback" class="feedback-link">Report bugs or suggestions</router-link>
       </span>
       <button @click="dismissBanner" class="dismiss-btn" title="Dismiss">&times;</button>
     </div>
-
-    <!-- Title: Feedback Modal -->
-    <BetaFeedback v-if="showFeedback" @close="showFeedback = false" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import BetaFeedback from './BetaFeedback.vue'
 
 const showBanner = ref(true)
-const showFeedback = ref(false)
 
 const dismissBanner = () => {
   showBanner.value = false
@@ -77,13 +70,10 @@ onMounted(() => {
 }
 
 .feedback-link {
-  background: none;
-  border: none;
   color: var(--tan-light);
   text-decoration: underline;
   cursor: pointer;
   font-size: inherit;
-  padding: 0;
   margin-left: 4px;
 }
 
