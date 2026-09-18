@@ -40,7 +40,7 @@ const CHAT_TOOLS = [
           properties: {
             query: {
               type: SchemaType.STRING,
-              description: 'Title keywords, themes, or character names',
+              description: 'Title keywords, themes, or character names used only to find titles',
             },
             contentType: {
               type: SchemaType.STRING,
@@ -90,13 +90,13 @@ const CHAT_TOOLS = [
       {
         name: 'lookup_public_info',
         description:
-          'Fetch a short Wikipedia summary for an animated movie/series already in the catalog, an animation studio, a voice actor, or a genre. Never use this for unrelated topics or to discover titles to recommend.',
+          'Fetch a short Wikipedia or catalog summary for an animated movie/series already in the catalog, an animation studio, a voice actor, a character, or a genre. Never use this to discover titles to recommend. Character lookups must not produce series recommendations.',
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
             name: {
               type: SchemaType.STRING,
-              description: 'Title, studio, voice actor, or genre name',
+              description: 'Title, studio, voice actor, character, or genre name',
             },
             title: {
               type: SchemaType.STRING,
@@ -104,7 +104,7 @@ const CHAT_TOOLS = [
             },
             kind: {
               type: SchemaType.STRING,
-              enum: ['title', 'studio', 'voice_actor', 'genre'],
+              enum: ['title', 'studio', 'voice_actor', 'genre', 'character'],
               description: 'What the name refers to',
             },
           },
@@ -362,7 +362,7 @@ Respond as simple comma-separated terms: term1, term2, term3`
     return {
       response: hasCatalogIntent(message)
         ? fallbackChatReply(docs)
-        : 'I can help with animated movies, series, studios, voice actors, and genres in the AniLounge catalog.',
+        : 'I can help with animated movies, series, studios, voice actors, characters, and genres in the AniLounge catalog.',
       results: docs.map(serializeCatalogDoc),
       searchSuggestion: null,
     }
@@ -378,7 +378,7 @@ Respond as simple comma-separated terms: term1, term2, term3`
     const message = String(userMessage || '').trim()
     if (!message) {
       return {
-        response: 'Ask about an animated movie, series, studio, voice actor, or genre.',
+        response: 'Ask about an animated movie, series, studio, voice actor, character, or genre.',
         results: [],
         searchSuggestion: null,
       }

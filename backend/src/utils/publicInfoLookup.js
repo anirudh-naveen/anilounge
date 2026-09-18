@@ -11,7 +11,7 @@ export const WIKIPEDIA_ORIGIN = 'https://en.wikipedia.org'
 export const WIKIPEDIA_USER_AGENT =
   'AniLounge/1.0 (https://find-animation.vercel.app; catalog chatbot; wikipedia summary lookup)'
 
-export const PUBLIC_INFO_KINDS = ['title', 'studio', 'voice_actor', 'genre']
+export const PUBLIC_INFO_KINDS = ['title', 'studio', 'voice_actor', 'genre', 'character']
 
 export const ANIMATION_GENRES = [
   'Action',
@@ -44,7 +44,7 @@ const MAX_TITLE_CANDIDATES = 4
 /**
  * Coerce a tool `kind` onto the allowed public-info topics.
  * @param {unknown} kind
- * @returns {'title'|'studio'|'voice_actor'|'genre'}
+ * @returns {'title'|'studio'|'voice_actor'|'genre'|'character'}
  */
 export function normalizePublicInfoKind(kind) {
   const value = String(kind || 'title')
@@ -55,6 +55,7 @@ export function normalizePublicInfoKind(kind) {
     return 'title'
   }
   if (value === 'voiceactor' || value === 'seiyuu' || value === 'va') return 'voice_actor'
+  if (value === 'char' || value === 'fictional_character') return 'character'
   if (PUBLIC_INFO_KINDS.includes(value)) return value
   return 'title'
 }
@@ -88,6 +89,14 @@ export function wikiLookupCandidates(name, kind = 'title') {
   if (topic === 'voice_actor') {
     return uniqueTitles(base, `${base} (voice actor)`, `${base} (actress)`, `${base} (actor)`)
   }
+  if (topic === 'character') {
+    return uniqueTitles(
+      base,
+      `${base} (character)`,
+      `${base} (fictional character)`,
+      `${base} (anime)`,
+    )
+  }
   if (topic === 'genre') {
     return uniqueTitles(base, `${base} (genre)`, `${base} (fiction)`)
   }
@@ -114,6 +123,11 @@ export function extractMatchesTopic(extract, description, kind) {
   }
   if (topic === 'voice_actor') {
     return /\b(voice actor|voice actress|seiyuu|seiyū|voice acting)\b/.test(text)
+  }
+  if (topic === 'character') {
+    return /\b(fictional character|anime character|manga character|protagonist|character in|animated character)\b/.test(
+      text,
+    )
   }
   if (topic === 'genre') {
     return /\b(genre|anime genre|film genre|manga|animation)\b/.test(text)

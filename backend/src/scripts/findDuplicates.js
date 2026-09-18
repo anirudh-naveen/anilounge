@@ -3,8 +3,8 @@
  * Run before mergeDuplicates.js. Logs known pairs (Ne Zha, A Silent Voice) plus groups that
  * share any English/native/original/alternative name. Does not mutate the database.
  */
-import mongoose from 'mongoose'
 import dotenv from 'dotenv'
+import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import { collectContentTitles } from '../utils/titles.js'
 
@@ -75,7 +75,7 @@ function groupContentBySharedTitles(allContent) {
  */
 async function findDuplicates() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI)
+    await connectPostgres()
     console.log('Database connected')
 
     const nezhaItems = await Content.find({
@@ -128,7 +128,7 @@ async function findDuplicates() {
       console.log('\nNo duplicate titles found!')
     }
 
-    await mongoose.disconnect()
+    await closePostgres()
     console.log('\nDatabase disconnected')
   } catch (error) {
     console.error('Error:', error)

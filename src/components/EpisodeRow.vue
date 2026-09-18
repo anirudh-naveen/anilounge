@@ -72,13 +72,22 @@
         <p class="expanded-overview">
           {{ selectedEpisode.overview || 'No description available.' }}
         </p>
-        <div v-if="selectedEpisode.cast.length" class="expanded-cast">
+        <EntityCastRow
+          v-if="characters.length"
+          :items="characters"
+          :content-id="contentId"
+          title="Characters"
+        />
+        <div v-else-if="selectedEpisode.cast.length" class="expanded-cast">
           <h4>Cast</h4>
           <div class="cast-list">
-            <div
+            <button
               v-for="member in selectedEpisode.cast"
               :key="`${member.name}-${member.character}`"
+              type="button"
               class="cast-card"
+              :disabled="!matchedCharacter(member.character)"
+              @click.stop="openMatchedCharacter(member.character)"
             >
               <img
                 v-if="member.profilePath"
@@ -90,8 +99,10 @@
                 <i class="fas fa-user"></i>
               </div>
               <p class="cast-name">{{ member.name }}</p>
-              <p v-if="member.character" class="cast-character">{{ member.character }}</p>
-            </div>
+              <p v-if="cleanCharacterName(member.character)" class="cast-character">
+                {{ cleanCharacterName(member.character) }}
+              </p>
+            </button>
           </div>
         </div>
       </div>
@@ -101,7 +112,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { Episode } from '@/types/content'
+import { useRoute, useRouter } from 'vue-router'
+import type { CatalogEntity, Episode } from '@/types/content'
 import { getProfileUrl, getStillUrl } from '@/services/api'
 import {
   episodeKey,
@@ -109,11 +121,36 @@ import {
   formatEpisodeIndex,
   getSeasonNumbers,
 } from '@/utils/episodes'
+import { cleanCharacterName, matchCharacterByName } from '@/utils/entities'
+import EntityCastRow from '@/components/EntityCastRow.vue'
 
-const props = defineProps<{
-  episodes: Episode[]
-  loading?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    episodes: Episode[]
+    loading?: boolean
+    characters?: CatalogEntity[]
+    contentId?: string
+  }>(),
+  {
+    characters: () => [],
+  },
+)
+
+const router = useRouter()
+const route = useRoute()
+
+const matchedCharacter = (characterName: string) =>
+  matchCharacterByName(characterName, props.characters)
+
+const openMatchedCharacter = (characterName: string) => {
+  const entity = matchedCharacter(characterName)
+  if (!entity) return
+  router.push({
+    name: 'CharacterDetails',
+    params: { id: entity._id },
+    query: { from: route.fullPath },
+  })
+}
 
 const stripEl = ref<HTMLElement | null>(null)
 const selectedSeason = ref(1)
@@ -384,6 +421,15 @@ const handleImageError = (event: Event) => {
 .cast-card {
   flex: 0 0 110px;
   text-align: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cast-card:disabled {
+  cursor: default;
 }
 
 .cast-card img,

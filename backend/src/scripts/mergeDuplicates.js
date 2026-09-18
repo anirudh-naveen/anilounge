@@ -4,10 +4,9 @@
  * Skips a group when it contains more than one TMDB id or more than one MAL id.
  * Rewrites watchlist, ratings, and relationship pointers onto the kept row.
  */
-import mongoose from 'mongoose'
 import dotenv from 'dotenv'
+import { connectPostgres, closePostgres, query } from '../../config/postgres.js'
 import Content from '../models/Content.js'
-import User from '../models/User.js'
 import { applyTitleFields } from '../utils/titles.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 
@@ -168,57 +167,55 @@ function mergeSecondaryIntoPrimary(primary, secondary) {
   primary.lastUpdated = new Date()
 }
 
+function sameId(a, b) {
+  return String(a) === String(b)
+}
+
 async function retargetUsers(fromId, toId) {
-  const users = await User.find({
-    $or: [{ 'watchlist.content': fromId }, { 'ratings.content': fromId }],
-  })
-
-  for (const user of users) {
-    const hasWatch = user.watchlist.some((item) => item.content && item.content.equals(toId))
-    user.watchlist = user.watchlist.filter((item) => {
-      if (!item.content || !item.content.equals(fromId)) return true
-      if (hasWatch) return false
-      item.content = toId
-      return true
-    })
-
-    const hasRating = user.ratings.some((item) => item.content && item.content.equals(toId))
-    user.ratings = user.ratings.filter((item) => {
-      if (!item.content || !item.content.equals(fromId)) return true
-      if (hasRating) return false
-      item.content = toId
-      return true
-    })
-
-    await user.save()
-  }
+  await query(
+    `UPDATE watchlist_entries SET content_id = $2
+     WHERE content_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM watchlist_entries we
+         WHERE we.user_id = watchlist_entries.user_id AND we.content_id = $2
+       )`,
+    [fromId, toId],
+  )
+  await query('DELETE FROM watchlist_entries WHERE content_id = $1', [fromId])
+  await query(
+    `UPDATE user_ratings SET content_id = $2
+     WHERE content_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM user_ratings ur
+         WHERE ur.user_id = user_ratings.user_id AND ur.content_id = $2
+       )`,
+    [fromId, toId],
+  )
+  await query('DELETE FROM user_ratings WHERE content_id = $1', [fromId])
 }
 
 async function retargetRelationships(fromId, toId) {
-  const docs = await Content.find({
-    $or: [
-      { 'relationships.sequels': fromId },
-      { 'relationships.prequels': fromId },
-      { 'relationships.related': fromId },
-    ],
-  })
-
-  for (const doc of docs) {
-    for (const field of ['sequels', 'prequels', 'related']) {
-      const list = doc.relationships?.[field]
-      if (!Array.isArray(list)) continue
-      doc.relationships[field] = [
-        ...new Set(
-          list.map((id) => (id.equals(fromId) ? toId.toString() : id.toString())),
-        ),
-      ]
-    }
-    await doc.save()
-  }
+  await query(
+    `INSERT INTO content_relations (from_id, to_id, kind, source)
+     SELECT from_id, $2, kind, source
+     FROM content_relations
+     WHERE to_id = $1 AND from_id <> $2
+     ON CONFLICT (from_id, to_id, kind) DO NOTHING`,
+    [fromId, toId],
+  )
+  await query(
+    `INSERT INTO content_relations (from_id, to_id, kind, source)
+     SELECT $2, to_id, kind, source
+     FROM content_relations
+     WHERE from_id = $1 AND to_id <> $2
+     ON CONFLICT (from_id, to_id, kind) DO NOTHING`,
+    [fromId, toId],
+  )
+  await query('DELETE FROM content_relations WHERE from_id = $1 OR to_id = $1', [fromId])
 }
 
 async function mergeDuplicates() {
-  await mongoose.connect(process.env.MONGODB_URI)
+  await connectPostgres()
   console.log('Database connected')
 
   const allContent = await Content.find({}).lean()
@@ -235,7 +232,7 @@ async function mergeDuplicates() {
     const primary = await Content.findById(primaryMeta._id)
     if (!primary) continue
 
-    const secondaries = group.filter((item) => !item._id.equals(primary._id))
+    const secondaries = group.filter((item) => !sameId(item._id, primary._id))
     console.log(
       `\nKeeping "${primary.title}" (${primary._id}) and merging ${secondaries.length} duplicate(s)`,
     )
@@ -259,7 +256,7 @@ async function mergeDuplicates() {
   const skipped = groups.length - safeGroups.length
   console.log(`\nMerged ${mergedGroups} groups, deleted ${deleted} duplicate rows, skipped ${skipped} ambiguous groups`)
 
-  await mongoose.disconnect()
+  await closePostgres()
   console.log('Database disconnected')
 }
 

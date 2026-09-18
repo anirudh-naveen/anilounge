@@ -4,69 +4,47 @@
  * Mutates Content.userRatingAverage, userRatingCount, userRatingSum, and unifiedScore.
  * Watchlist ratings win over the legacy `ratings` array for the same title.
  */
-import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import User from '../models/User.js'
+import { connectPostgres, closePostgres, query } from '../../config/postgres.js'
 import Content from '../models/Content.js'
-import { calculateUnifiedScore, isValidUserRating } from '../utils/ratings.js'
+import { calculateUnifiedScore } from '../utils/ratings.js'
 
 dotenv.config()
 
 /**
- * Prefer watchlist.rating; fall back to User.ratings when the title is not on the list.
- * @param {object} user
- * @param {string} contentId
- * @returns {number | null}
- */
-function getEffectiveUserRating(user, contentId) {
-  const watchlistItem = user.watchlist?.find((item) => item.content?.toString() === contentId)
-  if (watchlistItem) {
-    return isValidUserRating(watchlistItem.rating) ? watchlistItem.rating : null
-  }
-
-  const legacyRating = user.ratings?.find((item) => item.content?.toString() === contentId)
-  return isValidUserRating(legacyRating?.rating) ? legacyRating.rating : null
-}
-
-/**
- * Zero user-rating fields, then rewrite them from all users and refresh unifiedScore.
+ * Zero user-rating fields, then rewrite them from watchlist and user_ratings rows.
  * @returns {Promise<void>}
  */
 async function calculateInitialUserRatings() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI)
+    await connectPostgres()
     console.log('Database connected')
 
-    const users = await User.find({
-      $or: [{ 'watchlist.rating': { $exists: true } }, { 'ratings.0': { $exists: true } }],
-    })
-
-    console.log(`Processing ${users.length} users with ratings...`)
+    const { rows: ratingRows } = await query(`
+      SELECT content_id, rating FROM watchlist_entries WHERE rating IS NOT NULL
+      UNION ALL
+      SELECT ur.content_id, ur.rating
+      FROM user_ratings ur
+      WHERE ur.rating IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM watchlist_entries we
+          WHERE we.user_id = ur.user_id AND we.content_id = ur.content_id AND we.rating IS NOT NULL
+        )
+    `)
 
     const contentRatings = {}
-
-    for (const user of users) {
-      const seen = new Set()
-
-      for (const item of user.watchlist || []) {
-        const contentId = item.content?.toString()
-        if (!contentId || !isValidUserRating(item.rating)) continue
-        seen.add(contentId)
-        if (!contentRatings[contentId]) contentRatings[contentId] = []
-        contentRatings[contentId].push(item.rating)
-      }
-
-      for (const rating of user.ratings || []) {
-        const contentId = rating.content?.toString()
-        if (!contentId || seen.has(contentId) || !isValidUserRating(rating.rating)) continue
-        if (!contentRatings[contentId]) contentRatings[contentId] = []
-        contentRatings[contentId].push(rating.rating)
-      }
+    for (const row of ratingRows) {
+      const contentId = String(row.content_id)
+      if (!contentRatings[contentId]) contentRatings[contentId] = []
+      contentRatings[contentId].push(Number(row.rating))
     }
 
     console.log(`Found ratings for ${Object.keys(contentRatings).length} content items`)
 
-    await Content.updateMany({}, { $set: { userRatingAverage: null, userRatingCount: 0, userRatingSum: 0 } })
+    await Content.updateMany(
+      {},
+      { $set: { userRatingAverage: null, userRatingCount: 0, userRatingSum: 0 } },
+    )
 
     let updated = 0
     for (const [contentId, ratings] of Object.entries(contentRatings)) {
@@ -115,7 +93,7 @@ async function calculateInitialUserRatings() {
       )
     }
 
-    await mongoose.disconnect()
+    await closePostgres()
     console.log('Database disconnected')
   } catch (error) {
     console.error('Error:', error)

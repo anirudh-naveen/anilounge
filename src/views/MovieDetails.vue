@@ -110,20 +110,6 @@
         <p>{{ movie.overview || 'No overview available.' }}</p>
       </div>
 
-      <!-- Title: Production Companies -->
-      <div v-if="movie.productionCompanies?.length" class="production-info">
-        <h3>Production Companies</h3>
-        <div class="companies">
-          <span
-            v-for="(company, index) in movie.productionCompanies"
-            :key="`company-${index}`"
-            class="company-tag"
-          >
-            {{ company }}
-          </span>
-        </div>
-      </div>
-
       <!-- Title: Related Loading -->
       <div v-if="relatedContentLoading" class="related-content-loading">
         <h3>Loading Related Content...</h3>
@@ -252,6 +238,25 @@
           </div>
         </div>
       </div>
+
+      <EntityCastRow
+        :items="characters"
+        :content-id="movie._id"
+        :loading="charactersLoading"
+      />
+
+      <div v-if="animationStudios.length" class="production-info">
+        <h3>Animation studios</h3>
+        <div class="companies">
+          <span
+            v-for="studio in animationStudios"
+            :key="`studio-${studio}`"
+            class="company-tag"
+          >
+            {{ studio }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Title: Watchlist -->
@@ -278,7 +283,9 @@ import {
 } from '@/services/api'
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
-import type { UnifiedContent } from '@/types/content'
+import EntityCastRow from '@/components/EntityCastRow.vue'
+import type { CatalogEntity, UnifiedContent } from '@/types/content'
+import { useEntityStore } from '@/stores/entities'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel } from '@/utils/watchlist'
@@ -294,11 +301,14 @@ const route = useRoute()
 const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
+const entityStore = useEntityStore()
 
 const movie = ref<UnifiedContent | null>(null)
 const loading = ref(true)
 const error = ref('')
 const showStatusDropdown = ref(false)
+const characters = ref<CatalogEntity[]>([])
+const charactersLoading = ref(false)
 const relatedContent = ref<{
   sequels: UnifiedContent[]
   prequels: UnifiedContent[]
@@ -307,6 +317,7 @@ const relatedContent = ref<{
 const relatedContentLoading = ref(false)
 let detailsRequestId = 0
 let relatedRequestId = 0
+let charactersRequestId = 0
 
 const watchlistItem = computed(() =>
   movie.value ? contentStore.getWatchlistItem(movie.value._id) : undefined,
@@ -321,6 +332,30 @@ const getDisplayScore = (content: UnifiedContent) => {
 
 const getDisplayVoteCount = (content: UnifiedContent) => getTotalVoteCount(content)
 
+const animationStudios = computed(() => {
+  const studios = (movie.value?.studios || []).filter(Boolean)
+  if (studios.length) return [...new Set(studios)]
+  return [...new Set((movie.value?.productionCompanies || []).filter(Boolean))]
+})
+
+const fetchCharacters = async (contentId: string) => {
+  const requestId = ++charactersRequestId
+  charactersLoading.value = true
+  try {
+    const data = await entityStore.getContentCharacters(contentId)
+    if (requestId !== charactersRequestId) return
+    characters.value = data
+  } catch (err) {
+    if (requestId !== charactersRequestId) return
+    console.error('Failed to fetch characters:', err)
+    characters.value = []
+  } finally {
+    if (requestId === charactersRequestId) {
+      charactersLoading.value = false
+    }
+  }
+}
+
 const loadMovie = async (movieId: string) => {
   const requestId = ++detailsRequestId
 
@@ -333,7 +368,9 @@ const loadMovie = async (movieId: string) => {
   error.value = ''
   relatedContent.value = null
   relatedContentLoading.value = false
+  characters.value = []
   contentStore.scrollToTop()
+  fetchCharacters(movieId)
 
   const cached = contentStore.findContentById(movieId)
   if (cached) {

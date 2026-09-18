@@ -37,11 +37,16 @@ const mountChat = async () => {
         name: 'MovieDetails',
         component: { template: '<div />' },
       },
-      {
-        path: '/tv/:id',
-        name: 'TVShowDetails',
-        component: { template: '<div />' },
-      },
+    {
+      path: '/tv/:id',
+      name: 'TVShowDetails',
+      component: { template: '<div />' },
+    },
+    {
+      path: '/character/:id',
+      name: 'CharacterDetails',
+      component: { template: '<div />' },
+    },
     ],
   })
   await router.push('/search')

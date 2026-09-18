@@ -3,8 +3,7 @@
  * Run once on a fresh database (or after wiping users). Inserts a User with
  * email demo@findanimation.com; no-ops when that email is present. Does not mutate Content.
  */
-import mongoose from 'mongoose'
-import bcrypt from 'bcryptjs'
+import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import User from '../models/User.js'
 import dotenv from 'dotenv'
 
@@ -16,8 +15,8 @@ dotenv.config()
  */
 const createDemoUser = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/findanimation')
-    console.log('Connected to MongoDB')
+    await connectPostgres()
+    console.log('Connected to PostgreSQL')
 
     const existingUser = await User.findOne({ email: 'demo@findanimation.com' })
     if (existingUser) {
@@ -25,12 +24,10 @@ const createDemoUser = async () => {
       return
     }
 
-    const hashedPassword = await bcrypt.hash('DemoPassword123!', 12)
-
     const demoUser = new User({
       username: 'DemoUser',
       email: 'demo@findanimation.com',
-      password: hashedPassword,
+      password: 'DemoPassword123!',
       profilePicture: 'https://via.placeholder.com/150/4F46E5/FFFFFF?text=Demo',
       bio: 'Demo account for recruiters to explore Find Animation features',
       preferences: {
@@ -51,8 +48,8 @@ const createDemoUser = async () => {
   } catch (error) {
     console.error('Error creating demo user:', error)
   } finally {
-    await mongoose.disconnect()
-    console.log('Disconnected from MongoDB')
+    await closePostgres()
+    console.log('Disconnected from PostgreSQL')
   }
 }
 

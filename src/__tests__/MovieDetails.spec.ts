@@ -45,6 +45,13 @@ vi.mock('@/services/api', () => ({
   getDetailsRouteName: () => 'MovieDetails',
 }))
 
+vi.mock('@/stores/entities', () => ({
+  useEntityStore: () => ({
+    getContentCharacters: vi.fn().mockResolvedValue([]),
+    getContentVoiceActors: vi.fn().mockResolvedValue([]),
+  }),
+}))
+
 const mountPage = async () => {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -56,7 +63,7 @@ const mountPage = async () => {
   const wrapper = mount(MovieDetails, {
     global: {
       plugins: [router],
-      stubs: { StatusDropdown: true },
+      stubs: { StatusDropdown: true, EntityCastRow: true },
     },
   })
   await flushPromises()
