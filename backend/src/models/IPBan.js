@@ -1,135 +1,105 @@
 /**
- * Mongoose schema for temporary IP bans used by auth/rate-limit middleware.
- * Models layer: ban reason, attempt counts, and TTL expiry via MongoDB expireAfterSeconds.
+ * Temporary IP bans stored in Postgres.
  */
-import mongoose from 'mongoose'
+import crypto from 'crypto'
+import { query } from '../../config/postgres.js'
 
-const ipBanSchema = new mongoose.Schema({
-  ip: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true,
-  },
-  reason: {
-    type: String,
-    required: true,
-    enum: ['bot_detection', 'brute_force', 'suspicious_activity', 'rate_limit_exceeded', 'manual'],
-  },
-  bannedAt: {
-    type: Date,
-    default: Date.now,
-  },
-  expiresAt: {
-    type: Date,
-    required: true,
-  },
-  attempts: {
-    type: Number,
-    default: 1,
-  },
-  userAgent: {
-    type: String,
-  },
-  lastSeen: {
-    type: Date,
-    default: Date.now,
-  },
-  isActive: {
-    type: Boolean,
-    default: true,
-  },
-})
-
-// MongoDB TTL index: documents drop when expiresAt is in the past
-ipBanSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
-
-/**
- * Create or extend an active ban for an IP.
- * Repeat hits increment attempts and refresh expiry rather than inserting a second row.
- * @param {string} ip
- * @param {string} reason - One of the schema enum values
- * @param {number} [duration=86400000] - Ban length in milliseconds (default 24h)
- * @param {string | null} [userAgent=null]
- * @returns {Promise<import('mongoose').Document>}
- */
-ipBanSchema.statics.banIP = async function (
-  ip,
-  reason,
-  duration = 24 * 60 * 60 * 1000,
-  userAgent = null,
-) {
-  const expiresAt = new Date(Date.now() + duration)
-
-  try {
-    const existingBan = await this.findOne({ ip, isActive: true })
-
-    if (existingBan) {
-      existingBan.attempts += 1
-      existingBan.lastSeen = new Date()
-      existingBan.expiresAt = expiresAt
-      existingBan.userAgent = userAgent || existingBan.userAgent
-      await existingBan.save()
-      return existingBan
-    } else {
-      const ban = new this({
-        ip,
-        reason,
-        expiresAt,
-        userAgent,
-      })
-      await ban.save()
-      return ban
-    }
-  } catch (error) {
-    console.error('Error banning IP:', error)
-    throw error
+function mapRow(row) {
+  if (!row) return null
+  return {
+    _id: row.id,
+    ip: row.ip,
+    reason: row.reason,
+    bannedAt: row.banned_at,
+    expiresAt: row.expires_at,
+    attempts: Number(row.attempts || 1),
+    userAgent: row.user_agent,
+    lastSeen: row.last_seen,
+    isActive: row.is_active,
   }
 }
 
-/**
- * Active, unexpired ban document for this IP, or null.
- * @param {string} ip
- * @returns {Promise<import('mongoose').Document | null>}
- */
-ipBanSchema.statics.isIPBanned = async function (ip) {
-  const ban = await this.findOne({
-    ip,
-    isActive: true,
-    expiresAt: { $gt: new Date() },
-  })
+const IPBan = {
+  async banIP(ip, reason, duration = 24 * 60 * 60 * 1000, userAgent = null) {
+    const expiresAt = new Date(Date.now() + duration)
+    const existing = await query(
+      'SELECT * FROM ip_bans WHERE ip = $1 AND is_active = true LIMIT 1',
+      [ip],
+    )
+    if (existing.rows[0]) {
+      const { rows } = await query(
+        `UPDATE ip_bans
+         SET attempts = attempts + 1, last_seen = now(), expires_at = $2, user_agent = COALESCE($3, user_agent)
+         WHERE id = $1
+         RETURNING *`,
+        [existing.rows[0].id, expiresAt, userAgent],
+      )
+      return mapRow(rows[0])
+    }
+    const { rows } = await query(
+      `INSERT INTO ip_bans (id, ip, reason, expires_at, attempts, user_agent, is_active)
+       VALUES ($1,$2,$3,$4,1,$5,true)
+       ON CONFLICT (ip) DO UPDATE SET
+         reason = EXCLUDED.reason,
+         expires_at = EXCLUDED.expires_at,
+         attempts = ip_bans.attempts + 1,
+         user_agent = EXCLUDED.user_agent,
+         is_active = true,
+         last_seen = now()
+       RETURNING *`,
+      [crypto.randomUUID(), ip, reason, expiresAt, userAgent],
+    )
+    return mapRow(rows[0])
+  },
 
-  return ban
+  async isIPBanned(ip) {
+    const { rows } = await query(
+      `SELECT * FROM ip_bans
+       WHERE ip = $1 AND is_active = true AND expires_at > now()
+       LIMIT 1`,
+      [ip],
+    )
+    return mapRow(rows[0])
+  },
+
+  async unbanIP(ip) {
+    const result = await query('UPDATE ip_bans SET is_active = false WHERE ip = $1', [ip])
+    return { modifiedCount: result.rowCount || 0 }
+  },
+
+  async getBanStats() {
+    const { rows } = await query(
+      `SELECT reason AS _id, count(*)::int AS count, coalesce(sum(attempts),0)::int AS "totalAttempts"
+       FROM ip_bans
+       WHERE is_active = true AND expires_at > now()
+       GROUP BY reason`,
+    )
+    return rows
+  },
+
+  async find(filter = {}) {
+    const clauses = ['TRUE']
+    const params = []
+    if (filter.isActive != null) {
+      params.push(filter.isActive)
+      clauses.push(`is_active = $${params.length}`)
+    }
+    if (filter.expiresAt?.$gt) {
+      params.push(filter.expiresAt.$gt)
+      clauses.push(`expires_at > $${params.length}`)
+    }
+    const { rows } = await query(
+      `SELECT * FROM ip_bans WHERE ${clauses.join(' AND ')} ORDER BY banned_at DESC`,
+      params,
+    )
+    return rows.map(mapRow)
+  },
+
+  async findOne(filter = {}) {
+    const rows = await IPBan.find(filter)
+    if (filter.ip) return rows.find((row) => row.ip === filter.ip) || null
+    return rows[0] || null
+  },
 }
 
-/**
- * Soft-unban by clearing isActive (TTL still removes expired rows).
- * @param {string} ip
- * @returns {Promise<import('mongoose').UpdateWriteOpResult>}
- */
-ipBanSchema.statics.unbanIP = async function (ip) {
-  return this.updateMany({ ip }, { isActive: false })
-}
-
-/**
- * Counts of currently active bans grouped by reason.
- * @returns {Promise<Array<{ _id: string, count: number, totalAttempts: number }>>}
- */
-ipBanSchema.statics.getBanStats = async function () {
-  const stats = await this.aggregate([
-    {
-      $match: { isActive: true, expiresAt: { $gt: new Date() } },
-    },
-    {
-      $group: {
-        _id: '$reason',
-        count: { $sum: 1 },
-        totalAttempts: { $sum: '$attempts' },
-      },
-    },
-  ])
-
-  return stats
-}
-
-export default mongoose.model('IPBan', ipBanSchema)
+export default IPBan

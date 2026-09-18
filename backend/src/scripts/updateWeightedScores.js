@@ -3,26 +3,12 @@
  * Run after changing calculateUnifiedScore or when TMDB/MAL/user vote fields were backfilled.
  * Mutates only unifiedScore; does not refetch APIs.
  */
-import mongoose from 'mongoose'
 import dotenv from 'dotenv'
+import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 
 dotenv.config()
-
-/**
- * Connect using MONGODB_URI.
- * @returns {Promise<void>}
- */
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI)
-    console.log('Database connected')
-  } catch (error) {
-    console.error('Database connection failed:', error.message)
-    process.exit(1)
-  }
-}
 
 /**
  * Persist a new unifiedScore when the vote-weighted value differs from the stored one.
@@ -30,6 +16,8 @@ const connectDB = async () => {
  */
 const updateWeightedScores = async () => {
   try {
+    await connectPostgres()
+    console.log('Database connected')
     console.log('Updating weighted scores for existing content...')
     const contentItems = await Content.find({})
     let updatedCount = 0
@@ -56,23 +44,10 @@ const updateWeightedScores = async () => {
     console.log(`Updated ${updatedCount} content items with weighted scores`)
   } catch (error) {
     console.error('Error updating weighted scores:', error.message)
-  }
-}
-
-/**
- * Connect, recompute scores, disconnect.
- * @returns {Promise<void>}
- */
-const main = async () => {
-  try {
-    await connectDB()
-    await updateWeightedScores()
-  } catch (error) {
-    console.error('Script failed:', error.message)
   } finally {
-    await mongoose.disconnect()
+    await closePostgres()
     console.log('Database disconnected')
   }
 }
 
-main()
+updateWeightedScores()

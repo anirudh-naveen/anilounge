@@ -19,6 +19,7 @@ import authMiddleware, {
 import upload, { handleUploadError } from '../middleware/upload.js'
 import { bruteForceProtection } from '../middleware/antiBot.js'
 import { validateObjectId } from '../middleware/security.js'
+import { isCatalogId } from '../db/ids.js'
 
 const router = express.Router()
 
@@ -151,7 +152,9 @@ router.post(
 router.post(
   '/watchlist',
   [
-    body('contentId').isMongoId().withMessage('Valid content ID is required'),
+    body('contentId')
+      .custom((value) => isCatalogId(value))
+      .withMessage('Valid content ID is required'),
     body('status').optional().isIn(['plan_to_watch', 'watching', 'completed', 'dropped']),
     body('rating').optional().isFloat({ min: 0, max: 10 }),
     body('currentEpisode').optional().isInt({ min: 0 }),

@@ -1,10 +1,10 @@
 /**
  * One-off maintenance script: stamp franchise names from RelationshipService.franchiseMap.
  * Run after editing the franchise map or when Content.franchise is empty on known series.
- * Mutates Content.franchise and relationships.franchise; does not rewrite sequel/prequel ids.
+ * Mutates franchise membership; does not rewrite sequel/prequel ids.
  */
-import mongoose from 'mongoose'
 import dotenv from 'dotenv'
+import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import relationshipService from '../services/relationshipService.js'
 
@@ -16,7 +16,7 @@ dotenv.config()
  */
 async function updateFranchises() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI)
+    await connectPostgres()
     console.log('Database connected')
 
     const allContent = await Content.find({})
@@ -53,7 +53,6 @@ async function updateFranchises() {
       if (hasFranchise) {
         await Content.findByIdAndUpdate(content._id, {
           franchise: franchiseName,
-          'relationships.franchise': franchiseName,
         })
         console.log(`Updated ${content.title} with franchise: ${franchiseName}`)
         updated++
@@ -64,7 +63,7 @@ async function updateFranchises() {
   } catch (error) {
     console.error('Error updating franchises:', error)
   } finally {
-    await mongoose.disconnect()
+    await closePostgres()
     console.log('Database disconnected')
   }
 }

@@ -1,7 +1,7 @@
 /**
  * Express entry point for the Find Animation API.
  *
- * Layer: HTTP server. Loads env, connects MongoDB, applies security/rate-limit
+ * Layer: HTTP server. Loads env, connects PostgreSQL, applies security/rate-limit
  * middleware, mounts `/api` and `/admin`, and starts the content-sync scheduler.
  */
 
@@ -33,9 +33,9 @@ import {
 
 dotenv.config()
 
-// Production exits without JWT_SECRET and MONGODB_URI; development only warns so local work can start.
+// Production exits without JWT_SECRET and DATABASE_URL; development only warns so local work can start.
 if (process.env.NODE_ENV === 'production') {
-  const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI']
+  const requiredEnvVars = ['JWT_SECRET', 'DATABASE_URL']
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
 
   if (missingVars.length > 0) {
@@ -44,7 +44,7 @@ if (process.env.NODE_ENV === 'production') {
     process.exit(1)
   }
 } else {
-  const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI']
+  const requiredEnvVars = ['JWT_SECRET', 'DATABASE_URL']
   const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
   if (missingVars.length > 0) {
     console.warn('Missing environment variables (development mode):', missingVars.join(', '))

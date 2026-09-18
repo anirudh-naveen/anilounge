@@ -3,8 +3,8 @@
  * Run when MAL-only movies show null or sub-60-minute runtimes. Mutates Content.runtime
  * using unifiedContentService.getEstimatedRuntime (does not call TMDB).
  */
-import mongoose from 'mongoose'
 import dotenv from 'dotenv'
+import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 
@@ -16,16 +16,13 @@ dotenv.config()
  */
 async function updateRuntimes() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI)
+    await connectPostgres()
     console.log('Database connected')
 
     const malMovies = await Content.find({
       malId: { $exists: true },
       contentType: 'movie',
-      $or: [
-        { runtime: null },
-        { runtime: { $lt: 60 } },
-      ],
+      $or: [{ runtime: null }, { runtime: { $lt: 60 } }],
     })
 
     console.log(`Found ${malMovies.length} MAL movies to update`)
@@ -53,7 +50,7 @@ async function updateRuntimes() {
   } catch (error) {
     console.error('Error updating runtimes:', error)
   } finally {
-    await mongoose.disconnect()
+    await closePostgres()
     console.log('Database disconnected')
   }
 }

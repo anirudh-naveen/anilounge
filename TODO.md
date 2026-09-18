@@ -60,5 +60,6 @@
 
 ## Infrastructure
 
-1. Create CI/CD test blockers before PRs.
-2. Switch the recipient email of the site to support@anilounge.net. Confirm recipient email is setup for bug reports and emails.
+1. Migrate from MongoDB to a Relational Database. ✅
+2. Create CI/CD test blockers before PRs.
+3. Switch the recipient email of the site to support@anilounge.net. Confirm recipient email is setup for bug reports and emails.

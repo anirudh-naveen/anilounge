@@ -187,43 +187,10 @@ async function findSimilarTo(title, filters, limit) {
     query,
     { _id: { $nin: [seed._id, ...(filters.excludeIds || [])] } },
   ])
-  const docs = await Content.aggregate([
-    { $match: similarQuery },
-    {
-      $addFields: {
-        genreOverlap: {
-          $size: {
-            $setIntersection: [
-              {
-                $map: {
-                  input: { $ifNull: ['$genres', []] },
-                  as: 'genre',
-                  in: { $ifNull: ['$$genre.name', '$$genre'] },
-                },
-              },
-              seedGenres,
-            ],
-          },
-        },
-        studioOverlap: {
-          $size: {
-            $setIntersection: [
-              {
-                $setUnion: [
-                  { $ifNull: ['$studios', []] },
-                  { $ifNull: ['$productionCompanies', []] },
-                ],
-              },
-              seedStudios,
-            ],
-          },
-        },
-      },
-    },
-    { $sort: { genreOverlap: -1, studioOverlap: -1, unifiedScore: -1, popularity: -1 } },
-    { $limit: candidateLimit(limit) },
-    { $project: CATALOG_PROJECTION },
-  ])
+  const docs = await Content.find(similarQuery)
+    .sort({ unifiedScore: -1, popularity: -1 })
+    .limit(candidateLimit(limit))
+    .lean()
   return withRecommendationRankMeta(
     sortByRecommendationRank(
       docs,

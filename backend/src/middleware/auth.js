@@ -160,15 +160,16 @@ export const refreshAccessToken = async (req, res) => {
     tokenDoc.isRevoked = true
     await tokenDoc.save()
 
-    const newAccessToken = generateAccessToken(tokenDoc.userId._id)
-    const newRefreshToken = await generateRefreshToken(tokenDoc.userId._id)
+    const userId = tokenDoc.userId?._id || tokenDoc.userId
+    const newAccessToken = generateAccessToken(userId)
+    const newRefreshToken = await generateRefreshToken(userId)
 
     res.json({
       success: true,
       message: 'Token refreshed successfully',
       data: {
         accessToken: newAccessToken,
-        refreshToken: newRefreshToken.token,
+        refreshToken: newRefreshToken,
       },
     })
   } catch (error) {
