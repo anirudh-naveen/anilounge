@@ -1,16 +1,76 @@
 /**
  * Read-only diagnostic script: print likely duplicate Content rows.
  * Run before mergeDuplicates.js. Logs known pairs (Ne Zha, A Silent Voice) plus groups that
- * share a punctuation-stripped title. Does not mutate the database.
+ * share any English/native/original/alternative name. Does not mutate the database.
  */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import Content from '../models/Content.js'
+import { collectContentTitles } from '../utils/titles.js'
 
 dotenv.config()
 
 /**
- * Print Ne Zha / Silent Voice matches and all normalized-title groups with more than one row.
+ * Strip punctuation for latin titles; keep the original lowercased string when that would empty Japanese names.
+ * @param {string} title
+ * @returns {string}
+ */
+function normalizeForGrouping(title) {
+  const lower = String(title).toLowerCase().trim()
+  const stripped = lower.replace(/[^\w\s]/g, '').trim()
+  return stripped || lower
+}
+
+/**
+ * Group catalog rows that share any searchable name on the same contentType.
+ * @param {object[]} allContent
+ * @returns {object[][]}
+ */
+function groupContentBySharedTitles(allContent) {
+  const parent = allContent.map((_, i) => i)
+  const find = (i) => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]]
+      i = parent[i]
+    }
+    return i
+  }
+  const union = (a, b) => {
+    const ra = find(a)
+    const rb = find(b)
+    if (ra !== rb) parent[rb] = ra
+  }
+
+  const keyToIndex = new Map()
+  allContent.forEach((item, index) => {
+    const keys = new Set(
+      collectContentTitles(item)
+        .map(normalizeForGrouping)
+        .filter(Boolean)
+        .map((key) => `${item.contentType}::${key}`),
+    )
+    for (const key of keys) {
+      const existing = keyToIndex.get(key)
+      if (existing != null) {
+        union(existing, index)
+      } else {
+        keyToIndex.set(key, index)
+      }
+    }
+  })
+
+  const groups = new Map()
+  allContent.forEach((item, i) => {
+    const root = find(i)
+    if (!groups.has(root)) groups.set(root, [])
+    groups.get(root).push(item)
+  })
+
+  return [...groups.values()].filter((items) => items.length > 1)
+}
+
+/**
+ * Print Ne Zha / Silent Voice matches and groups that share any searchable title.
  * @returns {Promise<void>}
  */
 async function findDuplicates() {
@@ -48,25 +108,11 @@ async function findDuplicates() {
 
     console.log('\nSearching for potential duplicates across all content...')
     const allContent = await Content.find({}).lean()
-    const titleGroups = {}
-
-    allContent.forEach((item) => {
-      const normalizedTitle = item.title
-        .toLowerCase()
-        .replace(/[^\w\s]/g, '')
-        .trim()
-
-      if (!titleGroups[normalizedTitle]) {
-        titleGroups[normalizedTitle] = []
-      }
-      titleGroups[normalizedTitle].push(item)
-    })
-
-    const duplicateGroups = Object.entries(titleGroups).filter(([, items]) => items.length > 1)
+    const duplicateGroups = groupContentBySharedTitles(allContent)
 
     if (duplicateGroups.length > 0) {
       console.log(`\n📋 Found ${duplicateGroups.length} potential duplicate groups:\n`)
-      duplicateGroups.forEach(([, items]) => {
+      duplicateGroups.forEach((items) => {
         console.log(`\n"${items[0].title}" (${items.length} items):`)
         items.forEach((item) => {
           const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'

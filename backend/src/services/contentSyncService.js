@@ -1,7 +1,7 @@
 /**
  * Persists TMDB and MyAnimeList catalog rows into MongoDB Content documents.
  * Domain service used by the populateUnified CLI and the hourly contentSyncScheduler.
- * Dedup is title/type based (external IDs are reference-only). Merges combine MAL + TMDB
+ * Dedup is title/type based (external IDs are reference-only, except conflicting ids block a merge). Merges combine MAL + TMDB
  * without clobbering user ratings; unifiedScore is vote-weighted across sources.
  */
 import mongoose from 'mongoose'
@@ -9,7 +9,12 @@ import Content from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import relationshipService from './relationshipService.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
-import { applyTitleFields, contentTitleMatchOr } from '../utils/titles.js'
+import {
+  applyTitleFields,
+  contentExactTitlesMatchOr,
+  contentTitlesOverlap,
+  externalIdsConflict,
+} from '../utils/titles.js'
 
 class DatabasePopulator {
   constructor() {
@@ -368,29 +373,25 @@ class DatabasePopulator {
   }
 
   /**
-   * Title-variation lookup plus isLikelySameContent fact checks.
-   * External IDs are not used as match keys.
+   * Exact name lookup plus isLikelySameContent fact checks.
+   * Searches every English/native/original/alternative name. Conflicting TMDB/MAL ids never merge.
    * @param {object} contentData
    * @returns {Promise<Array<{ content: object, reason: 'title_match' }>>}
    */
   async findDuplicateContent(contentData) {
     const duplicates = []
+    const titleOr = contentExactTitlesMatchOr(contentData)
+    if (titleOr.length === 0) return duplicates
 
-    const titleVariations = this.generateTitleVariations(contentData.title)
+    const candidates = await Content.find({
+      $or: titleOr,
+      contentType: contentData.contentType,
+    })
 
-    for (const title of titleVariations) {
-      const titleMatcher = {
-        $regex: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
-      }
-      const byTitle = await Content.findOne({
-        $or: contentTitleMatchOr(titleMatcher),
-        contentType: contentData.contentType,
-      })
-
-      if (byTitle && !duplicates.some((d) => d.content._id.equals(byTitle._id))) {
-        if (this.isLikelySameContent(contentData, byTitle)) {
-          duplicates.push({ content: byTitle, reason: 'title_match' })
-        }
+    for (const candidate of candidates) {
+      if (duplicates.some((d) => d.content._id.equals(candidate._id))) continue
+      if (this.isLikelySameContent(contentData, candidate)) {
+        duplicates.push({ content: candidate, reason: 'title_match' })
       }
     }
 
@@ -398,45 +399,8 @@ class DatabasePopulator {
   }
 
   /**
-   * Strip parentheticals, seasons, "Movie", and "The" so TMDB/MAL title spellings can still match.
-   * @param {string} title
-   * @returns {string[]}
-   */
-  generateTitleVariations(title) {
-    const variations = [title]
-
-    const normalized = title.toLowerCase().trim()
-    variations.push(normalized)
-
-    const cleaned = normalized
-      .replace(/\s*\(.*?\)\s*/g, '')
-      .replace(/\s*:.*$/g, '')
-      .replace(/\s*-\s*.*$/g, '')
-      .replace(/\s*season\s*\d+.*$/gi, '')
-      .replace(/\s*movie.*$/gi, '')
-      .replace(/\s*the\s+/gi, '')
-      .replace(/[^\w\s]/g, '')
-      .trim()
-
-    if (cleaned !== normalized && cleaned.length > 2) {
-      variations.push(cleaned)
-    }
-
-    const originalCleaned = title
-      .replace(/\s*\(.*?\)\s*/g, '')
-      .replace(/\s*:.*$/g, '')
-      .replace(/\s*-\s*.*$/g, '')
-      .trim()
-
-    if (originalCleaned !== title && originalCleaned.length > 2) {
-      variations.push(originalCleaned.toLowerCase())
-    }
-
-    return [...new Set(variations)].filter((v) => v && v.length > 2)
-  }
-
-  /**
    * Lenient same-title check used when merging TMDB and MAL rows:
+   * names must overlap and external ids must not conflict;
    * movies within 2 years, TV within 3; at least one shared genre when both have genres;
    * TV episode counts within 10; movie runtimes within 45 minutes.
    * Missing year/genre/episode/runtime does not reject the match.
@@ -445,6 +409,17 @@ class DatabasePopulator {
    * @returns {boolean}
    */
   isLikelySameContent(newContent, existingContent) {
+    if (externalIdsConflict(newContent, existingContent)) {
+      console.log(
+        `External ID mismatch: ${newContent.title} vs ${existingContent.title}`,
+      )
+      return false
+    }
+
+    if (!contentTitlesOverlap(newContent, existingContent)) {
+      return false
+    }
+
     if (newContent.releaseDate && existingContent.releaseDate) {
       const newYear = new Date(newContent.releaseDate).getFullYear()
       const existingYear = new Date(existingContent.releaseDate).getFullYear()

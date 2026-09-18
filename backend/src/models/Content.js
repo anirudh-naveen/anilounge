@@ -41,7 +41,7 @@ const ContentSchema = new mongoose.Schema(
       index: true,
     },
 
-    // External IDs are reference-only; catalog dedup is title/type based, not these IDs
+    // External IDs are reference-only for lookup; merge still refuses when both sides have different ids
     tmdbId: {
       type: Number,
       sparse: true,

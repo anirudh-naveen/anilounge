@@ -65,6 +65,77 @@ export function collectContentTitles(content = {}) {
 }
 
 /**
+ * True when any searchable name on the left matches any searchable name on the right.
+ * Catches TMDB/MAL duplicates whose English and native titles are swapped across sources.
+ * @param {object} [left={}]
+ * @param {object} [right={}]
+ * @returns {boolean}
+ */
+export function contentTitlesOverlap(left = {}, right = {}) {
+  const rightTitles = collectContentTitles(right)
+  return collectContentTitles(left).some((leftTitle) =>
+    rightTitles.some((rightTitle) => titlesEqual(leftTitle, rightTitle)),
+  )
+}
+
+/**
+ * Positive numeric TMDB/MAL id, or null when missing.
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+function numericExternalId(value) {
+  if (value == null || value === '') return null
+  const id = Number(value)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+/**
+ * True when both rows already have a TMDB id or both have a MAL id, and those ids differ.
+ * Same-name franchise entries must stay separate instead of merging into one row.
+ * @param {object} [left={}]
+ * @param {object} [right={}]
+ * @returns {boolean}
+ */
+export function externalIdsConflict(left = {}, right = {}) {
+  const leftTmdb = numericExternalId(left.tmdbId)
+  const rightTmdb = numericExternalId(right.tmdbId)
+  if (leftTmdb != null && rightTmdb != null && leftTmdb !== rightTmdb) {
+    return true
+  }
+
+  const leftMal = numericExternalId(left.malId)
+  const rightMal = numericExternalId(right.malId)
+  if (leftMal != null && rightMal != null && leftMal !== rightMal) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Escape a title for an exact, case-insensitive Mongo regex.
+ * @param {unknown} title
+ * @returns {object | null} `{ $regex, $options }` or null when empty
+ */
+export function exactTitleMatcher(title) {
+  const escaped = normalizeTitle(title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  if (!escaped) return null
+  return { $regex: `^${escaped}$`, $options: 'i' }
+}
+
+/**
+ * Mongo `$or` that exact-matches every searchable name on `content` against every title field.
+ * @param {object} [content={}]
+ * @returns {object[]}
+ */
+export function contentExactTitlesMatchOr(content = {}) {
+  return collectContentTitles(content).flatMap((title) => {
+    const matcher = exactTitleMatcher(title)
+    return matcher ? contentTitleMatchOr(matcher) : []
+  })
+}
+
+/**
  * Map API title fields onto the Content schema.
  * Canonical `title` prefers English, then fallback, then native. `originalTitle` mirrors native.
  * Alternatives exclude values already stored as title/english/native.
