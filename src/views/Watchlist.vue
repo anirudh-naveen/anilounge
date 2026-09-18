@@ -185,7 +185,7 @@
                       "
                       class="status-select"
                     >
-                      <option value="plan_to_watch">Plan to Watch</option>
+                      <option value="plan_to_watch">Planned</option>
                       <option value="watching">Watching</option>
                       <option value="completed">Completed</option>
                       <option value="dropped">Dropped</option>
@@ -328,7 +328,7 @@ const sortDirection = ref<SortDirection>('desc')
 
 const statusOptions = [
   { value: 'all', label: 'All' },
-  { value: 'plan_to_watch', label: 'Plan to Watch' },
+  { value: 'plan_to_watch', label: 'Planned' },
   { value: 'watching', label: 'Watching' },
   { value: 'completed', label: 'Completed' },
   { value: 'dropped', label: 'Dropped' },
