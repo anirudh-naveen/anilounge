@@ -5,6 +5,8 @@
  * views, and display helpers.
  */
 
+export type CatalogEntityType = 'character' | 'voice_actor' | 'studio'
+
 export interface UnifiedContent {
   _id: string
   title: string
@@ -12,7 +14,7 @@ export interface UnifiedContent {
   nativeTitle?: string
   originalTitle?: string
   overview: string
-  contentType: 'movie' | 'tv' | 'special'
+  contentType: 'movie' | 'tv' | 'special' | 'character' | 'voice_actor'
   posterPath?: string
   backdropPath?: string
   releaseDate?: string | Date
@@ -58,6 +60,9 @@ export interface UnifiedContent {
   franchise?: string
   /** `'tmdb'` or `'mal'` on external search results. */
   source?: string
+  /** Present on character / voice-actor / studio search hits. */
+  entityType?: CatalogEntityType
+  appearances?: EntityAppearance[]
   relationships?: {
     sequels: string[]
     prequels: string[]
@@ -90,4 +95,56 @@ export interface Episode {
 
 export interface UnifiedContentWithScore extends UnifiedContent {
   unifiedScore: number
+}
+
+export interface EntityVoiceCredit {
+  name: string
+  language?: string
+  malId?: number
+  tmdbId?: number
+  imagePath?: string
+  entity?: string
+}
+
+export interface EntityAppearance {
+  content?:
+    | string
+    | {
+        _id: string
+        title?: string
+        englishTitle?: string
+        nativeTitle?: string
+        posterPath?: string
+        contentType?: 'movie' | 'tv' | 'special'
+      }
+  character?:
+    | string
+    | {
+        _id: string
+        name?: string
+        imagePath?: string
+        entityType?: CatalogEntityType
+      }
+  role?: string
+  importance?: number
+  characterName?: string
+  language?: string
+  voiceActors?: EntityVoiceCredit[]
+}
+
+/** Persisted character, voice actor, or studio with its own detail screen. */
+export interface CatalogEntity {
+  _id: string
+  entityType: CatalogEntityType
+  name: string
+  englishName?: string
+  nativeName?: string
+  alternativeNames?: string[]
+  about?: string
+  imagePath?: string
+  malId?: number
+  tmdbId?: number
+  favoritesCount?: number
+  isFavorited?: boolean
+  appearances?: EntityAppearance[]
 }

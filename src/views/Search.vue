@@ -285,7 +285,7 @@
               :item="item"
               :is-authenticated="authStore.isAuthenticated"
               :in-watchlist="contentStore.isInWatchlist(item._id)"
-              :show-watchlist="!(item as any).source"
+              :show-watchlist="!(item as any).source && !isCatalogEntity(item)"
             />
           </div>
         </div>
@@ -337,6 +337,7 @@ import {
   isMovieLike,
   matchesContentTypeFilter,
   tracksEpisodes,
+  isCatalogEntity,
 } from '@/services/api'
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
@@ -402,36 +403,43 @@ const filteredResults = computed(() => {
   let results = [...searchResults.value]
   const active = appliedFilters.value
 
-  // Apply type filter (Movies includes specials)
+  // Apply type filter (Movies includes specials). Characters stay visible in text search.
   if (active.type !== 'all') {
-    results = results.filter((item) => matchesContentTypeFilter(item.contentType, active.type))
+    results = results.filter(
+      (item) => isCatalogEntity(item) || matchesContentTypeFilter(item.contentType, active.type),
+    )
   }
 
   // Apply rating range (1–10). Full span includes unrated titles.
   if (!(active.ratingMin === 1 && active.ratingMax === 10)) {
-    results = results.filter((item) =>
-      ratingMatchesFilter(item, active.ratingMin, active.ratingMax),
+    results = results.filter(
+      (item) => isCatalogEntity(item) || ratingMatchesFilter(item, active.ratingMin, active.ratingMax),
     )
   }
 
   // Apply year filter
   if (active.year !== 'all') {
-    results = results.filter((item) => matchesYearFilter(item, active.year))
+    results = results.filter((item) => isCatalogEntity(item) || matchesYearFilter(item, active.year))
   }
 
   // Apply season filter (movies and series)
   if (active.season !== 'all') {
-    results = results.filter((item) => matchesSeasonFilter(item, active.season))
+    results = results.filter(
+      (item) => isCatalogEntity(item) || matchesSeasonFilter(item, active.season),
+    )
   }
 
   // Apply status filter (completed / airing / upcoming)
   if (active.status !== 'all') {
-    results = results.filter((item) => matchesStatusFilter(item, active.status))
+    results = results.filter(
+      (item) => isCatalogEntity(item) || matchesStatusFilter(item, active.status),
+    )
   }
 
   // Apply genre filter
   if (active.genre !== 'all') {
     results = results.filter((item) => {
+      if (isCatalogEntity(item)) return true
       if (!item.genres || !Array.isArray(item.genres)) return false
       return item.genres.some((genre) => {
         const genreName = typeof genre === 'string' ? genre : genre.name
@@ -443,6 +451,7 @@ const filteredResults = computed(() => {
   // Apply language filter (this is a simplified implementation)
   if (active.language !== 'all') {
     results = results.filter((item) => {
+      if (isCatalogEntity(item)) return true
       // For now, we'll assume Japanese content based on MAL data
       // This could be enhanced with actual language data from TMDB
       if (active.language === 'Japanese') {
@@ -464,7 +473,9 @@ const filteredResults = computed(() => {
 
   // Apply country of origin
   if (active.country !== 'all') {
-    results = results.filter((item) => matchesCountryFilter(item, active.country))
+    results = results.filter(
+      (item) => isCatalogEntity(item) || matchesCountryFilter(item, active.country),
+    )
   }
 
   return applySort(

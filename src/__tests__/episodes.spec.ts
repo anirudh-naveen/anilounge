@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import EpisodeRow from '@/components/EpisodeRow.vue'
-import type { Episode } from '@/types/content'
+import type { CatalogEntity, Episode } from '@/types/content'
 import {
   episodeKey,
   episodesForSeason,
@@ -20,6 +21,25 @@ const episode = (overrides: Partial<Episode> = {}): Episode => ({
   cast: [{ name: 'Aoi Yuki', character: 'Hero', profilePath: '' }],
   ...overrides,
 })
+
+const mountRow = async (props: { episodes: Episode[]; characters?: CatalogEntity[] }) => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: { template: '<div />' } },
+      { path: '/character/:id', name: 'CharacterDetails', component: { template: '<div />' } },
+    ],
+  })
+  await router.push('/')
+  await router.isReady()
+  return {
+    wrapper: mount(EpisodeRow, {
+      props,
+      global: { plugins: [router] },
+    }),
+    router,
+  }
+}
 
 describe('episode helpers', () => {
   it('groups seasons and sorts episode numbers', () => {
@@ -60,7 +80,7 @@ describe('EpisodeRow', () => {
   ]
 
   it('expands title, description, and cast on the same page', async () => {
-    const wrapper = mount(EpisodeRow, { props: { episodes } })
+    const { wrapper } = await mountRow({ episodes })
 
     expect(wrapper.find('a').exists()).toBe(false)
     expect(wrapper.text()).toContain('Begin')
@@ -75,7 +95,7 @@ describe('EpisodeRow', () => {
   })
 
   it('collapses when the same episode is clicked again', async () => {
-    const wrapper = mount(EpisodeRow, { props: { episodes } })
+    const { wrapper } = await mountRow({ episodes })
     const card = wrapper.get('[data-testid="episode-1-1"]')
 
     await card.trigger('click')
@@ -86,7 +106,7 @@ describe('EpisodeRow', () => {
   })
 
   it('filters the strip to the selected season', async () => {
-    const wrapper = mount(EpisodeRow, { props: { episodes } })
+    const { wrapper } = await mountRow({ episodes })
 
     expect(wrapper.text()).toContain('Begin')
     expect(wrapper.text()).not.toContain('Later')
@@ -94,5 +114,37 @@ describe('EpisodeRow', () => {
     await wrapper.get('button.season-pill:nth-child(2)').trigger('click')
     expect(wrapper.text()).toContain('Later')
     expect(wrapper.text()).not.toContain('Begin')
+  })
+
+  it('shows series characters on every expanded episode and opens their screen', async () => {
+    const characters: CatalogEntity[] = [
+      {
+        _id: 'char-hero',
+        entityType: 'character',
+        name: 'Hero (voice)',
+        appearances: [{ content: 'show-1', role: 'Main' }],
+      },
+      ...Array.from({ length: 11 }, (_, index) => ({
+        _id: `char-${index}`,
+        entityType: 'character' as const,
+        name: `Extra ${index}`,
+        appearances: [{ content: 'show-1', role: 'Supporting' }],
+      })),
+    ]
+    const { wrapper, router } = await mountRow({ episodes, characters })
+    await wrapper.get('[data-testid="episode-1-1"]').trigger('click')
+    expect(wrapper.get('[data-testid="character-card-char-hero"]').text()).toContain('Hero')
+    expect(wrapper.get('[data-testid="character-card-char-hero"]').text()).not.toContain('Main')
+    expect(wrapper.get('[data-testid="character-card-char-hero"]').text()).not.toContain('voice')
+    expect(wrapper.findAll('[data-testid^="character-card-"]')).toHaveLength(10)
+    expect(wrapper.text()).toContain('+2 more')
+    const push = vi.spyOn(router, 'push')
+    await wrapper.get('[data-testid="character-card-char-hero"]').trigger('click')
+    expect(push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'CharacterDetails',
+        params: { id: 'char-hero' },
+      }),
+    )
   })
 })

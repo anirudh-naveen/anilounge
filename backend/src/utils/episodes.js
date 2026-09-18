@@ -3,6 +3,8 @@
  * Utils layer: normalizes title, description, still, and cast for the TV details row.
  */
 
+import { cleanCharacterName } from './entities.js'
+
 const DEFAULT_CAST_LIMIT = 8
 
 /**
@@ -24,7 +26,7 @@ export function mapTmdbCastMember(person) {
   const roleCharacter = Array.isArray(person.roles) ? person.roles[0]?.character : ''
   return {
     name,
-    character: asText(person.character) || asText(roleCharacter),
+    character: cleanCharacterName(asText(person.character) || asText(roleCharacter)),
     profilePath: asText(person.profile_path),
   }
 }

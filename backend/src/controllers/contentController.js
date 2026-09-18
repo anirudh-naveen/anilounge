@@ -2,7 +2,7 @@
  * Catalog, search, AI, watchlist, and rating HTTP handlers.
  *
  * Layer: controller. Talks to Content/User models, unified/Gemini/relationship
- * services, and rating helpers. Watchlist and vote writes run in a Mongo session.
+ * services, and rating helpers. Watchlist and vote writes run in a Postgres transaction.
  */
 
 import Content from '../models/Content.js'
@@ -28,7 +28,7 @@ import {
   sortForCatalogTab,
 } from '../utils/catalogTabs.js'
 import { validationResult } from 'express-validator'
-import mongoose from 'mongoose'
+import { startSession } from '../../config/postgres.js'
 
 const movieLikeTypes = ['movie', 'special']
 
@@ -630,7 +630,7 @@ export const aiChat = async (req, res) => {
  * @returns {Promise<void>}
  */
 export const addToWatchlist = async (req, res) => {
-  const session = await mongoose.startSession()
+  const session = await startSession()
   session.startTransaction()
 
   try {
@@ -794,7 +794,7 @@ export const getWatchlist = async (req, res) => {
  * @returns {Promise<void>}
  */
 export const removeFromWatchlist = async (req, res) => {
-  const session = await mongoose.startSession()
+  const session = await startSession()
   session.startTransaction()
 
   try {
@@ -852,7 +852,7 @@ export const removeFromWatchlist = async (req, res) => {
  * @returns {Promise<void>}
  */
 export const updateWatchlistItem = async (req, res) => {
-  const session = await mongoose.startSession()
+  const session = await startSession()
   session.startTransaction()
 
   try {
@@ -1020,7 +1020,7 @@ async function applyContentRatingChange(content, oldRating, newRating, session) 
  * @returns {Promise<void>}
  */
 export const voteContent = async (req, res) => {
-  const session = await mongoose.startSession()
+  const session = await startSession()
   session.startTransaction()
 
   try {

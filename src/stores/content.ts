@@ -9,6 +9,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
   contentAPI,
+  entityAPI,
   watchlistAPI,
   formatGenres,
   getContentTypeDisplay,
@@ -451,6 +452,33 @@ export const useContentStore = defineStore('content', () => {
         })
       } else {
         filteredResults.sort((a, b) => (b.unifiedScore || 0) - (a.unifiedScore || 0))
+      }
+
+      if (searchTerm) {
+        try {
+          const entityResponse = await entityAPI.search({
+            q: query,
+            type: 'all',
+            limit: 24,
+          })
+          const entityHits = ((entityResponse.data?.data || []) as UnifiedContent[]).filter(
+            (hit) => hit.entityType === 'character' || hit.entityType === 'voice_actor',
+          )
+          const seen = new Set(filteredResults.map((item) => item._id))
+          const extra = entityHits.filter((hit) => hit?._id && !seen.has(hit._id))
+          extra.sort((left, right) => {
+            const leftName = getSearchableTitles(left).map((title) => title.toLowerCase())
+            const rightName = getSearchableTitles(right).map((title) => title.toLowerCase())
+            const leftExact = leftName.includes(searchTerm)
+            const rightExact = rightName.includes(searchTerm)
+            if (leftExact && !rightExact) return -1
+            if (!leftExact && rightExact) return 1
+            return 0
+          })
+          filteredResults = [...extra, ...filteredResults]
+        } catch (entityError) {
+          console.error('Character search failed:', entityError)
+        }
       }
 
       const totalItems = filteredResults.length

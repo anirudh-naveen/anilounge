@@ -125,27 +125,12 @@
       </div>
 
       <!-- Title: Episodes -->
-      <EpisodeRow :episodes="episodes" :loading="episodesLoading" />
-
-      <!-- Title: Studios -->
-      <div v-if="show.studios?.length" class="network-info">
-        <h3>Studios</h3>
-        <div class="networks">
-          <span v-for="studio in show.studios" :key="`studio-${studio}`" class="network-tag">
-            {{ studio }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Title: Production Companies -->
-      <div v-if="show.productionCompanies?.length" class="production-info">
-        <h3>Production Companies</h3>
-        <div class="companies">
-          <span v-for="company in show.productionCompanies" :key="company" class="company-tag">
-            {{ company }}
-          </span>
-        </div>
-      </div>
+      <EpisodeRow
+        :episodes="episodes"
+        :loading="episodesLoading"
+        :characters="characters"
+        :content-id="show._id"
+      />
 
       <!-- Title: Related Loading -->
       <div v-if="relatedContentLoading" class="related-content-loading">
@@ -275,6 +260,21 @@
           </div>
         </div>
       </div>
+
+      <EntityCastRow
+        :items="characters"
+        :content-id="show._id"
+        :loading="charactersLoading"
+      />
+
+      <div v-if="animationStudios.length" class="network-info">
+        <h3>Animation studios</h3>
+        <div class="networks">
+          <span v-for="studio in animationStudios" :key="`studio-${studio}`" class="network-tag">
+            {{ studio }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Title: Watchlist -->
@@ -302,7 +302,9 @@ import {
 import StatusDropdown from '@/components/StatusDropdown.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EpisodeRow from '@/components/EpisodeRow.vue'
-import type { Episode, UnifiedContent } from '@/types/content'
+import EntityCastRow from '@/components/EntityCastRow.vue'
+import type { CatalogEntity, Episode, UnifiedContent } from '@/types/content'
+import { useEntityStore } from '@/stores/entities'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel } from '@/utils/watchlist'
@@ -318,6 +320,7 @@ const route = useRoute()
 const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
+const entityStore = useEntityStore()
 
 const show = ref<UnifiedContent | null>(null)
 const loading = ref(true)
@@ -331,9 +334,12 @@ const relatedContent = ref<{
 const relatedContentLoading = ref(false)
 const episodes = ref<Episode[]>([])
 const episodesLoading = ref(false)
+const characters = ref<CatalogEntity[]>([])
+const charactersLoading = ref(false)
 let detailsRequestId = 0
 let relatedRequestId = 0
 let episodesRequestId = 0
+let charactersRequestId = 0
 
 const watchlistItem = computed(() =>
   show.value ? contentStore.getWatchlistItem(show.value._id) : undefined,
@@ -348,6 +354,12 @@ const getDisplayScore = (content: UnifiedContent) => {
 
 const getDisplayVoteCount = (content: UnifiedContent) => getTotalVoteCount(content)
 
+const animationStudios = computed(() => {
+  const studios = (show.value?.studios || []).filter(Boolean)
+  if (studios.length) return [...new Set(studios)]
+  return [...new Set((show.value?.productionCompanies || []).filter(Boolean))]
+})
+
 const loadShow = async (showId: string) => {
   const requestId = ++detailsRequestId
 
@@ -361,10 +373,12 @@ const loadShow = async (showId: string) => {
   relatedContent.value = null
   relatedContentLoading.value = false
   episodes.value = []
+  characters.value = []
   contentStore.scrollToTop()
 
   const cached = contentStore.findContentById(showId)
   fetchEpisodes(showId)
+  fetchCharacters(showId)
   if (cached) {
     show.value = cached
     loading.value = false
@@ -507,6 +521,24 @@ const fetchEpisodes = async (contentId: string) => {
   } finally {
     if (requestId === episodesRequestId) {
       episodesLoading.value = false
+    }
+  }
+}
+
+const fetchCharacters = async (contentId: string) => {
+  const requestId = ++charactersRequestId
+  charactersLoading.value = true
+  try {
+    const data = await entityStore.getContentCharacters(contentId)
+    if (requestId !== charactersRequestId) return
+    characters.value = data
+  } catch (err) {
+    if (requestId !== charactersRequestId) return
+    console.error('Failed to fetch characters:', err)
+    characters.value = []
+  } finally {
+    if (requestId === charactersRequestId) {
+      charactersLoading.value = false
     }
   }
 }

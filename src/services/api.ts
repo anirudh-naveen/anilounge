@@ -84,6 +84,22 @@ export const authAPI = {
     }),
 }
 
+export const entityAPI = {
+  search: (params: { q: string; type?: string; limit?: number }) => api.get('/entities', { params }),
+
+  getById: (id: string) => api.get(`/entities/${id}`),
+
+  getContentCharacters: (contentId: string) => api.get(`/content/${contentId}/characters`),
+
+  getContentVoiceActors: (contentId: string) => api.get(`/content/${contentId}/voice-actors`),
+
+  getFavorites: () => api.get('/favorites'),
+
+  favorite: (id: string) => api.post(`/entities/${id}/favorite`),
+
+  unfavorite: (id: string) => api.delete(`/entities/${id}/favorite`),
+}
+
 export const contentAPI = {
   getContent: (params: ContentParams) => api.get('/content', { params }),
 
@@ -143,10 +159,11 @@ export const watchlistAPI = {
  */
 export const getImageUrl = (path: string, size = 'w500') => {
   if (!path) return '/placeholder-movie.jpg'
-
-  if (path.startsWith('http')) {
-    return path
+  if (path.startsWith('//')) return `https:${path}`
+  if (path.startsWith('http://') && /myanimelist\.net/i.test(path)) {
+    return `https://${path.slice('http://'.length)}`
   }
+  if (path.startsWith('http')) return path
 
   return `https://image.tmdb.org/t/p/${size}${path}`
 }
@@ -265,13 +282,17 @@ export const formatGenres = (genres: Array<{ id?: number; name?: string }> | str
 }
 
 /**
- * Human-readable content-type label, including `"Special"` for MAL specials.
- * @param contentType - `movie`, `tv`, or `special`.
- * @returns `"Movie"`, `"Series"`, or `"Special"`.
+ * Human-readable content-type label, including `"Special"` for MAL specials
+ * and `"Character"` for catalog people.
+ * @param contentType - `movie`, `tv`, `special`, or `character`.
+ * @returns `"Movie"`, `"Series"`, `"Special"`, or `"Character"`.
  */
 export const getContentTypeDisplay = (contentType: string) => {
   if (contentType === 'special') return 'Special'
   if (contentType === 'movie') return 'Movie'
+  if (contentType === 'character') return 'Character'
+  if (contentType === 'voice_actor') return 'Voice Actor'
+  if (contentType === 'studio') return 'Studio'
   return 'Series'
 }
 
@@ -282,6 +303,15 @@ export const getContentTypeDisplay = (contentType: string) => {
  */
 export const isMovieLike = (contentType?: string) =>
   contentType === 'movie' || contentType === 'special'
+
+/**
+ * Whether this row is a character, voice actor, or studio (not a watchable title).
+ * @param item - Search or catalog row.
+ */
+export const isCatalogEntity = (item?: { entityType?: string; contentType?: string }) => {
+  const kind = item?.entityType || item?.contentType
+  return kind === 'character' || kind === 'voice_actor' || kind === 'studio'
+}
 
 /**
  * Card badge label. Specials keep their own tag even though they live in Movies.
@@ -298,6 +328,9 @@ export const getCardContentTypeDisplay = (contentType: string) => getContentType
  */
 export const matchesContentTypeFilter = (itemType: string | undefined, filter?: string) => {
   if (!filter || filter === 'all') return true
+  if (itemType === 'character' || itemType === 'voice_actor' || itemType === 'studio') {
+    return false
+  }
   if (filter === 'movie') return isMovieLike(itemType)
   return itemType === filter
 }
@@ -310,6 +343,9 @@ export const matchesContentTypeFilter = (itemType: string | undefined, filter?: 
 export const getContentTypeBadgeClass = (contentType: string) => {
   if (contentType === 'tv') return 'tv-badge'
   if (contentType === 'special') return 'special-badge'
+  if (contentType === 'character') return 'character-badge'
+  if (contentType === 'voice_actor') return 'voice-actor-badge'
+  if (contentType === 'studio') return 'studio-badge'
   return 'movie-badge'
 }
 
@@ -336,7 +372,10 @@ export const tracksEpisodes = (item: {
  * @param item - Object with a `contentType`.
  * @returns `'TVShowDetails'` or `'MovieDetails'`.
  */
-export const getDetailsRouteName = (item: { contentType?: string }) => {
+export const getDetailsRouteName = (item: { contentType?: string; entityType?: string }) => {
+  const kind = item.entityType || item.contentType
+  if (kind === 'character') return 'CharacterDetails'
+  if (kind === 'voice_actor') return 'VoiceActorDetails'
   return item.contentType === 'tv' ? 'TVShowDetails' : 'MovieDetails'
 }
 

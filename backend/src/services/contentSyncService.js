@@ -1,10 +1,10 @@
 /**
- * Persists TMDB and MyAnimeList catalog rows into MongoDB Content documents.
+ * Persists TMDB and MyAnimeList catalog rows into PostgreSQL Content documents.
  * Domain service used by the populateUnified CLI and the hourly contentSyncScheduler.
  * Dedup is title/type based (external IDs are reference-only, except conflicting ids block a merge). Merges combine MAL + TMDB
  * without clobbering user ratings; unifiedScore is vote-weighted across sources.
  */
-import mongoose from 'mongoose'
+import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import relationshipService from './relationshipService.js'
@@ -40,12 +40,12 @@ class DatabasePopulator {
   }
 
   /**
-   * Connect using MONGODB_URI. Scheduler passes manageConnection: false and skips this.
+   * Connect using DATABASE_URL. Scheduler passes manageConnection: false and skips this.
    * @returns {Promise<void>}
    */
   async connectDB() {
     try {
-      await mongoose.connect(process.env.MONGODB_URI)
+      await connectPostgres()
       console.log('Database connected')
     } catch (error) {
       console.error('Database connection error:', error)
@@ -54,12 +54,12 @@ class DatabasePopulator {
   }
 
   /**
-   * Close the mongoose connection opened by connectDB.
+   * Close the PostgreSQL pool opened by connectDB.
    * @returns {Promise<void>}
    */
   async disconnectDB() {
     try {
-      await mongoose.disconnect()
+      await closePostgres()
       console.log('Database disconnected')
     } catch (error) {
       console.error('Database disconnection error:', error)
@@ -565,6 +565,7 @@ class DatabasePopulator {
 
           const newContent = new Content(contentWithRelationships)
           await newContent.save()
+          await relationshipService.populateRelationshipsFromMAL(newContent)
           this.stats.newAdded++
           console.log(`Added MAL ${contentData.contentType}: ${contentData.title}`)
         }
@@ -604,7 +605,7 @@ class DatabasePopulator {
   }
 
   /**
-   * Copy merged title fields onto an existing mongoose document.
+   * Copy merged title fields onto an existing catalog document.
    * @param {object} existingContent
    * @param {object} titleFields
    * @returns {void}
@@ -799,6 +800,7 @@ class DatabasePopulator {
     existingContent.lastUpdated = new Date()
 
     await existingContent.save()
+    await relationshipService.populateRelationshipsFromMAL(existingContent)
   }
 
   /**
