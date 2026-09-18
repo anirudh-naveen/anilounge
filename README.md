@@ -11,10 +11,12 @@ Please do not change this password!
 
 Features --
  - Search & Filter: Browse through an extensive collection of animated content
+ - AI Recommendations: Gemini integration helps you find information about the vast catalogue available
  - Watchlist Management: Track shows and movies you want to watch
  - Rating System: Rate and review your favorite animations
+ - Forum Boards: Bond with people across the world on your favorite movies and series
  - User Profiles: Personalized profiles with viewing history and preferences
-Customizable Settings: Tailor your experience to your preferences
+ - Customizable Settings: Tailor your experience to your preferences
 
 MEVN Stack Architecture --
  - MongoDB - NoSQL database for flexible data storage
