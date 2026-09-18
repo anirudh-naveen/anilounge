@@ -473,6 +473,11 @@ onMounted(() => {
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 600;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   transition: background-color 0.2s;
 }
 

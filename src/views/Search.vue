@@ -726,6 +726,11 @@ onMounted(() => {
   font-weight: 650;
   font-family: inherit;
   font-size: 0.95rem;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   transition: all 0.2s ease;
 }
 
@@ -775,8 +780,11 @@ onMounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.15;
   gap: 0.5rem;
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
   color: var(--text-on-accent);
@@ -797,6 +805,9 @@ onMounted(() => {
 .filters-toggle-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.15;
   gap: 0.4rem;
   padding: 0.9rem 1.1rem;
   border: 1px solid var(--border-color);
@@ -996,9 +1007,12 @@ onMounted(() => {
   cursor: pointer;
   font-weight: 600;
   font-size: 0.8rem;
+  line-height: 1.15;
   transition: all 0.3s ease;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 0.4rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   flex-shrink: 0;
@@ -1177,7 +1191,11 @@ onMounted(() => {
 }
 
 .btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.15;
   padding: 12px 24px;
   border-radius: 8px;
   text-decoration: none;

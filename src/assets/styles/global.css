@@ -1,7 +1,6 @@
 /* AniLounge — Poster Wall Café: light grey gallery, ink navy, colorful accents. */
 :root {
-  --font-body:
-    'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
 
   /* Canvas */
@@ -212,12 +211,28 @@ html {
 }
 
 .poster-frame:hover {
-  box-shadow:
-    var(--shadow-spot),
-    var(--shadow-lg);
+  box-shadow: var(--shadow-spot), var(--shadow-lg);
 }
 
-/* Button Styles */
+/* Button Styles — keep label text centered even when body line-height is 1.6 */
+button,
+.btn,
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
+  font-family: inherit;
+}
+
+/* Font Awesome is not loaded; empty <i> tags still take a flex gap and shift labels. */
+button i:empty,
+.btn i:empty,
+a.btn i:empty {
+  display: none;
+}
+
 .btn {
   padding: 0.75rem 1.5rem;
   border: none;
@@ -226,9 +241,6 @@ html {
   cursor: pointer;
   transition: all 0.3s ease;
   text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   gap: 0.5rem;
 }
 

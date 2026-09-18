@@ -161,9 +161,11 @@ const handleLogin = async () => {
 .btn-large {
   padding: 1rem;
   font-size: 1.1rem;
+  line-height: 1.15;
   display: flex;
   align-items: center;
   justify-content: center;
+  text-align: center;
   gap: 0.5rem;
 }
 

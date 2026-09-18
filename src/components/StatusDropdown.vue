@@ -1,16 +1,16 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <!--
-  StatusDropdown.vue — watchlist add overlay (component).
+  StatusDropdown.vue — watchlist add/edit overlay (component).
 
   Modal form for status, rating, episodes, and notes when adding a title to
-  the authenticated user's watchlist.
+  the authenticated user's watchlist, or updating one that is already saved.
 -->
 <template>
   <!-- Overlay -->
   <div v-if="showDropdown" class="status-dropdown-overlay" @click="closeDropdown">
     <div class="status-dropdown" @click.stop>
       <div class="dropdown-header">
-        <h3>Add to Watchlist</h3>
+        <h3>{{ isEditing ? 'Watchlist Status' : 'Add to Watchlist' }}</h3>
         <button @click="closeDropdown" class="close-btn">×</button>
       </div>
 
@@ -20,9 +20,13 @@
         <div class="status-selection">
           <label>Status:</label>
           <select v-model="selectedStatus" class="status-select">
-            <option value="plan_to_watch">Plan to Watch</option>
-            <option value="watching">Watching</option>
-            <option value="completed">Completed</option>
+            <option
+              v-for="option in WATCHLIST_STATUS_OPTIONS"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
           </select>
         </div>
 
@@ -66,17 +70,20 @@
       <!-- Actions -->
       <div class="dropdown-actions">
         <button @click="closeDropdown" class="btn btn-secondary">Cancel</button>
-        <button @click="addToWatchlist" class="btn btn-primary">Add to Watchlist</button>
+        <button @click="saveWatchlist" class="btn btn-primary">
+          {{ isEditing ? 'Save' : 'Add to Watchlist' }}
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+import { WATCHLIST_STATUS_OPTIONS, type WatchlistStatus } from '@/utils/watchlist'
 
 interface Props {
   showDropdown: boolean
@@ -93,10 +100,26 @@ const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
 
-const selectedStatus = ref<'plan_to_watch' | 'watching' | 'completed'>('plan_to_watch')
+const selectedStatus = ref<WatchlistStatus>('plan_to_watch')
 const selectedRating = ref<number | undefined>(undefined)
 const selectedEpisodes = ref<number>(0)
 const selectedNotes = ref<string>('')
+
+const existingItem = computed(() => contentStore.getWatchlistItem(props.contentId))
+const isEditing = computed(() => Boolean(existingItem.value))
+
+const populateForm = () => {
+  const item = existingItem.value
+  if (!item) {
+    resetForm()
+    return
+  }
+
+  selectedStatus.value = item.status
+  selectedRating.value = item.rating
+  selectedEpisodes.value = item.currentEpisode ?? 0
+  selectedNotes.value = item.notes ?? ''
+}
 
 const closeDropdown = () => {
   emit('close')
@@ -110,29 +133,51 @@ const resetForm = () => {
   selectedNotes.value = ''
 }
 
-const addToWatchlist = async () => {
+const saveWatchlist = async () => {
   try {
     if (!authStore.isAuthenticated) {
-      toast.error('Please login to add items to your watchlist')
+      toast.error(
+        isEditing.value
+          ? 'Please login to update your watchlist'
+          : 'Please login to add items to your watchlist',
+      )
       return
     }
 
-    await contentStore.addToWatchlist(
-      props.contentId,
-      selectedStatus.value,
-      selectedRating.value,
-      props.contentType === 'tv' ? selectedEpisodes.value : undefined,
-      undefined, // currentSeason - not used in quick add
-      selectedNotes.value || undefined,
-    )
+    if (isEditing.value) {
+      await contentStore.updateWatchlistItem(props.contentId, {
+        status: selectedStatus.value,
+        rating: selectedRating.value,
+        currentEpisode: props.contentType === 'tv' ? selectedEpisodes.value : undefined,
+        notes: selectedNotes.value || undefined,
+      })
+      toast.success('Watchlist updated!')
+    } else {
+      await contentStore.addToWatchlist(
+        props.contentId,
+        selectedStatus.value,
+        selectedRating.value,
+        props.contentType === 'tv' ? selectedEpisodes.value : undefined,
+        undefined, // currentSeason - not used in quick add
+        selectedNotes.value || undefined,
+      )
+      toast.success('Added to watchlist!')
+    }
 
-    toast.success('Added to watchlist!')
     closeDropdown()
   } catch (error) {
-    console.error('Error adding to watchlist:', error)
-    toast.error('Failed to add to watchlist')
+    console.error('Error saving watchlist item:', error)
+    toast.error(isEditing.value ? 'Failed to update watchlist' : 'Failed to add to watchlist')
   }
 }
+
+watch(
+  () => [props.showDropdown, existingItem.value] as const,
+  ([open]) => {
+    if (open) populateForm()
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>
@@ -265,6 +310,11 @@ const addToWatchlist = async () => {
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 0.9rem;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .btn-secondary {

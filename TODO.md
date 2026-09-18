@@ -24,7 +24,6 @@
 
 ### Bug Fixes
 
-1. Fix the text for all buttons on pages to be properly centered.
 
 ## Home
 
@@ -49,10 +48,6 @@
 ### Additions
 
 ### Bug Fixes
-
-1. Make sure that if content is in the watchlist, when clicking the content the "Add to Watchlist" should instead display the current status on your watchlist.
-   - By clicking the current status, you should be allowed to change its status there too.
-2. Change watchlist so that the filter between the types of "watched" is a dropdown clicker next to the sort instead of individual tabs.
 
 ## Profile
 

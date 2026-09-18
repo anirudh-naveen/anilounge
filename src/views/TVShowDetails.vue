@@ -102,27 +102,17 @@
           <!-- Title: Actions -->
           <div class="show-actions">
             <button
-              v-if="authStore.isAuthenticated && !isInWatchlist"
+              v-if="authStore.isAuthenticated"
+              data-testid="watchlist-action"
               @click="showStatusDropdown = true"
-              class="btn-primary add-to-watchlist"
+              :class="
+                isInWatchlist ? 'btn-secondary watchlist-status' : 'btn-primary add-to-watchlist'
+              "
             >
-              <i class="fas fa-plus"></i>
-              Add to Watchlist
+              {{ isInWatchlist ? watchlistStatusLabel : 'Add to Watchlist' }}
             </button>
 
-            <button
-              v-if="authStore.isAuthenticated && isInWatchlist"
-              @click="removeFromWatchlist"
-              class="btn-secondary remove-from-watchlist"
-            >
-              <i class="fas fa-check"></i>
-              In Watchlist
-            </button>
-
-            <button @click="shareShow" class="btn-outline">
-              <i class="fas fa-share"></i>
-              Share
-            </button>
+            <button @click="shareShow" class="btn-outline">Share</button>
           </div>
         </div>
       </div>
@@ -315,6 +305,7 @@ import EpisodeRow from '@/components/EpisodeRow.vue'
 import type { Episode, UnifiedContent } from '@/types/content'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { getWatchlistStatusLabel } from '@/utils/watchlist'
 import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airing'
 import {
   isMovieCatalogPath,
@@ -344,10 +335,11 @@ let detailsRequestId = 0
 let relatedRequestId = 0
 let episodesRequestId = 0
 
-const isInWatchlist = computed(() => {
-  if (!show.value || !authStore.user?.watchlist) return false
-  return authStore.user.watchlist.some((item) => item.content?._id === show.value?._id)
-})
+const watchlistItem = computed(() =>
+  show.value ? contentStore.getWatchlistItem(show.value._id) : undefined,
+)
+const isInWatchlist = computed(() => Boolean(watchlistItem.value))
+const watchlistStatusLabel = computed(() => getWatchlistStatusLabel(watchlistItem.value?.status))
 
 const getDisplayScore = (content: UnifiedContent) => {
   const average = getWeightedAverage(content)
@@ -477,16 +469,6 @@ const goBack = () => {
   }
 }
 
-const removeFromWatchlist = async () => {
-  if (!show.value) return
-
-  try {
-    await contentStore.removeFromWatchlist(show.value._id)
-  } catch (err) {
-    console.error('Failed to remove from watchlist:', err)
-  }
-}
-
 const shareShow = () => {
   if (navigator.share && show.value) {
     navigator.share({
@@ -583,6 +565,16 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => authStore.isAuthenticated,
+  (isAuthenticated) => {
+    if (isAuthenticated) {
+      void contentStore.loadWatchlist()
+    }
+  },
+  { immediate: true },
+)
+
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
   img.style.display = 'none'
@@ -598,8 +590,11 @@ const handleImageError = (event: Event) => {
 }
 
 .back-button {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.15;
   gap: 0.5rem;
   margin-bottom: 2rem;
   padding: 0.5rem 1rem;
@@ -752,6 +747,7 @@ const handleImageError = (event: Event) => {
 
 .show-actions {
   display: flex;
+  align-items: center;
   gap: 1rem;
   margin-top: 1.5rem;
 }
@@ -764,15 +760,19 @@ const handleImageError = (event: Event) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
   gap: 0.5rem;
+  box-sizing: border-box;
+  border: 2px solid transparent;
 }
 
 .btn-primary {
   background: var(--blend-color);
   color: white;
-  border: none;
 }
 
 .btn-primary:hover {
@@ -783,7 +783,6 @@ const handleImageError = (event: Event) => {
 .btn-secondary {
   background: var(--success-color);
   color: white;
-  border: none;
 }
 
 .btn-secondary:hover {
@@ -794,7 +793,7 @@ const handleImageError = (event: Event) => {
 .btn-outline {
   background: transparent;
   color: var(--text-primary);
-  border: 2px solid var(--border-color);
+  border-color: var(--border-color);
 }
 
 .btn-outline:hover {

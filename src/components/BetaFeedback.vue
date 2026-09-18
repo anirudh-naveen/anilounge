@@ -136,6 +136,11 @@ textarea.form-control {
   border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
 }

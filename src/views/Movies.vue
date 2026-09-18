@@ -274,6 +274,11 @@ onMounted(async () => {
   transition: all 0.2s ease;
   font-weight: 600;
   font-family: inherit;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .tab-btn:hover {
@@ -435,7 +440,11 @@ onMounted(async () => {
 }
 
 .btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.15;
   padding: 12px 24px;
   border-radius: 8px;
   text-decoration: none;
