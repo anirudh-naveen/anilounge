@@ -18,8 +18,9 @@ Features --
  - User Profiles: Personalized profiles with viewing history and preferences
  - Customizable Settings: Tailor your experience to your preferences
 
-MEVN Stack Architecture --
- - MongoDB - NoSQL database for flexible data storage
+MEVN --> PEVN Stack Architecture --
+ - MongoDB - NoSQL database for flexible data storage (old)
+ - PostgresSQL - SQL relational database for recording complex relationships of data
  - Express.js - Backend web application framework
  - Vue.js - Progressive frontend JavaScript framework
  - Node.js - JavaScript runtime environment
