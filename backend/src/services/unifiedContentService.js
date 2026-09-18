@@ -14,7 +14,12 @@ import {
   mapTmdbEpisode,
   tmdbSeasonNumbers,
 } from '../utils/episodes.js'
-import { buildTitleFields, uniqueTitles } from '../utils/titles.js'
+import {
+  buildTitleFields,
+  collectContentTitles,
+  contentTitlesOverlap,
+  externalIdsConflict,
+} from '../utils/titles.js'
 import { MAL_ORIGIN_COUNTRIES, extractOriginCountries } from '../utils/originCountries.js'
 import { parseMalDate } from '../utils/malDates.js'
 
@@ -842,32 +847,29 @@ class UnifiedContentService {
   }
 
   /**
-   * Collapse live-search hits on englishTitle/title + contentType, then rank exact title match over score.
+   * Collapse live-search hits when any names overlap on the same contentType, then rank title match over score.
    * @param {object[]} results
    * @param {string} query
    * @returns {object[]}
    */
   deduplicateAndRank(results, query) {
-    const seen = new Set()
     const deduplicated = []
 
     for (const result of results) {
-      const key = `${result.englishTitle || result.title}-${result.contentType}`
-      if (!seen.has(key)) {
-        seen.add(key)
+      const duplicate = deduplicated.find(
+        (item) =>
+          item.contentType === result.contentType &&
+          contentTitlesOverlap(item, result) &&
+          !externalIdsConflict(item, result),
+      )
+      if (!duplicate) {
         deduplicated.push(result)
       }
     }
 
     const queryLower = query.toLowerCase()
     const matchesQuery = (item) =>
-      uniqueTitles(
-        item.englishTitle,
-        item.title,
-        item.nativeTitle,
-        item.originalTitle,
-        item.alternativeTitles,
-      ).some((title) => title.toLowerCase().includes(queryLower))
+      collectContentTitles(item).some((title) => title.toLowerCase().includes(queryLower))
 
     return deduplicated.sort((a, b) => {
       const aTitleMatch = matchesQuery(a)
