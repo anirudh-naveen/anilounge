@@ -136,6 +136,20 @@ const userSchema = new mongoose.Schema(
       favoriteGenres: [String],
       favoriteStudios: [String],
     },
+
+    // Favorited characters, voice actors, and studios (not watchlist titles)
+    favoriteEntities: [
+      {
+        entity: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Entity',
+        },
+        addedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
 
   {

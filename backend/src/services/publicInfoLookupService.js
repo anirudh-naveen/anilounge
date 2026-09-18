@@ -2,11 +2,13 @@
  * publicInfoLookupService.js — Topic-gated Wikipedia summaries for chat.
  *
  * Domain service: encyclopedia fetches are limited to catalog titles,
- * animation studios, voice actors, and genres. Web text never discovers
+ * animation studios, voice actors, characters, and genres. Web text never discovers
  * titles to recommend.
  */
 
 import { findByTitle, searchCatalog } from './catalogLookupService.js'
+import { findEntityByName } from './entityService.js'
+import { serializeEntity } from '../utils/entities.js'
 import {
   extractMatchesTopic,
   isAllowedWikipediaUrl,
@@ -198,6 +200,56 @@ async function lookupVoiceActor(name, options) {
   }
 }
 
+const CHARACTER_NOTE =
+  'Answer the character question from this lookup. Do not recommend series from character info. Only search_catalog if the user explicitly asked for title recommendations.'
+
+async function lookupCharacter(name, options) {
+  const entity = await findEntityByName(name, 'character')
+  if (entity) {
+    await entity.populate({
+      path: 'appearances.content',
+      select: 'title englishTitle nativeTitle contentType',
+    })
+  }
+  const summary = await firstWikipediaHit(
+    wikiLookupCandidates(name, 'character'),
+    options,
+    (hit) => extractMatchesTopic(hit.extract, hit.description, 'character'),
+  )
+  const serialized = entity ? serializeEntity(entity) : null
+  if (!serialized && !summary) {
+    return {
+      docs: [],
+      payload: {
+        allowed: false,
+        reason:
+          'No catalog character or encyclopedia page found. Do not invent biographies or recommend titles.',
+      },
+    }
+  }
+  const appearances = (serialized?.appearances || [])
+    .map((row) => {
+      const content = row.content
+      if (!content || typeof content !== 'object') return null
+      return content.englishTitle || content.title || null
+    })
+    .filter(Boolean)
+  return {
+    docs: [],
+    payload: wikiPayload({
+      kind: 'character',
+      name: serialized?.name || name,
+      summary,
+      extra: {
+        about: serialized?.about || undefined,
+        catalogAppearances: appearances,
+        role: serialized?.appearances?.[0]?.role,
+        note: CHARACTER_NOTE,
+      },
+    }),
+  }
+}
+
 /**
  * Look up encyclopedia background for a title, studio, voice actor, or genre.
  * @param {{ name?: string, title?: string, kind?: string }} [args]
@@ -213,5 +265,6 @@ export async function lookupPublicInfo(args = {}, options = {}) {
   if (kind === 'studio') return lookupStudio(name, options)
   if (kind === 'genre') return lookupGenre(name, options)
   if (kind === 'voice_actor') return lookupVoiceActor(name, options)
+  if (kind === 'character') return lookupCharacter(name, options)
   return lookupTitle(name, options)
 }

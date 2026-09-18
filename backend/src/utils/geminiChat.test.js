@@ -95,6 +95,7 @@ describe('grounded copy', () => {
     assert.match(instruction, /not a general web search/)
     assert.match(instruction, /Favorite genres: Action/)
     assert.match(instruction, /matching genres first/)
-    assert.match(instruction, /Frieren \(watching\)/)
+    assert.match(instruction, /Characters and voice actors are for answering questions only/)
+    assert.match(instruction, /kind character/)
   })
 })

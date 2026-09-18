@@ -30,6 +30,7 @@
   --movie-badge: #d94a4a;
   --tv-badge: #3d8bd9;
   --special-badge: #9b6ad9;
+  --character-badge: #2f9e8f;
 
   /* Text */
   --text-primary: #152238;
@@ -358,6 +359,12 @@ a.btn i:empty {
 
 .special-badge {
   background: var(--special-badge);
+}
+
+.character-badge,
+.voice-actor-badge,
+.studio-badge {
+  background: var(--character-badge);
 }
 
 /* Grid Layout */

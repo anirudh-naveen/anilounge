@@ -120,6 +120,8 @@ describe('topic gates', () => {
   it('normalizes kinds and known genres', () => {
     assert.equal(normalizePublicInfoKind('seiyuu'), 'voice_actor')
     assert.equal(normalizePublicInfoKind('movie'), 'title')
+    assert.equal(normalizePublicInfoKind('character'), 'character')
+    assert.equal(normalizePublicInfoKind('fictional character'), 'character')
     assert.equal(isKnownGenre('Isekai'), true)
     assert.equal(isKnownGenre('finance'), false)
   })
@@ -140,5 +142,14 @@ describe('topic gates', () => {
     )
     assert.equal(extractMatchesTopic('An American football player.', '', 'voice_actor'), false)
     assert.equal(extractMatchesTopic('Isekai is an anime genre.', '', 'genre'), true)
+    assert.deepEqual(wikiLookupCandidates('Luffy', 'character').slice(0, 2), [
+      'Luffy',
+      'Luffy (character)',
+    ])
+    assert.equal(
+      extractMatchesTopic('Monkey D. Luffy is a fictional character in One Piece.', '', 'character'),
+      true,
+    )
+    assert.equal(extractMatchesTopic('A cooking technique from Italy.', '', 'character'), false)
   })
 })

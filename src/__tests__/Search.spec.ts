@@ -21,6 +21,10 @@ vi.mock('@/services/api', async (importOriginal) => {
         data: { success: true, data: [], pagination: { totalItems: 0 } },
       }),
     },
+    entityAPI: {
+      ...actual.entityAPI,
+      search: vi.fn().mockResolvedValue({ data: { success: true, data: [] } }),
+    },
   }
 })
 

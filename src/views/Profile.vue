@@ -103,6 +103,31 @@
                   </span>
                 </div>
               </div>
+              <!-- Title: Favorite Characters -->
+              <div class="preference-item">
+                <label>Favorite Characters</label>
+                <div v-if="favoriteCharacters.length" class="favorite-entity-grid">
+                  <button
+                    v-for="entity in favoriteCharacters"
+                    :key="entity._id"
+                    type="button"
+                    class="favorite-entity-card"
+                    @click="openEntity(entity)"
+                  >
+                    <img
+                      v-if="entity.imagePath"
+                      :src="getPosterUrl(entity.imagePath)"
+                      :alt="entity.name"
+                      referrerpolicy="no-referrer"
+                    />
+                    <div v-else class="favorite-entity-placeholder">
+                      <i class="fas fa-user"></i>
+                    </div>
+                    <span>{{ entity.name }}</span>
+                  </button>
+                </div>
+                <span v-else class="no-preferences">No favorite characters yet</span>
+              </div>
             </div>
           </div>
         </div>
@@ -112,17 +137,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineOptions } from 'vue'
+import { computed, defineOptions, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
-import { isMovieLike, API_HOST } from '@/services/api'
+import { useEntityStore } from '@/stores/entities'
+import { isMovieLike, API_HOST, getPosterUrl } from '@/services/api'
 import { getRatingColorHSL } from '@/utils/ratingColors'
 import type { WatchlistItem } from '@/types'
+import type { CatalogEntity } from '@/types/content'
 
 defineOptions({ name: 'ProfilePage' })
 
 const authStore = useAuthStore()
 const contentStore = useContentStore()
+const entityStore = useEntityStore()
+const router = useRouter()
 
 const userInitials = computed(() => {
   const username = authStore.user?.username || ''
@@ -211,6 +241,22 @@ const favoriteGenres = computed(() => {
 
 const favoriteStudios = computed(() => {
   return authStore.user?.preferences?.favoriteStudios || []
+})
+
+const favoriteCharacters = computed(() =>
+  entityStore.favorites.filter((entity) => entity.entityType === 'character'),
+)
+
+const openEntity = (entity: CatalogEntity) => {
+  router.push({ name: 'CharacterDetails', params: { id: entity._id } })
+}
+
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    entityStore.loadFavorites().catch((err) => {
+      console.error('Failed to load favorites:', err)
+    })
+  }
 })
 
 const formatDate = (dateString: string | undefined) => {
@@ -444,6 +490,40 @@ const getProfilePictureUrl = (profilePicture: string) => {
 .no-preferences {
   color: var(--text-muted);
   font-style: italic;
+}
+
+.favorite-entity-grid {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.favorite-entity-card {
+  width: 88px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.favorite-entity-card img,
+.favorite-entity-placeholder {
+  width: 88px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  margin-bottom: 0.35rem;
+}
+
+.favorite-entity-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
 }
 
 .rating-number {
