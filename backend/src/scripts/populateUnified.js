@@ -1,5 +1,5 @@
 /**
- * CLI entry for DatabasePopulator: pull TMDB/MAL pages into MongoDB Content.
+ * CLI entry for DatabasePopulator: pull TMDB/MAL pages into PostgreSQL Content.
  * Run for initial catalog load or a manual refresh. Mutates Content (insert/update/merge).
  * `--clear` deletes all Content first — never used by the hourly scheduler.
  *
@@ -34,7 +34,7 @@ const parseArgs = () => {
 }
 
 /**
- * Run populateDatabase with this process owning the mongoose connection.
+ * Run populateDatabase with this process owning the PostgreSQL connection.
  * @returns {Promise<void>}
  */
 const runPopulation = async () => {

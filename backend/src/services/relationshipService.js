@@ -4,7 +4,19 @@
  * and genre-similar fallback. Results are cached in memory for 10 minutes.
  */
 import Content from '../models/Content.js'
+import { query } from '../../config/postgres.js'
 import { contentTitleMatchOr } from '../utils/titles.js'
+
+const MAL_KIND = {
+  sequel: 'sequel',
+  prequel: 'prequel',
+  side_story: 'side_story',
+  parent_story: 'parent_story',
+  alternative_setting: 'alternative_setting',
+  alternative_version: 'alternative_version',
+  summary: 'summary',
+  full_story: 'full_story',
+}
 
 class RelationshipService {
   constructor() {
@@ -175,51 +187,39 @@ class RelationshipService {
   }
 
   /**
-   * Resolution order: stored relationship ids, franchise map, genre-similar fallback, then title patterns.
+   * Stored typed edges first, then other titles in the same franchise row.
+   * Does not infer related titles from genre, runtime, or title regex.
    * @param {object} content
    * @returns {Promise<{ sequels: object[], prequels: object[], related: object[] }>}
    */
   async findSmartRelationships(content) {
     const result = { sequels: [], prequels: [], related: [] }
 
-    if (
-      content.relationships &&
-      (content.relationships.sequels?.length > 0 ||
-        content.relationships.prequels?.length > 0 ||
-        content.relationships.related?.length > 0)
-    ) {
-      const sequelIds = content.relationships.sequels?.map((s) => s._id || s) || []
-      const prequelIds = content.relationships.prequels?.map((p) => p._id || p) || []
-      const relatedIds = content.relationships.related?.map((r) => r._id || r) || []
+    const sequelIds = (content.relationships?.sequels || []).map((row) => String(row._id || row))
+    const prequelIds = (content.relationships?.prequels || []).map((row) => String(row._id || row))
+    const relatedIds = (content.relationships?.related || []).map((row) => String(row._id || row))
+    const storedIds = [...sequelIds, ...prequelIds, ...relatedIds]
 
-      if (sequelIds.length > 0 || prequelIds.length > 0 || relatedIds.length > 0) {
-        const allRelatedContent = await Content.find({
-          _id: { $in: [...sequelIds, ...prequelIds, ...relatedIds] },
-        }).lean()
-
-        result.sequels = allRelatedContent.filter((c) => sequelIds.includes(c._id.toString()))
-        result.prequels = allRelatedContent.filter((c) => prequelIds.includes(c._id.toString()))
-        result.related = allRelatedContent.filter((c) => relatedIds.includes(c._id.toString()))
-
-        return result
-      }
-    }
-
-    const franchiseContent = await this.findByFranchise(content)
-    if (franchiseContent.length > 0) {
-      return this.categorizeRelationships(franchiseContent, content)
-    }
-
-    const genreRecommendations = await this.getGenreBasedRecommendations(content, 6)
-    if (genreRecommendations.length > 0) {
-      result.related = genreRecommendations
-      console.log(`Using genre-based recommendations for ${content.title}`)
+    if (storedIds.length > 0) {
+      const allRelatedContent = await Content.find({ _id: { $in: storedIds } }).lean()
+      const byId = (ids) =>
+        allRelatedContent.filter((row) => ids.includes(String(row._id)))
+      result.sequels = byId(sequelIds)
+      result.prequels = byId(prequelIds)
+      result.related = byId(relatedIds)
       return result
     }
 
-    const relatedContent = await this.findByPatterns(content)
-    if (relatedContent.length > 0) {
-      return this.categorizeRelationships(relatedContent, content)
+    if (content.franchise) {
+      const franchiseContent = await Content.find({
+        franchise: content.franchise,
+        _id: { $ne: content._id },
+      })
+        .sort({ releaseDate: 1 })
+        .lean()
+      if (franchiseContent.length > 0) {
+        return this.categorizeRelationships(franchiseContent, content)
+      }
     }
 
     return result
@@ -285,8 +285,8 @@ class RelationshipService {
   }
 
   /**
-   * Load MAL related_anime and map relation_type onto sequels/prequels/related ObjectIds.
-   * sequel/prequel stay dedicated; alternative/side/parent/summary/full_story go to related.
+   * Load MAL related_anime and write typed content_relations rows.
+   * sequel/prequel stay dedicated; other MAL relation_type values keep their kind.
    * @param {object} content
    * @returns {Promise<object>} The same content object with relationships filled when MAL data exists
    */
@@ -320,33 +320,33 @@ class RelationshipService {
         related: [],
       }
 
-      for (const relation of malData.related_anime) {
-        const relationType = relation.relation_type?.toLowerCase()
-        const relatedMalId = relation.node?.id
+      await query(`DELETE FROM content_relations WHERE from_id = $1 AND source = 'mal'`, [
+        content._id,
+      ])
 
+      const seen = new Set()
+      for (const relation of malData.related_anime) {
+        const kind = MAL_KIND[String(relation.relation_type || '').toLowerCase()] || 'other'
+        const relatedMalId = relation.node?.id
         if (!relatedMalId) continue
 
         const relatedContent = await Content.findOne({ malId: relatedMalId })
-        if (!relatedContent) continue
+        if (!relatedContent || String(relatedContent._id) === String(content._id)) continue
 
-        switch (relationType) {
-          case 'sequel':
-            relationships.sequels.push(relatedContent._id)
-            break
-          case 'prequel':
-            relationships.prequels.push(relatedContent._id)
-            break
-          case 'alternative_setting':
-          case 'alternative_version':
-          case 'side_story':
-          case 'parent_story':
-          case 'summary':
-          case 'full_story':
-            relationships.related.push(relatedContent._id)
-            break
-          default:
-            relationships.related.push(relatedContent._id)
-        }
+        const key = `${relatedContent._id}:${kind}`
+        if (seen.has(key)) continue
+        seen.add(key)
+
+        await query(
+          `INSERT INTO content_relations (from_id, to_id, kind, source)
+           VALUES ($1, $2, $3, 'mal')
+           ON CONFLICT (from_id, to_id, kind) DO NOTHING`,
+          [content._id, relatedContent._id, kind],
+        )
+
+        if (kind === 'sequel') relationships.sequels.push(relatedContent._id)
+        else if (kind === 'prequel') relationships.prequels.push(relatedContent._id)
+        else relationships.related.push(relatedContent._id)
       }
 
       if (!content.relationships) {

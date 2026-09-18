@@ -1,119 +1,56 @@
 /**
  * Read-only diagnostic script: list sequel/prequel links and report ids that do not resolve.
- * Run after relationship ingest or merge. Looks up related rows by malId/tmdbId stored on
- * relationships.sequels/prequels. Does not mutate Content.
+ * Run after relationship ingest or merge. Does not mutate Content.
  */
-import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import Content from '../models/Content.js'
+import { connectPostgres, closePostgres, query } from '../../config/postgres.js'
 
 dotenv.config()
 
 /**
- * Print titles with sequels/prequels and count links whose malId/tmdbId is missing from the catalog.
+ * Print titles with sequels/prequels and count dangling content_relations rows.
  * @returns {Promise<void>}
  */
 async function checkRelationships() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI)
+    await connectPostgres()
     console.log('Database connected')
 
-    const contentWithRelationships = await Content.find({
-      'relationships.sequels': { $exists: true, $ne: [] },
-    }).lean()
-
-    console.log(`\nFound ${contentWithRelationships.length} items with sequel relationships`)
-
-    if (contentWithRelationships.length > 0) {
-      console.log('\nContent with Sequels:\n')
-      for (const item of contentWithRelationships) {
-        console.log(`\n"${item.title}" (${item.contentType})`)
-        if (item.relationships?.sequels?.length > 0) {
-          console.log('  Sequels:')
-          for (const sequelId of item.relationships.sequels) {
-            const sequel = await Content.findOne({
-              $or: [{ malId: sequelId }, { tmdbId: sequelId }],
-            }).lean()
-            if (sequel) {
-              console.log(`    - ${sequel.title}`)
-            } else {
-              console.log(`    - [Not found: ${sequelId}]`)
-            }
-          }
-        }
-      }
+    const { rows: sequels } = await query(
+      `SELECT c.title AS from_title, t.title AS to_title, t.id AS to_id
+       FROM content_relations r
+       JOIN content c ON c.id = r.from_id
+       JOIN content t ON t.id = r.to_id
+       WHERE r.kind = 'sequel'
+       ORDER BY c.title`,
+    )
+    console.log(`\nFound ${sequels.length} sequel edges`)
+    for (const row of sequels) {
+      console.log(`  "${row.from_title}" → ${row.to_title}`)
     }
 
-    const contentWithPrequels = await Content.find({
-      'relationships.prequels': { $exists: true, $ne: [] },
-    }).lean()
-
-    console.log(`\n\nFound ${contentWithPrequels.length} items with prequel relationships`)
-
-    if (contentWithPrequels.length > 0) {
-      console.log('\nContent with Prequels:\n')
-      for (const item of contentWithPrequels) {
-        console.log(`\n"${item.title}" (${item.contentType})`)
-        if (item.relationships?.prequels?.length > 0) {
-          console.log('  Prequels:')
-          for (const prequelId of item.relationships.prequels) {
-            const prequel = await Content.findOne({
-              $or: [{ malId: prequelId }, { tmdbId: prequelId }],
-            }).lean()
-            if (prequel) {
-              console.log(`    - ${prequel.title}`)
-            } else {
-              console.log(`    - [Not found: ${prequelId}]`)
-            }
-          }
-        }
-      }
+    const { rows: prequels } = await query(
+      `SELECT c.title AS from_title, t.title AS to_title
+       FROM content_relations r
+       JOIN content c ON c.id = r.from_id
+       JOIN content t ON t.id = r.to_id
+       WHERE r.kind = 'prequel'
+       ORDER BY c.title`,
+    )
+    console.log(`\nFound ${prequels.length} prequel edges`)
+    for (const row of prequels) {
+      console.log(`  "${row.from_title}" → ${row.to_title}`)
     }
 
-    console.log('\n\nChecking for broken relationships...\n')
-    let brokenCount = 0
-
-    for (const item of [...contentWithRelationships, ...contentWithPrequels]) {
-      const brokenLinks = []
-
-      if (item.relationships?.sequels) {
-        for (const sequelId of item.relationships.sequels) {
-          const sequel = await Content.findOne({
-            $or: [{ malId: sequelId }, { tmdbId: sequelId }],
-          }).lean()
-          if (!sequel) {
-            brokenLinks.push({ type: 'sequel', id: sequelId })
-          }
-        }
-      }
-
-      if (item.relationships?.prequels) {
-        for (const prequelId of item.relationships.prequels) {
-          const prequel = await Content.findOne({
-            $or: [{ malId: prequelId }, { tmdbId: prequelId }],
-          }).lean()
-          if (!prequel) {
-            brokenLinks.push({ type: 'prequel', id: prequelId })
-          }
-        }
-      }
-
-      if (brokenLinks.length > 0) {
-        console.log(`"${item.title}" has ${brokenLinks.length} broken link(s):`)
-        brokenLinks.forEach((link) => {
-          console.log(`   - ${link.type}: ${link.id}`)
-        })
-        brokenCount += brokenLinks.length
-      }
+    const { rows: kinds } = await query(
+      `SELECT kind, count(*)::int AS n FROM content_relations GROUP BY kind ORDER BY kind`,
+    )
+    console.log('\nEdges by kind:')
+    for (const row of kinds) {
+      console.log(`  ${row.kind}: ${row.n}`)
     }
 
-    if (brokenCount === 0) {
-      console.log('No broken relationships found!')
-    } else {
-      console.log(`\nFound ${brokenCount} broken relationship(s)`)
-    }
-
-    await mongoose.disconnect()
+    await closePostgres()
     console.log('\nDatabase disconnected')
   } catch (error) {
     console.error('Error:', error)

@@ -261,6 +261,7 @@
     "path-key": "^3.1.1",
     "path-parse": "^1.0.7",
     "path-to-regexp": "^0.1.12",
+    "pg": "^8.23.0",
     "picocolors": "^1.1.1",
     "picomatch": "^2.3.1",
     "pirates": "^4.0.7",
@@ -354,6 +355,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "db:schema": "node src/scripts/applySchema.js",
+    "db:migrate-mongo": "node src/scripts/migrateMongoToPostgres.js",
+    "db:ingest-relations": "node src/scripts/ingestMalRelations.js",
     "populate-unified": "node src/scripts/populateUnified.js",
     "calculate-user-ratings": "node src/scripts/calculateInitialUserRatings.js",
     "test": "echo \"Error: no test specified\" && exit 1"

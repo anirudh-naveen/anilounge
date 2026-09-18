@@ -5,7 +5,7 @@
  * search/detail, and toggles per-user favorites.
  */
 
-import mongoose from 'mongoose'
+import { isCatalogId } from '../db/ids.js'
 import Content from '../models/Content.js'
 import Entity from '../models/Entity.js'
 import User from '../models/User.js'
@@ -181,7 +181,7 @@ export const favoriteEntity = async (req, res) => {
 export const unfavoriteEntity = async (req, res) => {
   try {
     const entityId = req.params.id
-    if (!mongoose.Types.ObjectId.isValid(entityId)) {
+    if (!isCatalogId(entityId)) {
       return res.status(400).json({ success: false, message: 'Invalid ID format' })
     }
     const entity = await Entity.findById(entityId)

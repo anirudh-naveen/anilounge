@@ -6,8 +6,8 @@
  */
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import mongoose from 'mongoose'
 import dotenv from 'dotenv'
+import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import User from '../models/User.js'
 
@@ -49,12 +49,12 @@ export function lowVoteCleanupFilter({ excludeIds = [] } = {}) {
 }
 
 /**
- * Connect using MONGODB_URI.
+ * Connect using DATABASE_URL.
  * @returns {Promise<void>}
  */
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI)
+    await connectPostgres()
     console.log('Database connected')
   } catch (error) {
     console.error('Database connection failed:', error.message)
@@ -111,7 +111,7 @@ const cleanupLowVoteContent = async () => {
   } catch (error) {
     console.error('Error cleaning up content:', error)
   } finally {
-    await mongoose.disconnect()
+    await closePostgres()
     console.log('Database disconnected')
   }
 }

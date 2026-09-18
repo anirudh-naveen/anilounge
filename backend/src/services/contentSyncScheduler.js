@@ -1,7 +1,7 @@
 /**
  * Cron wrapper around DatabasePopulator for hourly TMDB/MAL catalog refresh.
  * Domain service: start/stop scheduling, overlap guard, and last-run status.
- * Mutates Content via populateDatabase with clear:false and the process mongoose connection.
+ * Mutates Content via populateDatabase with clear:false and the process PostgreSQL pool.
  */
 import cron from 'node-cron'
 import DatabasePopulator from './contentSyncService.js'

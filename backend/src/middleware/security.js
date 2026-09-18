@@ -7,6 +7,7 @@
 
 import sanitizeHtml from 'sanitize-html'
 import xss from 'xss'
+import { isCatalogId } from '../db/ids.js'
 
 const sanitizeOptions = {
   allowedTags: [],
@@ -71,7 +72,7 @@ export const sanitizeXSS = (req, res, next) => {
 }
 
 /**
- * Reject `:id` or `:contentId` params that are not 24-char hex ObjectIds.
+ * Reject `:id` or `:contentId` params that are not a UUID or legacy Mongo ObjectId.
  *
  * @param {import('express').Request} req - Reads `params.id` or `params.contentId`.
  * @param {import('express').Response} res - 400 `{ message: 'Invalid ID format' }` when the id is malformed.
@@ -82,7 +83,7 @@ export const validateObjectId = (req, res, next) => {
   const { id, contentId } = req.params
   const idToCheck = id || contentId
 
-  if (idToCheck && !/^[0-9a-fA-F]{24}$/.test(idToCheck)) {
+  if (idToCheck && !isCatalogId(idToCheck)) {
     return res.status(400).json({
       success: false,
       message: 'Invalid ID format',
