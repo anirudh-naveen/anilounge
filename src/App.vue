@@ -527,13 +527,16 @@ const handleLogout = () => {
 }
 
 .btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1.25rem;
   border-radius: 8px;
   font-size: 0.9rem;
   font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
   border: none;
