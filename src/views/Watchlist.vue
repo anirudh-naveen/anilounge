@@ -2,8 +2,8 @@
 <!--
   Watchlist.vue — authenticated watchlist view.
 
-  Status tabs and sort toolbar over a compact expandable list of tracked
-  movies and series. Progress, rating, and status are editable per row.
+  Status filter dropdown and sort toolbar over a compact expandable list of
+  tracked movies and series. Progress, rating, and status are editable per row.
 -->
 <template>
   <div class="watchlist-page">
@@ -15,20 +15,22 @@
       </div>
 
       <!-- Toolbar -->
-      <!-- Title: Status Tabs -->
-      <div class="filter-tabs">
-        <button
-          v-for="status in statusOptions"
-          :key="status.value"
-          @click="selectedStatus = status.value"
-          :class="['tab-btn', { active: selectedStatus === status.value }]"
-        >
-          {{ status.label }} ({{ getStatusCount(status.value) }})
-        </button>
-      </div>
-
-      <!-- Title: Sort -->
       <div class="watchlist-toolbar">
+        <!-- Title: Status Filter -->
+        <div class="status-filter">
+          <label for="watchlist-status-filter">Status:</label>
+          <select
+            id="watchlist-status-filter"
+            v-model="selectedStatus"
+            data-testid="watchlist-status-filter"
+            class="status-filter-select"
+          >
+            <option v-for="status in statusOptions" :key="status.value" :value="status.value">
+              {{ status.label }} ({{ getStatusCount(status.value) }})
+            </option>
+          </select>
+        </div>
+        <!-- Title: Sort -->
         <SortByControls v-model:sort-by="sortBy" v-model:sort-direction="sortDirection" />
       </div>
 
@@ -286,9 +288,15 @@
       <!-- Title: Empty State -->
       <div v-else class="empty-state">
         <div class="empty-icon">Watchlist</div>
-        <h3>No items in your watchlist</h3>
-        <p>Start adding movies and series to track your progress!</p>
-        <router-link to="/search" class="btn btn-primary">Browse the catalog</router-link>
+        <template v-if="contentStore.watchlist.length === 0">
+          <h3>No items in your watchlist</h3>
+          <p>Start adding movies and series to track your progress!</p>
+          <router-link to="/search" class="btn btn-primary">Browse the catalog</router-link>
+        </template>
+        <template v-else>
+          <h3>No {{ selectedStatusLabel }} titles</h3>
+          <p>Try another status, or add more titles to your watchlist.</p>
+        </template>
       </div>
     </div>
   </div>
@@ -314,6 +322,7 @@ import AiringBadge from '@/components/AiringBadge.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
 import { getDisplayTitle } from '@/utils/titles'
 import { getSearchCategoryDate } from '@/utils/searchFilters'
+import { getWatchlistStatusLabel, WATCHLIST_STATUS_FILTER_OPTIONS } from '@/utils/watchlist'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -326,23 +335,15 @@ const expandedItems = ref(new Set<string>())
 const sortBy = ref<SortByOption>('relevance')
 const sortDirection = ref<SortDirection>('desc')
 
-const statusOptions = [
-  { value: 'all', label: 'All' },
-  { value: 'plan_to_watch', label: 'Planned' },
-  { value: 'watching', label: 'Watching' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'dropped', label: 'Dropped' },
-]
+const statusOptions = WATCHLIST_STATUS_FILTER_OPTIONS
+const selectedStatusLabel = computed(() => getWatchlistStatusLabel(selectedStatus.value))
 
 const getStatusCount = (status: string) => {
   if (status === 'all') return contentStore.watchlist.length
   return contentStore.watchlist.filter((item) => item.status === status).length
 }
 
-const getStatusLabel = (status: string) => {
-  const option = statusOptions.find((opt) => opt.value === status)
-  return option ? option.label : status
-}
+const getStatusLabel = (status: string) => getWatchlistStatusLabel(status)
 
 const getStatusClass = (status: string) => {
   return `status-${status.replace(/_/g, '-')}`
@@ -777,42 +778,42 @@ onUnmounted(() => {
   font-size: 1.1rem;
 }
 
-.filter-tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.tab-btn {
-  padding: 0.7rem 1.35rem;
-  border: 1px solid var(--border-color);
-  background: var(--bg-parchment);
-  color: var(--text-secondary);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-weight: 600;
-  font-family: inherit;
-}
-
-.tab-btn:hover {
-  background: var(--navbar-accent);
-  color: var(--text-primary);
-  border-color: var(--border-hover);
-}
-
-.tab-btn.active {
-  background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
-  color: var(--text-on-accent);
-  border-color: transparent;
-}
-
 .watchlist-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
   margin-bottom: 1.25rem;
+}
+
+.status-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 180px;
+}
+
+.status-filter label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.status-filter-select {
+  padding: 0.5rem;
+  border: 2px solid var(--text-primary);
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.status-filter-select:focus {
+  outline: none;
+  background: white;
+  border-color: var(--coral-primary);
+  box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
 }
 
 .watchlist-toolbar :deep(.sort-by-controls) {
@@ -1220,6 +1221,11 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 0.9rem;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
   color: var(--text-on-accent);
 }
@@ -1243,6 +1249,11 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 0.9rem;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .btn-primary {
@@ -1304,9 +1315,11 @@ onUnmounted(() => {
     justify-content: stretch;
   }
 
+  .status-filter,
   .watchlist-toolbar :deep(.sort-by-controls) {
     width: 100%;
     min-width: 0;
+    flex: 1 1 100%;
   }
 
   .list-column-header {

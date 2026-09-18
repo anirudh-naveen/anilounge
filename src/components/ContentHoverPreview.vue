@@ -55,11 +55,11 @@
           v-if="isAuthenticated && showWatchlist"
           type="button"
           class="hover-watchlist-btn"
-          :class="{ added: inWatchlist }"
-          :disabled="inWatchlist"
+          :class="{ added: isOnWatchlist }"
+          data-testid="hover-watchlist-btn"
           @click.stop="openForm"
         >
-          {{ inWatchlist ? 'In Watchlist' : 'Add to Watchlist' }}
+          {{ isOnWatchlist ? watchlistStatusLabel : 'Add to Watchlist' }}
         </button>
       </template>
 
@@ -69,10 +69,13 @@
         <label class="form-field">
           <span>Status</span>
           <select v-model="selectedStatus" class="form-control">
-            <option value="plan_to_watch">Plan to Watch</option>
-            <option value="watching">Watching</option>
-            <option value="completed">Completed</option>
-            <option value="dropped">Dropped</option>
+            <option
+              v-for="option in WATCHLIST_STATUS_OPTIONS"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
           </select>
         </label>
         <label class="form-field">
@@ -109,7 +112,7 @@
         <div class="form-actions">
           <button type="button" class="form-cancel" @click.stop="closeForm">Cancel</button>
           <button type="submit" class="hover-watchlist-btn form-submit" :disabled="isSaving">
-            {{ isSaving ? 'Adding...' : 'Add to Watchlist' }}
+            {{ submitLabel }}
           </button>
         </div>
       </form>
@@ -119,12 +122,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import {
-  formatGenres,
-  getContentTypeDisplay,
-  isMovieLike,
-  tracksEpisodes,
-} from '@/services/api'
+import { formatGenres, getContentTypeDisplay, isMovieLike, tracksEpisodes } from '@/services/api'
 import { getRatingTextStyle } from '@/utils/ratingColors'
 import { getWeightedAverage } from '@/utils/ratings'
 import { useContentStore } from '@/stores/content'
@@ -132,6 +130,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import {
+  getWatchlistStatusLabel,
+  WATCHLIST_STATUS_OPTIONS,
+  type WatchlistStatus,
+} from '@/utils/watchlist'
 import AiringBadge from '@/components/AiringBadge.vue'
 
 const PREVIEW_WIDTH = 300
@@ -158,10 +161,18 @@ const rootEl = ref<HTMLElement | null>(null)
 const openLeft = ref(false)
 const showForm = ref(false)
 const isSaving = ref(false)
-const selectedStatus = ref<'plan_to_watch' | 'watching' | 'completed' | 'dropped'>('plan_to_watch')
+const selectedStatus = ref<WatchlistStatus>('plan_to_watch')
 const selectedRating = ref<number | undefined>(undefined)
 const selectedEpisodes = ref<number>(0)
 const selectedNotes = ref('')
+
+const watchlistItem = computed(() => contentStore.getWatchlistItem(props.item._id))
+const isOnWatchlist = computed(() => Boolean(watchlistItem.value) || props.inWatchlist)
+const watchlistStatusLabel = computed(() => getWatchlistStatusLabel(watchlistItem.value?.status))
+const submitLabel = computed(() => {
+  if (isSaving.value) return isOnWatchlist.value ? 'Saving...' : 'Adding...'
+  return isOnWatchlist.value ? 'Save' : 'Add to Watchlist'
+})
 
 const averageRating = computed(() => getWeightedAverage(props.item))
 const displayRating = computed(() =>
@@ -191,6 +202,19 @@ const resetForm = () => {
   selectedNotes.value = ''
 }
 
+const populateForm = () => {
+  const item = watchlistItem.value
+  if (!item) {
+    resetForm()
+    return
+  }
+
+  selectedStatus.value = item.status
+  selectedRating.value = item.rating
+  selectedEpisodes.value = item.currentEpisode ?? 0
+  selectedNotes.value = item.notes ?? ''
+}
+
 const closeForm = () => {
   showForm.value = false
   resetForm()
@@ -201,10 +225,7 @@ const openForm = () => {
     toast.error('Please log in to add items to your watchlist')
     return
   }
-  if (props.inWatchlist) {
-    toast.info('Already in your watchlist!')
-    return
-  }
+  populateForm()
   showForm.value = true
 }
 
@@ -216,19 +237,29 @@ const submitWatchlist = async () => {
 
   isSaving.value = true
   try {
-    await contentStore.addToWatchlist(
-      props.item._id,
-      selectedStatus.value,
-      selectedRating.value,
-      tracksEpisodes(props.item) ? selectedEpisodes.value : undefined,
-      undefined,
-      selectedNotes.value || undefined,
-    )
-    toast.success('Added to watchlist!')
+    if (isOnWatchlist.value) {
+      await contentStore.updateWatchlistItem(props.item._id, {
+        status: selectedStatus.value,
+        rating: selectedRating.value,
+        currentEpisode: tracksEpisodes(props.item) ? selectedEpisodes.value : undefined,
+        notes: selectedNotes.value || undefined,
+      })
+      toast.success('Watchlist updated!')
+    } else {
+      await contentStore.addToWatchlist(
+        props.item._id,
+        selectedStatus.value,
+        selectedRating.value,
+        tracksEpisodes(props.item) ? selectedEpisodes.value : undefined,
+        undefined,
+        selectedNotes.value || undefined,
+      )
+      toast.success('Added to watchlist!')
+    }
     closeForm()
   } catch (error) {
-    console.error('Error adding to watchlist:', error)
-    toast.error('Failed to add to watchlist')
+    console.error('Error saving watchlist item:', error)
+    toast.error(isOnWatchlist.value ? 'Failed to update watchlist' : 'Failed to add to watchlist')
   } finally {
     isSaving.value = false
   }
@@ -398,6 +429,11 @@ onBeforeUnmount(() => {
   padding: 0.45rem 0.75rem;
   font-weight: 600;
   font-size: 0.8rem;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   cursor: pointer;
   color: var(--text-on-accent);
   background: linear-gradient(135deg, var(--coral-light), var(--coral-primary));
@@ -406,7 +442,7 @@ onBeforeUnmount(() => {
 .hover-watchlist-btn.added {
   background: var(--teal-primary);
   color: var(--text-on-accent);
-  cursor: default;
+  cursor: pointer;
 }
 
 .hover-watchlist-form {
@@ -463,6 +499,11 @@ onBeforeUnmount(() => {
   padding: 0.45rem 0.7rem;
   font-weight: 600;
   font-size: 0.8rem;
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   cursor: pointer;
 }
 
