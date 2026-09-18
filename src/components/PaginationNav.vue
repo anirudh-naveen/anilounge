@@ -124,7 +124,11 @@ const goTo = (page: number) => {
 }
 
 .btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.15;
   padding: 12px 24px;
   border-radius: 8px;
   text-decoration: none;

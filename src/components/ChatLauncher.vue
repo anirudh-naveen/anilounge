@@ -67,12 +67,14 @@ const onSearchResults = async (results: UnifiedContent[]) => {
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+  line-height: 1;
   cursor: pointer;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  text-align: center;
 }
 
 .chat-trigger:hover {
