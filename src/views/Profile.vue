@@ -128,6 +128,31 @@
                 </div>
                 <span v-else class="no-preferences">No favorite characters yet</span>
               </div>
+              <!-- Title: Favorite Voice Actors -->
+              <div class="preference-item">
+                <label>Favorite Voice Actors</label>
+                <div v-if="favoriteVoiceActors.length" class="favorite-entity-grid">
+                  <button
+                    v-for="entity in favoriteVoiceActors"
+                    :key="entity._id"
+                    type="button"
+                    class="favorite-entity-card"
+                    @click="openEntity(entity)"
+                  >
+                    <img
+                      v-if="entity.imagePath"
+                      :src="getPosterUrl(entity.imagePath)"
+                      :alt="entity.name"
+                      referrerpolicy="no-referrer"
+                    />
+                    <div v-else class="favorite-entity-placeholder">
+                      <i class="fas fa-microphone"></i>
+                    </div>
+                    <span>{{ entity.name }}</span>
+                  </button>
+                </div>
+                <span v-else class="no-preferences">No favorite voice actors yet</span>
+              </div>
             </div>
           </div>
         </div>
@@ -142,7 +167,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
 import { useEntityStore } from '@/stores/entities'
-import { isMovieLike, API_HOST, getPosterUrl } from '@/services/api'
+import { isMovieLike, API_HOST, getDetailsRouteName, getPosterUrl } from '@/services/api'
 import { getRatingColorHSL } from '@/utils/ratingColors'
 import type { WatchlistItem } from '@/types'
 import type { CatalogEntity } from '@/types/content'
@@ -247,8 +272,12 @@ const favoriteCharacters = computed(() =>
   entityStore.favorites.filter((entity) => entity.entityType === 'character'),
 )
 
+const favoriteVoiceActors = computed(() =>
+  entityStore.favorites.filter((entity) => entity.entityType === 'voice_actor'),
+)
+
 const openEntity = (entity: CatalogEntity) => {
-  router.push({ name: 'CharacterDetails', params: { id: entity._id } })
+  router.push({ name: getDetailsRouteName(entity), params: { id: entity._id } })
 }
 
 onMounted(() => {

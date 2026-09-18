@@ -124,12 +124,6 @@
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
 
-      <EntityCastRow
-        :items="characters"
-        :content-id="show._id"
-        :loading="charactersLoading"
-      />
-
       <!-- Title: Episodes -->
       <EpisodeRow
         :episodes="episodes"
@@ -137,26 +131,6 @@
         :characters="characters"
         :content-id="show._id"
       />
-
-      <!-- Title: Studios -->
-      <div v-if="show.studios?.length" class="network-info">
-        <h3>Studios</h3>
-        <div class="networks">
-          <span v-for="studio in show.studios" :key="`studio-${studio}`" class="network-tag">
-            {{ studio }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Title: Production Companies -->
-      <div v-if="show.productionCompanies?.length" class="production-info">
-        <h3>Production Companies</h3>
-        <div class="companies">
-          <span v-for="company in show.productionCompanies" :key="company" class="company-tag">
-            {{ company }}
-          </span>
-        </div>
-      </div>
 
       <!-- Title: Related Loading -->
       <div v-if="relatedContentLoading" class="related-content-loading">
@@ -286,6 +260,21 @@
           </div>
         </div>
       </div>
+
+      <EntityCastRow
+        :items="characters"
+        :content-id="show._id"
+        :loading="charactersLoading"
+      />
+
+      <div v-if="animationStudios.length" class="network-info">
+        <h3>Animation studios</h3>
+        <div class="networks">
+          <span v-for="studio in animationStudios" :key="`studio-${studio}`" class="network-tag">
+            {{ studio }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Title: Watchlist -->
@@ -364,6 +353,12 @@ const getDisplayScore = (content: UnifiedContent) => {
 }
 
 const getDisplayVoteCount = (content: UnifiedContent) => getTotalVoteCount(content)
+
+const animationStudios = computed(() => {
+  const studios = (show.value?.studios || []).filter(Boolean)
+  if (studios.length) return [...new Set(studios)]
+  return [...new Set((show.value?.productionCompanies || []).filter(Boolean))]
+})
 
 const loadShow = async (showId: string) => {
   const requestId = ++detailsRequestId

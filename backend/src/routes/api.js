@@ -77,6 +77,7 @@ router.get('/stats', contentController.getDatabaseStats)
 router.get('/content/:id', validateObjectId, contentController.getContentById)
 router.get('/content/:id/episodes', validateObjectId, contentController.getContentEpisodes)
 router.get('/content/:id/characters', validateObjectId, entityController.getContentCharacters)
+router.get('/content/:id/voice-actors', validateObjectId, entityController.getContentVoiceActors)
 router.get('/entities', entityController.searchCatalogEntities)
 router.get(
   '/entities/:id',
@@ -193,7 +194,7 @@ router.post(
 
 router.get('/content/:contentId/my-rating', validateObjectId, contentController.getMyRating)
 
-/** Entity favorites (characters today; voice actors and studios later). */
+/** Entity favorites (characters and voice actors; studios later). */
 router.get('/favorites', entityController.getFavoriteEntities)
 router.post('/entities/:id/favorite', validateObjectId, entityController.favoriteEntity)
 router.delete('/entities/:id/favorite', validateObjectId, entityController.unfavoriteEntity)

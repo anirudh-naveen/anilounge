@@ -6,19 +6,27 @@
  */
 
 import Entity from '../models/Entity.js'
+import Content from '../models/Content.js'
 import {
   appearanceRoleRank,
+  characterImportanceScore,
   characterPortraitPath,
   characterUpsertFilter,
   cleanCharacterName,
+  displayPersonName,
   entityNamesEqual,
   foldEntityName,
   highlightedCharacters,
+  highlightedVoiceActors,
   isUsableCharacterName,
   mapJikanCharacterRow,
+  mapJikanPersonVoiceRow,
   mapTmdbCharacterCredits,
+  mapVoiceActorFromCredit,
   serializeEntity,
   uniqueEntityNames,
+  voiceActorImagePath,
+  voiceActorUpsertFilter,
 } from '../utils/entities.js'
 
 const JIKAN_BASE = 'https://api.jikan.moe/v4'
@@ -27,6 +35,7 @@ const STALE_MS = 7 * 24 * 60 * 60 * 1000
 const JIKAN_GAP_MS = 450
 const FETCH_TIMEOUT_MS = 20000
 const MAX_CHARACTERS_PER_TITLE = 80
+const MAX_VOICED_CHARACTERS = 600
 const JIKAN_HEADERS = {
   Accept: 'application/json',
   'User-Agent': 'AniLounge/1.0 (https://find-animation.vercel.app; catalog characters)',
@@ -34,6 +43,7 @@ const JIKAN_HEADERS = {
 
 let lastJikanAt = 0
 let indexesReady = false
+const ingestLocks = new Map()
 
 /**
  * @param {number} ms
@@ -130,10 +140,22 @@ export function charactersAreFresh(content, now = Date.now()) {
  * @returns {boolean} True when the document changed.
  */
 export function mergeAppearance(entity, appearance) {
-  const contentId = String(appearance.content)
-  const existing = (entity.appearances || []).find(
-    (row) => String(row.content) === contentId,
-  )
+  const contentId = appearance.content ? String(appearance.content._id || appearance.content) : ''
+  const characterId = appearance.character
+    ? String(appearance.character._id || appearance.character)
+    : ''
+  const characterKey = foldEntityName(appearance.characterName || '')
+  const existing = (entity.appearances || []).find((row) => {
+    const rowContent = row.content ? String(row.content._id || row.content) : ''
+    const rowCharacterId = row.character ? String(row.character._id || row.character) : ''
+    if (entity.entityType === 'voice_actor') {
+      if (characterId && rowCharacterId) return characterId === rowCharacterId
+      if (characterKey) return foldEntityName(row.characterName || '') === characterKey
+      return false
+    }
+    if (!contentId) return false
+    return rowContent === contentId
+  })
   if (!existing) {
     entity.appearances = [...(entity.appearances || []), appearance]
     return true
@@ -141,6 +163,22 @@ export function mergeAppearance(entity, appearance) {
   let changed = false
   if (appearance.role && existing.role !== appearance.role) {
     existing.role = appearance.role
+    changed = true
+  }
+  if (appearance.character && !existing.character) {
+    existing.character = appearance.character
+    changed = true
+  }
+  if (appearance.characterName && existing.characterName !== appearance.characterName) {
+    existing.characterName = appearance.characterName
+    changed = true
+  }
+  if (appearance.content && !existing.content) {
+    existing.content = appearance.content
+    changed = true
+  }
+  if (appearance.language && existing.language !== appearance.language) {
+    existing.language = appearance.language
     changed = true
   }
   if (
@@ -164,6 +202,75 @@ export function mergeAppearance(entity, appearance) {
 }
 
 /**
+ * Upsert one voice-actor payload and return the saved document.
+ * @param {object} payload
+ * @param {Date} now
+ * @returns {Promise<object|null>}
+ */
+async function upsertVoiceActorPayload(payload, now = new Date()) {
+  const name = displayPersonName(payload?.name)
+  if (!name) return null
+  let entity = await Entity.findOne(voiceActorUpsertFilter({ ...payload, name }))
+  const malId = Number(payload.malId)
+  const hasMalId = Number.isFinite(malId) && malId > 0
+  const imagePath = voiceActorImagePath(payload.imagePath)
+
+  if (!entity) {
+    entity = new Entity({
+      entityType: 'voice_actor',
+      name,
+      englishName: name,
+      alternativeNames: payload.alternativeNames || [],
+      imagePath,
+      appearances: payload.appearance ? [payload.appearance] : [],
+      lastSyncedAt: now,
+    })
+    if (hasMalId) entity.malId = malId
+    if (payload.tmdbId) entity.tmdbId = payload.tmdbId
+    await entity.save()
+    return entity
+  }
+
+  if (payload.appearance) mergeAppearance(entity, payload.appearance)
+  if (entity.name !== name) {
+    entity.name = name
+    if (!entity.englishName) entity.englishName = name
+  }
+  if (imagePath && !voiceActorImagePath(entity.imagePath)) entity.imagePath = imagePath
+  const names = uniqueEntityNames(entity.alternativeNames, payload.alternativeNames)
+  if (names.length) entity.alternativeNames = names
+  if (entity.malId == null) entity.set('malId', undefined)
+  entity.lastSyncedAt = now
+  await entity.save()
+  return entity
+}
+
+/**
+ * Persist voice actors from a character payload's credits and attach entity ids.
+ * @param {object} payload
+ * @param {Date} now
+ * @returns {Promise<void>}
+ */
+async function attachVoiceActorsToPayload(payload, now, characterId) {
+  const credits = payload?.appearance?.voiceActors || []
+  for (const credit of credits) {
+    const vaPayload = mapVoiceActorFromCredit(credit, {
+      contentId: payload.appearance?.content,
+      characterName: payload.name,
+      role: payload.appearance?.role,
+      characterId,
+    })
+    if (!vaPayload) continue
+    try {
+      const voiceActor = await upsertVoiceActorPayload(vaPayload, now)
+      if (voiceActor) credit.entity = voiceActor._id
+    } catch (error) {
+      console.error(`Voice actor upsert failed for ${credit?.name}:`, error.message)
+    }
+  }
+}
+
+/**
  * Upsert mapped character payloads for one title. One failed row does not abort the rest.
  * @param {Array<object>} payloads
  * @returns {Promise<object[]>}
@@ -175,6 +282,7 @@ async function upsertCharacterPayloads(payloads) {
     try {
       const cleanedName = cleanCharacterName(payload.name) || payload.name
       if (!isUsableCharacterName(cleanedName)) continue
+      payload.name = cleanedName
 
       let entity = await Entity.findOne(characterUpsertFilter({ ...payload, name: cleanedName }))
       const malId = Number(payload.malId)
@@ -194,6 +302,8 @@ async function upsertCharacterPayloads(payloads) {
         if (hasMalId) entity.malId = malId
         if (payload.tmdbId) entity.tmdbId = payload.tmdbId
         await entity.save()
+        await attachVoiceActorsToPayload(payload, now, entity._id)
+        if (payload.appearance?.voiceActors?.length) await entity.save()
         saved.push(entity)
         continue
       }
@@ -212,6 +322,8 @@ async function upsertCharacterPayloads(payloads) {
       if (entity.malId == null) entity.set('malId', undefined)
       entity.lastSyncedAt = now
       await entity.save()
+      await attachVoiceActorsToPayload(payload, now, entity._id)
+      if (payload.appearance?.voiceActors?.length) await entity.save()
       saved.push(entity)
     } catch (error) {
       console.error(`Character upsert failed for ${payload?.name}:`, error.message)
@@ -327,6 +439,24 @@ function needsCharacterRefresh(content, docs) {
  */
 export async function ensureCharactersForContent(content, options = {}) {
   if (!content?._id) return []
+  const key = String(content._id)
+  if (ingestLocks.has(key)) return ingestLocks.get(key)
+  const pending = loadCharactersForContent(content, options)
+  ingestLocks.set(key, pending)
+  try {
+    return await pending
+  } finally {
+    ingestLocks.delete(key)
+  }
+}
+
+/**
+ * Unlocked character ingest used by `ensureCharactersForContent`.
+ * @param {object} content
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object[]>}
+ */
+async function loadCharactersForContent(content, options = {}) {
   await ensureEntityIndexes()
 
   let docs = await Entity.find({
@@ -411,6 +541,279 @@ export async function ensureCharacterAbout(entity, options = {}) {
 }
 
 /**
+ * Voice actors attached to a title (created while ingesting its characters).
+ * @param {object} content
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object[]>}
+ */
+export async function ensureVoiceActorsForContent(content, options = {}) {
+  if (!content?._id) return []
+  await ensureCharactersForContent(content, options)
+  const docs = await Entity.find({
+    entityType: 'voice_actor',
+    'appearances.content': content._id,
+  })
+  return highlightedVoiceActors(docs, content._id)
+}
+
+/**
+ * Persist missing voice-actor entities from a character's credits.
+ * @param {object} character
+ * @returns {Promise<object>}
+ */
+export async function ensureVoiceActorsForCharacter(character) {
+  if (!character || character.entityType !== 'character') return character
+  const now = new Date()
+  let changed = false
+  for (const appearance of character.appearances || []) {
+    const contentId = appearance.content?._id || appearance.content
+    for (const credit of appearance.voiceActors || []) {
+      if (credit.entity) continue
+      const vaPayload = mapVoiceActorFromCredit(credit, {
+        contentId,
+        characterName: character.name,
+        role: appearance.role,
+        characterId: character._id,
+      })
+      if (!vaPayload) continue
+      try {
+        const voiceActor = await upsertVoiceActorPayload(vaPayload, now)
+        if (voiceActor) {
+          credit.entity = voiceActor._id
+          changed = true
+        }
+      } catch (error) {
+        console.error(`Voice actor link failed for ${credit?.name}:`, error.message)
+      }
+    }
+  }
+  if (changed) await character.save()
+  return character
+}
+
+/**
+ * Fill biography and portrait from Jikan `/people/{id}` when a VA page is opened.
+ * @param {object} entity
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object>}
+ */
+export async function ensureVoiceActorAbout(entity, options = {}) {
+  if (!entity || entity.entityType !== 'voice_actor') return entity
+  const needsImage = !voiceActorImagePath(entity.imagePath)
+  if (entity.about && !needsImage) return entity
+  const malId = Number(entity.malId)
+  if (!Number.isFinite(malId) || malId < 1) return entity
+  const body = await jikanGet(`/people/${malId}`, options)
+  const data = body?.data
+  if (!data) return entity
+  if (!entity.about && data.about) entity.about = String(data.about).trim()
+  const given = String(data.given_name || '').trim()
+  const family = String(data.family_name || '').trim()
+  if (!entity.nativeName && (family || given)) {
+    entity.nativeName = [family, given].filter(Boolean).join(' ')
+  }
+  const names = uniqueEntityNames(entity.alternativeNames, data.alternate_names, data.name)
+  if (names.length) entity.alternativeNames = names
+  const jpg = data.images?.jpg?.large_image_url || data.images?.jpg?.image_url
+  if (needsImage && jpg && !/questionmark/i.test(String(jpg))) entity.imagePath = jpg
+  const display = displayPersonName(data.name) || entity.name
+  if (display && entity.name !== display) {
+    entity.alternativeNames = uniqueEntityNames(entity.alternativeNames, entity.name)
+    entity.name = display
+    entity.englishName = display
+  }
+  await entity.save()
+  return entity
+}
+
+/**
+ * Whether Jikan `/people/{id}/voices` should be fetched again.
+ * @param {object} entity
+ * @returns {boolean}
+ */
+function voiceCreditsAreFresh(entity) {
+  if (!entity?.voiceCreditsSyncedAt) return false
+  return Date.now() - new Date(entity.voiceCreditsSyncedAt).getTime() < STALE_MS
+}
+
+/**
+ * Attach catalog character ids onto voice-actor appearances that only have names.
+ * @param {object} entity
+ * @returns {Promise<boolean>}
+ */
+async function attachLocalCharactersToVoiceActor(entity) {
+  let changed = false
+  for (const appearance of entity.appearances || []) {
+    if (appearance.character) continue
+    const name = cleanCharacterName(appearance.characterName)
+    if (!isUsableCharacterName(name)) continue
+    const contentId = appearance.content?._id || appearance.content
+    let match = null
+    if (contentId) {
+      match = await Entity.findOne({
+        entityType: 'character',
+        'appearances.content': contentId,
+        $or: [{ name }, { englishName: name }],
+      })
+    }
+    if (!match) {
+      match = await Entity.findOne(characterUpsertFilter({ name }))
+    }
+    if (!match) continue
+    appearance.character = match._id
+    if (!appearance.characterName) appearance.characterName = match.name
+    changed = true
+  }
+  return changed
+}
+
+/**
+ * Upsert a character from a Jikan people-voices row so the VA page can link it.
+ * @param {object} mapped
+ * @param {object|null} content
+ * @param {Date} now
+ * @param {Map<number, object>} byMal
+ * @returns {Promise<object|null>}
+ */
+async function upsertCharacterFromVoiceRow(mapped, content, now, byMal) {
+  let character = byMal.get(mapped.malId) || null
+  if (!character) {
+    character = new Entity({
+      entityType: 'character',
+      name: mapped.name,
+      englishName: mapped.name,
+      imagePath: characterPortraitPath(mapped.imagePath),
+      malId: mapped.malId,
+      appearances: content
+        ? [
+            {
+              content: content._id,
+              role: mapped.role,
+              importance: characterImportanceScore({ role: mapped.role }),
+            },
+          ]
+        : [],
+      lastSyncedAt: now,
+    })
+    await character.save()
+    byMal.set(mapped.malId, character)
+    return character
+  }
+
+  let changed = false
+  if (content) {
+    changed = mergeAppearance(character, {
+      content: content._id,
+      role: mapped.role,
+      importance: characterImportanceScore({ role: mapped.role }),
+    })
+  }
+  if (characterPortraitPath(mapped.imagePath) && !characterPortraitPath(character.imagePath)) {
+    character.imagePath = mapped.imagePath
+    changed = true
+  }
+  if (mapped.name && character.name !== mapped.name && isUsableCharacterName(mapped.name)) {
+    character.name = mapped.name
+    if (!character.englishName) character.englishName = mapped.name
+    changed = true
+  }
+  if (changed) await character.save()
+  return character
+}
+
+/**
+ * Pull every Jikan voiced character for a voice actor (not only visited titles).
+ * @param {object} entity
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object>}
+ */
+async function ingestVoiceActorCredits(entity, options = {}) {
+  await ensureEntityIndexes()
+  const malId = Number(entity.malId)
+  const now = new Date()
+  let changed = await attachLocalCharactersToVoiceActor(entity)
+
+  if (!Number.isFinite(malId) || malId < 1) {
+    if (changed) await entity.save()
+    return entity
+  }
+
+  const body = await jikanGet(`/people/${malId}/voices`, options)
+  if (!body) {
+    if (changed) await entity.save()
+    return entity
+  }
+  const mappedRows = (Array.isArray(body?.data) ? body.data : [])
+    .map((row) => mapJikanPersonVoiceRow(row))
+    .filter(Boolean)
+    .slice(0, MAX_VOICED_CHARACTERS)
+
+  const characterMalIds = [...new Set(mappedRows.map((row) => row.malId))]
+  const animeMalIds = [...new Set(mappedRows.map((row) => row.animeMalId).filter(Boolean))]
+  const [existingCharacters, contents] = await Promise.all([
+    characterMalIds.length
+      ? Entity.find({ entityType: 'character', malId: { $in: characterMalIds } })
+      : Promise.resolve([]),
+    animeMalIds.length
+      ? Content.find({ malId: { $in: animeMalIds } }).select('_id malId')
+      : Promise.resolve([]),
+  ])
+  const byMal = new Map(existingCharacters.map((doc) => [Number(doc.malId), doc]))
+  const contentByMal = new Map(contents.map((doc) => [Number(doc.malId), doc]))
+
+  for (const mapped of mappedRows) {
+    try {
+      const content = mapped.animeMalId ? contentByMal.get(mapped.animeMalId) || null : null
+      const character = await upsertCharacterFromVoiceRow(mapped, content, now, byMal)
+      if (!character) continue
+      const appearance = {
+        character: character._id,
+        characterName: mapped.name,
+        role: mapped.role,
+        language: 'Japanese',
+        importance: characterImportanceScore({ role: mapped.role }),
+      }
+      if (content) appearance.content = content._id
+      if (mergeAppearance(entity, appearance)) changed = true
+    } catch (error) {
+      console.error(`Voice credit ingest failed for ${mapped?.name}:`, error.message)
+    }
+  }
+
+  entity.voiceCreditsSyncedAt = now
+  entity.lastSyncedAt = now
+  await entity.save()
+  return entity
+}
+
+/**
+ * Load every character this voice actor has played, including MAL credits
+ * for titles the user has not opened.
+ * @param {object} entity
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object>}
+ */
+export async function ensureVoiceActorCredits(entity, options = {}) {
+  if (!entity || entity.entityType !== 'voice_actor') return entity
+  const hasCharacterLinks = (entity.appearances || []).some((row) => row.character)
+  if (voiceCreditsAreFresh(entity) && hasCharacterLinks) return entity
+
+  const key = `va-voices:${entity._id}`
+  if (ingestLocks.has(key)) {
+    await ingestLocks.get(key)
+    const fresh = await Entity.findById(entity._id)
+    return fresh || entity
+  }
+  const pending = ingestVoiceActorCredits(entity, options)
+  ingestLocks.set(key, pending)
+  try {
+    return await pending
+  } finally {
+    ingestLocks.delete(key)
+  }
+}
+
+/**
  * Regex-safe substring search across name fields.
  * @param {string} query
  * @param {{ entityType?: string, limit?: number }} [options]
@@ -445,10 +848,11 @@ export async function findEntityByName(name, entityType = 'character') {
   const term = String(name || '').trim()
   if (!term) return null
   const candidates = await searchEntities(term, { entityType, limit: 12 })
+  const aliases = uniqueEntityNames(term, displayPersonName(term))
   return (
     candidates.find((doc) =>
       uniqueEntityNames(doc.name, doc.englishName, doc.nativeName, doc.alternativeNames).some(
-        (candidate) => entityNamesEqual(candidate, term),
+        (candidate) => aliases.some((alias) => entityNamesEqual(candidate, alias)),
       ),
     ) ||
     candidates[0] ||
@@ -464,10 +868,16 @@ export async function findEntityByName(name, entityType = 'character') {
  */
 export async function serializeEntityDetails(entity, options = {}) {
   if (!entity) return null
-  await entity.populate({
-    path: 'appearances.content',
-    select: 'title englishTitle nativeTitle posterPath contentType',
-  })
+  await entity.populate([
+    {
+      path: 'appearances.content',
+      select: 'title englishTitle nativeTitle posterPath contentType',
+    },
+    {
+      path: 'appearances.character',
+      select: 'name englishName imagePath entityType malId',
+    },
+  ])
   return serializeEntity(entity, options)
 }
 

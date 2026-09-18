@@ -91,6 +91,8 @@ export const entityAPI = {
 
   getContentCharacters: (contentId: string) => api.get(`/content/${contentId}/characters`),
 
+  getContentVoiceActors: (contentId: string) => api.get(`/content/${contentId}/voice-actors`),
+
   getFavorites: () => api.get('/favorites'),
 
   favorite: (id: string) => api.post(`/entities/${id}/favorite`),
@@ -373,6 +375,7 @@ export const tracksEpisodes = (item: {
 export const getDetailsRouteName = (item: { contentType?: string; entityType?: string }) => {
   const kind = item.entityType || item.contentType
   if (kind === 'character') return 'CharacterDetails'
+  if (kind === 'voice_actor') return 'VoiceActorDetails'
   return item.contentType === 'tv' ? 'TVShowDetails' : 'MovieDetails'
 }
 

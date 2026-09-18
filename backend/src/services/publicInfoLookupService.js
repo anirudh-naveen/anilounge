@@ -171,30 +171,52 @@ async function lookupGenre(name, options) {
   }
 }
 
+const VOICE_ACTOR_NOTE =
+  'Answer the voice-actor question from this lookup. Do not recommend series from voice-actor credits. Only search_catalog if the user explicitly asked for title recommendations.'
+
 async function lookupVoiceActor(name, options) {
+  const entity = await findEntityByName(name, 'voice_actor')
+  if (entity) {
+    await entity.populate({
+      path: 'appearances.content',
+      select: 'title englishTitle nativeTitle contentType',
+    })
+  }
   const summary = await firstWikipediaHit(
     wikiLookupCandidates(name, 'voice_actor'),
     options,
     (hit) => extractMatchesTopic(hit.extract, hit.description, 'voice_actor'),
   )
-  if (!summary) {
+  const serialized = entity ? serializeEntity(entity) : null
+  if (!serialized && !summary) {
     return {
       docs: [],
       payload: {
         allowed: false,
         reason:
-          'No voice-actor encyclopedia page found. Do not invent credits or titles.',
+          'No catalog voice actor or encyclopedia page found. Do not invent credits or recommend titles.',
       },
     }
   }
+  const appearances = (serialized?.appearances || [])
+    .map((row) => {
+      const content = row.content
+      if (!content || typeof content !== 'object') return null
+      const title = content.englishTitle || content.title
+      if (!title) return null
+      return row.characterName ? `${title} (${row.characterName})` : title
+    })
+    .filter(Boolean)
   return {
     docs: [],
     payload: wikiPayload({
       kind: 'voice_actor',
-      name,
+      name: serialized?.name || name,
       summary,
       extra: {
-        note: 'Do not name titles unless search_catalog confirms they are in the catalog.',
+        about: serialized?.about || undefined,
+        catalogCredits: appearances,
+        note: VOICE_ACTOR_NOTE,
       },
     }),
   }

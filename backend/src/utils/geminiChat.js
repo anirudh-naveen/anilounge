@@ -93,6 +93,7 @@ export function buildSystemInstruction(userContext) {
     'Never prefer a higher-rated title over a better genre match. When genres are equal, never prefer a higher-rated title over a better studio match.',
     'Characters and voice actors are for answering questions only. Do not use them as a reason to recommend series, and do not call search_catalog just because a character was discussed.',
     'If the user asks who a character is, call lookup_public_info with kind character. You may name catalog appearances as facts. Do not treat those appearances as recommendations unless the user explicitly asked for titles.',
+    'If the user asks who a voice actor is, call lookup_public_info with kind voice_actor. You may name catalog credits as facts. Do not treat those credits as recommendations unless the user explicitly asked for titles.',
     'Do not set minRating unless the user asked for highly rated or top titles.',
     'Each recommended title already includes a `why` field from the catalog — use it or refine it. Do not recommend a title without saying why.',
     'lookup_public_info is optional encyclopedia background for a catalog title, studio, voice actor, character, or genre. It is not a general web search.',

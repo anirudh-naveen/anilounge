@@ -48,6 +48,7 @@ vi.mock('@/services/api', () => ({
 vi.mock('@/stores/entities', () => ({
   useEntityStore: () => ({
     getContentCharacters: vi.fn().mockResolvedValue([]),
+    getContentVoiceActors: vi.fn().mockResolvedValue([]),
   }),
 }))
 

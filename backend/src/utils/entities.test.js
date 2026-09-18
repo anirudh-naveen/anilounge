@@ -12,7 +12,9 @@ import {
   isCharacterPortrait,
   isUsableCharacterName,
   mapJikanCharacterRow,
+  mapJikanPersonVoiceRow,
   mapTmdbCharacterCredits,
+  mapVoiceActorFromCredit,
   matchCharacterByName,
   serializeEntity,
   uniqueEntityNames,
@@ -95,6 +97,41 @@ describe('Jikan / TMDB mappers', () => {
     assert.equal(mapped[0].appearance.voiceActors.length, 2)
     assert.equal(mapped[0].appearance.voiceActors[0].imagePath, '/a.jpg')
   })
+
+  it('maps a voice credit onto a searchable voice-actor payload', () => {
+    const mapped = mapVoiceActorFromCredit(
+      {
+        name: 'Tanaka, Mayumi',
+        language: 'Japanese',
+        malId: 8,
+        imagePath: 'https://cdn.myanimelist.net/images/voiceactors/mayumi.jpg',
+      },
+      { contentId: 'content-1', characterName: 'Monkey D. Luffy', role: 'Main', characterId: 'char-1' },
+    )
+    assert.equal(mapped.name, 'Mayumi Tanaka')
+    assert.equal(mapped.malId, 8)
+    assert.equal(mapped.appearance.characterName, 'Monkey D. Luffy')
+    assert.equal(mapped.appearance.character, 'char-1')
+    assert.equal(mapped.appearance.language, 'Japanese')
+    assert.equal(mapped.imagePath.includes('voiceactors'), true)
+  })
+
+  it('maps Jikan people-voices rows onto voiced characters', () => {
+    const mapped = mapJikanPersonVoiceRow({
+      role: 'Main',
+      anime: { mal_id: 21, title: 'One Piece' },
+      character: {
+        mal_id: 40,
+        name: 'Monkey D. Luffy',
+        images: { jpg: { image_url: 'https://cdn.myanimelist.net/images/characters/9/luffy.jpg' } },
+      },
+    })
+    assert.equal(mapped.name, 'Monkey D. Luffy')
+    assert.equal(mapped.malId, 40)
+    assert.equal(mapped.role, 'Main')
+    assert.equal(mapped.animeMalId, 21)
+    assert.equal(mapped.imagePath.includes('characters'), true)
+  })
 })
 
 describe('character portraits', () => {
@@ -119,6 +156,26 @@ describe('character portraits', () => {
         appearances: [],
       }).imagePath,
       '',
+    )
+    assert.equal(
+      serializeEntity({
+        _id: 'va-1',
+        entityType: 'voice_actor',
+        name: 'Tanaka, Mayumi',
+        imagePath: 'https://cdn.myanimelist.net/images/voiceactors/1/mayumi.jpg',
+        appearances: [],
+      }).imagePath.includes('voiceactors'),
+      true,
+    )
+    assert.equal(
+      serializeEntity({
+        _id: 'va-1',
+        entityType: 'voice_actor',
+        name: 'Tanaka, Mayumi',
+        imagePath: 'https://cdn.myanimelist.net/images/voiceactors/1/mayumi.jpg',
+        appearances: [],
+      }).name,
+      'Mayumi Tanaka',
     )
   })
 })
@@ -190,5 +247,30 @@ describe('serializeEntity', () => {
     assert.equal(hit.entityType, 'character')
     assert.equal(hit.title, 'Nami')
     assert.equal(hit.posterPath, 'https://cdn.example/nami.jpg')
+  })
+
+  it('keeps populated character portraits on voice-actor appearances', () => {
+    const serialized = serializeEntity({
+      _id: 'va-1',
+      entityType: 'voice_actor',
+      name: 'Mayumi Tanaka',
+      imagePath: 'https://cdn.myanimelist.net/images/voiceactors/1/mayumi.jpg',
+      appearances: [
+        {
+          role: 'Main',
+          characterName: 'Monkey D. Luffy',
+          character: {
+            _id: 'char-1',
+            name: 'Monkey D. Luffy',
+            imagePath: 'https://cdn.myanimelist.net/images/characters/9/luffy.jpg',
+          },
+        },
+      ],
+    })
+    assert.equal(serialized.appearances[0].character.name, 'Monkey D. Luffy')
+    assert.equal(
+      serialized.appearances[0].character.imagePath.includes('characters'),
+      true,
+    )
   })
 })

@@ -12,6 +12,10 @@ import User from '../models/User.js'
 import {
   ensureCharacterAbout,
   ensureCharactersForContent,
+  ensureVoiceActorAbout,
+  ensureVoiceActorCredits,
+  ensureVoiceActorsForCharacter,
+  ensureVoiceActorsForContent,
   searchEntities,
   serializeEntity,
   serializeEntityDetails,
@@ -56,6 +60,30 @@ export const getContentCharacters = async (req, res) => {
 }
 
 /**
+ * Voice actors (cast) for a catalog title. Ingests with the character list.
+ *
+ * @param {import('express').Request} req - Reads `params.id`.
+ * @param {import('express').Response} res
+ * @returns {Promise<void>}
+ */
+export const getContentVoiceActors = async (req, res) => {
+  try {
+    const content = await Content.findById(req.params.id)
+    if (!content) {
+      return res.status(404).json({ success: false, message: 'Content not found' })
+    }
+    const docs = await ensureVoiceActorsForContent(content)
+    res.json({
+      success: true,
+      data: docs.map((doc) => serializeEntity(doc)),
+    })
+  } catch (error) {
+    console.error('Error fetching content voice actors:', error)
+    res.status(500).json({ success: false, message: 'Error fetching voice actors' })
+  }
+}
+
+/**
  * Search persisted entities by name. Defaults to characters.
  *
  * @param {import('express').Request} req - Reads `query.q`, `query.type`, `query.limit`.
@@ -87,12 +115,17 @@ export const searchCatalogEntities = async (req, res) => {
  */
 export const getEntityById = async (req, res) => {
   try {
-    const entity = await Entity.findById(req.params.id)
+    let entity = await Entity.findById(req.params.id)
     if (!entity) {
       return res.status(404).json({ success: false, message: 'Entity not found' })
     }
     if (entity.entityType === 'character') {
       await ensureCharacterAbout(entity)
+      await ensureVoiceActorsForCharacter(entity)
+    }
+    if (entity.entityType === 'voice_actor') {
+      await ensureVoiceActorAbout(entity)
+      entity = (await ensureVoiceActorCredits(entity)) || entity
     }
     const isFavorited = req.user ? userHasFavorite(req.user, entity._id) : false
     res.json({
@@ -199,6 +232,7 @@ export const getFavoriteEntities = async (req, res) => {
 
 export default {
   getContentCharacters,
+  getContentVoiceActors,
   searchCatalogEntities,
   getEntityById,
   favoriteEntity,

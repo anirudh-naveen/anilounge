@@ -110,26 +110,6 @@
         <p>{{ movie.overview || 'No overview available.' }}</p>
       </div>
 
-      <EntityCastRow
-        :items="characters"
-        :content-id="movie._id"
-        :loading="charactersLoading"
-      />
-
-      <!-- Title: Production Companies -->
-      <div v-if="movie.productionCompanies?.length" class="production-info">
-        <h3>Production Companies</h3>
-        <div class="companies">
-          <span
-            v-for="(company, index) in movie.productionCompanies"
-            :key="`company-${index}`"
-            class="company-tag"
-          >
-            {{ company }}
-          </span>
-        </div>
-      </div>
-
       <!-- Title: Related Loading -->
       <div v-if="relatedContentLoading" class="related-content-loading">
         <h3>Loading Related Content...</h3>
@@ -258,6 +238,25 @@
           </div>
         </div>
       </div>
+
+      <EntityCastRow
+        :items="characters"
+        :content-id="movie._id"
+        :loading="charactersLoading"
+      />
+
+      <div v-if="animationStudios.length" class="production-info">
+        <h3>Animation studios</h3>
+        <div class="companies">
+          <span
+            v-for="studio in animationStudios"
+            :key="`studio-${studio}`"
+            class="company-tag"
+          >
+            {{ studio }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Title: Watchlist -->
@@ -332,6 +331,12 @@ const getDisplayScore = (content: UnifiedContent) => {
 }
 
 const getDisplayVoteCount = (content: UnifiedContent) => getTotalVoteCount(content)
+
+const animationStudios = computed(() => {
+  const studios = (movie.value?.studios || []).filter(Boolean)
+  if (studios.length) return [...new Set(studios)]
+  return [...new Set((movie.value?.productionCompanies || []).filter(Boolean))]
+})
 
 const fetchCharacters = async (contentId: string) => {
   const requestId = ++charactersRequestId
