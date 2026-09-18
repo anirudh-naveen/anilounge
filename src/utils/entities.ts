@@ -102,3 +102,45 @@ export function matchCharacterByName(
     return names.some((name) => fold(name) === target)
   })
 }
+
+export interface VoicedCharacterCard {
+  id: string
+  name: string
+  imagePath: string
+  role: string
+  content?: EntityAppearance['content']
+}
+
+/**
+ * Unique characters a voice actor has played, Main roles first. No 10-card cap.
+ */
+export function collectVoicedCharacters(entity?: CatalogEntity | null): VoicedCharacterCard[] {
+  const seen = new Set<string>()
+  const rows: VoicedCharacterCard[] = []
+  for (const appearance of entity?.appearances || []) {
+    const populated =
+      appearance.character && typeof appearance.character === 'object' ? appearance.character : null
+    const id =
+      populated?._id || (typeof appearance.character === 'string' ? appearance.character : '')
+    const name =
+      cleanCharacterName(populated?.name || appearance.characterName) ||
+      populated?.name ||
+      appearance.characterName ||
+      ''
+    const key = id || fold(name)
+    if (!key || !name || seen.has(key)) continue
+    seen.add(key)
+    rows.push({
+      id,
+      name,
+      imagePath: populated?.imagePath || '',
+      role: appearance.role || '',
+      content: appearance.content,
+    })
+  }
+  return rows.sort((left, right) => {
+    const leftMain = left.role === 'Main' ? 0 : 1
+    const rightMain = right.role === 'Main' ? 0 : 1
+    return leftMain - rightMain || left.name.localeCompare(right.name)
+  })
+}

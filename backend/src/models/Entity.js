@@ -22,7 +22,10 @@ const AppearanceSchema = new mongoose.Schema(
     content: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Content',
-      required: true,
+    },
+    character: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Entity',
     },
     role: {
       type: String,
@@ -33,6 +36,7 @@ const AppearanceSchema = new mongoose.Schema(
       default: 0,
     },
     characterName: String,
+    language: String,
     voiceActors: [VoiceCreditSchema],
   },
   { _id: false },
@@ -69,6 +73,8 @@ const EntitySchema = new mongoose.Schema(
       default: 0,
     },
     lastSyncedAt: Date,
+    /** Last time Jikan `/people/{id}/voices` was ingested for a voice actor. */
+    voiceCreditsSyncedAt: Date,
     appearances: [AppearanceSchema],
   },
   { timestamps: true },

@@ -458,10 +458,12 @@ export const useContentStore = defineStore('content', () => {
         try {
           const entityResponse = await entityAPI.search({
             q: query,
-            type: 'character',
-            limit: 20,
+            type: 'all',
+            limit: 24,
           })
-          const entityHits = (entityResponse.data?.data || []) as UnifiedContent[]
+          const entityHits = ((entityResponse.data?.data || []) as UnifiedContent[]).filter(
+            (hit) => hit.entityType === 'character' || hit.entityType === 'voice_actor',
+          )
           const seen = new Set(filteredResults.map((item) => item._id))
           const extra = entityHits.filter((hit) => hit?._id && !seen.has(hit._id))
           extra.sort((left, right) => {

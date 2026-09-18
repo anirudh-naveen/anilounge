@@ -9,7 +9,7 @@
     <h3>{{ title }}</h3>
     <div v-if="loading" class="cast-loading">
       <div class="spinner"></div>
-      <p>Loading characters...</p>
+      <p>Loading {{ title.toLowerCase() }}...</p>
     </div>
     <div v-else class="cast-list">
       <button
@@ -17,7 +17,7 @@
         :key="entity._id"
         type="button"
         class="cast-card"
-        :data-testid="`character-card-${entity._id}`"
+        :data-testid="cardTestId(entity)"
         @click="openEntity(entity)"
       >
         <img
@@ -28,9 +28,10 @@
           @error="handleImageError"
         />
         <div v-else class="no-profile">
-          <i class="fas fa-user"></i>
+          <i :class="entity.entityType === 'voice_actor' ? 'fas fa-microphone' : 'fas fa-user'"></i>
         </div>
         <p class="cast-name">{{ displayName(entity) }}</p>
+        <p v-if="roleFor(entity)" class="cast-role">{{ roleFor(entity) }}</p>
       </button>
       <p v-if="overflowCount" class="cast-overflow">+{{ overflowCount }} more</p>
     </div>
@@ -41,8 +42,13 @@
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { CatalogEntity } from '@/types/content'
-import { getPosterUrl } from '@/services/api'
-import { cleanCharacterName, highlightedCharacters } from '@/utils/entities'
+import { getDetailsRouteName, getPosterUrl } from '@/services/api'
+import {
+  appearanceForContent,
+  cleanCharacterName,
+  displayPersonName,
+  highlightedCharacters,
+} from '@/utils/entities'
 
 const props = withDefaults(
   defineProps<{
@@ -50,25 +56,41 @@ const props = withDefaults(
     contentId?: string
     title?: string
     loading?: boolean
+    showRole?: boolean
   }>(),
   {
     items: () => [],
     title: 'Characters',
     loading: false,
+    showRole: false,
   },
 )
 
 const highlighted = computed(() => highlightedCharacters(props.items))
 const overflowCount = computed(() => Math.max(0, props.items.length - highlighted.value.length))
 
-const displayName = (entity: CatalogEntity) => cleanCharacterName(entity.name) || entity.name
+const displayName = (entity: CatalogEntity) =>
+  entity.entityType === 'voice_actor'
+    ? displayPersonName(entity.name)
+    : cleanCharacterName(entity.name) || entity.name
+
+const roleFor = (entity: CatalogEntity) => {
+  if (!props.showRole) return ''
+  const appearance = appearanceForContent(entity, props.contentId)
+  return appearance?.characterName || appearance?.role || ''
+}
+
+const cardTestId = (entity: CatalogEntity) =>
+  entity.entityType === 'voice_actor'
+    ? `voice-actor-card-${entity._id}`
+    : `character-card-${entity._id}`
 
 const router = useRouter()
 const route = useRoute()
 
 const openEntity = (entity: CatalogEntity) => {
   router.push({
-    name: 'CharacterDetails',
+    name: getDetailsRouteName(entity),
     params: { id: entity._id },
     query: { from: route.fullPath },
   })
@@ -155,6 +177,12 @@ const handleImageError = (event: Event) => {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.cast-role {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .cast-overflow {

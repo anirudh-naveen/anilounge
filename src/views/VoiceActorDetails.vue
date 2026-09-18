@@ -1,8 +1,8 @@
 <!--
-  CharacterDetails.vue — character detail view.
+  VoiceActorDetails.vue — voice-actor detail view.
 
-  Own screen for a catalog character: picture, about, favorite toggle, and
-  every title they appear in with a role. Not a Movies/TV tab.
+  Own screen for a catalog voice actor: picture, about, favorite toggle, and
+  every character they have voiced. Not a Movies/TV tab.
 -->
 <template>
   <div class="character-details">
@@ -13,36 +13,36 @@
 
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
-      <p>Loading character...</p>
+      <p>Loading voice actor...</p>
     </div>
 
     <div v-else-if="error" class="error">
-      <h2>Error loading character</h2>
+      <h2>Error loading voice actor</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>
 
-    <div v-else-if="character" class="character-content">
+    <div v-else-if="voiceActor" class="character-content">
       <div class="character-header">
         <div class="character-poster">
           <img
-            v-if="character.imagePath"
-            :src="getPosterUrl(character.imagePath)"
-            :alt="character.name"
+            v-if="voiceActor.imagePath"
+            :src="getPosterUrl(voiceActor.imagePath)"
+            :alt="displayPersonName(voiceActor.name)"
             referrerpolicy="no-referrer"
             @error="handleImageError"
           />
           <div v-else class="no-poster">
-            <i class="fas fa-user"></i>
+            <i class="fas fa-microphone"></i>
             <p>No image available</p>
           </div>
         </div>
 
         <div class="character-info">
-          <p class="entity-kicker">Character</p>
-          <h1 class="character-title">{{ cleanCharacterName(character.name) || character.name }}</h1>
-          <p v-if="character.nativeName" class="original-title">
-            Native Name: {{ character.nativeName }}
+          <p class="entity-kicker">Voice actor</p>
+          <h1 class="character-title">{{ displayPersonName(voiceActor.name) }}</h1>
+          <p v-if="voiceActor.nativeName" class="original-title">
+            Native Name: {{ voiceActor.nativeName }}
           </p>
 
           <div class="character-actions">
@@ -50,11 +50,11 @@
               v-if="authStore.isAuthenticated"
               type="button"
               data-testid="favorite-action"
-              :class="character.isFavorited ? 'btn-secondary' : 'btn-primary'"
+              :class="voiceActor.isFavorited ? 'btn-secondary' : 'btn-primary'"
               @click="onToggleFavorite"
             >
-              <i :class="character.isFavorited ? 'fas fa-heart' : 'far fa-heart'"></i>
-              {{ character.isFavorited ? 'Favorited' : 'Add to Favorites' }}
+              <i :class="voiceActor.isFavorited ? 'fas fa-heart' : 'far fa-heart'"></i>
+              {{ voiceActor.isFavorited ? 'Favorited' : 'Add to Favorites' }}
             </button>
             <button v-else type="button" class="btn-outline" @click="router.push('/login')">
               Sign in to favorite
@@ -63,61 +63,36 @@
         </div>
       </div>
 
-      <div v-if="voiceActors.length" class="voice-actors" data-testid="voice-actor-row">
-        <h2>Voice actors</h2>
-        <div class="voice-actor-list">
-          <button
-            v-for="credit in voiceActors"
-            :key="`${credit.entity || credit.name}-${credit.language || ''}`"
-            type="button"
-            class="voice-actor-card"
-            data-testid="voice-actor-card"
-            :disabled="!credit.entity"
-            @click="openVoiceActor(credit)"
+      <div class="character-description">
+        <h2>About</h2>
+        <p class="about-text">{{ voiceActor.about || 'No biography available.' }}</p>
+      </div>
+
+      <div v-if="voicedCharacters.length" class="appearances">
+        <h2>Characters</h2>
+        <div class="content-grid">
+          <div
+            v-for="row in voicedCharacters"
+            :key="row.key"
+            class="content-card"
+            :class="{ clickable: Boolean(row.id) }"
+            :data-testid="`voiced-character-${row.id || row.key}`"
+            @click="openCharacter(row)"
           >
             <img
-              v-if="credit.imagePath"
-              :src="getPosterUrl(credit.imagePath)"
-              :alt="displayPersonName(credit.name)"
+              v-if="row.imagePath"
+              :src="getPosterUrl(row.imagePath)"
+              :alt="row.name"
               referrerpolicy="no-referrer"
               @error="handleImageError"
             />
             <div v-else class="no-poster small">
-              <i class="fas fa-microphone"></i>
-            </div>
-            <p class="voice-actor-name">{{ displayPersonName(credit.name) }}</p>
-            <p v-if="credit.language" class="voice-actor-language">{{ credit.language }}</p>
-          </button>
-        </div>
-      </div>
-
-      <div class="character-description">
-        <h2>About</h2>
-        <p class="about-text">{{ character.about || 'No biography available.' }}</p>
-      </div>
-
-      <div v-if="appearanceTitles.length" class="appearances">
-        <h2>Appears in</h2>
-        <div class="content-grid">
-          <div
-            v-for="row in appearanceTitles"
-            :key="row.id"
-            class="content-card"
-            :data-testid="`appearance-${row.id}`"
-            @click="openTitle(row)"
-          >
-            <img
-              v-if="row.posterPath"
-              :src="getPosterUrl(row.posterPath)"
-              :alt="row.title"
-              @error="handleImageError"
-            />
-            <div v-else class="no-poster small">
-              <i class="fas fa-film"></i>
+              <i class="fas fa-user"></i>
             </div>
             <div class="content-info">
-              <h5>{{ row.title }}</h5>
-              <p v-if="row.role" class="content-type">{{ row.role }}</p>
+              <h5>{{ row.name }}</h5>
+              <p v-if="row.title" class="content-type">{{ row.title }}</p>
+              <p v-else-if="row.role" class="content-type">{{ row.role }}</p>
             </div>
           </div>
         </div>
@@ -131,77 +106,65 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useEntityStore } from '@/stores/entities'
-import { getDetailsRouteName, getPosterUrl } from '@/services/api'
+import { getPosterUrl } from '@/services/api'
 import { getDisplayTitle } from '@/utils/titles'
-import { cleanCharacterName, collectVoiceActors, displayPersonName } from '@/utils/entities'
-import type { CatalogEntity, EntityVoiceCredit } from '@/types/content'
+import { collectVoicedCharacters, displayPersonName } from '@/utils/entities'
+import type { CatalogEntity } from '@/types/content'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const entityStore = useEntityStore()
 
-const character = ref<CatalogEntity | null>(null)
+const voiceActor = ref<CatalogEntity | null>(null)
 const loading = ref(true)
 const error = ref('')
 
-const appearanceTitles = computed(() => {
-  return (character.value?.appearances || [])
-    .map((row) => {
-      const content = row.content
-      if (!content || typeof content !== 'object') return null
-      return {
-        id: content._id,
-        title: getDisplayTitle(content),
-        posterPath: content.posterPath || '',
-        contentType: content.contentType,
-        role: row.role || '',
-      }
-    })
-    .filter((row): row is NonNullable<typeof row> => Boolean(row))
+const voicedCharacters = computed(() => {
+  return collectVoicedCharacters(voiceActor.value).map((row, index) => {
+    const content = row.content && typeof row.content === 'object' ? row.content : null
+    return {
+      key: row.id || `${row.name}-${index}`,
+      id: row.id,
+      name: row.name,
+      imagePath: row.imagePath,
+      role: row.role,
+      title: content ? getDisplayTitle(content) : '',
+    }
+  })
 })
 
-const voiceActors = computed(() => collectVoiceActors(character.value))
-
-const loadCharacter = async (id: string) => {
+const loadVoiceActor = async (id: string) => {
   if (!id) {
-    error.value = 'No character ID provided'
+    error.value = 'No voice actor ID provided'
     loading.value = false
     return
   }
   loading.value = true
   error.value = ''
   try {
-    character.value = await entityStore.getEntityDetails(id)
+    voiceActor.value = await entityStore.getEntityDetails(id)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load character'
-    character.value = null
+    error.value = err instanceof Error ? err.message : 'Failed to load voice actor'
+    voiceActor.value = null
   } finally {
     loading.value = false
   }
 }
 
 const onToggleFavorite = async () => {
-  if (!character.value) return
+  if (!voiceActor.value) return
   try {
-    character.value = await entityStore.toggleFavorite(character.value)
+    voiceActor.value = await entityStore.toggleFavorite(voiceActor.value)
   } catch (err) {
     console.error('Favorite update failed:', err)
   }
 }
 
-const openVoiceActor = (credit: EntityVoiceCredit) => {
-  if (!credit.entity) return
+const openCharacter = (row: { id: string }) => {
+  if (!row.id) return
   router.push({
-    name: 'VoiceActorDetails',
-    params: { id: credit.entity },
-    query: { from: route.fullPath },
-  })
-}
-
-const openTitle = (row: { id: string; contentType?: string }) => {
-  router.push({
-    name: getDetailsRouteName({ contentType: row.contentType }),
+    name: 'CharacterDetails',
     params: { id: row.id },
     query: { from: route.fullPath },
   })
@@ -224,7 +187,7 @@ const handleImageError = (event: Event) => {
 watch(
   () => route.params.id,
   (id) => {
-    if (typeof id === 'string') loadCharacter(id)
+    if (typeof id === 'string') loadVoiceActor(id)
   },
   { immediate: true },
 )
@@ -345,54 +308,8 @@ watch(
 }
 
 .character-description,
-.appearances,
-.voice-actors {
+.appearances {
   margin-bottom: 2rem;
-}
-
-.voice-actor-list {
-  display: flex;
-  gap: 0.75rem;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
-}
-
-.voice-actor-card {
-  flex: 0 0 110px;
-  text-align: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  color: inherit;
-  cursor: pointer;
-}
-
-.voice-actor-card:disabled {
-  cursor: default;
-}
-
-.voice-actor-card img,
-.voice-actor-card .no-poster.small {
-  width: 110px;
-  height: 140px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: var(--bg-hover);
-}
-
-.voice-actor-name,
-.voice-actor-language {
-  margin: 0.35rem 0 0;
-  font-size: 0.8rem;
-}
-
-.voice-actor-name {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.voice-actor-language {
-  color: var(--text-muted);
 }
 
 .about-text {
@@ -412,6 +329,9 @@ watch(
   border: 1px solid var(--border-color);
   border-radius: 10px;
   overflow: hidden;
+}
+
+.content-card.clickable {
   cursor: pointer;
 }
 

@@ -14,7 +14,7 @@ export interface UnifiedContent {
   nativeTitle?: string
   originalTitle?: string
   overview: string
-  contentType: 'movie' | 'tv' | 'special' | 'character'
+  contentType: 'movie' | 'tv' | 'special' | 'character' | 'voice_actor'
   posterPath?: string
   backdropPath?: string
   releaseDate?: string | Date
@@ -103,6 +103,7 @@ export interface EntityVoiceCredit {
   malId?: number
   tmdbId?: number
   imagePath?: string
+  entity?: string
 }
 
 export interface EntityAppearance {
@@ -116,9 +117,18 @@ export interface EntityAppearance {
         posterPath?: string
         contentType?: 'movie' | 'tv' | 'special'
       }
+  character?:
+    | string
+    | {
+        _id: string
+        name?: string
+        imagePath?: string
+        entityType?: CatalogEntityType
+      }
   role?: string
   importance?: number
   characterName?: string
+  language?: string
   voiceActors?: EntityVoiceCredit[]
 }
 

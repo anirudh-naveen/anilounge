@@ -23,6 +23,11 @@ export const useEntityStore = defineStore('entities', () => {
     return (response.data?.data || []) as CatalogEntity[]
   }
 
+  const getContentVoiceActors = async (contentId: string): Promise<CatalogEntity[]> => {
+    const response = await entityAPI.getContentVoiceActors(contentId)
+    return (response.data?.data || []) as CatalogEntity[]
+  }
+
   const getEntityDetails = async (id: string): Promise<CatalogEntity> => {
     isLoading.value = true
     error.value = null
@@ -68,6 +73,7 @@ export const useEntityStore = defineStore('entities', () => {
     isLoading,
     error,
     getContentCharacters,
+    getContentVoiceActors,
     getEntityDetails,
     loadFavorites,
     toggleFavorite,

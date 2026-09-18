@@ -244,21 +244,64 @@ export function characterPortraitPath(path) {
 }
 
 /**
+ * MAL people names are often `"Last, First"`.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function displayPersonName(value) {
+  const name = normalizeEntityName(value)
+  if (!name.includes(',')) return name
+  const [last, first] = name.split(',').map((part) => part.trim())
+  if (first && last) return `${first} ${last}`
+  return name
+}
+
+/**
+ * Voice-actor photo URL. MAL `voiceactors` paths and TMDB profiles are valid here.
+ * @param {unknown} path
+ * @returns {string}
+ */
+export function voiceActorImagePath(path) {
+  const value = normalizeEntityName(path)
+  if (!value || /questionmark/i.test(value)) return ''
+  return value
+}
+
+/**
+ * Mongo filter used to upsert a character or voice actor without colliding on `malId: null`.
+ * @param {string} entityType
+ * @param {{ malId?: number, name?: string }} payload
+ * @returns {object}
+ */
+export function entityUpsertFilter(entityType, payload) {
+  const malId = Number(payload?.malId)
+  if (Number.isFinite(malId) && malId > 0) {
+    return { entityType, malId }
+  }
+  return {
+    entityType,
+    name: normalizeEntityName(payload?.name),
+    $or: [{ malId: { $exists: false } }, { malId: null }],
+  }
+}
+
+/**
  * Mongo filter used to upsert a character without colliding on `malId: null`.
  * Sparse unique indexes still index null, so TMDB-only rows must omit malId.
  * @param {{ malId?: number, name?: string }} payload
  * @returns {object}
  */
 export function characterUpsertFilter(payload) {
-  const malId = Number(payload?.malId)
-  if (Number.isFinite(malId) && malId > 0) {
-    return { entityType: 'character', malId }
-  }
-  return {
-    entityType: 'character',
-    name: normalizeEntityName(payload?.name),
-    $or: [{ malId: { $exists: false } }, { malId: null }],
-  }
+  return entityUpsertFilter('character', payload)
+}
+
+/**
+ * Mongo filter used to upsert a voice actor.
+ * @param {{ malId?: number, name?: string }} payload
+ * @returns {object}
+ */
+export function voiceActorUpsertFilter(payload) {
+  return entityUpsertFilter('voice_actor', payload)
 }
 
 /**
@@ -369,6 +412,89 @@ export function mapTmdbCharacterCredits(credits, contentId) {
 }
 
 /**
+ * Map one character voice credit onto a voice-actor upsert payload.
+ * @param {object} [credit]
+ * @param {{ contentId: unknown, characterName?: string, role?: string }} meta
+ * @returns {object | null}
+ */
+export function mapVoiceActorFromCredit(
+  credit,
+  { contentId, characterName, role, characterId } = {},
+) {
+  const original = normalizeEntityName(credit?.name)
+  if (!original) return null
+  const name = displayPersonName(original)
+  const malId = Number(credit?.malId)
+  const tmdbId = Number(credit?.tmdbId)
+  const appearance = {
+    characterName: cleanCharacterName(characterName) || characterName || '',
+    role: normalizeEntityName(role) || 'Voice',
+    language: normalizeEntityName(credit?.language),
+    importance: characterImportanceScore({ role }),
+  }
+  if (contentId) appearance.content = contentId
+  if (characterId) appearance.character = characterId
+  return {
+    name,
+    alternativeNames: uniqueEntityNames(original, name),
+    imagePath: voiceActorImagePath(credit?.imagePath),
+    malId: Number.isFinite(malId) && malId > 0 ? malId : undefined,
+    tmdbId: Number.isFinite(tmdbId) && tmdbId > 0 ? tmdbId : undefined,
+    appearance,
+  }
+}
+
+/**
+ * Map one Jikan `/people/{id}/voices` row onto a voiced-character payload.
+ * @param {object} [row]
+ * @returns {{ malId: number, name: string, imagePath: string, role: string, animeMalId?: number } | null}
+ */
+export function mapJikanPersonVoiceRow(row) {
+  const character = row?.character && typeof row.character === 'object' ? row.character : null
+  const name = cleanCharacterName(character?.name)
+  const malId = Number(character?.mal_id)
+  if (!isUsableCharacterName(name) || !Number.isFinite(malId) || malId < 1) return null
+  const animeMalId = Number(row?.anime?.mal_id)
+  return {
+    malId,
+    name,
+    imagePath: entityImagePath(character?.images),
+    role: normalizeEntityName(row?.role) || 'Supporting',
+    animeMalId: Number.isFinite(animeMalId) && animeMalId > 0 ? animeMalId : undefined,
+  }
+}
+
+/**
+ * Unique voice actors for a title, Japanese / Main credits first, capped for the Cast row.
+ * @param {object[]} [entities]
+ * @param {unknown} contentId
+ * @param {number} [limit]
+ * @returns {object[]}
+ */
+export function highlightedVoiceActors(
+  entities,
+  contentId,
+  limit = HIGHLIGHTED_CHARACTERS_PER_TITLE,
+) {
+  const cap = Number.isFinite(Number(limit)) ? Number(limit) : HIGHLIGHTED_CHARACTERS_PER_TITLE
+  return [...(Array.isArray(entities) ? entities : [])]
+    .filter((entity) => displayPersonName(entity?.name))
+    .sort((left, right) => {
+      const leftApp = appearanceForContentId(left, contentId)
+      const rightApp = appearanceForContentId(right, contentId)
+      const roleDiff = appearanceRoleRank(leftApp?.role) - appearanceRoleRank(rightApp?.role)
+      if (roleDiff) return roleDiff
+      const leftJa = /japanese/i.test(leftApp?.language || '') ? 0 : 1
+      const rightJa = /japanese/i.test(rightApp?.language || '') ? 0 : 1
+      if (leftJa !== rightJa) return leftJa - rightJa
+      const importanceDiff = (Number(rightApp?.importance) || 0) - (Number(leftApp?.importance) || 0)
+      if (importanceDiff) return importanceDiff
+      return displayPersonName(left?.name).localeCompare(displayPersonName(right?.name))
+    })
+    .slice(0, Math.max(0, cap))
+}
+
+/**
  * Find a persisted character that matches an episode-cast character name.
  * @param {string} characterName
  * @param {Array<{ _id?: unknown, name?: string, englishName?: string, nativeName?: string, alternativeNames?: string[] }>} characters
@@ -407,17 +533,44 @@ export function serializeEntity(doc, options = {}) {
   return {
     _id: raw._id,
     entityType: raw.entityType,
-    name: cleanCharacterName(raw.name) || raw.name,
+    name:
+      raw.entityType === 'voice_actor'
+        ? displayPersonName(raw.name)
+        : cleanCharacterName(raw.name) || raw.name,
     englishName: raw.englishName || '',
     nativeName: raw.nativeName || '',
     alternativeNames: raw.alternativeNames || [],
     about: raw.about || '',
-    imagePath: characterPortraitPath(raw.imagePath),
+    imagePath:
+      raw.entityType === 'character'
+        ? characterPortraitPath(raw.imagePath)
+        : voiceActorImagePath(raw.imagePath),
     malId: raw.malId,
     tmdbId: raw.tmdbId,
     favoritesCount: raw.favoritesCount || 0,
     isFavorited: Boolean(options.isFavorited),
-    appearances,
+    appearances: appearances.map((row) => {
+      const character = serializeNestedCharacter(row.character)
+      if (!character) return row
+      return { ...row, character }
+    }),
+  }
+}
+
+/**
+ * Slim populated character on a voice-actor appearance.
+ * @param {unknown} value
+ * @returns {object|undefined}
+ */
+function serializeNestedCharacter(value) {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = typeof value.toObject === 'function' ? value.toObject() : value
+  if (!raw._id && !raw.name) return undefined
+  return {
+    _id: raw._id,
+    entityType: 'character',
+    name: cleanCharacterName(raw.name) || raw.name || '',
+    imagePath: characterPortraitPath(raw.imagePath),
   }
 }
 
