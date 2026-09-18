@@ -8,6 +8,7 @@
 import express from 'express'
 import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
+import entityController from '../controllers/entityController.js'
 import * as authController from '../controllers/authController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
@@ -75,6 +76,14 @@ router.get('/search', contentController.searchContent)
 router.get('/stats', contentController.getDatabaseStats)
 router.get('/content/:id', validateObjectId, contentController.getContentById)
 router.get('/content/:id/episodes', validateObjectId, contentController.getContentEpisodes)
+router.get('/content/:id/characters', validateObjectId, entityController.getContentCharacters)
+router.get('/entities', entityController.searchCatalogEntities)
+router.get(
+  '/entities/:id',
+  validateObjectId,
+  optionalAuthenticate,
+  entityController.getEntityById,
+)
 router.get('/content/external/:id', contentController.getContentByExternalId)
 router.get('/content/:id/similar', validateObjectId, contentController.getSimilarContent)
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
@@ -183,5 +192,10 @@ router.post(
 )
 
 router.get('/content/:contentId/my-rating', validateObjectId, contentController.getMyRating)
+
+/** Entity favorites (characters today; voice actors and studios later). */
+router.get('/favorites', entityController.getFavoriteEntities)
+router.post('/entities/:id/favorite', validateObjectId, entityController.favoriteEntity)
+router.delete('/entities/:id/favorite', validateObjectId, entityController.unfavoriteEntity)
 
 export default router

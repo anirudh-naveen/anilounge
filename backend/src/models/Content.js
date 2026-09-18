@@ -162,6 +162,8 @@ const ContentSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    /** When character ingest last completed successfully for this title. */
+    characterSyncAt: Date,
     createdAt: {
       type: Date,
       default: Date.now,
