@@ -3,7 +3,7 @@
 ## Content
 
 1. Fix characters as content
-   - Character sshould have images attached.
+   - Character should have images attached.
    - Character should be merged with all of the same name in their home "franchise".
 2. Add voice actors as a type of content. ✅
    - They will not have their own tab but will have their own screen and can be clicked and will be searchable and favoritable for the profile.

@@ -424,6 +424,7 @@ class UnifiedContentService {
       tmdbId: tmdbData.id,
       genres: tmdbData.genres || [],
       productionCompanies: tmdbData.production_companies?.map((company) => company.name) || [],
+      studios: tmdbData.production_companies?.map((company) => company.name) || [],
       originCountries: extractOriginCountries(tmdbData),
       dataSources: {
         tmdb: {

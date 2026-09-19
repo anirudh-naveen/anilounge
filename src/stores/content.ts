@@ -462,7 +462,10 @@ export const useContentStore = defineStore('content', () => {
             limit: 24,
           })
           const entityHits = ((entityResponse.data?.data || []) as UnifiedContent[]).filter(
-            (hit) => hit.entityType === 'character' || hit.entityType === 'voice_actor',
+            (hit) =>
+              hit.entityType === 'character' ||
+              hit.entityType === 'voice_actor' ||
+              hit.entityType === 'studio',
           )
           const seen = new Set(filteredResults.map((item) => item._id))
           const extra = entityHits.filter((hit) => hit?._id && !seen.has(hit._id))

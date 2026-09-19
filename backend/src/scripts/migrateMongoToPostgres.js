@@ -1,5 +1,5 @@
 /**
- * Copy Mongo Content / Entity / User documents into Postgres.
+ * Copy Mongo Content / Entity / User documents into the content-supertype schema.
  * Layer: CLI migration. Truncates SQL tables, then inserts. Does not copy
  * inferred related-title links (Mongo sequel/prequel/related arrays are empty;
  * genre-similarity is not a relation).
@@ -12,6 +12,12 @@ import crypto from 'crypto'
 import dotenv from 'dotenv'
 import mongoose from 'mongoose'
 import { getPool, closePostgres } from '../../config/postgres.js'
+import {
+  airingFromMalStatus,
+  appearanceRole,
+  kindFromContentType,
+  kindFromEntityType,
+} from '../db/kinds.js'
 
 dotenv.config()
 
@@ -22,6 +28,7 @@ const RELATION_KINDS = new Set([
   'parent_story',
   'alternative_setting',
   'alternative_version',
+  'alternative',
   'summary',
   'full_story',
   'other',
@@ -125,33 +132,31 @@ async function insertMany(client, table, columns, rows, chunkSize = 80) {
 
 /**
  * @param {import('pg').PoolClient} client
+ * @param {string} name
+ * @param {Map<string, string>} studioByName
+ * @returns {Promise<string>}
+ */
+async function upsertStudio(client, name, studioByName) {
+  const key = name.toLowerCase()
+  if (studioByName.has(key)) return studioByName.get(key)
+  const id = uuid()
+  await insertRow(client, 'content', ['id', 'kind', 'name'], [id, 'studio', name])
+  await insertRow(client, 'studios', ['content_id'], [id])
+  studioByName.set(key, id)
+  return id
+}
+
+/**
+ * @param {import('pg').PoolClient} client
  * @returns {Promise<void>}
  */
 async function truncateAll(client) {
   await client.query(`
     TRUNCATE TABLE
-      voice_credits,
-      appearances,
-      entity_alternative_names,
-      content_studios,
-      content_studio_names,
-      content_production_companies,
-      content_origin_countries,
-      content_alternative_titles,
-      content_genres,
-      content_relations,
-      franchise_members,
-      franchises,
-      user_favorite_studios,
-      user_favorite_genres,
-      user_favorite_entities,
-      user_ratings,
-      watchlist_entries,
-      refresh_tokens,
-      ip_bans,
+      content,
       users,
-      entities,
-      content
+      genres,
+      ip_bans
     RESTART IDENTITY CASCADE
   `)
 }
@@ -164,74 +169,92 @@ async function truncateAll(client) {
 async function copyContent(client, contentByMongo) {
   const docs = await mongoose.connection.db.collection('contents').find({}).toArray()
   const franchiseByName = new Map()
+  const studioByName = new Map()
+  const genreByName = new Map()
   const seenTmdb = new Set()
   const seenMal = new Set()
+  const contentRows = []
+  const movieRows = []
+  const seriesRows = []
+  const specialRows = []
+  const genreRows = []
+  const akaRows = []
+  const studioCreditRows = []
   const franchiseRows = []
   const memberRows = []
-  const contentRows = []
-  const genreRows = []
-  const altTitleRows = []
-  const countryRows = []
-  const studioRows = []
-  const companyRows = []
   let relationCount = 0
   let duplicateTmdb = 0
-
-  const contentColumns = [
-    'id',
-    'mongo_id',
-    'internal_id',
-    'title',
-    'english_title',
-    'native_title',
-    'original_title',
-    'overview',
-    'tagline',
-    'content_type',
-    'poster_path',
-    'backdrop_path',
-    'release_date',
-    'last_air_date',
-    'runtime',
-    'episode_count',
-    'season_count',
-    'tmdb_id',
-    'mal_id',
-    'vote_average',
-    'vote_count',
-    'popularity',
-    'unified_score',
-    'user_rating_average',
-    'user_rating_count',
-    'user_rating_sum',
-    'mal_score',
-    'mal_scored_by',
-    'mal_rank',
-    'mal_status',
-    'mal_episodes',
-    'mal_media_type',
-    'mal_source',
-    'mal_rating',
-    'broadcast_day',
-    'broadcast_time',
-    'next_episode_air_date',
-    'next_episode_number',
-    'next_episode_season',
-    'airing_updated_at',
-    'start_season_year',
-    'start_season',
-    'tmdb_has_data',
-    'tmdb_last_updated',
-    'mal_has_data',
-    'mal_last_updated',
-    'character_sync_at',
-    'created_at',
-    'updated_at',
-  ]
 
   for (const doc of docs) {
     const id = uuid()
     contentByMongo.set(String(doc._id), id)
+    const kind = kindFromContentType(doc.contentType)
+    const name = asText(doc.englishTitle) || asText(doc.title) || 'Untitled'
+    const origin = (Array.isArray(doc.originCountries) ? doc.originCountries : [])
+      .map(asText)
+      .find((code) => code && code.length === 2)
+
+    let tmdbId = asNumber(doc.tmdbId)
+    if (tmdbId != null) {
+      if (seenTmdb.has(`${kind}:${tmdbId}`)) {
+        duplicateTmdb += 1
+        tmdbId = null
+      } else {
+        seenTmdb.add(`${kind}:${tmdbId}`)
+      }
+    }
+    let malId = asNumber(doc.malId)
+    if (malId != null) {
+      if (seenMal.has(`${kind}:${malId}`)) malId = null
+      else seenMal.add(`${kind}:${malId}`)
+    }
+
+    contentRows.push([
+      id,
+      kind,
+      name,
+      asText(doc.nativeTitle),
+      asText(doc.overview),
+      asText(doc.posterPath),
+      malId,
+      tmdbId,
+      asNumber(doc.anilistId),
+      asDate(doc.createdAt) || new Date(),
+      asDate(doc.updatedAt) || new Date(),
+    ])
+
+    const shared = [
+      asText(doc.originalTitle) || asText(doc.nativeTitle),
+      asText(doc.tagline),
+      asText(doc.backdropPath),
+      asDate(doc.releaseDate),
+      origin ? origin.toUpperCase() : null,
+      asNumber(doc.voteAverage),
+      asNumber(doc.voteCount),
+      asNumber(doc.malScore),
+      asNumber(doc.malScoredBy),
+      asNumber(doc.popularity),
+      asNumber(doc.unifiedScore),
+    ]
+
+    if (kind === 'movie') {
+      movieRows.push([id, ...shared, asNumber(doc.runtime)])
+    } else if (kind === 'special') {
+      specialRows.push([id, ...shared, asNumber(doc.runtime)])
+    } else {
+      seriesRows.push([
+        id,
+        ...shared,
+        asNumber(doc.seasonCount),
+        asNumber(doc.episodeCount) ?? asNumber(doc.malEpisodes),
+        airingFromMalStatus(doc.malStatus),
+        asEnum(doc.startSeason, ['winter', 'spring', 'summer', 'fall']),
+        asNumber(doc.startSeasonYear),
+        asText(doc.broadcastDay),
+        asDate(doc.nextEpisodeAirDate),
+        asNumber(doc.nextEpisodeNumber),
+      ])
+    }
 
     const franchiseName = asText(doc.franchise) || asText(doc.relationships?.franchise)
     if (franchiseName && !franchiseByName.has(franchiseName)) {
@@ -239,131 +262,126 @@ async function copyContent(client, contentByMongo) {
       franchiseByName.set(franchiseName, franchiseId)
       franchiseRows.push([franchiseId, franchiseName])
     }
-    if (franchiseName) {
-      memberRows.push([franchiseByName.get(franchiseName), id])
-    }
-
-    let tmdbId = asNumber(doc.tmdbId)
-    if (tmdbId != null) {
-      if (seenTmdb.has(tmdbId)) {
-        duplicateTmdb += 1
-        tmdbId = null
-      } else {
-        seenTmdb.add(tmdbId)
-      }
-    }
-    let malId = asNumber(doc.malId)
-    if (malId != null) {
-      if (seenMal.has(malId)) malId = null
-      else seenMal.add(malId)
-    }
-
-    contentRows.push([
-      id,
-      String(doc._id),
-      doc.internalId,
-      doc.title,
-      asText(doc.englishTitle),
-      asText(doc.nativeTitle),
-      asText(doc.originalTitle),
-      asText(doc.overview),
-      asText(doc.tagline),
-      asEnum(doc.contentType, ['movie', 'tv', 'special']) || 'tv',
-      asText(doc.posterPath),
-      asText(doc.backdropPath),
-      asDate(doc.releaseDate),
-      asDate(doc.lastAirDate),
-      asNumber(doc.runtime),
-      asNumber(doc.episodeCount),
-      asNumber(doc.seasonCount),
-      tmdbId,
-      malId,
-      asNumber(doc.voteAverage),
-      asNumber(doc.voteCount),
-      asNumber(doc.popularity),
-      asNumber(doc.unifiedScore),
-      asNumber(doc.userRatingAverage),
-      asNumber(doc.userRatingCount) ?? 0,
-      asNumber(doc.userRatingSum) ?? 0,
-      asNumber(doc.malScore),
-      asNumber(doc.malScoredBy),
-      asNumber(doc.malRank),
-      asEnum(doc.malStatus, ['finished_airing', 'currently_airing', 'not_yet_aired']),
-      asNumber(doc.malEpisodes),
-      asEnum(doc.malMediaType, ['unknown', 'tv', 'ova', 'movie', 'special', 'ona', 'music']),
-      asEnum(doc.malSource, [
-        'manga',
-        'light_novel',
-        'novel',
-        'web_novel',
-        'original',
-        'game',
-        '4_koma_manga',
-        'web_manga',
-        'music',
-        'picture_book',
-        'visual_novel',
-        'other',
-      ]),
-      asEnum(doc.malRating, ['g', 'pg', 'pg_13', 'r', 'r+', 'rx']),
-      asText(doc.broadcastDay),
-      asText(doc.broadcastTime),
-      asDate(doc.nextEpisodeAirDate),
-      asNumber(doc.nextEpisodeNumber),
-      asNumber(doc.nextEpisodeSeason),
-      asDate(doc.airingUpdatedAt),
-      asNumber(doc.startSeasonYear),
-      asEnum(doc.startSeason, ['winter', 'spring', 'summer', 'fall']),
-      Boolean(doc.dataSources?.tmdb?.hasData),
-      asDate(doc.dataSources?.tmdb?.lastUpdated),
-      Boolean(doc.dataSources?.mal?.hasData),
-      asDate(doc.dataSources?.mal?.lastUpdated),
-      asDate(doc.characterSyncAt),
-      asDate(doc.createdAt) || new Date(),
-      asDate(doc.updatedAt) || new Date(),
-    ])
+    if (franchiseName) memberRows.push([franchiseByName.get(franchiseName), id])
 
     const seenGenres = new Set()
     for (const genre of Array.isArray(doc.genres) ? doc.genres : []) {
-      const name = asText(typeof genre === 'string' ? genre : genre?.name)
-      if (!name) continue
-      const key = name.toLowerCase()
+      const genreName = asText(typeof genre === 'string' ? genre : genre?.name)
+      if (!genreName) continue
+      const key = genreName.toLowerCase()
       if (seenGenres.has(key)) continue
       seenGenres.add(key)
-      genreRows.push([id, asNumber(typeof genre === 'object' ? genre.id : null), name])
+      if (!genreByName.has(key)) genreByName.set(key, { id: uuid(), name: genreName })
+      genreRows.push([id, genreByName.get(key).id])
     }
 
     for (const title of new Set((doc.alternativeTitles || []).map(asText).filter(Boolean))) {
-      altTitleRows.push([id, title])
+      akaRows.push([id, title])
     }
 
-    for (const country of new Set((doc.originCountries || []).map(asText).filter(Boolean))) {
-      if (country.length !== 2) continue
-      countryRows.push([id, country.toUpperCase()])
-    }
-
-    for (const name of new Set((doc.studios || []).map(asText).filter(Boolean))) {
-      studioRows.push([id, name])
-    }
-
-    for (const name of new Set((doc.productionCompanies || []).map(asText).filter(Boolean))) {
-      companyRows.push([id, name])
+    const studioNames = [
+      ...(Array.isArray(doc.studios) ? doc.studios : []),
+      ...(Array.isArray(doc.productionCompanies) ? doc.productionCompanies : []),
+    ]
+    for (const studioName of new Set(studioNames.map(asText).filter(Boolean))) {
+      studioCreditRows.push([id, studioName])
     }
   }
 
-  await insertMany(client, 'franchises', ['id', 'name'], franchiseRows)
-  await insertMany(client, 'content', contentColumns, contentRows)
-  await insertMany(client, 'franchise_members', ['franchise_id', 'content_id'], memberRows)
-  await insertMany(client, 'content_genres', ['content_id', 'tmdb_id', 'name'], genreRows)
-  await insertMany(client, 'content_alternative_titles', ['content_id', 'title'], altTitleRows)
-  await insertMany(client, 'content_origin_countries', ['content_id', 'country_code'], countryRows)
-  await insertMany(client, 'content_studio_names', ['content_id', 'name'], studioRows)
+  await insertMany(client, 'content', [
+    'id',
+    'kind',
+    'name',
+    'native_name',
+    'about',
+    'image_path',
+    'mal_id',
+    'tmdb_id',
+    'anilist_id',
+    'created_at',
+    'updated_at',
+  ], contentRows)
+
+  await insertMany(client, 'movies', [
+    'content_id',
+    'original_title',
+    'tagline',
+    'backdrop_path',
+    'release_date',
+    'origin_country',
+    'tmdb_score',
+    'tmdb_votes',
+    'mal_score',
+    'mal_votes',
+    'popularity',
+    'unified_score',
+    'runtime_minutes',
+  ], movieRows)
+
+  await insertMany(client, 'specials', [
+    'content_id',
+    'original_title',
+    'tagline',
+    'backdrop_path',
+    'release_date',
+    'origin_country',
+    'tmdb_score',
+    'tmdb_votes',
+    'mal_score',
+    'mal_votes',
+    'popularity',
+    'unified_score',
+    'runtime_minutes',
+  ], specialRows)
+
+  await insertMany(client, 'series', [
+    'content_id',
+    'original_title',
+    'tagline',
+    'backdrop_path',
+    'release_date',
+    'origin_country',
+    'tmdb_score',
+    'tmdb_votes',
+    'mal_score',
+    'mal_votes',
+    'popularity',
+    'unified_score',
+    'season_count',
+    'episode_count',
+    'airing_status',
+    'start_season',
+    'start_year',
+    'broadcast_day',
+    'next_episode_at',
+    'next_episode_number',
+  ], seriesRows)
+
   await insertMany(
     client,
-    'content_production_companies',
-    ['content_id', 'name'],
-    companyRows,
+    'genres',
+    ['id', 'name'],
+    [...genreByName.values()].map((genre) => [genre.id, genre.name]),
   )
+  await insertMany(client, 'content_genres', ['content_id', 'genre_id'], genreRows)
+  await insertMany(client, 'content_akas', ['content_id', 'name'], akaRows)
+
+  for (const [franchiseName, franchiseId] of franchiseByName) {
+    await insertRow(client, 'content', ['id', 'kind', 'name'], [franchiseId, 'franchise', franchiseName])
+    await insertRow(client, 'franchises', ['content_id'], [franchiseId])
+  }
+  await insertMany(client, 'franchise_members', ['franchise_id', 'member_id'], memberRows)
+
+  for (const [workId, studioName] of studioCreditRows) {
+    const studioId = await upsertStudio(client, studioName, studioByName)
+    await insertRow(
+      client,
+      'studio_credits',
+      ['work_id', 'studio_id'],
+      [workId, studioId],
+    )
+  }
+
   if (duplicateTmdb) {
     console.log(`  cleared ${duplicateTmdb} duplicate tmdb_id values (kept both titles)`)
   }
@@ -411,66 +429,81 @@ async function copyEntities(client, contentByMongo, entityByMongo) {
   const vaByTmdb = new Map()
   const vaByMal = new Map()
   const vaByName = new Map()
-  const entityRows = []
-  const altNameRows = []
+  const seenTmdb = new Set()
+  const seenMal = new Set()
+  const contentRows = []
+  const characterRows = []
+  const voiceRows = []
+  const studioRows = []
+  const akaRows = []
   const appearanceRows = []
   const creditRows = []
   let appearanceCount = 0
   let creditCount = 0
 
   for (const doc of docs) {
-    const id = uuid()
     const entityType = asEnum(doc.entityType, ['character', 'voice_actor', 'studio'])
     if (!entityType) continue
+    const id = uuid()
+    const kind = kindFromEntityType(entityType)
     entityByMongo.set(String(doc._id), id)
 
-    entityRows.push([
+    let tmdbId = asNumber(doc.tmdbId)
+    if (tmdbId != null) {
+      const key = `${kind}:${tmdbId}`
+      if (seenTmdb.has(key)) tmdbId = null
+      else seenTmdb.add(key)
+    }
+    let malId = asNumber(doc.malId)
+    if (malId != null) {
+      const key = `${kind}:${malId}`
+      if (seenMal.has(key)) malId = null
+      else seenMal.add(key)
+    }
+
+    contentRows.push([
       id,
-      String(doc._id),
-      entityType,
+      kind,
       doc.name,
-      asText(doc.englishName),
       asText(doc.nativeName),
       asText(doc.about),
       asText(doc.imagePath),
-      asNumber(doc.malId),
-      asNumber(doc.tmdbId),
-      asNumber(doc.favoritesCount) ?? 0,
-      asDate(doc.lastSyncedAt),
-      asDate(doc.voiceCreditsSyncedAt),
+      malId,
+      tmdbId,
       asDate(doc.createdAt) || new Date(),
       asDate(doc.updatedAt) || new Date(),
     ])
+    if (kind === 'character') characterRows.push([id, asText(doc.englishName)])
+    else if (kind === 'voice') voiceRows.push([id, asText(doc.englishName)])
+    else studioRows.push([id])
 
     for (const name of new Set((doc.alternativeNames || []).map(asText).filter(Boolean))) {
-      altNameRows.push([id, name])
+      akaRows.push([id, name])
     }
 
-    if (entityType === 'voice_actor') {
+    if (kind === 'voice') {
       if (doc.tmdbId) vaByTmdb.set(Number(doc.tmdbId), id)
       if (doc.malId) vaByMal.set(Number(doc.malId), id)
       if (doc.name) vaByName.set(String(doc.name).toLowerCase(), id)
     }
   }
 
-  await insertMany(client, 'entities', [
+  await insertMany(client, 'content', [
     'id',
-    'mongo_id',
-    'entity_type',
+    'kind',
     'name',
-    'english_name',
     'native_name',
     'about',
     'image_path',
     'mal_id',
     'tmdb_id',
-    'favorites_count',
-    'last_synced_at',
-    'voice_credits_synced_at',
     'created_at',
     'updated_at',
-  ], entityRows)
-  await insertMany(client, 'entity_alternative_names', ['entity_id', 'name'], altNameRows)
+  ], contentRows)
+  await insertMany(client, 'characters', ['content_id', 'english_name'], characterRows)
+  await insertMany(client, 'voices', ['content_id', 'english_name'], voiceRows)
+  await insertMany(client, 'studios', ['content_id'], studioRows)
+  await insertMany(client, 'content_akas', ['content_id', 'name'], akaRows)
 
   /**
    * @param {object} credit
@@ -488,7 +521,8 @@ async function copyEntities(client, contentByMongo, entityByMongo) {
     return null
   }
 
-  const appearanceKeys = new Set()
+  const appearanceKeys = new Map()
+  const creditKeys = new Set()
 
   for (const doc of docs) {
     const entityId = entityByMongo.get(String(doc._id))
@@ -496,44 +530,64 @@ async function copyEntities(client, contentByMongo, entityByMongo) {
     const entityType = asEnum(doc.entityType, ['character', 'voice_actor', 'studio'])
     const appearances = Array.isArray(doc.appearances) ? doc.appearances : []
 
+    if (entityType === 'studio') {
+      const seenWorks = new Set()
+      for (const appearance of appearances) {
+        const workId = contentByMongo.get(mongoId(appearance.content))
+        if (!workId || seenWorks.has(workId)) continue
+        seenWorks.add(workId)
+        await insertRow(
+          client,
+          'studio_credits',
+          ['work_id', 'studio_id'],
+          [workId, entityId],
+        )
+      }
+      continue
+    }
+
     for (const appearance of appearances) {
-      const contentId = contentByMongo.get(mongoId(appearance.content))
-      if (!contentId) continue
+      const workId = contentByMongo.get(mongoId(appearance.content))
+      if (!workId) continue
 
       let characterId = null
       if (entityType === 'character') characterId = entityId
       else if (appearance.character) characterId = entityByMongo.get(mongoId(appearance.character)) || null
+      if (!characterId) continue
 
-      const key = `${contentId}:${characterId || `va:${entityId}`}`
-      if (appearanceKeys.has(key)) continue
-      appearanceKeys.add(key)
-
-      const appearanceId = uuid()
-      appearanceRows.push([
-        appearanceId,
-        contentId,
-        characterId,
-        asText(appearance.role) || 'Supporting',
-        asNumber(appearance.importance) ?? 0,
-        asText(appearance.characterName),
-        asText(appearance.language),
-      ])
-      appearanceCount += 1
+      const key = `${workId}:${characterId}`
+      let appearanceId
+      if (appearanceKeys.has(key)) {
+        appearanceId = appearanceKeys.get(key)
+      } else {
+        appearanceId = uuid()
+        appearanceKeys.set(key, appearanceId)
+        appearanceRows.push([
+          appearanceId,
+          workId,
+          characterId,
+          appearanceRole(appearance.role),
+          asNumber(appearance.importance) ?? 0,
+        ])
+        appearanceCount += 1
+      }
 
       const credits = Array.isArray(appearance.voiceActors) ? appearance.voiceActors : []
+      if (entityType === 'voice') {
+        const creditKey = `${appearanceId}:${entityId}:${asText(appearance.language) || ''}`
+        if (!creditKeys.has(creditKey)) {
+          creditKeys.add(creditKey)
+          creditRows.push([uuid(), appearanceId, entityId, asText(appearance.language)])
+          creditCount += 1
+        }
+      }
       for (const credit of credits) {
-        const name = asText(credit.name)
-        if (!name) continue
-        creditRows.push([
-          uuid(),
-          appearanceId,
-          resolveVoiceActor(credit),
-          name,
-          asText(credit.language),
-          asNumber(credit.malId),
-          asNumber(credit.tmdbId),
-          asText(credit.imagePath),
-        ])
+        const voiceId = resolveVoiceActor(credit)
+        if (!voiceId) continue
+        const creditKey = `${appearanceId}:${voiceId}:${asText(credit.language) || ''}`
+        if (creditKeys.has(creditKey)) continue
+        creditKeys.add(creditKey)
+        creditRows.push([uuid(), appearanceId, voiceId, asText(credit.language)])
         creditCount += 1
       }
     }
@@ -541,22 +595,16 @@ async function copyEntities(client, contentByMongo, entityByMongo) {
 
   await insertMany(client, 'appearances', [
     'id',
-    'content_id',
+    'work_id',
     'character_id',
     'role',
     'importance',
-    'character_name',
-    'language',
   ], appearanceRows)
   await insertMany(client, 'voice_credits', [
     'id',
     'appearance_id',
-    'voice_actor_id',
-    'name',
+    'voice_id',
     'language',
-    'mal_id',
-    'tmdb_id',
-    'image_path',
   ], creditRows)
 
   return { entities: docs.length, appearances: appearanceCount, credits: creditCount }
@@ -587,51 +635,47 @@ async function copyUsers(client, contentByMongo, entityByMongo) {
       'users',
       [
         'id',
-        'mongo_id',
         'username',
         'email',
         'password_hash',
         'profile_picture',
-        'is_demo_account',
+        'bio',
+        'is_demo',
         'failed_login_attempts',
         'lock_until',
-        'last_login',
+        'last_login_at',
         'created_at',
-        'updated_at',
       ],
       [
         id,
-        String(doc._id),
         username,
         email,
         doc.password,
         asText(doc.profilePicture),
+        asText(doc.bio),
         Boolean(doc.isDemoAccount) || email === 'demo@findanimation.com',
         asNumber(doc.failedLoginAttempts) ?? 0,
         asDate(doc.lockUntil),
         asDate(doc.lastLogin),
         asDate(doc.createdAt) || new Date(),
-        asDate(doc.updatedAt) || new Date(),
       ],
     )
 
     const seenWatchlist = new Set()
+    const seenRatings = new Set()
     for (const entry of doc.watchlist || []) {
       const contentId = contentByMongo.get(mongoId(entry.content))
       if (!contentId || seenWatchlist.has(contentId)) continue
       seenWatchlist.add(contentId)
       await insertRow(
         client,
-        'watchlist_entries',
+        'watchlist',
         [
           'user_id',
           'content_id',
           'status',
-          'rating',
           'current_episode',
-          'total_episodes',
           'current_season',
-          'total_seasons',
           'notes',
           'added_at',
           'updated_at',
@@ -641,32 +685,40 @@ async function copyUsers(client, contentByMongo, entityByMongo) {
           contentId,
           asEnum(entry.status, ['plan_to_watch', 'watching', 'completed', 'dropped']) ||
             'plan_to_watch',
-          asNumber(entry.rating),
           asNumber(entry.currentEpisode) ?? 0,
-          asNumber(entry.totalEpisodes),
           asNumber(entry.currentSeason) ?? 1,
-          asNumber(entry.totalSeasons),
           asText(entry.notes),
           asDate(entry.addedAt) || new Date(),
           asDate(entry.updatedAt) || new Date(),
         ],
       )
       watchlistCount += 1
+      const score = asNumber(entry.rating)
+      if (score != null && !seenRatings.has(contentId)) {
+        seenRatings.add(contentId)
+        await insertRow(
+          client,
+          'ratings',
+          ['user_id', 'content_id', 'score', 'rated_at'],
+          [id, contentId, score, asDate(entry.updatedAt) || new Date()],
+        )
+        ratingCount += 1
+      }
     }
 
-    const seenRatings = new Set()
     for (const rating of doc.ratings || []) {
       const contentId = contentByMongo.get(mongoId(rating.content))
-      if (!contentId || seenRatings.has(contentId) || asNumber(rating.rating) == null) continue
+      const score = asNumber(rating.rating)
+      if (!contentId || seenRatings.has(contentId) || score == null) continue
       seenRatings.add(contentId)
       await insertRow(
         client,
-        'user_ratings',
-        ['user_id', 'content_id', 'rating', 'review', 'watched_at'],
+        'ratings',
+        ['user_id', 'content_id', 'score', 'review', 'rated_at'],
         [
           id,
           contentId,
-          asNumber(rating.rating),
+          score,
           asText(rating.review),
           asDate(rating.watchedAt) || new Date(),
         ],
@@ -679,22 +731,10 @@ async function copyUsers(client, contentByMongo, entityByMongo) {
       if (!entityId) continue
       await insertRow(
         client,
-        'user_favorite_entities',
-        ['user_id', 'entity_id', 'added_at'],
+        'favorites',
+        ['user_id', 'content_id', 'added_at'],
         [id, entityId, asDate(fav.addedAt) || new Date()],
       )
-    }
-
-    for (const name of new Set((doc.preferences?.favoriteGenres || []).map(asText).filter(Boolean))) {
-      await insertRow(client, 'user_favorite_genres', ['user_id', 'name'], [id, name])
-    }
-
-    const studios = [
-      ...(doc.preferences?.favoriteStudios || []),
-      ...(doc.preferences?.preferredStudios || []),
-    ]
-    for (const name of new Set(studios.map(asText).filter(Boolean))) {
-      await insertRow(client, 'user_favorite_studios', ['user_id', 'name'], [id, name])
     }
   }
 

@@ -42,11 +42,11 @@ export function isCatalogId(value) {
 }
 
 /**
- * SQL predicate matching a UUID primary key or mongo_id.
+ * SQL predicate matching a UUID primary key.
  * @param {string} alias
  * @param {string} param
  * @returns {string}
  */
 export function idEqualsSql(alias, param) {
-  return `(${alias}.id::text = ${param} OR ${alias}.mongo_id = ${param})`
+  return `${alias}.id::text = ${param}`
 }

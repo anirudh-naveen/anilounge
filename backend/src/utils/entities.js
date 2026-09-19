@@ -331,6 +331,8 @@ export function mapJikanCharacterRow(row, contentId) {
       }
     })
     .filter(Boolean)
+    .sort((left, right) => Number(/japanese/i.test(right.language)) - Number(/japanese/i.test(left.language)))
+    .slice(0, 3)
 
   const role = normalizeEntityName(row?.role) || 'Supporting'
   const favorites = Number(row?.favorites ?? character?.favorites) || 0

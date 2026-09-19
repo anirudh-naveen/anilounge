@@ -17,12 +17,12 @@ async function checkRelationships() {
     console.log('Database connected')
 
     const { rows: sequels } = await query(
-      `SELECT c.title AS from_title, t.title AS to_title, t.id AS to_id
+      `SELECT c.name AS from_title, t.name AS to_title, t.id AS to_id
        FROM content_relations r
        JOIN content c ON c.id = r.from_id
        JOIN content t ON t.id = r.to_id
        WHERE r.kind = 'sequel'
-       ORDER BY c.title`,
+       ORDER BY c.name`,
     )
     console.log(`\nFound ${sequels.length} sequel edges`)
     for (const row of sequels) {
@@ -30,12 +30,12 @@ async function checkRelationships() {
     }
 
     const { rows: prequels } = await query(
-      `SELECT c.title AS from_title, t.title AS to_title
+      `SELECT c.name AS from_title, t.name AS to_title
        FROM content_relations r
        JOIN content c ON c.id = r.from_id
        JOIN content t ON t.id = r.to_id
        WHERE r.kind = 'prequel'
-       ORDER BY c.title`,
+       ORDER BY c.name`,
     )
     console.log(`\nFound ${prequels.length} prequel edges`)
     for (const row of prequels) {

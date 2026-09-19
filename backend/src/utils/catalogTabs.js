@@ -8,7 +8,7 @@ export const TV_CATALOG_TABS = ['popular', 'airing', 'upcoming']
 export const MOVIE_CATALOG_TABS = ['popular', 'theatres', 'upcoming']
 
 /** Animated films released in this window are treated as still in theatres. */
-export const THEATRICAL_WINDOW_MS = 56 * 24 * 60 * 60 * 1000
+export const THEATRICAL_WINDOW_MS = 120 * 24 * 60 * 60 * 1000
 
 /**
  * Coerce a query value to a TV catalog tab id.
@@ -129,7 +129,7 @@ export function matchTvCatalogTab(tab, from = new Date()) {
 
 /**
  * Mongo filter for a movie catalog tab. Popular adds no extra constraints.
- * Theatres is theatrical movies released in the last eight weeks (OVA/specials excluded).
+ * Theatres is theatrical movies released in the last four months (OVA/specials excluded).
  * Upcoming is MAL `not_yet_aired`, with a future release-date fallback.
  * @param {unknown} tab - Raw tab query value.
  * @param {Date} [from=new Date()] - Clock used for window comparisons.

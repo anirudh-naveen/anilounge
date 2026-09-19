@@ -34,7 +34,7 @@ const TMDB_BASE = 'https://api.themoviedb.org/3'
 const STALE_MS = 7 * 24 * 60 * 60 * 1000
 const JIKAN_GAP_MS = 450
 const FETCH_TIMEOUT_MS = 20000
-const MAX_CHARACTERS_PER_TITLE = 80
+const MAX_CHARACTERS_PER_TITLE = 12
 const MAX_VOICED_CHARACTERS = 600
 const JIKAN_HEADERS = {
   Accept: 'application/json',
@@ -402,14 +402,21 @@ async function cleanupStaleCharacterAppearances(content) {
       { $pull: { appearances: { content: contentId } } },
     )
     if (content.malId) {
-      await Entity.updateMany(
-        {
-          entityType: 'character',
-          'appearances.content': contentId,
-          $or: [{ malId: { $exists: false } }, { malId: null }],
-        },
-        { $pull: { appearances: { content: contentId } } },
-      )
+      const malCharacter = await Entity.findOne({
+        entityType: 'character',
+        'appearances.content': contentId,
+        malId: { $gt: 0 },
+      })
+      if (malCharacter) {
+        await Entity.updateMany(
+          {
+            entityType: 'character',
+            'appearances.content': contentId,
+            $or: [{ malId: { $exists: false } }, { malId: null }],
+          },
+          { $pull: { appearances: { content: contentId } } },
+        )
+      }
     }
   } catch (error) {
     console.error('Failed to clean stale character appearances:', error.message)
@@ -423,11 +430,12 @@ async function cleanupStaleCharacterAppearances(content) {
  * @returns {boolean}
  */
 function needsCharacterRefresh(content, docs) {
-  if (!charactersAreFresh(content) || !docs.length) return true
+  if (!docs.length) return true
   if (docs.some((doc) => !isUsableCharacterName(doc.name))) return true
   if (docs.some((doc) => /\(\s*voices?\s*\)/i.test(String(doc.name || '')))) return true
-  if (content.malId && docs.some((doc) => !doc.malId)) return true
-  if (content.malId && docs.every((doc) => !characterPortraitPath(doc.imagePath))) return true
+  const hasMal = docs.some((doc) => doc.malId)
+  if (content.malId && hasMal && docs.some((doc) => !doc.malId)) return true
+  if (content.malId && hasMal && docs.every((doc) => !characterPortraitPath(doc.imagePath))) return true
   return false
 }
 
@@ -474,7 +482,14 @@ async function loadCharactersForContent(content, options = {}) {
     } catch (error) {
       console.error('Jikan character ingest failed:', error.message)
     }
-  } else if (content.tmdbId) {
+  }
+
+  docs = await Entity.find({
+    entityType: 'character',
+    'appearances.content': content._id,
+  })
+  const hasMalCharacters = docs.some((doc) => doc.malId)
+  if (content.tmdbId && !hasMalCharacters) {
     try {
       await ingestTmdbCharacters(content, options)
     } catch (error) {
@@ -491,11 +506,6 @@ async function loadCharactersForContent(content, options = {}) {
 
   if (docs.length) {
     content.characterSyncAt = new Date()
-    try {
-      await content.save()
-    } catch (error) {
-      console.error('Failed to stamp characterSyncAt:', error.message)
-    }
   }
 
   return highlightedCharacters(docs, content._id, MAX_CHARACTERS_PER_TITLE)

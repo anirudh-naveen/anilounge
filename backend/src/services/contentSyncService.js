@@ -943,10 +943,16 @@ export async function ingestTmdbNowPlayingMovies(limit = 40) {
 
     const existing = await Content.findOne({ tmdbId: contentData.tmdbId })
     if (existing) {
-      if (contentData.releaseDate && !existing.releaseDate) {
+      let changed = false
+      if (contentData.releaseDate && existing.releaseDate !== contentData.releaseDate) {
         existing.releaseDate = contentData.releaseDate
-        await existing.save()
+        changed = true
       }
+      if (contentData.studios?.length && !(existing.studios || []).length) {
+        existing.studios = contentData.studios
+        changed = true
+      }
+      if (changed) await existing.save()
       continue
     }
 

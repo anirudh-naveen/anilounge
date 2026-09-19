@@ -12,7 +12,7 @@ import { calculateUnifiedScore } from '../utils/ratings.js'
 dotenv.config()
 
 /**
- * Zero user-rating fields, then rewrite them from watchlist and user_ratings rows.
+ * Zero user-rating fields, then rewrite them from ratings rows.
  * @returns {Promise<void>}
  */
 async function calculateInitialUserRatings() {
@@ -21,15 +21,7 @@ async function calculateInitialUserRatings() {
     console.log('Database connected')
 
     const { rows: ratingRows } = await query(`
-      SELECT content_id, rating FROM watchlist_entries WHERE rating IS NOT NULL
-      UNION ALL
-      SELECT ur.content_id, ur.rating
-      FROM user_ratings ur
-      WHERE ur.rating IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1 FROM watchlist_entries we
-          WHERE we.user_id = ur.user_id AND we.content_id = ur.content_id AND we.rating IS NOT NULL
-        )
+      SELECT content_id, score AS rating FROM ratings
     `)
 
     const contentRatings = {}
