@@ -1,0 +1,348 @@
+// AniLounge target schema (dbdiagram.io)
+// `content` is the shared id. Subtype tables are disjoint: a row is exactly
+// one of movie / series / special / franchise / character / voice / studio.
+
+Enum content_kind {
+  movie
+  series
+  special
+  franchise
+  character
+  voice
+  studio
+}
+
+Enum airing_status {
+  upcoming
+  airing
+  finished
+}
+
+Enum relation_kind {
+  sequel
+  prequel
+  side_story
+  parent_story
+  alternative
+  summary
+  other
+}
+
+Enum watch_status {
+  plan_to_watch
+  watching
+  completed
+  dropped
+}
+
+Enum friendship_status {
+  pending
+  accepted
+  blocked
+}
+
+Enum appearance_role {
+  main
+  supporting
+  cameo
+}
+
+Enum post_kind {
+  discussion
+  review
+}
+
+// ---------------------------------------------------------------------------
+// Content supertype
+// ---------------------------------------------------------------------------
+
+Table content {
+  id uuid [pk]
+  kind content_kind [not null]
+  name varchar [not null, note: 'English / display name']
+  native_name varchar
+  about text
+  image_path varchar
+  mal_id int
+  tmdb_id int
+  anilist_id int
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: 'Insert content, then exactly one subtype row with the same id.'
+}
+
+// ---------------------------------------------------------------------------
+// Watchable subtypes
+// ---------------------------------------------------------------------------
+
+Table movies {
+  content_id uuid [pk, ref: - content.id]
+  original_title varchar
+  tagline varchar
+  backdrop_path varchar
+  release_date date
+  origin_country char(2)
+  runtime_minutes int
+  tmdb_score decimal
+  tmdb_votes int
+  mal_score decimal
+  mal_votes int
+  popularity decimal
+}
+
+Table series {
+  content_id uuid [pk, ref: - content.id]
+  original_title varchar
+  tagline varchar
+  backdrop_path varchar
+  release_date date
+  origin_country char(2)
+  season_count int
+  episode_count int
+  airing_status airing_status
+  start_season varchar
+  start_year int
+  broadcast_day varchar
+  next_episode_at timestamptz
+  next_episode_number int
+  tmdb_score decimal
+  tmdb_votes int
+  mal_score decimal
+  mal_votes int
+  popularity decimal
+}
+
+Table specials {
+  content_id uuid [pk, ref: - content.id]
+  original_title varchar
+  tagline varchar
+  backdrop_path varchar
+  release_date date
+  origin_country char(2)
+  runtime_minutes int
+  tmdb_score decimal
+  tmdb_votes int
+  mal_score decimal
+  mal_votes int
+  popularity decimal
+}
+
+Table genres {
+  id uuid [pk]
+  name varchar [unique, not null]
+}
+
+Table content_genres {
+  content_id uuid [not null, ref: > content.id]
+  genre_id uuid [not null, ref: > genres.id]
+
+  indexes {
+    (content_id, genre_id) [pk]
+  }
+
+  Note: 'Watchable content only (movie / series / special).'
+}
+
+Table content_akas {
+  content_id uuid [not null, ref: > content.id]
+  name varchar [not null]
+
+  indexes {
+    (content_id, name) [pk]
+  }
+}
+
+Table content_relations {
+  id uuid [pk]
+  from_id uuid [not null, ref: > content.id]
+  to_id uuid [not null, ref: > content.id]
+  kind relation_kind [not null]
+  source varchar [not null, default: 'curated', note: 'mal | tmdb | curated']
+  created_at timestamptz [default: `now()`]
+
+  indexes {
+    (from_id, to_id, kind) [unique]
+  }
+
+  Note: 'Typed sequel/prequel/etc between watchable content. Not genre-similarity.'
+}
+
+// ---------------------------------------------------------------------------
+// Other content subtypes
+// ---------------------------------------------------------------------------
+
+Table franchises {
+  content_id uuid [pk, ref: - content.id]
+}
+
+Table franchise_members {
+  franchise_id uuid [not null, ref: > franchises.content_id]
+  member_id uuid [not null, unique, ref: > content.id]
+
+  indexes {
+    (franchise_id, member_id) [pk]
+  }
+
+  Note: 'member_id is a movie, series, or special. One franchise per watchable.'
+}
+
+Table characters {
+  content_id uuid [pk, ref: - content.id]
+  english_name varchar
+}
+
+Table voices {
+  content_id uuid [pk, ref: - content.id]
+  english_name varchar
+}
+
+Table studios {
+  content_id uuid [pk, ref: - content.id]
+}
+
+Table appearances {
+  id uuid [pk]
+  work_id uuid [not null, ref: > content.id]
+  character_id uuid [not null, ref: > characters.content_id]
+  role appearance_role [not null, default: 'supporting']
+  importance int [default: 0]
+
+  indexes {
+    (work_id, character_id) [unique]
+  }
+
+  Note: 'work_id is a movie, series, or special.'
+}
+
+Table voice_credits {
+  id uuid [pk]
+  appearance_id uuid [not null, ref: > appearances.id]
+  voice_id uuid [not null, ref: > voices.content_id]
+  language varchar
+
+  indexes {
+    (appearance_id, voice_id, language) [unique]
+  }
+}
+
+Table studio_credits {
+  work_id uuid [not null, ref: > content.id]
+  studio_id uuid [not null, ref: > studios.content_id]
+
+  indexes {
+    (work_id, studio_id) [pk]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Accounts
+// ---------------------------------------------------------------------------
+
+Table users {
+  id uuid [pk]
+  username varchar [unique, not null]
+  email varchar [unique, not null]
+  password_hash varchar [not null]
+  profile_picture varchar
+  bio text
+  is_demo boolean [not null, default: false]
+  created_at timestamptz [default: `now()`]
+  last_login_at timestamptz
+}
+
+Table friendships {
+  follower_id uuid [not null, ref: > users.id]
+  followee_id uuid [not null, ref: > users.id]
+  status friendship_status [not null, default: 'pending']
+  created_at timestamptz [default: `now()`]
+
+  indexes {
+    (follower_id, followee_id) [pk]
+  }
+}
+
+Table watchlist {
+  user_id uuid [not null, ref: > users.id]
+  content_id uuid [not null, ref: > content.id]
+  status watch_status [not null, default: 'plan_to_watch']
+  current_episode int [default: 0]
+  current_season int [default: 1]
+  notes text
+  added_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  indexes {
+    (user_id, content_id) [pk]
+  }
+
+  Note: 'Watchable content only (movie / series / special).'
+}
+
+Table ratings {
+  user_id uuid [not null, ref: > users.id]
+  content_id uuid [not null, ref: > content.id]
+  score int [not null, note: '1-10']
+  review text
+  rated_at timestamptz [default: `now()`]
+
+  indexes {
+    (user_id, content_id) [pk]
+  }
+}
+
+Table favorites {
+  user_id uuid [not null, ref: > users.id]
+  content_id uuid [not null, ref: > content.id]
+  added_at timestamptz [default: `now()`]
+
+  indexes {
+    (user_id, content_id) [pk]
+  }
+
+  Note: 'Any content kind: title, character, voice, studio, franchise.'
+}
+
+// ---------------------------------------------------------------------------
+// Forum, DMs, inbox
+// ---------------------------------------------------------------------------
+
+Table posts {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  kind post_kind [not null, default: 'discussion']
+  title varchar [not null]
+  body text [not null]
+  content_id uuid [ref: > content.id]
+  created_at timestamptz [default: `now()`]
+
+  Note: 'content_id tags any content kind. Null means site-wide.'
+}
+
+Table comments {
+  id uuid [pk]
+  post_id uuid [not null, ref: > posts.id]
+  user_id uuid [not null, ref: > users.id]
+  parent_id uuid [ref: > comments.id]
+  body text [not null]
+  created_at timestamptz [default: `now()`]
+}
+
+Table messages {
+  id uuid [pk]
+  sender_id uuid [not null, ref: > users.id]
+  recipient_id uuid [not null, ref: > users.id]
+  body text [not null]
+  read_at timestamptz
+  created_at timestamptz [default: `now()`]
+}
+
+Table notifications {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  kind varchar [not null, note: 'friend_invite | comment | message | news']
+  post_id uuid [ref: > posts.id]
+  actor_id uuid [ref: > users.id]
+  read_at timestamptz
+  created_at timestamptz [default: `now()`]
+}

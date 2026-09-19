@@ -22,7 +22,7 @@ const schemaPath = path.resolve(__dirname, '../../db/schema.sql')
  * @param {string} sql
  * @returns {string[]}
  */
-function splitStatements(sql) {
+export function splitStatements(sql) {
   const statements = []
   let current = ''
   let inString = false
@@ -95,6 +95,34 @@ async function applySchema() {
     for (const statement of statements) {
       await client.query(statement)
     }
+    const legacy = await client.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'legacy_content'`,
+    )
+    if (legacy.rowCount) {
+      await client.query(`
+        UPDATE movies m
+        SET airing_status = CASE lc.mal_status
+          WHEN 'currently_airing' THEN 'airing'
+          WHEN 'not_yet_aired' THEN 'upcoming'
+          WHEN 'finished_airing' THEN 'finished'
+          ELSE m.airing_status
+        END
+        FROM legacy_content lc
+        WHERE lc.id = m.content_id AND m.airing_status IS NULL
+      `)
+      await client.query(`
+        UPDATE specials sp
+        SET airing_status = CASE lc.mal_status
+          WHEN 'currently_airing' THEN 'airing'
+          WHEN 'not_yet_aired' THEN 'upcoming'
+          WHEN 'finished_airing' THEN 'finished'
+          ELSE sp.airing_status
+        END
+        FROM legacy_content lc
+        WHERE lc.id = sp.content_id AND sp.airing_status IS NULL
+      `)
+    }
     await client.query('COMMIT')
     console.log('Schema applied')
   } catch (error) {
@@ -106,4 +134,8 @@ async function applySchema() {
   }
 }
 
-applySchema()
+const isDirectRun =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+if (isDirectRun) {
+  applySchema()
+}

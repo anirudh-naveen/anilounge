@@ -15,17 +15,16 @@ function mapUserRow(row) {
   return {
     _id: row.id,
     id: row.id,
-    mongoId: row.mongo_id,
     username: row.username,
     email: row.email,
     password: row.password_hash,
     profilePicture: row.profile_picture,
-    isDemoAccount: Boolean(row.is_demo_account),
+    bio: row.bio,
+    isDemoAccount: Boolean(row.is_demo),
     failedLoginAttempts: Number(row.failed_login_attempts || 0),
     lockUntil: row.lock_until,
-    lastLogin: row.last_login,
+    lastLogin: row.last_login_at,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
     watchlist: [],
     ratings: [],
     favoriteEntities: [],
@@ -35,46 +34,43 @@ function mapUserRow(row) {
 
 async function loadUserChildren(doc) {
   const id = doc._id
-  const [watchlist, ratings, favEntities, favGenres, favStudios] = await Promise.all([
-    query('SELECT * FROM watchlist_entries WHERE user_id = $1 ORDER BY added_at', [id]),
-    query('SELECT * FROM user_ratings WHERE user_id = $1', [id]),
-    query('SELECT * FROM user_favorite_entities WHERE user_id = $1', [id]),
-    query('SELECT name FROM user_favorite_genres WHERE user_id = $1', [id]),
-    query('SELECT name FROM user_favorite_studios WHERE user_id = $1', [id]),
+  const [watchlist, ratings, favs] = await Promise.all([
+    query('SELECT * FROM watchlist WHERE user_id = $1 ORDER BY added_at', [id]),
+    query('SELECT * FROM ratings WHERE user_id = $1', [id]),
+    query('SELECT * FROM favorites WHERE user_id = $1', [id]),
   ])
-  doc.watchlist = watchlist.rows.map((row) => ({
-    content: String(row.content_id),
-    status: row.status,
-    rating: row.rating,
-    currentEpisode: row.current_episode,
-    totalEpisodes: row.total_episodes,
-    currentSeason: row.current_season,
-    totalSeasons: row.total_seasons,
-    notes: row.notes,
-    addedAt: row.added_at,
-    updatedAt: row.updated_at,
-  }))
+  const ratingByContent = new Map(ratings.rows.map((row) => [String(row.content_id), row]))
+  doc.watchlist = watchlist.rows.map((row) => {
+    const rating = ratingByContent.get(String(row.content_id))
+    return {
+      content: String(row.content_id),
+      status: row.status,
+      rating: rating ? Number(rating.score) : null,
+      currentEpisode: row.current_episode,
+      currentSeason: row.current_season,
+      notes: row.notes,
+      addedAt: row.added_at,
+      updatedAt: row.updated_at,
+    }
+  })
   doc.ratings = ratings.rows.map((row) => ({
     content: String(row.content_id),
-    rating: row.rating,
+    rating: Number(row.score),
     review: row.review,
-    watchedAt: row.watched_at,
+    watchedAt: row.rated_at,
   }))
-  doc.favoriteEntities = favEntities.rows.map((row) => ({
-    entity: String(row.entity_id),
+  doc.favoriteEntities = favs.rows.map((row) => ({
+    entity: String(row.content_id),
     addedAt: row.added_at,
   }))
-  doc.preferences = {
-    favoriteGenres: favGenres.rows.map((row) => row.name),
-    favoriteStudios: favStudios.rows.map((row) => row.name),
-  }
+  doc.preferences = { favoriteGenres: [], favoriteStudios: [] }
   return doc
 }
 
 async function populateWatchlistContent(doc, select) {
   const ids = doc.watchlist.map((item) => item.content).filter(Boolean)
   if (!ids.length) return
-  const { rows } = await query('SELECT * FROM content WHERE id = ANY($1::uuid[])', [ids])
+  const { rows } = await query('SELECT * FROM works WHERE id = ANY($1::uuid[])', [ids])
   const contents = await attachContentRelations(rows.map(mapContentRow))
   const byId = new Map(contents.map((item) => [String(item._id), item]))
   doc.watchlist = doc.watchlist.map((item) => ({
@@ -86,12 +82,24 @@ async function populateWatchlistContent(doc, select) {
 async function populateRatingContent(doc) {
   const ids = doc.ratings.map((item) => item.content).filter(Boolean)
   if (!ids.length) return
-  const { rows } = await query('SELECT * FROM content WHERE id = ANY($1::uuid[])', [ids])
+  const { rows } = await query('SELECT * FROM works WHERE id = ANY($1::uuid[])', [ids])
   const contents = await attachContentRelations(rows.map(mapContentRow))
   const byId = new Map(contents.map((item) => [String(item._id), item]))
   doc.ratings = doc.ratings.map((item) => ({
     ...item,
     content: byId.get(String(item.content)) || item.content,
+  }))
+}
+
+async function populateFavoriteEntities(doc) {
+  const ids = doc.favoriteEntities.map((item) => item.entity).filter(Boolean)
+  if (!ids.length) return
+  const { default: Entity } = await import('./Entity.js')
+  const entities = await Entity.find({ _id: { $in: ids } })
+  const byId = new Map(entities.map((item) => [String(item._id), item]))
+  doc.favoriteEntities = doc.favoriteEntities.map((item) => ({
+    ...item,
+    entity: byId.get(String(item.entity)) || item.entity,
   }))
 }
 
@@ -111,17 +119,16 @@ function isBcrypt(value) {
 function User(data = {}, options = {}) {
   Object.assign(this, mapUserRow({
     id: data._id || data.id || crypto.randomUUID(),
-    mongo_id: data.mongoId || null,
     username: data.username,
     email: data.email,
     password_hash: data.password,
     profile_picture: data.profilePicture || null,
-    is_demo_account: data.isDemoAccount || false,
+    bio: data.bio || null,
+    is_demo: data.isDemoAccount || false,
     failed_login_attempts: data.failedLoginAttempts || 0,
     lock_until: data.lockUntil || null,
-    last_login: data.lastLogin || null,
+    last_login_at: data.lastLogin || null,
     created_at: data.createdAt || new Date(),
-    updated_at: data.updatedAt || new Date(),
   }))
   if (data.watchlist) this.watchlist = data.watchlist
   if (data.ratings) this.ratings = data.ratings
@@ -165,26 +172,26 @@ User.prototype.save = async function save() {
 
   await query(
     `INSERT INTO users (
-       id, mongo_id, username, email, password_hash, profile_picture, is_demo_account,
-       failed_login_attempts, lock_until, last_login, created_at, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, COALESCE((SELECT created_at FROM users WHERE id=$1), now()), now())
+       id, username, email, password_hash, profile_picture, bio, is_demo,
+       failed_login_attempts, lock_until, last_login_at, created_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, COALESCE((SELECT created_at FROM users WHERE id=$1), now()))
      ON CONFLICT (id) DO UPDATE SET
        username = EXCLUDED.username,
        email = EXCLUDED.email,
        password_hash = EXCLUDED.password_hash,
        profile_picture = EXCLUDED.profile_picture,
-       is_demo_account = EXCLUDED.is_demo_account,
+       bio = EXCLUDED.bio,
+       is_demo = EXCLUDED.is_demo,
        failed_login_attempts = EXCLUDED.failed_login_attempts,
        lock_until = EXCLUDED.lock_until,
-       last_login = EXCLUDED.last_login,
-       updated_at = now()`,
+       last_login_at = EXCLUDED.last_login_at`,
     [
       this._id,
-      this.mongoId || null,
       this.username,
       this.email,
       passwordHash,
       this.profilePicture || null,
+      this.bio || null,
       Boolean(this.isDemoAccount) || this.email === DEMO_USER_EMAIL,
       this.failedLoginAttempts || 0,
       lockUntil,
@@ -192,27 +199,23 @@ User.prototype.save = async function save() {
     ],
   )
 
-  await query('DELETE FROM watchlist_entries WHERE user_id = $1', [this._id])
+  await query('DELETE FROM watchlist WHERE user_id = $1', [this._id])
   for (const item of this.watchlist || []) {
     const contentId = asId(item.content)
     if (!contentId) continue
     const resolved = await Content.findById(contentId)
     if (!resolved) continue
     await query(
-      `INSERT INTO watchlist_entries (
-         user_id, content_id, status, rating, current_episode, total_episodes,
-         current_season, total_seasons, notes, added_at, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      `INSERT INTO watchlist (
+         user_id, content_id, status, current_episode, current_season, notes, added_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (user_id, content_id) DO NOTHING`,
       [
         this._id,
         resolved._id,
         item.status || 'plan_to_watch',
-        item.rating ?? null,
         item.currentEpisode ?? 0,
-        item.totalEpisodes ?? null,
         item.currentSeason ?? 1,
-        item.totalSeasons ?? null,
         item.notes || null,
         item.addedAt || new Date(),
         item.updatedAt || new Date(),
@@ -220,43 +223,42 @@ User.prototype.save = async function save() {
     )
   }
 
-  await query('DELETE FROM user_ratings WHERE user_id = $1', [this._id])
+  await query('DELETE FROM ratings WHERE user_id = $1', [this._id])
+  for (const item of this.watchlist || []) {
+    const contentId = asId(item.content)
+    if (!contentId || item.rating == null) continue
+    const resolved = await Content.findById(contentId)
+    if (!resolved) continue
+    await query(
+      `INSERT INTO ratings (user_id, content_id, score, rated_at)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (user_id, content_id) DO UPDATE SET score = EXCLUDED.score`,
+      [this._id, resolved._id, item.rating, item.updatedAt || new Date()],
+    )
+  }
   for (const item of this.ratings || []) {
     const contentId = asId(item.content)
     if (!contentId || item.rating == null) continue
     const resolved = await Content.findById(contentId)
     if (!resolved) continue
     await query(
-      `INSERT INTO user_ratings (user_id, content_id, rating, review, watched_at)
+      `INSERT INTO ratings (user_id, content_id, score, review, rated_at)
        VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (user_id, content_id) DO NOTHING`,
+       ON CONFLICT (user_id, content_id) DO UPDATE SET
+         score = EXCLUDED.score,
+         review = COALESCE(EXCLUDED.review, ratings.review)`,
       [this._id, resolved._id, item.rating, item.review || null, item.watchedAt || new Date()],
     )
   }
 
-  await query('DELETE FROM user_favorite_entities WHERE user_id = $1', [this._id])
+  await query('DELETE FROM favorites WHERE user_id = $1', [this._id])
   for (const item of this.favoriteEntities || []) {
     const entityId = asId(item.entity)
     if (!entityId) continue
     await query(
-      `INSERT INTO user_favorite_entities (user_id, entity_id, added_at)
+      `INSERT INTO favorites (user_id, content_id, added_at)
        VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
       [this._id, entityId, item.addedAt || new Date()],
-    )
-  }
-
-  await query('DELETE FROM user_favorite_genres WHERE user_id = $1', [this._id])
-  for (const name of this.preferences?.favoriteGenres || []) {
-    await query(
-      'INSERT INTO user_favorite_genres (user_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [this._id, name],
-    )
-  }
-  await query('DELETE FROM user_favorite_studios WHERE user_id = $1', [this._id])
-  for (const name of this.preferences?.favoriteStudios || []) {
-    await query(
-      'INSERT INTO user_favorite_studios (user_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [this._id, name],
     )
   }
 
@@ -284,6 +286,9 @@ async function execUserFind(filter, q) {
     }
     if (path === 'ratings.content' || path === 'ratings') {
       await populateRatingContent(doc)
+    }
+    if (path === 'favoriteEntities.entity' || path?.includes('favoriteEntities')) {
+      await populateFavoriteEntities(doc)
     }
   }
   return q._lean ? doc.toJSON() : doc
@@ -315,11 +320,11 @@ User.find = function find(filter = {}) {
 
 User.distinct = async function distinct(path) {
   if (path === 'watchlist.content') {
-    const { rows } = await query('SELECT DISTINCT content_id FROM watchlist_entries')
+    const { rows } = await query('SELECT DISTINCT content_id FROM watchlist')
     return rows.map((row) => row.content_id)
   }
   if (path === 'ratings.content') {
-    const { rows } = await query('SELECT DISTINCT content_id FROM user_ratings')
+    const { rows } = await query('SELECT DISTINCT content_id FROM ratings')
     return rows.map((row) => row.content_id)
   }
   return []

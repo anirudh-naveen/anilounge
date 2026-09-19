@@ -1,8 +1,9 @@
 /**
- * Characters, voice actors, and studios stored in Postgres.
+ * Characters, voice actors, and studios as content subtypes.
  */
 import crypto from 'crypto'
 import { query } from '../../config/postgres.js'
+import { appearanceRole, appearanceRoleToApi, entityTypeFromKind, kindFromEntityType } from '../db/kinds.js'
 import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId } from '../db/ids.js'
@@ -12,18 +13,15 @@ function mapEntityRow(row) {
   return {
     _id: row.id,
     id: row.id,
-    mongoId: row.mongo_id,
-    entityType: row.entity_type,
+    entityType: entityTypeFromKind(row.kind),
     name: row.name,
-    englishName: row.english_name,
+    englishName: row.english_name || row.character_english || row.voice_english || null,
     nativeName: row.native_name,
     about: row.about,
     imagePath: row.image_path,
     malId: row.mal_id != null ? Number(row.mal_id) : null,
     tmdbId: row.tmdb_id != null ? Number(row.tmdb_id) : null,
     favoritesCount: Number(row.favorites_count || 0),
-    lastSyncedAt: row.last_synced_at,
-    voiceCreditsSyncedAt: row.voice_credits_synced_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     alternativeNames: [],
@@ -32,36 +30,43 @@ function mapEntityRow(row) {
 }
 
 async function loadEntityChildren(doc) {
-  const [names, appearances] = await Promise.all([
-    query('SELECT name FROM entity_alternative_names WHERE entity_id = $1', [doc._id]),
+  const [names, appearances, studioWorks] = await Promise.all([
+    query('SELECT name FROM content_akas WHERE content_id = $1', [doc._id]),
     query(
       `SELECT a.*, json_agg(
          json_build_object(
-           'name', v.name,
+           'name', vc.name,
            'language', v.language,
-           'malId', v.mal_id,
-           'tmdbId', v.tmdb_id,
-           'imagePath', v.image_path,
-           'entity', v.voice_actor_id
+           'entity', v.voice_id
          )
        ) FILTER (WHERE v.id IS NOT NULL) AS voice_actors
        FROM appearances a
        LEFT JOIN voice_credits v ON v.appearance_id = a.id
+       LEFT JOIN content vc ON vc.id = v.voice_id
        WHERE a.character_id = $1 OR EXISTS (
-         SELECT 1 FROM voice_credits vc WHERE vc.appearance_id = a.id AND vc.voice_actor_id = $1
+         SELECT 1 FROM voice_credits vc2 WHERE vc2.appearance_id = a.id AND vc2.voice_id = $1
        )
        GROUP BY a.id`,
       [doc._id],
     ),
+    query('SELECT work_id FROM studio_credits WHERE studio_id = $1', [doc._id]),
   ])
   doc.alternativeNames = names.rows.map((row) => row.name)
+  if (doc.entityType === 'studio') {
+    doc.appearances = studioWorks.rows.map((row) => ({
+      content: row.work_id,
+      character: null,
+      role: 'Supporting',
+      importance: 0,
+      voiceActors: [],
+    }))
+    return doc
+  }
   doc.appearances = appearances.rows.map((row) => ({
-    content: row.content_id,
+    content: row.work_id,
     character: row.character_id,
-    role: row.role,
+    role: appearanceRoleToApi(row.role),
     importance: row.importance,
-    characterName: row.character_name,
-    language: row.language,
     voiceActors: row.voice_actors || [],
   }))
   return doc
@@ -107,13 +112,19 @@ Entity.prototype.populate = async function populate(specs) {
   ]
   let contents = []
   if (contentIds.length) {
-    const { rows } = await query('SELECT * FROM content WHERE id = ANY($1::uuid[])', [contentIds])
+    const { rows } = await query('SELECT * FROM works WHERE id = ANY($1::uuid[])', [contentIds])
     contents = await attachContentRelations(rows.map(mapContentRow))
   }
   const contentById = new Map(contents.map((item) => [String(item._id), item]))
   const characterById = new Map()
   if (characterIds.length) {
-    const { rows } = await query('SELECT * FROM entities WHERE id = ANY($1::uuid[])', [characterIds])
+    const { rows } = await query(
+      `SELECT e.*, ch.english_name
+       FROM content e
+       LEFT JOIN characters ch ON ch.content_id = e.id
+       WHERE e.id = ANY($1::uuid[])`,
+      [characterIds],
+    )
     for (const row of rows) characterById.set(String(row.id), mapEntityRow(row))
   }
   for (const spec of list) {
@@ -144,84 +155,167 @@ function pick(doc, select) {
   return out
 }
 
+async function workExists(workId) {
+  const id = asId(workId)
+  if (!id) return false
+  const { rows } = await query(
+    `SELECT 1 FROM content WHERE id::text = $1 AND kind IN ('movie', 'series', 'special')`,
+    [id],
+  )
+  return Boolean(rows[0])
+}
+
+async function upsertAppearance(workId, characterId, role, importance) {
+  const { rows } = await query(
+    `INSERT INTO appearances (id, work_id, character_id, role, importance)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (work_id, character_id) DO UPDATE SET
+       role = EXCLUDED.role,
+       importance = GREATEST(appearances.importance, EXCLUDED.importance)
+     RETURNING id`,
+    [crypto.randomUUID(), workId, characterId, appearanceRole(role), importance || 0],
+  )
+  return rows[0]?.id
+}
+
+async function insertVoiceCredit(appearanceId, voiceId, language) {
+  if (!appearanceId || !voiceId) return
+  try {
+    const existing = await query('SELECT content_id FROM voices WHERE content_id = $1', [voiceId])
+    if (!existing.rows[0]) {
+      const kindRow = await query('SELECT kind FROM content WHERE id = $1', [voiceId])
+      if (kindRow.rows[0]?.kind !== 'voice') return
+      await query('INSERT INTO voices (content_id) VALUES ($1) ON CONFLICT DO NOTHING', [voiceId])
+    }
+    await query(
+      `INSERT INTO voice_credits (appearance_id, voice_id, language)
+       VALUES ($1,$2,$3)
+       ON CONFLICT DO NOTHING`,
+      [appearanceId, voiceId, language || null],
+    )
+  } catch (error) {
+    console.error('Failed to save voice credit:', error.message)
+  }
+}
+
 Entity.prototype.save = async function save() {
+  const kind = kindFromEntityType(this.entityType)
   await query(
-    `INSERT INTO entities (
-       id, mongo_id, entity_type, name, english_name, native_name, about, image_path,
-       mal_id, tmdb_id, favorites_count, last_synced_at, voice_credits_synced_at, created_at, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, COALESCE((SELECT created_at FROM entities WHERE id=$1), now()), now())
+    `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE((SELECT created_at FROM content WHERE id=$1), now()), now())
      ON CONFLICT (id) DO UPDATE SET
-       entity_type = EXCLUDED.entity_type,
+       kind = EXCLUDED.kind,
        name = EXCLUDED.name,
-       english_name = EXCLUDED.english_name,
        native_name = EXCLUDED.native_name,
        about = EXCLUDED.about,
        image_path = EXCLUDED.image_path,
        mal_id = EXCLUDED.mal_id,
        tmdb_id = EXCLUDED.tmdb_id,
-       favorites_count = EXCLUDED.favorites_count,
-       last_synced_at = EXCLUDED.last_synced_at,
-       voice_credits_synced_at = EXCLUDED.voice_credits_synced_at,
        updated_at = now()`,
     [
       this._id,
-      this.mongoId || null,
-      this.entityType,
+      kind,
       this.name,
-      this.englishName || null,
       this.nativeName || null,
       this.about || null,
       this.imagePath || null,
       this.malId || null,
       this.tmdbId || null,
-      this.favoritesCount || 0,
-      this.lastSyncedAt || null,
-      this.voiceCreditsSyncedAt || null,
     ],
   )
 
-  await query('DELETE FROM entity_alternative_names WHERE entity_id = $1', [this._id])
+  if (kind === 'character') {
+    await query('DELETE FROM voices WHERE content_id = $1', [this._id])
+    await query('DELETE FROM studios WHERE content_id = $1', [this._id])
+    await query(
+      `INSERT INTO characters (content_id, english_name) VALUES ($1, $2)
+       ON CONFLICT (content_id) DO UPDATE SET english_name = EXCLUDED.english_name`,
+      [this._id, this.englishName || null],
+    )
+  } else if (kind === 'voice') {
+    await query('DELETE FROM characters WHERE content_id = $1', [this._id])
+    await query('DELETE FROM studios WHERE content_id = $1', [this._id])
+    await query(
+      `INSERT INTO voices (content_id, english_name) VALUES ($1, $2)
+       ON CONFLICT (content_id) DO UPDATE SET english_name = EXCLUDED.english_name`,
+      [this._id, this.englishName || null],
+    )
+  } else {
+    await query('DELETE FROM characters WHERE content_id = $1', [this._id])
+    await query('DELETE FROM voices WHERE content_id = $1', [this._id])
+    await query(
+      'INSERT INTO studios (content_id) VALUES ($1) ON CONFLICT DO NOTHING',
+      [this._id],
+    )
+  }
+
+  await query('DELETE FROM content_akas WHERE content_id = $1', [this._id])
   for (const name of [...new Set(this.alternativeNames || [])].filter(Boolean)) {
     await query(
-      'INSERT INTO entity_alternative_names (entity_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      'INSERT INTO content_akas (content_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
       [this._id, name],
     )
   }
 
-  if (this.entityType === 'character') {
-    await query('DELETE FROM appearances WHERE character_id = $1', [this._id])
+  if (kind === 'character') {
+    const seenWorks = new Set()
     for (const appearance of this.appearances || []) {
-      const content = await Content.findById(asId(appearance.content))
-      if (!content) continue
-      const appearanceId = crypto.randomUUID()
-      await query(
-        `INSERT INTO appearances (id, content_id, character_id, role, importance, character_name, language)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          appearanceId,
-          content._id,
+      try {
+        const workId = asId(appearance.content)
+        if (!workId || seenWorks.has(workId) || !(await workExists(workId))) continue
+        seenWorks.add(workId)
+        const appearanceId = await upsertAppearance(
+          workId,
           this._id,
-          appearance.role || 'Supporting',
-          appearance.importance || 0,
-          appearance.characterName || null,
-          appearance.language || null,
-        ],
-      )
-      for (const credit of appearance.voiceActors || []) {
-        await query(
-          `INSERT INTO voice_credits (appearance_id, voice_actor_id, name, language, mal_id, tmdb_id, image_path)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [
-            appearanceId,
-            credit.entity ? asId(credit.entity) : null,
-            credit.name,
-            credit.language || null,
-            credit.malId || null,
-            credit.tmdbId || null,
-            credit.imagePath || null,
-          ],
+          appearance.role,
+          appearance.importance,
         )
+        if (!appearanceId) continue
+        for (const credit of appearance.voiceActors || []) {
+          const voiceId = credit.entity ? asId(credit.entity) : null
+          if (!voiceId) continue
+          await insertVoiceCredit(appearanceId, voiceId, credit.language)
+        }
+      } catch (error) {
+        console.error('Failed to save character appearance:', error.message)
       }
+    }
+    if (seenWorks.size) {
+      const ids = [...seenWorks]
+      await query(
+        `DELETE FROM appearances
+         WHERE character_id = $1
+           AND NOT (work_id::text = ANY($2::text[]))`,
+        [this._id, ids],
+      )
+    }
+  }
+
+  if (kind === 'voice') {
+    for (const appearance of this.appearances || []) {
+      const workId = asId(appearance.content)
+      const characterId = asId(appearance.character)
+      if (!workId || !characterId || !(await workExists(workId))) continue
+      const appearanceId = await upsertAppearance(
+        workId,
+        characterId,
+        appearance.role,
+        appearance.importance,
+      )
+      if (!appearanceId) continue
+      await insertVoiceCredit(appearanceId, this._id, appearance.language)
+    }
+  }
+
+  if (kind === 'studio') {
+    await query('DELETE FROM studio_credits WHERE studio_id = $1', [this._id])
+    for (const appearance of this.appearances || []) {
+      const workId = asId(appearance.content)
+      if (!workId || !(await workExists(workId))) continue
+      await query(
+        'INSERT INTO studio_credits (work_id, studio_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [workId, this._id],
+      )
     }
   }
 
@@ -229,10 +323,21 @@ Entity.prototype.save = async function save() {
   return this
 }
 
+const PEOPLE_FROM = `
+  content e
+  LEFT JOIN characters ch ON ch.content_id = e.id
+  LEFT JOIN voices v ON v.content_id = e.id
+  LEFT JOIN studios st ON st.content_id = e.id
+`
+
 async function execFind(filter, q) {
   const compiled = compileMongoFilter(filter, 'entities')
   const order = compileSort(q._sort || { favoritesCount: -1, name: 1 }, 'entities')
-  let sql = `SELECT e.* FROM entities e WHERE ${compiled.sql} ORDER BY ${order}`
+  let sql = `SELECT e.*, ch.english_name AS character_english, v.english_name AS voice_english,
+    (SELECT count(*) FROM favorites f WHERE f.content_id = e.id) AS favorites_count
+    FROM ${PEOPLE_FROM}
+    WHERE e.kind IN ('character', 'voice', 'studio') AND ${compiled.sql}
+    ORDER BY ${order}`
   const params = [...compiled.params]
   if (q._limit != null) {
     params.push(q._limit)
@@ -241,8 +346,11 @@ async function execFind(filter, q) {
   const { rows } = await query(sql, params)
   const docs = []
   for (const row of rows) {
-    const doc = new Entity(mapEntityRow(row), { fromDb: true })
-    Object.assign(doc, mapEntityRow(row))
+    const mapped = mapEntityRow({
+      ...row,
+      english_name: row.character_english || row.voice_english,
+    })
+    const doc = new Entity(mapped, { fromDb: true })
     await loadEntityChildren(doc)
     docs.push(q._lean ? doc.toJSON() : doc)
   }
@@ -266,12 +374,31 @@ Entity.findById = function findById(id) {
   return Entity.findOne({ _id: String(id) })
 }
 
-Entity.updateMany = async function updateMany() {
-  return { modifiedCount: 0 }
+Entity.updateMany = async function updateMany(filter = {}, update = {}) {
+  const pullContent = update?.$pull?.appearances?.content
+  if (!pullContent) return { modifiedCount: 0 }
+  const compiled = compileMongoFilter(filter, 'entities')
+  const params = [...compiled.params, asId(pullContent)]
+  const result = await query(
+    `DELETE FROM appearances a
+     USING content e
+     WHERE a.character_id = e.id
+       AND e.kind = 'character'
+       AND ${compiled.sql}
+       AND a.work_id::text = $${params.length}`,
+    params,
+  )
+  return { modifiedCount: result.rowCount || 0 }
 }
 
 Entity.collection = {
   dropIndex: async () => {},
+}
+
+Entity.create = async function create(data) {
+  const doc = data instanceof Entity ? data : new Entity(data)
+  await doc.save()
+  return doc
 }
 
 export default Entity
