@@ -48,7 +48,7 @@ export function getPool() {
   pool = new pg.Pool({
     connectionString,
     ssl: sslForDatabaseUrl(connectionString),
-    max: 10,
+    max: Number(process.env.PG_POOL_MAX) || 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
   })

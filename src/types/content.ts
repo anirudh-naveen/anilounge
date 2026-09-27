@@ -101,6 +101,29 @@ export interface Episode {
   cast: EpisodeCastMember[]
 }
 
+/** One TMDB season of a show, linked to the catalog title for that season when stored. */
+export interface SeasonSummary {
+  seasonNumber: number
+  name: string
+  overview: string
+  posterPath: string
+  airDate?: string | null
+  episodeCount: number
+  voteAverage?: number | null
+  /** Catalog title that is this season (MAL/AniList list seasons separately), or null. */
+  contentId: string | null
+}
+
+/** Episodes and seasons for a TV details page (`GET /content/:id/episodes`). */
+export interface SeasonGuide {
+  episodes: Episode[]
+  seasons?: SeasonSummary[]
+  /** Season the requested title is, when it is one season of a longer show. */
+  currentSeason?: number | null
+  /** Title the episodes and seasons belong to. */
+  seriesId?: string
+}
+
 export interface UnifiedContentWithScore extends UnifiedContent {
   unifiedScore: number
 }

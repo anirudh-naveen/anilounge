@@ -3,7 +3,8 @@
 
   Renders season pills and a left-to-right episode scroller on the show
   details page. Clicking a card expands title, description, and cast in place;
-  episodes are not routed to their own page.
+  episodes are not routed to their own page. Picking a season emits
+  `select-season`; a parent passing `selectedSeason` controls the pills.
 -->
 <template>
   <section v-if="loading || episodes.length" class="episode-row">
@@ -24,8 +25,8 @@
           :key="`season-${season}`"
           type="button"
           class="season-pill"
-          :class="{ active: season === selectedSeason }"
-          :aria-selected="season === selectedSeason"
+          :class="{ active: season === activeSeason }"
+          :aria-selected="season === activeSeason"
           @click="selectSeason(season)"
         >
           Season {{ season }}
@@ -134,12 +135,17 @@ const props = withDefaults(
     contentId?: string
     /** Parent series; episodes credit its studios. */
     show?: UnifiedContent | null
+    /** Season chosen by the parent; null lets the row track its own pick. */
+    selectedSeason?: number | null
   }>(),
   {
     characters: () => [],
     show: null,
+    selectedSeason: null,
   },
 )
+
+const emit = defineEmits<{ 'select-season': [season: number] }>()
 
 const router = useRouter()
 const route = useRoute()
@@ -158,12 +164,13 @@ const openMatchedCharacter = (characterName: string) => {
 }
 
 const stripEl = ref<HTMLElement | null>(null)
-const selectedSeason = ref(1)
+const ownSeason = ref(1)
 const selectedKey = ref('')
 
 const seasons = computed(() => getSeasonNumbers(props.episodes))
+const activeSeason = computed(() => props.selectedSeason ?? ownSeason.value)
 const multiSeason = computed(() => seasons.value.length > 1)
-const visibleEpisodes = computed(() => episodesForSeason(props.episodes, selectedSeason.value))
+const visibleEpisodes = computed(() => episodesForSeason(props.episodes, activeSeason.value))
 
 const selectedEpisode = computed(
   () => visibleEpisodes.value.find((episode) => episodeKey(episode) === selectedKey.value) || null,
@@ -189,9 +196,8 @@ const expandedMeta = computed(() => {
 const isSelected = (episode: Episode) => episodeKey(episode) === selectedKey.value
 
 const selectSeason = (season: number) => {
-  selectedSeason.value = season
-  selectedKey.value = ''
-  if (stripEl.value) stripEl.value.scrollLeft = 0
+  ownSeason.value = season
+  emit('select-season', season)
 }
 
 const toggleEpisode = (episode: Episode) => {
@@ -199,11 +205,16 @@ const toggleEpisode = (episode: Episode) => {
   selectedKey.value = selectedKey.value === key ? '' : key
 }
 
+watch(activeSeason, () => {
+  selectedKey.value = ''
+  if (stripEl.value) stripEl.value.scrollLeft = 0
+})
+
 watch(
   () => props.episodes,
   (episodes) => {
     const numbers = getSeasonNumbers(episodes)
-    selectedSeason.value = numbers[0] || 1
+    ownSeason.value = numbers[0] || 1
     selectedKey.value = ''
   },
   { immediate: true },

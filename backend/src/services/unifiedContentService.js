@@ -12,6 +12,7 @@ import {
   mapMalEpisode,
   mapSeriesCast,
   mapTmdbEpisode,
+  mapTmdbSeason,
   tmdbSeasonNumbers,
 } from '../utils/episodes.js'
 import {
@@ -329,17 +330,17 @@ class UnifiedContentService {
   /**
    * Single MAL anime document for the configured field set.
    * @param {number} malId
-   * @param {{ skipDelay?: boolean }} [options]
+   * @param {{ skipDelay?: boolean, extraFields?: string[] }} [options]
    * @returns {Promise<object | null>}
    */
-  async getMalAnimeDetails(malId, { skipDelay = false } = {}) {
+  async getMalAnimeDetails(malId, { skipDelay = false, extraFields = [] } = {}) {
     if (!this.hasMalKey) return null
 
     try {
       if (!skipDelay) await this.delay(this.malDelay)
       const response = await this.malClient.get(`/anime/${malId}`, {
         params: {
-          fields: MAL_ANIME_FIELDS,
+          fields: [MAL_ANIME_FIELDS, ...extraFields].join(','),
         },
       })
 
@@ -425,6 +426,12 @@ class UnifiedContentService {
       genres: tmdbData.genres || [],
       productionCompanies: tmdbData.production_companies?.map((company) => company.name) || [],
       studios: tmdbData.production_companies?.map((company) => company.name) || [],
+      studioRefs:
+        tmdbData.production_companies?.map((company) => ({
+          name: company.name,
+          tmdbId: company.id,
+          imagePath: company.logo_path || undefined,
+        })) || [],
       originCountries: extractOriginCountries(tmdbData),
       dataSources: {
         tmdb: {
@@ -525,6 +532,7 @@ class UnifiedContentService {
       malRating: anime.rating,
       genres: anime.genres?.map((genre) => ({ id: genre.id, name: genre.name })) || [],
       studios: anime.studios?.map((studio) => studio.name) || [],
+      studioRefs: anime.studios?.map((studio) => ({ name: studio.name, malId: studio.id })) || [],
       originCountries: [...MAL_ORIGIN_COUNTRIES],
       dataSources: {
         mal: {
@@ -1037,9 +1045,9 @@ class UnifiedContentService {
   }
 
   /**
-   * Cached episode list for a catalog id, or null when missing/expired.
+   * Cached episodes + season summaries for a catalog id, or null when missing/expired.
    * @param {string} contentId
-   * @returns {object[] | null}
+   * @returns {{ episodes: object[], seasons: object[] } | null}
    */
   getCachedEpisodes(contentId) {
     const entry = this.episodeCache.get(String(contentId))
@@ -1052,9 +1060,9 @@ class UnifiedContentService {
   }
 
   /**
-   * Store an episode list until `ttlMs` elapses.
+   * Store episodes + season summaries until `ttlMs` elapses.
    * @param {string} contentId
-   * @param {object[]} data
+   * @param {{ episodes: object[], seasons: object[] }} data
    * @param {number} ttlMs
    */
   setCachedEpisodes(contentId, data, ttlMs) {
@@ -1134,24 +1142,25 @@ class UnifiedContentService {
   }
 
   /**
-   * TMDB episodes across seasons, with series cast as a fallback when guests are missing.
+   * TMDB episodes across seasons, with series cast as a fallback when guests are missing,
+   * plus each season's summary (name, overview, poster, air date, score).
    * @param {number} tmdbId
    * @param {number} [seasonCount]
-   * @returns {Promise<object[]>}
+   * @returns {Promise<{ episodes: object[], seasons: object[] }>}
    */
-  async fetchTmdbEpisodes(tmdbId, seasonCount) {
+  async fetchTmdbSeasonData(tmdbId, seasonCount) {
     const [tvDetails, credits] = await Promise.all([
       this.getTmdbContentDetails(tmdbId, 'tv', { skipDelay: true }),
       this.getTmdbAggregateCredits(tmdbId),
     ])
     const seriesCast = mapSeriesCast(credits)
     const seasonNumbers = tmdbSeasonNumbers(tvDetails, seasonCount)
-    const seasons = await this.mapWithConcurrency(seasonNumbers, 4, (seasonNumber) =>
+    const seasonDocs = await this.mapWithConcurrency(seasonNumbers, 4, (seasonNumber) =>
       this.getTmdbSeasonDetails(tmdbId, seasonNumber),
     )
 
     const episodes = []
-    for (const season of seasons) {
+    for (const season of seasonDocs) {
       if (!Array.isArray(season?.episodes)) continue
       for (const episode of season.episodes) {
         const mapped = mapTmdbEpisode(episode, seriesCast)
@@ -1159,7 +1168,12 @@ class UnifiedContentService {
       }
     }
 
-    return episodes
+    const seasons = (Array.isArray(tvDetails?.seasons) ? tvDetails.seasons : [])
+      .map(mapTmdbSeason)
+      .filter(Boolean)
+      .sort((left, right) => left.seasonNumber - right.seasonNumber)
+
+    return { episodes, seasons }
   }
 
   /**
@@ -1173,30 +1187,40 @@ class UnifiedContentService {
   }
 
   /**
-   * Episode cards for a TV catalog document: TMDB first, MAL if TMDB is empty.
+   * Episode cards and TMDB season summaries for a TV catalog document: TMDB
+   * first, MAL episodes (no season summaries) if TMDB is empty.
    * Results are cached in-process (6h while airing, 7d otherwise).
-   * @param {object} content - Mongoose Content document or plain catalog row.
-   * @returns {Promise<object[]>}
+   * @param {object} content - Content document or plain catalog row.
+   * @returns {Promise<{ episodes: object[], seasons: object[] }>}
    */
-  async getTvShowEpisodes(content) {
-    if (!content || content.contentType !== 'tv') return []
+  async getTvShowSeasonData(content) {
+    if (!content || content.contentType !== 'tv') return { episodes: [], seasons: [] }
 
     const cacheKey = String(content._id)
     const cached = this.getCachedEpisodes(cacheKey)
     if (cached) return cached
 
-    let episodes = []
+    let data = { episodes: [], seasons: [] }
     if (content.tmdbId) {
-      episodes = await this.fetchTmdbEpisodes(content.tmdbId, content.seasonCount)
+      data = await this.fetchTmdbSeasonData(content.tmdbId, content.seasonCount)
     }
-    if (!episodes.length && content.malId) {
-      episodes = await this.fetchMalEpisodes(content.malId)
+    if (!data.episodes.length && content.malId) {
+      data = { episodes: await this.fetchMalEpisodes(content.malId), seasons: [] }
     }
 
     const airing = content.malStatus === 'currently_airing'
     const ttlMs = airing ? 6 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000
-    this.setCachedEpisodes(cacheKey, episodes, ttlMs)
-    return episodes
+    this.setCachedEpisodes(cacheKey, data, ttlMs)
+    return data
+  }
+
+  /**
+   * Episode cards for a TV catalog document (see `getTvShowSeasonData`).
+   * @param {object} content
+   * @returns {Promise<object[]>}
+   */
+  async getTvShowEpisodes(content) {
+    return (await this.getTvShowSeasonData(content)).episodes
   }
 }
 

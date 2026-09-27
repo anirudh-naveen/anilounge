@@ -11,6 +11,7 @@ import User from '../models/User.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
 import relationshipService from '../services/relationshipService.js'
+import { getSeasonGuide } from '../services/seasonService.js'
 import {
   ingestMalRankingByTypes,
   ingestTmdbNowPlayingMovies,
@@ -216,11 +217,14 @@ export const getContentById = async (req, res) => {
 }
 
 /**
- * Episode cards for a TV catalog title (title, description, still, cast).
- * Movies and specials return an empty list. Episodes are not separate pages.
+ * Episode cards for a TV catalog title (title, description, still, cast) plus
+ * its season guide. When the title is one season of a TMDB show (MAL lists
+ * seasons separately), episodes and seasons come from that show and
+ * `currentSeason` marks this title's season. Each season carries `contentId`,
+ * the catalog row for that season, or null. Movies and specials return empty lists.
  *
  * @param {import('express').Request} req - Reads `params.id`.
- * @param {import('express').Response} res - 200 `{ data: { episodes } }`, 404 if missing, or 500.
+ * @param {import('express').Response} res - 200 `{ data: { episodes, seasons, currentSeason, seriesId } }`, 404 if missing, or 500.
  * @returns {Promise<void>}
  */
 export const getContentEpisodes = async (req, res) => {
@@ -235,12 +239,9 @@ export const getContentEpisodes = async (req, res) => {
       })
     }
 
-    const episodes =
-      content.contentType === 'tv' ? await unifiedContentService.getTvShowEpisodes(content) : []
-
     res.json({
       success: true,
-      data: { episodes },
+      data: await getSeasonGuide(content),
     })
   } catch (error) {
     console.error('Error fetching content episodes:', error)

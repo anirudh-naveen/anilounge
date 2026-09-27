@@ -210,7 +210,7 @@ Content.prototype.save = async function save() {
   const id = this._id
   const kind = kindFromContentType(this.contentType)
   const name = this.englishTitle || this.title || 'Untitled'
-  await query(
+  const { rowCount } = await query(
     `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, anilist_id, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE((SELECT created_at FROM content WHERE id=$1), now()), now())
      ON CONFLICT (id) DO UPDATE SET
@@ -222,7 +222,8 @@ Content.prototype.save = async function save() {
        mal_id = EXCLUDED.mal_id,
        tmdb_id = EXCLUDED.tmdb_id,
        anilist_id = EXCLUDED.anilist_id,
-       updated_at = now()`,
+       updated_at = now()
+     WHERE content.kind IN ('movie', 'series', 'special')`,
     [
       id,
       kind,
@@ -235,6 +236,9 @@ Content.prototype.save = async function save() {
       this.anilistId ?? null,
     ],
   )
+  if (!rowCount) {
+    throw new Error(`Refusing to save ${kind} ${id}: id belongs to a non-watchable content row`)
+  }
 
   await query('DELETE FROM movies WHERE content_id = $1', [id])
   await query('DELETE FROM series WHERE content_id = $1', [id])
@@ -351,21 +355,90 @@ async function upsertGenre(name) {
   return again.rows[0].id
 }
 
-async function upsertStudio(name) {
-  const existing = await query(
-    `SELECT id FROM content WHERE kind = 'studio' AND lower(name) = lower($1)`,
-    [name],
+function positiveInt(value) {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+async function findStudio(where, value) {
+  const { rows } = await query(
+    `SELECT id, mal_id, tmdb_id, anilist_id, image_path FROM content
+     WHERE kind = 'studio' AND ${where}
+     ORDER BY (mal_id IS NOT NULL) DESC, created_at
+     LIMIT 1`,
+    [value],
   )
-  if (existing.rows[0]) {
-    await query('INSERT INTO studios (content_id) VALUES ($1) ON CONFLICT DO NOTHING', [
-      existing.rows[0].id,
-    ])
-    return existing.rows[0].id
+  return rows[0] || null
+}
+
+/**
+ * Studio row for a credit: MAL producer id, AniList studio id, TMDB company id,
+ * then name or alias. A studio whose id for the same source differs is never
+ * matched by name. Missing external ids and logo are filled when no other
+ * studio already owns them.
+ * @param {string} name
+ * @param {{ malId?: number, anilistId?: number, tmdbId?: number, imagePath?: string }} [ref]
+ * @returns {Promise<string>}
+ */
+async function upsertStudio(name, ref = {}) {
+  const malId = positiveInt(ref.malId)
+  const anilistId = positiveInt(ref.anilistId)
+  const tmdbId = positiveInt(ref.tmdbId)
+  const imagePath = ref.imagePath || null
+  let row = null
+  if (malId) row = await findStudio('mal_id = $1', malId)
+  if (!row && anilistId) row = await findStudio('anilist_id = $1', anilistId)
+  if (!row && tmdbId) row = await findStudio('tmdb_id = $1', tmdbId)
+  if (!row) {
+    const { rows } = await query(
+      `SELECT id, mal_id, tmdb_id, anilist_id, image_path FROM content s
+       WHERE s.kind = 'studio'
+         AND (lower(s.name) = lower($1)
+              OR EXISTS (SELECT 1 FROM content_akas k WHERE k.content_id = s.id AND lower(k.name) = lower($1)))
+         AND ($2::int IS NULL OR s.mal_id IS NULL OR s.mal_id = $2)
+         AND ($3::int IS NULL OR s.anilist_id IS NULL OR s.anilist_id = $3)
+         AND ($4::int IS NULL OR s.tmdb_id IS NULL OR s.tmdb_id = $4)
+       ORDER BY (lower(s.name) = lower($1)) DESC, (s.mal_id IS NOT NULL) DESC, s.created_at
+       LIMIT 1`,
+      [name, malId, anilistId, tmdbId],
+    )
+    row = rows[0] || null
   }
-  const id = crypto.randomUUID()
-  await query(`INSERT INTO content (id, kind, name) VALUES ($1, 'studio', $2)`, [id, name])
-  await query('INSERT INTO studios (content_id) VALUES ($1)', [id])
-  return id
+
+  if (!row) {
+    const id = crypto.randomUUID()
+    await query(
+      `INSERT INTO content (id, kind, name, mal_id, tmdb_id, anilist_id, image_path)
+       VALUES ($1, 'studio', $2, $3, $4, $5, $6)`,
+      [id, name, malId, tmdbId, anilistId, imagePath],
+    )
+    await query('INSERT INTO studios (content_id) VALUES ($1)', [id])
+    return id
+  }
+
+  await query('INSERT INTO studios (content_id) VALUES ($1) ON CONFLICT DO NOTHING', [row.id])
+  const fills = [
+    ['mal_id', malId, row.mal_id == null],
+    ['anilist_id', anilistId, row.anilist_id == null],
+    ['tmdb_id', tmdbId, row.tmdb_id == null],
+  ]
+  for (const [column, value, missing] of fills) {
+    if (!value || !missing) continue
+    await query(
+      `UPDATE content SET ${column} = $2, updated_at = now()
+       WHERE id = $1 AND ${column} IS NULL
+         AND NOT EXISTS (SELECT 1 FROM content o WHERE o.kind = 'studio' AND o.${column} = $2)`,
+      [row.id, value],
+    )
+  }
+  if (imagePath && !row.image_path) {
+    await query(
+      `UPDATE content SET image_path = $2, updated_at = now()
+       WHERE id = $1 AND (image_path IS NULL OR image_path = '')`,
+      [row.id, imagePath],
+    )
+  }
+  return row.id
 }
 
 async function upsertFranchise(name) {
@@ -414,8 +487,14 @@ async function replaceChildren(doc) {
         .filter(Boolean),
     ),
   ]
+  const refsByName = new Map()
+  for (const ref of doc.studioRefs || []) {
+    if (!ref?.name) continue
+    const key = ref.name.toLowerCase()
+    refsByName.set(key, { ...ref, ...refsByName.get(key) })
+  }
   for (const name of studioNames) {
-    const studioId = await upsertStudio(name)
+    const studioId = await upsertStudio(name, refsByName.get(name.toLowerCase()))
     await query(
       'INSERT INTO studio_credits (work_id, studio_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
       [id, studioId],

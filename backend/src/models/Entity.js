@@ -8,6 +8,7 @@ import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId } from '../db/ids.js'
 import Content, { attachContentRelations, mapContentRow } from './Content.js'
+import { knownVoiceLanguage } from '../utils/entities.js'
 
 function mapEntityRow(row) {
   return {
@@ -21,6 +22,7 @@ function mapEntityRow(row) {
     imagePath: row.image_path,
     malId: row.mal_id != null ? Number(row.mal_id) : null,
     tmdbId: row.tmdb_id != null ? Number(row.tmdb_id) : null,
+    anilistId: row.anilist_id != null ? Number(row.anilist_id) : null,
     favoritesCount: Number(row.favorites_count || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -238,7 +240,17 @@ async function upsertAppearances(rows) {
  * @returns {Promise<void>}
  */
 async function insertVoiceCredits(credits) {
-  const list = credits.filter((row) => isUuid(row.appearanceId) && isUuid(row.voiceId))
+  const byPair = new Map()
+  for (const row of credits) {
+    if (!isUuid(row.appearanceId) || !isUuid(row.voiceId)) continue
+    const language = knownVoiceLanguage(row.language)
+    const pair = `${row.appearanceId}:${row.voiceId}`
+    const rows = byPair.get(pair) || []
+    if (rows.some((kept) => kept.language === language)) continue
+    if (!language && rows.length) continue
+    byPair.set(pair, [...rows.filter((kept) => kept.language), { ...row, language }])
+  }
+  const list = [...byPair.values()].flat()
   if (!list.length) return
   const voiceIds = [...new Set(list.map((row) => row.voiceId))]
   try {
@@ -248,17 +260,33 @@ async function insertVoiceCredits(credits) {
        ON CONFLICT DO NOTHING`,
       [voiceIds],
     )
+    const params = [
+      list.map((row) => row.appearanceId),
+      list.map((row) => row.voiceId),
+      list.map((row) => row.language),
+    ]
+    // Unique (appearance, voice, language) lets NULL languages repeat, so an
+    // unlabeled credit is only written when the pair has no credit at all.
+    await query(
+      `DELETE FROM voice_credits vc
+       USING unnest($1::uuid[], $2::uuid[], $3::text[]) AS t(appearance_id, voice_id, language)
+       WHERE t.language IS NOT NULL
+         AND vc.appearance_id = t.appearance_id AND vc.voice_id = t.voice_id
+         AND (vc.language IS NULL OR lower(vc.language) = 'unknown')`,
+      params,
+    )
     await query(
       `INSERT INTO voice_credits (appearance_id, voice_id, language)
        SELECT t.appearance_id, t.voice_id, t.language
        FROM unnest($1::uuid[], $2::uuid[], $3::text[]) AS t(appearance_id, voice_id, language)
        JOIN voices v ON v.content_id = t.voice_id
+       WHERE NOT EXISTS (
+         SELECT 1 FROM voice_credits x
+         WHERE x.appearance_id = t.appearance_id AND x.voice_id = t.voice_id
+           AND (t.language IS NULL OR x.language = t.language)
+       )
        ON CONFLICT DO NOTHING`,
-      [
-        list.map((row) => row.appearanceId),
-        list.map((row) => row.voiceId),
-        list.map((row) => row.language || null),
-      ],
+      params,
     )
   } catch (error) {
     console.error('Failed to save voice credits:', error.message)
@@ -282,18 +310,20 @@ const SUBTYPE_SQL = {
 
 Entity.prototype.save = async function save() {
   const kind = kindFromEntityType(this.entityType)
-  await query(
-    `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE((SELECT created_at FROM content WHERE id=$1), now()), now())
+  // An id collision must never turn a title (or another person kind) into this entity.
+  const { rowCount } = await query(
+    `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, anilist_id, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE((SELECT created_at FROM content WHERE id=$1), now()), now())
      ON CONFLICT (id) DO UPDATE SET
-       kind = EXCLUDED.kind,
        name = EXCLUDED.name,
        native_name = EXCLUDED.native_name,
        about = EXCLUDED.about,
        image_path = EXCLUDED.image_path,
        mal_id = EXCLUDED.mal_id,
        tmdb_id = EXCLUDED.tmdb_id,
-       updated_at = now()`,
+       anilist_id = EXCLUDED.anilist_id,
+       updated_at = now()
+     WHERE content.kind = EXCLUDED.kind`,
     [
       this._id,
       kind,
@@ -303,8 +333,12 @@ Entity.prototype.save = async function save() {
       this.imagePath || null,
       this.malId || null,
       this.tmdbId || null,
+      this.anilistId || null,
     ],
   )
+  if (!rowCount) {
+    throw new Error(`Refusing to save ${kind} ${this._id}: id belongs to another content kind`)
+  }
 
   await query(
     SUBTYPE_SQL[kind],

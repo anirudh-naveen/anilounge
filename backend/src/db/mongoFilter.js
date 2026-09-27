@@ -2,7 +2,7 @@
  * Compile a subset of Mongo filters used by this API into parameterized SQL.
  */
 
-import { asId } from './ids.js'
+import { asId, isUuid } from './ids.js'
 import { kindFromEntityType, mapMalStatusFilterValue } from './kinds.js'
 
 const CONTENT_COLUMNS = {
@@ -20,6 +20,7 @@ const CONTENT_COLUMNS = {
   seasonCount: 'c.season_count',
   tmdbId: 'c.tmdb_id',
   malId: 'c.mal_id',
+  anilistId: 'c.anilist_id',
   voteAverage: 'c.vote_average',
   voteCount: 'c.vote_count',
   popularity: 'c.popularity',
@@ -42,6 +43,7 @@ const ENTITY_COLUMNS = {
   imagePath: 'e.image_path',
   malId: 'e.mal_id',
   tmdbId: 'e.tmdb_id',
+  anilistId: 'e.anilist_id',
   favoritesCount: 'e.favorites_count',
 }
 
@@ -49,6 +51,15 @@ const USER_COLUMNS = {
   username: 'u.username',
   email: 'u.email',
   isDemoAccount: 'u.is_demo',
+}
+
+/**
+ * SQL twin of `titleKey` in `utils/titles.js`: NFKC, lowercase, no whitespace.
+ * @param {string} sqlCol
+ * @returns {string}
+ */
+export function titleKeySql(sqlCol) {
+  return `regexp_replace(lower(normalize(${sqlCol}, NFKC)), '\\s', '', 'g')`
 }
 
 /**
@@ -123,32 +134,23 @@ function compileRelation(table, field, condition, ctx) {
   }
 
   if (field === 'appearances.content') {
-    const workMatch = compileLeaf(
-      'a.work_id::text',
+    const wanted =
       condition && typeof condition === 'object' && !Array.isArray(condition) && condition.$in
-        ? { $in: condition.$in.map((value) => asId(value)) }
-        : asId(condition),
-      ctx,
-    )
-    return `(EXISTS (
-      SELECT 1 FROM appearances a
-      WHERE ${workMatch} AND (
-        a.character_id = e.id
-        OR EXISTS (
-          SELECT 1 FROM voice_credits vc
-          WHERE vc.appearance_id = a.id AND vc.voice_id = e.id
-        )
-      )
-    ) OR EXISTS (
-      SELECT 1 FROM studio_credits sc
-      WHERE sc.studio_id = e.id AND ${compileLeaf(
-        'sc.work_id::text',
-        condition && typeof condition === 'object' && !Array.isArray(condition) && condition.$in
-          ? { $in: condition.$in.map((value) => asId(value)) }
-          : asId(condition),
-        ctx,
-      )}
-    ))`
+        ? condition.$in
+        : [condition]
+    const workIds = [...new Set(wanted.map((value) => asId(value)).filter(isUuid))]
+    if (!workIds.length) return 'FALSE'
+    // Start from the works (indexed work_id) rather than probing every person row.
+    const works = `ANY(${pushParam(ctx, workIds)}::uuid[])`
+    return `e.id IN (
+      SELECT a.character_id FROM appearances a WHERE a.work_id = ${works}
+      UNION ALL
+      SELECT vc.voice_id FROM appearances a
+      JOIN voice_credits vc ON vc.appearance_id = a.id
+      WHERE a.work_id = ${works}
+      UNION ALL
+      SELECT sc.studio_id FROM studio_credits sc WHERE sc.work_id = ${works}
+    )`
   }
 
   if (field === 'franchise') {
@@ -231,6 +233,10 @@ function compileLeaf(sqlCol, condition, ctx) {
     const like = regexToLike(condition)
     const p = pushParam(ctx, like.pattern)
     return `${sqlCol} ILIKE ${p} ESCAPE '\\'`
+  }
+
+  if (condition && typeof condition === 'object' && typeof condition.$titleKey === 'string') {
+    return `${titleKeySql(sqlCol)} = ${pushParam(ctx, condition.$titleKey)}`
   }
 
   if (condition && typeof condition === 'object' && !(condition instanceof Date) && !Array.isArray(condition)) {

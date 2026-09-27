@@ -8,13 +8,46 @@ import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import relationshipService from './relationshipService.js'
+import {
+  ANILIST_ORIGIN_COUNTRIES,
+  convertAnilistToContent,
+  findAnilistMatch,
+} from './anilistService.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
+import { studioNamesEqual } from '../utils/entities.js'
 import {
   applyTitleFields,
+  collectContentTitles,
   contentExactTitlesMatchOr,
   contentTitlesOverlap,
   externalIdsConflict,
+  seasonsConflict,
 } from '../utils/titles.js'
+
+/**
+ * AniList search input for a Content-shaped title.
+ * @param {object} content
+ * @returns {{ titles: string[], contentType: string, year: number | null }}
+ */
+export function anilistSearchInput(content) {
+  const year = content.releaseDate ? new Date(content.releaseDate).getFullYear() : null
+  return {
+    titles: collectContentTitles(content),
+    contentType: content.contentType,
+    year: Number.isFinite(year) ? year : null,
+  }
+}
+
+/**
+ * Whether a TMDB-only title may exist on AniList (East Asian animation).
+ * @param {object} content
+ * @returns {boolean}
+ */
+export function isAnilistCandidate(content) {
+  return (content.originCountries || []).some((code) =>
+    ANILIST_ORIGIN_COUNTRIES.has(String(code).toUpperCase()),
+  )
+}
 
 class DatabasePopulator {
   constructor() {
@@ -326,46 +359,70 @@ class DatabasePopulator {
           this.stats.merged++
           console.log(`Merged TMDB data into existing content: ${contentData.title}`)
         }
-      } else {
-        contentData.unifiedScore = this.calculateUnifiedScoreWithUserRatings(
-          contentData.voteAverage,
-          contentData.voteCount,
-          null,
-          null,
-          null,
-          0,
-        )
-        if (!contentData.unifiedScore && contentData.voteAverage) {
-          contentData.unifiedScore = contentData.voteAverage
-        }
-
-        contentData.userRatingAverage = null
-        contentData.userRatingCount = 0
-        contentData.userRatingSum = 0
-
-        const relationships = await relationshipService.detectRelationshipsFromExternalData(
-          detailedTmdbData,
-          'tmdb',
-        )
-        if (relationships.franchise) {
-          contentData.franchise = relationships.franchise.name
-          contentData.relationships = {
-            sequels: [],
-            prequels: [],
-            related: [],
-            franchise: relationships.franchise.name,
-          }
-        }
-
-        if (contentData.genres) {
-          contentData.genres = this.deduplicateGenres(contentData.genres)
-        }
-
-        const newContent = new Content(contentData)
-        await newContent.save()
-        this.stats.newAdded++
-        console.log(`Added TMDB ${contentType}: ${contentData.title}`)
+        return
       }
+
+      // AniList knows the MAL entry for an anime TMDB lists under another name.
+      const anilistMatch = await this.findAnilistMatchForTmdb(contentData)
+      const anilistData = anilistMatch ? convertAnilistToContent(anilistMatch) : null
+      const malOwner = anilistData?.malId
+        ? await Content.findOne({ malId: anilistData.malId })
+        : null
+      if (malOwner && !malOwner.tmdbId) {
+        await this.mergeTmdbIntoExisting(malOwner, contentData, detailedTmdbData, { save: false })
+        await this.mergeAnilistIntoExisting(malOwner, anilistData)
+        this.stats.merged++
+        console.log(`Merged TMDB data into MAL title via AniList: ${contentData.title}`)
+        return
+      }
+
+      contentData.unifiedScore = this.calculateUnifiedScoreWithUserRatings(
+        contentData.voteAverage,
+        contentData.voteCount,
+        null,
+        null,
+        null,
+        0,
+      )
+      if (!contentData.unifiedScore && contentData.voteAverage) {
+        contentData.unifiedScore = contentData.voteAverage
+      }
+
+      contentData.userRatingAverage = null
+      contentData.userRatingCount = 0
+      contentData.userRatingSum = 0
+
+      const relationships = await relationshipService.detectRelationshipsFromExternalData(
+        detailedTmdbData,
+        'tmdb',
+      )
+      if (relationships.franchise) {
+        contentData.franchise = relationships.franchise.name
+        contentData.relationships = {
+          sequels: [],
+          prequels: [],
+          related: [],
+          franchise: relationships.franchise.name,
+        }
+      }
+
+      if (contentData.genres) {
+        contentData.genres = this.deduplicateGenres(contentData.genres)
+      }
+
+      const newContent = new Content(contentData)
+      if (anilistData) {
+        await this.mergeAnilistIntoExisting(newContent, anilistData, { save: false })
+        if (anilistData.malId && !malOwner) newContent.malId = anilistData.malId
+      }
+      await newContent.save()
+      if (newContent.malId && unifiedContentService.hasMalKey) {
+        const anime = await unifiedContentService.getMalAnimeDetails(newContent.malId)
+        const malData = anime ? unifiedContentService.convertMalToContent(anime) : null
+        if (malData) await this.mergeMalIntoExisting(newContent, malData)
+      }
+      this.stats.newAdded++
+      console.log(`Added TMDB ${contentType}: ${contentData.title}`)
     } catch (error) {
       console.error(`Error saving TMDB content:`, error.message)
       this.stats.errors++
@@ -400,7 +457,8 @@ class DatabasePopulator {
 
   /**
    * Lenient same-title check used when merging TMDB and MAL rows:
-   * names must overlap and external ids must not conflict;
+   * names must overlap (ignoring case and spacing), main names must not name
+   * different seasons/parts, and external ids must not conflict;
    * movies within 2 years, TV within 3; at least one shared genre when both have genres;
    * TV episode counts within 10; movie runtimes within 45 minutes.
    * Missing year/genre/episode/runtime does not reject the match.
@@ -417,6 +475,11 @@ class DatabasePopulator {
     }
 
     if (!contentTitlesOverlap(newContent, existingContent)) {
+      return false
+    }
+
+    if (seasonsConflict(newContent, existingContent)) {
+      console.log(`Season mismatch: ${newContent.title} vs ${existingContent.title}`)
       return false
     }
 
@@ -624,9 +687,10 @@ class DatabasePopulator {
    * @param {object} existingContent
    * @param {object} tmdbData - Converted Content-shaped TMDB object
    * @param {object} detailedTmdbData - Raw TMDB payload for franchise detection
+   * @param {{ save?: boolean }} [options] - `save: false` leaves persisting to the caller
    * @returns {Promise<void>}
    */
-  async mergeTmdbIntoExisting(existingContent, tmdbData, detailedTmdbData) {
+  async mergeTmdbIntoExisting(existingContent, tmdbData, detailedTmdbData, { save = true } = {}) {
     this.assignTitleFields(
       existingContent,
       applyTitleFields(existingContent, tmdbData, { preferIncomingEnglish: true }),
@@ -656,9 +720,17 @@ class DatabasePopulator {
     existingContent.voteCount = tmdbData.voteCount
     existingContent.popularity = tmdbData.popularity
 
-    existingContent.studios = [
-      ...new Set([...(existingContent.studios || []), ...(tmdbData.studios || [])]),
-    ]
+    // MAL lists the animation studio; TMDB companies are publishers/distributors for anime.
+    const hasMalStudios = Boolean(existingContent.malId) && (existingContent.studios || []).length > 0
+    if (!hasMalStudios) {
+      existingContent.studios = [
+        ...new Set([...(existingContent.studios || []), ...(tmdbData.studios || [])]),
+      ]
+      existingContent.studioRefs = [
+        ...(existingContent.studioRefs || []),
+        ...(tmdbData.studioRefs || []),
+      ]
+    }
     existingContent.originCountries = [
       ...new Set([...(existingContent.originCountries || []), ...(tmdbData.originCountries || [])]),
     ]
@@ -706,7 +778,7 @@ class DatabasePopulator {
     }
 
     existingContent.lastUpdated = new Date()
-    await existingContent.save()
+    if (save) await existingContent.save()
   }
 
   /**
@@ -715,9 +787,10 @@ class DatabasePopulator {
    * and may promote contentType to `special`.
    * @param {object} existingContent
    * @param {object} malData - Converted Content-shaped MAL object
+   * @param {{ save?: boolean }} [options] - `save: false` skips persisting and MAL relation ingest
    * @returns {Promise<void>}
    */
-  async mergeMalIntoExisting(existingContent, malData) {
+  async mergeMalIntoExisting(existingContent, malData, { save = true } = {}) {
     const isAnime = this.isAnimeContent(malData)
 
     this.assignTitleFields(
@@ -764,9 +837,10 @@ class DatabasePopulator {
       existingContent.contentType = 'special'
     }
 
-    existingContent.studios = [
-      ...new Set([...(existingContent.studios || []), ...(malData.studios || [])]),
-    ]
+    if ((malData.studios || []).length) {
+      existingContent.studios = [...new Set(malData.studios)]
+      existingContent.studioRefs = malData.studioRefs || []
+    }
     existingContent.originCountries = [
       ...new Set([...(existingContent.originCountries || []), ...(malData.originCountries || [])]),
     ]
@@ -799,8 +873,69 @@ class DatabasePopulator {
     }
     existingContent.lastUpdated = new Date()
 
+    if (!save) return
     await existingContent.save()
     await relationshipService.populateRelationshipsFromMAL(existingContent)
+  }
+
+  /**
+   * Overlay AniList fields onto an existing row: AniList id, extra titles, and
+   * overview/poster only where missing. Studios follow MAL first, then AniList
+   * animation studios, then TMDB companies; matching studios gain AniList ids.
+   * @param {object} existingContent
+   * @param {object} anilistData - Output of `convertAnilistToContent`
+   * @param {{ save?: boolean }} [options]
+   * @returns {Promise<void>}
+   */
+  async mergeAnilistIntoExisting(existingContent, anilistData, { save = true } = {}) {
+    if (!anilistData?.anilistId) return
+    existingContent.anilistId = anilistData.anilistId
+    this.assignTitleFields(existingContent, applyTitleFields(existingContent, anilistData))
+    if (!existingContent.overview && anilistData.overview) {
+      existingContent.overview = anilistData.overview
+    }
+    if (!existingContent.posterPath && anilistData.posterPath) {
+      existingContent.posterPath = anilistData.posterPath
+    }
+
+    const studios = existingContent.studios || []
+    const refs = existingContent.studioRefs || []
+    const hasMalStudios =
+      Boolean(existingContent.malId) &&
+      studios.length > 0 &&
+      (!refs.length || refs.some((ref) => ref.malId))
+    const namedAs = (ref, names) => {
+      const name = names.find((candidate) => studioNamesEqual(candidate, ref.name))
+      return name ? { ...ref, name } : null
+    }
+    if (hasMalStudios) {
+      const extra = (anilistData.allStudioRefs || []).map((ref) => namedAs(ref, studios))
+      existingContent.studioRefs = [...refs, ...extra.filter(Boolean)]
+    } else if ((anilistData.studios || []).length) {
+      const names = [...anilistData.studios]
+      const tmdbMatches = refs.filter((ref) => ref.tmdbId).map((ref) => namedAs(ref, names))
+      existingContent.studios = names
+      existingContent.studioRefs = [...anilistData.studioRefs, ...tmdbMatches.filter(Boolean)]
+    }
+
+    if (!existingContent.dataSources) existingContent.dataSources = {}
+    existingContent.dataSources.anilist = { hasData: true, lastUpdated: new Date() }
+    if (save) await existingContent.save()
+  }
+
+  /**
+   * AniList anime matching a new TMDB title, for East Asian animation only.
+   * @param {object} contentData
+   * @returns {Promise<object | null>}
+   */
+  async findAnilistMatchForTmdb(contentData) {
+    if (!isAnilistCandidate(contentData)) return null
+    try {
+      return await findAnilistMatch(anilistSearchInput(contentData))
+    } catch (error) {
+      console.error(`AniList lookup failed for ${contentData.title}:`, error.message)
+      return null
+    }
   }
 
   /**
@@ -950,6 +1085,7 @@ export async function ingestTmdbNowPlayingMovies(limit = 40) {
       }
       if (contentData.studios?.length && !(existing.studios || []).length) {
         existing.studios = contentData.studios
+        existing.studioRefs = contentData.studioRefs
         changed = true
       }
       if (changed) await existing.save()
