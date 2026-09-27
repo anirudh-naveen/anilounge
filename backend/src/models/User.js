@@ -37,7 +37,13 @@ async function loadUserChildren(doc) {
   const [watchlist, ratings, favs] = await Promise.all([
     query('SELECT * FROM watchlist WHERE user_id = $1 ORDER BY added_at', [id]),
     query('SELECT * FROM ratings WHERE user_id = $1', [id]),
-    query('SELECT * FROM favorites WHERE user_id = $1', [id]),
+    query(
+      `SELECT f.*, c.kind, c.name
+       FROM favorites f
+       JOIN content c ON c.id = f.content_id
+       WHERE f.user_id = $1`,
+      [id],
+    ),
   ])
   const ratingByContent = new Map(ratings.rows.map((row) => [String(row.content_id), row]))
   doc.watchlist = watchlist.rows.map((row) => {
@@ -61,6 +67,8 @@ async function loadUserChildren(doc) {
   }))
   doc.favoriteEntities = favs.rows.map((row) => ({
     entity: String(row.content_id),
+    kind: row.kind,
+    name: row.name,
     addedAt: row.added_at,
   }))
   doc.preferences = { favoriteGenres: [], favoriteStudios: [] }

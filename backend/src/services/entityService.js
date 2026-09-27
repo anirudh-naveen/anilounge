@@ -1,8 +1,10 @@
 /**
- * entityService.js — ingest and lookup for catalog characters (and later VAs/studios).
+ * entityService.js — ingest and lookup for catalog characters, voice actors, and studios.
  *
  * Domain service: Jikan anime-character lists and TMDB credits are upserted into
- * Entity documents. Title pages and search read the persisted rows.
+ * Entity documents. Studio rows come from title sync; their logo and about are
+ * filled from Jikan producers or TMDB companies. Title pages and search read
+ * the persisted rows.
  */
 
 import Entity from '../models/Entity.js'
@@ -29,9 +31,14 @@ import {
   isUsableCharacterName,
   mapJikanCharacterRow,
   mapJikanPersonVoiceRow,
+  mapJikanProducer,
   mapTmdbCharacterCredits,
   mapVoiceActorFromCredit,
+  pickJikanProducer,
+  pickTmdbCompany,
   serializeEntity,
+  studioImagePath,
+  studioNamesEqual,
   uniqueEntityNames,
   voiceActorImagePath,
   voiceActorUpsertFilter,
@@ -46,6 +53,7 @@ const MAX_CHARACTERS_PER_TITLE = 12
 /** A failed or partial Jikan/TMDB ingest is not retried on every page view. */
 const CHARACTER_RETRY_MS = 6 * 60 * 60 * 1000
 const characterSyncAttempts = new Map()
+const studioSyncAttempts = new Map()
 const CHARACTER_UPSERT_CONCURRENCY = 4
 const voiceActorLocks = new Map()
 
@@ -946,6 +954,112 @@ export async function ensureVoiceActorCredits(entity, options = {}) {
 }
 
 /**
+ * Jikan producer for a studio: by stored MAL id, else a name search.
+ * @param {object} entity
+ * @param {{ fetchImpl?: typeof fetch }} options
+ * @returns {Promise<object|null>}
+ */
+async function fetchJikanProducer(entity, options) {
+  const malId = Number(entity.malId)
+  if (Number.isFinite(malId) && malId > 0) {
+    const body = await jikanGet(`/producers/${malId}/full`, options)
+    return body?.data || null
+  }
+  const body = await jikanGet(
+    `/producers?q=${encodeURIComponent(entity.name)}&order_by=favorites&sort=desc&limit=10`,
+    options,
+  )
+  return pickJikanProducer(body?.data, entity.name)
+}
+
+/**
+ * TMDB company (logo, description) matching the studio name.
+ * @param {object} entity
+ * @param {{ fetchImpl?: typeof fetch, tmdbToken?: string }} options
+ * @returns {Promise<object|null>}
+ */
+async function fetchTmdbCompany(entity, options) {
+  const apiKey = options.tmdbToken || process.env.TMDB_API_KEY
+  if (!apiKey) return null
+  const key = encodeURIComponent(apiKey)
+  let companyId = Number(entity.tmdbId)
+  if (!Number.isFinite(companyId) || companyId < 1) {
+    const search = await fetchJson(
+      `${TMDB_BASE}/search/company?api_key=${key}&query=${encodeURIComponent(entity.name)}`,
+      options,
+    )
+    companyId = Number(pickTmdbCompany(search?.results, entity.name)?.id)
+  }
+  if (!Number.isFinite(companyId) || companyId < 1) return null
+  return fetchJson(`${TMDB_BASE}/company/${companyId}?api_key=${key}`, options)
+}
+
+/**
+ * Fill a studio's logo, native name, and about from Jikan, falling back to TMDB.
+ * Failed lookups are not retried on every page view.
+ * @param {object} entity
+ * @param {{ fetchImpl?: typeof fetch, tmdbToken?: string }} [options]
+ * @returns {Promise<object>}
+ */
+export async function ensureStudioDetails(entity, options = {}) {
+  if (!entity || entity.entityType !== 'studio') return entity
+  if (studioImagePath(entity.imagePath) && entity.about) return entity
+  const key = String(entity._id)
+  const lastAttempt = studioSyncAttempts.get(key) || 0
+  if (Date.now() - lastAttempt < CHARACTER_RETRY_MS) return entity
+  studioSyncAttempts.set(key, Date.now())
+
+  let changed = false
+  const producer = mapJikanProducer(await fetchJikanProducer(entity, options))
+  if (producer) {
+    if (!entity.malId) {
+      entity.malId = producer.malId
+      changed = true
+    }
+    if (!studioImagePath(entity.imagePath) && producer.imagePath) {
+      entity.imagePath = producer.imagePath
+      changed = true
+    }
+    if (!entity.about && producer.about) {
+      entity.about = producer.about
+      changed = true
+    }
+    if (!entity.nativeName && producer.nativeName) {
+      entity.nativeName = producer.nativeName
+      changed = true
+    }
+    const names = uniqueEntityNames(entity.alternativeNames, producer.alternativeNames).filter(
+      (name) => name !== entity.name,
+    )
+    if (names.length !== (entity.alternativeNames || []).length) {
+      entity.alternativeNames = names
+      changed = true
+    }
+  }
+
+  if (!studioImagePath(entity.imagePath) || !entity.about) {
+    const company = await fetchTmdbCompany(entity, options)
+    if (company?.id) {
+      if (!entity.tmdbId) {
+        entity.tmdbId = Number(company.id)
+        changed = true
+      }
+      if (!studioImagePath(entity.imagePath) && company.logo_path) {
+        entity.imagePath = company.logo_path
+        changed = true
+      }
+      if (!entity.about && company.description) {
+        entity.about = String(company.description).trim()
+        changed = true
+      }
+    }
+  }
+
+  if (changed) await entity.save()
+  return entity
+}
+
+/**
  * Regex-safe substring search across name fields.
  * @param {string} query
  * @param {{ entityType?: string, limit?: number }} [options]
@@ -985,8 +1099,10 @@ export async function findEntityByName(name, entityType = 'character') {
     candidates.find((doc) =>
       uniqueEntityNames(doc.name, doc.englishName, doc.nativeName, doc.alternativeNames).some(
         (candidate) =>
-          aliases.some(
-            (alias) => characterNamesEqual(candidate, alias) || entityNamesEqual(candidate, alias),
+          aliases.some((alias) =>
+            entityType === 'studio'
+              ? studioNamesEqual(candidate, alias)
+              : characterNamesEqual(candidate, alias) || entityNamesEqual(candidate, alias),
           ),
       ),
     ) ||
@@ -1003,10 +1119,14 @@ export async function findEntityByName(name, entityType = 'character') {
  */
 export async function serializeEntityDetails(entity, options = {}) {
   if (!entity) return null
+  const contentSelect =
+    entity.entityType === 'studio'
+      ? 'title englishTitle nativeTitle posterPath contentType releaseDate startSeasonYear unifiedScore malStatus'
+      : 'title englishTitle nativeTitle posterPath contentType'
   await entity.populate([
     {
       path: 'appearances.content',
-      select: 'title englishTitle nativeTitle posterPath contentType',
+      select: contentSelect,
     },
     {
       path: 'appearances.character',

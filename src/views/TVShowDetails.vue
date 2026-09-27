@@ -130,6 +130,7 @@
         :loading="episodesLoading"
         :characters="characters"
         :content-id="show._id"
+        :show="show"
       />
 
       <!-- Title: Related Loading -->
@@ -267,14 +268,7 @@
         :loading="charactersLoading"
       />
 
-      <div v-if="animationStudios.length" class="network-info">
-        <h3>Animation studios</h3>
-        <div class="networks">
-          <span v-for="studio in animationStudios" :key="`studio-${studio}`" class="network-tag">
-            {{ studio }}
-          </span>
-        </div>
-      </div>
+      <StudioLinks :content="show" />
     </div>
 
     <!-- Title: Watchlist -->
@@ -303,6 +297,7 @@ import StatusDropdown from '@/components/StatusDropdown.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EpisodeRow from '@/components/EpisodeRow.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
+import StudioLinks from '@/components/StudioLinks.vue'
 import type { CatalogEntity, Episode, UnifiedContent } from '@/types/content'
 import { useEntityStore } from '@/stores/entities'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
@@ -353,12 +348,6 @@ const getDisplayScore = (content: UnifiedContent) => {
 }
 
 const getDisplayVoteCount = (content: UnifiedContent) => getTotalVoteCount(content)
-
-const animationStudios = computed(() => {
-  const studios = (show.value?.studios || []).filter(Boolean)
-  if (studios.length) return [...new Set(studios)]
-  return [...new Set((show.value?.productionCompanies || []).filter(Boolean))]
-})
 
 const loadShow = async (showId: string) => {
   const requestId = ++detailsRequestId
@@ -849,41 +838,6 @@ const handleImageError = (event: Event) => {
   color: var(--text-muted);
 }
 
-.network-info,
-.production-info,
-.creator-info {
-  margin-bottom: 2rem;
-}
-
-.network-info h3,
-.production-info h3,
-.creator-info h3 {
-  font-size: 1.2rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-primary);
-}
-
-.networks,
-.companies,
-.countries,
-.creators {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.network-tag,
-.company-tag,
-.country-tag,
-.creator-tag {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  border: 1px solid var(--border-color);
-}
-
 @media (max-width: 768px) {
   .tv-details {
     padding: 1rem;
@@ -1078,13 +1032,6 @@ const handleImageError = (event: Event) => {
 }
 
 .genre-tag {
-  color: var(--text-on-accent) !important;
-}
-
-.company-tag,
-.network-tag,
-.country-tag,
-.creator-tag {
   color: var(--text-on-accent) !important;
 }
 </style>

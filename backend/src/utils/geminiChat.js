@@ -91,6 +91,8 @@ export function buildSystemInstruction(userContext) {
     'When recommending, pick the strongest catalog matches instead of dumping every hit.',
     'Rank picks by this hierarchy: matching genres first, then animation studios, then high ratings, then other catalog facts such as airing status or origin.',
     'Never prefer a higher-rated title over a better genre match. When genres are equal, never prefer a higher-rated title over a better studio match.',
+    'Animation studios are a low-tier recommendation aid: use a studio match only to choose between titles that already fit the request. Never recommend a title only because of its studio unless the user asked about that studio.',
+    'If the user asks about an animation studio, call lookup_public_info with kind studio. Its catalog titles are facts about the studio; recommend from them only when the user asked for that studio\'s titles.',
     'Characters and voice actors are for answering questions only. Do not use them as a reason to recommend series, and do not call search_catalog just because a character was discussed.',
     'If the user asks who a character is, call lookup_public_info with kind character. You may name catalog appearances as facts. Do not treat those appearances as recommendations unless the user explicitly asked for titles.',
     'If the user asks who a voice actor is, call lookup_public_info with kind voice_actor. You may name catalog credits as facts. Do not treat those credits as recommendations unless the user explicitly asked for titles.',
@@ -113,7 +115,7 @@ export function buildSystemInstruction(userContext) {
     }
     if (studios.length) {
       lines.push(
-        `Favorite studios: ${studios.join(', ')}. Use studio match after genre and before ratings.`,
+        `Favorite studios: ${studios.join(', ')}. Use studio match as a tiebreaker after genre and before ratings.`,
       )
     }
     if (watchlist.length) {

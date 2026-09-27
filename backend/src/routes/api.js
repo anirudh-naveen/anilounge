@@ -197,7 +197,7 @@ router.post(
 
 router.get('/content/:contentId/my-rating', validateObjectId, contentController.getMyRating)
 
-/** Entity favorites (characters and voice actors; studios later). */
+/** Entity favorites (characters, voice actors, and studios). */
 router.get('/favorites', entityController.getFavoriteEntities)
 router.post('/entities/:id/favorite', validateObjectId, entityController.favoriteEntity)
 router.delete('/entities/:id/favorite', validateObjectId, entityController.unfavoriteEntity)

@@ -8,6 +8,7 @@ import {
   characterPortraitPath,
   characterUpsertFilter,
   cleanCharacterName,
+  displayStudioName,
   entityNamesEqual,
   entityToSearchHit,
   foldEntityName,
@@ -17,11 +18,16 @@ import {
   isUsableCharacterName,
   mapJikanCharacterRow,
   mapJikanPersonVoiceRow,
+  mapJikanProducer,
   mapTmdbCharacterCredits,
   mapVoiceActorFromCredit,
   matchCharacterByName,
+  pickJikanProducer,
   pickPrimaryCharacter,
+  pickTmdbCompany,
   serializeEntity,
+  studioNameKey,
+  studioNamesEqual,
   uniqueEntityNames,
 } from './entities.js'
 
@@ -291,6 +297,73 @@ describe('serializeEntity', () => {
       serialized.appearances[0].character.imagePath.includes('characters'),
       true,
     )
+  })
+
+  it('keeps studio names and logos as-is and trims studio search hits', () => {
+    const serialized = serializeEntity({
+      _id: 'st-1',
+      entityType: 'studio',
+      name: 'Sunrise, Inc.',
+      imagePath: '/pixar-logo.png',
+      appearances: [{ content: 'w1' }, { content: 'w2' }],
+    })
+    assert.equal(serialized.name, 'Sunrise, Inc.')
+    assert.equal(serialized.imagePath, '/pixar-logo.png')
+    assert.equal(serialized.appearances.length, 2)
+    const hit = entityToSearchHit(serialized)
+    assert.equal(hit.contentType, 'studio')
+    assert.deepEqual(hit.appearances, [])
+  })
+})
+
+describe('studio lookups', () => {
+  it('matches studio names across corporate suffixes and punctuation', () => {
+    assert.equal(studioNameKey('Kyoto Animation Co., Ltd.'), 'kyoto animation')
+    assert.equal(studioNamesEqual('Kyoto Animation Co., Ltd.', 'Kyoto Animation'), true)
+    assert.equal(studioNamesEqual('Production I.G', 'production i g'), true)
+    assert.equal(studioNamesEqual('Pixar', 'Pixar Canada'), false)
+    assert.equal(displayStudioName('  Studio   Ghibli '), 'Studio Ghibli')
+  })
+
+  it('maps a Jikan producer and picks the matching search hit', () => {
+    const rows = [
+      {
+        mal_id: 99,
+        titles: [{ type: 'Default', title: 'Kyoto Animation Tokyo' }],
+      },
+      {
+        mal_id: 2,
+        titles: [
+          { type: 'Default', title: 'Kyoto Animation' },
+          { type: 'Japanese', title: '京都アニメーション' },
+          { type: 'Synonym', title: 'KyoAni' },
+        ],
+        images: { jpg: { image_url: 'https://cdn.myanimelist.net/images/company/2.png' } },
+        about: 'Studio in Uji.',
+      },
+    ]
+    const picked = pickJikanProducer(rows, 'Kyoto Animation Co., Ltd.')
+    assert.equal(picked.mal_id, 2)
+    assert.deepEqual(mapJikanProducer(picked), {
+      malId: 2,
+      name: 'Kyoto Animation',
+      nativeName: '京都アニメーション',
+      alternativeNames: ['京都アニメーション', 'KyoAni'],
+      imagePath: 'https://cdn.myanimelist.net/images/company/2.png',
+      about: 'Studio in Uji.',
+    })
+    assert.equal(mapJikanProducer({ mal_id: 0, titles: [] }), null)
+    assert.equal(pickJikanProducer(rows, 'MAPPA'), null)
+  })
+
+  it('prefers the TMDB company with a logo among exact name matches', () => {
+    const results = [
+      { id: 1, name: 'Pixar', logo_path: null },
+      { id: 3, name: 'Pixar', logo_path: '/logo.png' },
+      { id: 219390, name: 'Pixar Canada', logo_path: '/ca.png' },
+    ]
+    assert.equal(pickTmdbCompany(results, 'Pixar').id, 3)
+    assert.equal(pickTmdbCompany(results, 'DreamWorks'), null)
   })
 })
 

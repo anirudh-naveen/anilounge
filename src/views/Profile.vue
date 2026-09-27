@@ -2,7 +2,8 @@
   Profile.vue — user profile view.
 
   Shows the signed-in user's avatar, watchlist stats, account fields, and
-  favorite genre/studio preferences from the auth and content stores.
+  favorite genre/studio preferences, and favorited characters, voice actors,
+  and studios from the auth, content, and entity stores.
 -->
 <template>
   <div class="profile-page">
@@ -94,14 +95,37 @@
               <!-- Title: Favorite Studios -->
               <div class="preference-item">
                 <label>Favorite Studios</label>
-                <div class="studio-tags">
+                <div v-if="favoriteStudioEntities.length" class="favorite-entity-grid">
+                  <button
+                    v-for="entity in favoriteStudioEntities"
+                    :key="entity._id"
+                    type="button"
+                    class="favorite-entity-card studio-card"
+                    @click="openEntity(entity)"
+                  >
+                    <img
+                      v-if="entity.imagePath"
+                      :src="getPosterUrl(entity.imagePath)"
+                      :alt="entity.name"
+                      referrerpolicy="no-referrer"
+                    />
+                    <div v-else class="favorite-entity-placeholder">
+                      <i class="fas fa-building"></i>
+                    </div>
+                    <span>{{ entity.name }}</span>
+                  </button>
+                </div>
+                <div v-if="favoriteStudios.length" class="studio-tags">
                   <span v-for="studio in favoriteStudios" :key="studio" class="studio-tag">
                     {{ studio }}
                   </span>
-                  <span v-if="!favoriteStudios.length" class="no-preferences">
-                    No favorite studios set
-                  </span>
                 </div>
+                <span
+                  v-if="!favoriteStudioEntities.length && !favoriteStudios.length"
+                  class="no-preferences"
+                >
+                  No favorite studios yet
+                </span>
               </div>
               <!-- Title: Favorite Characters -->
               <div class="preference-item">
@@ -264,8 +288,15 @@ const favoriteGenres = computed(() => {
   return authStore.user?.preferences?.favoriteGenres || []
 })
 
+const favoriteStudioEntities = computed(() =>
+  entityStore.favorites.filter((entity) => entity.entityType === 'studio'),
+)
+
 const favoriteStudios = computed(() => {
-  return authStore.user?.preferences?.favoriteStudios || []
+  const favorited = new Set(favoriteStudioEntities.value.map((entity) => entity.name.toLowerCase()))
+  return (authStore.user?.preferences?.favoriteStudios || []).filter(
+    (name) => !favorited.has(name.toLowerCase()),
+  )
 })
 
 const favoriteCharacters = computed(() =>
@@ -553,6 +584,19 @@ const getProfilePictureUrl = (profilePicture: string) => {
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
+}
+
+.studio-card img,
+.studio-card .favorite-entity-placeholder {
+  height: 88px;
+  object-fit: contain;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.favorite-entity-grid + .studio-tags {
+  margin-top: 0.75rem;
 }
 
 .rating-number {

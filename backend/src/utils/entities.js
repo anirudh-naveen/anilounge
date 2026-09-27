@@ -377,6 +377,104 @@ export function voiceActorImagePath(path) {
 }
 
 /**
+ * Studio logo URL (Jikan producer image or TMDB `logo_path`).
+ * @param {unknown} path
+ * @returns {string}
+ */
+export function studioImagePath(path) {
+  return voiceActorImagePath(path)
+}
+
+/**
+ * Studio display name. Unlike people, `"Sunrise, Inc."` must not be reordered.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function displayStudioName(value) {
+  return normalizeEntityName(value).replace(/\s+/g, ' ')
+}
+
+/**
+ * Fold a studio name and drop corporate suffixes so `"Kyoto Animation Co., Ltd."`
+ * matches `"Kyoto Animation"`.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function studioNameKey(value) {
+  return foldEntityName(value)
+    .replace(/\b(co|ltd|inc|llc|corp|corporation|company|limited|k k|kk|gmbh)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Whether two studio labels name the same company.
+ * @param {unknown} left
+ * @param {unknown} right
+ * @returns {boolean}
+ */
+export function studioNamesEqual(left, right) {
+  const a = studioNameKey(left)
+  const b = studioNameKey(right)
+  return Boolean(a) && a === b
+}
+
+/**
+ * Map a Jikan `/producers` row onto studio fields.
+ * @param {object} [row]
+ * @returns {{ malId: number, name: string, nativeName: string, alternativeNames: string[], imagePath: string, about: string } | null}
+ */
+export function mapJikanProducer(row) {
+  const malId = Number(row?.mal_id)
+  if (!Number.isFinite(malId) || malId < 1) return null
+  const titles = Array.isArray(row?.titles) ? row.titles : []
+  const titleOf = (type) =>
+    normalizeEntityName(titles.find((entry) => entry?.type === type)?.title)
+  const name = displayStudioName(titleOf('Default') || titles[0]?.title || row?.name)
+  if (!name) return null
+  return {
+    malId,
+    name,
+    nativeName: titleOf('Japanese'),
+    alternativeNames: uniqueEntityNames(titles.map((entry) => entry?.title)).filter(
+      (title) => title !== name,
+    ),
+    imagePath: studioImagePath(entityImagePath(row?.images)),
+    about: normalizeEntityName(row?.about),
+  }
+}
+
+/**
+ * Jikan producer search hit whose titles match the studio name.
+ * @param {object[]} [rows]
+ * @param {string} name
+ * @returns {object | null}
+ */
+export function pickJikanProducer(rows, name) {
+  const list = Array.isArray(rows) ? rows : []
+  return (
+    list.find((row) =>
+      (Array.isArray(row?.titles) ? row.titles : []).some((entry) =>
+        studioNamesEqual(entry?.title, name),
+      ),
+    ) || null
+  )
+}
+
+/**
+ * TMDB `/search/company` hit that names the same studio, preferring one with a logo.
+ * @param {object[]} [results]
+ * @param {string} name
+ * @returns {object | null}
+ */
+export function pickTmdbCompany(results, name) {
+  const matches = (Array.isArray(results) ? results : []).filter((row) =>
+    studioNamesEqual(row?.name, name),
+  )
+  return matches.find((row) => row?.logo_path) || matches[0] || null
+}
+
+/**
  * Mongo filter used to upsert a character or voice actor without colliding on `malId: null`.
  * @param {string} entityType
  * @param {{ malId?: number, name?: string }} payload
@@ -644,18 +742,12 @@ export function serializeEntity(doc, options = {}) {
   return {
     _id: raw._id,
     entityType: raw.entityType,
-    name:
-      raw.entityType === 'voice_actor'
-        ? displayPersonName(raw.name)
-        : canonicalCharacterName(raw.name) || raw.name,
+    name: serializedEntityName(raw),
     englishName: raw.englishName || '',
     nativeName: raw.nativeName || '',
     alternativeNames: raw.alternativeNames || [],
     about: raw.about || '',
-    imagePath:
-      raw.entityType === 'character'
-        ? characterPortraitPath(raw.imagePath)
-        : voiceActorImagePath(raw.imagePath),
+    imagePath: serializedEntityImage(raw),
     malId: raw.malId,
     tmdbId: raw.tmdbId,
     favoritesCount: raw.favoritesCount || 0,
@@ -666,6 +758,18 @@ export function serializeEntity(doc, options = {}) {
       return { ...row, character }
     }),
   }
+}
+
+function serializedEntityName(raw) {
+  if (raw.entityType === 'voice_actor') return displayPersonName(raw.name)
+  if (raw.entityType === 'studio') return displayStudioName(raw.name)
+  return canonicalCharacterName(raw.name) || raw.name
+}
+
+function serializedEntityImage(raw) {
+  if (raw.entityType === 'character') return characterPortraitPath(raw.imagePath)
+  if (raw.entityType === 'studio') return studioImagePath(raw.imagePath)
+  return voiceActorImagePath(raw.imagePath)
 }
 
 /**
@@ -704,6 +808,7 @@ export function entityToSearchHit(entity) {
     entityType: serialized.entityType,
     genres: [],
     alternativeTitles: serialized.alternativeNames,
-    appearances: serialized.appearances,
+    // Studios can credit hundreds of titles; search cards never read them.
+    appearances: serialized.entityType === 'studio' ? [] : serialized.appearances,
   }
 }

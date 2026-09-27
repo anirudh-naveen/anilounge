@@ -116,13 +116,18 @@ async function lookupTitle(name, options) {
   }
 }
 
+const STUDIO_NOTE =
+  'Studios are a low-tier recommendation signal: use a studio match to break ties between titles that already fit the requested genres. Only recommend titles for a studio alone when the user asked about that studio.'
+
 async function lookupStudio(name, options) {
-  const docs = await searchCatalog({ studio: name, limit: 8 })
-  const summary = await firstWikipediaHit(wikiLookupCandidates(name, 'studio'), options)
+  const entity = await findEntityByName(name, 'studio')
+  const studioName = entity?.name || name
+  const docs = await searchCatalog({ studio: studioName, limit: 8 })
+  const summary = await firstWikipediaHit(wikiLookupCandidates(studioName, 'studio'), options)
   const studioLike = summary
     ? extractMatchesTopic(summary.extract, summary.description, 'studio')
     : false
-  if (!docs.length && !studioLike) {
+  if (!entity && !docs.length && !studioLike) {
     return {
       docs: [],
       payload: {
@@ -135,10 +140,13 @@ async function lookupStudio(name, options) {
     docs,
     payload: wikiPayload({
       kind: 'studio',
-      name,
-      summary: studioLike || docs.length ? summary : null,
+      name: studioName,
+      summary: studioLike || docs.length || entity ? summary : null,
       extra: {
+        about: entity?.about || undefined,
+        catalogTitleCount: entity ? (entity.appearances || []).length : undefined,
         catalogTitles: docs.map((doc) => doc.englishTitle || doc.title),
+        note: STUDIO_NOTE,
       },
     }),
   }

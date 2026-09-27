@@ -95,7 +95,7 @@ export async function attachContentRelations(docs) {
     ),
     query('SELECT content_id, name FROM content_akas WHERE content_id = ANY($1::uuid[])', [ids]),
     query(
-      `SELECT sc.work_id AS content_id, st.name
+      `SELECT sc.work_id AS content_id, st.id AS studio_id, st.name, st.image_path
        FROM studio_credits sc
        JOIN content st ON st.id = sc.studio_id
        WHERE sc.work_id = ANY($1::uuid[])`,
@@ -126,6 +126,11 @@ export async function attachContentRelations(docs) {
     doc.genres = (byGenre.get(id) || []).map((row) => ({ name: row.name }))
     doc.alternativeTitles = (byAlt.get(id) || []).map((row) => row.name)
     doc.studios = (byStudio.get(id) || []).map((row) => row.name)
+    doc.studioEntities = (byStudio.get(id) || []).map((row) => ({
+      _id: String(row.studio_id),
+      name: row.name,
+      imagePath: row.image_path || '',
+    }))
     doc.franchise = franchiseById.get(id) || null
     const edges = relByFrom.get(id) || []
     doc.relationships = {
