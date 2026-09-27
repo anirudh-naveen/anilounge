@@ -7,8 +7,6 @@ For recruiters who want to explore the application:
  - Email: demo@findanimation.com
  - Password: DemoPassword123!
    
-Please do not change this password!
-
 Features --
  - Search & Filter: Browse through an extensive collection of animated content
  - AI Recommendations: Gemini integration helps you find information about the vast catalogue available
