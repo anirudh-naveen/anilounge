@@ -9,6 +9,7 @@ import express from 'express'
 import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
 import entityController from '../controllers/entityController.js'
+import homeController from '../controllers/homeController.js'
 import * as authController from '../controllers/authController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
@@ -90,6 +91,10 @@ router.get('/content/external/:id', contentController.getContentByExternalId)
 router.get('/content/:id/similar', validateObjectId, contentController.getSimilarContent)
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
 router.get('/franchise/:franchiseName', contentController.getFranchiseContent)
+
+/** Homepage sections. Release updates use the watchlist when a token is present. */
+router.get('/home/updates', optionalAuthenticate, homeController.getUpdates)
+router.get('/home/character-of-the-day', homeController.getCharacterOfTheDay)
 
 /** Gemini-backed search and chat. Optional auth personalizes from watchlist/preferences. */
 router.post(
@@ -201,5 +206,8 @@ router.get('/content/:contentId/my-rating', validateObjectId, contentController.
 router.get('/favorites', entityController.getFavoriteEntities)
 router.post('/entities/:id/favorite', validateObjectId, entityController.favoriteEntity)
 router.delete('/entities/:id/favorite', validateObjectId, entityController.unfavoriteEntity)
+
+/** Homepage status feed: the viewer's and accepted friends' watchlist changes. */
+router.get('/home/activity', homeController.getActivity)
 
 export default router

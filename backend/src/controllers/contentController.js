@@ -638,9 +638,9 @@ export const aiChat = async (req, res) => {
  */
 export const addToWatchlist = async (req, res) => {
   const session = await startSession()
-  session.startTransaction()
 
   try {
+    await session.startTransaction()
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
       await session.abortTransaction()
@@ -700,8 +700,7 @@ export const addToWatchlist = async (req, res) => {
     if (existingItem) {
       existingItem.status = status || existingItem.status
       existingItem.rating = rating !== undefined ? rating : existingItem.rating
-      existingItem.currentEpisode =
-        currentEpisode !== undefined ? currentEpisode : existingItem.currentEpisode
+      setWatchedEpisode(existingItem, currentEpisode)
       existingItem.currentSeason =
         currentSeason !== undefined ? currentSeason : existingItem.currentSeason
       existingItem.totalEpisodes = maxEpisodes
@@ -714,6 +713,7 @@ export const addToWatchlist = async (req, res) => {
         status: status || 'plan_to_watch',
         rating: rating,
         currentEpisode: currentEpisode || 0,
+        previousEpisode: 0,
         currentSeason: currentSeason || 1,
         totalEpisodes: maxEpisodes,
         totalSeasons: maxSeasons,
@@ -802,9 +802,9 @@ export const getWatchlist = async (req, res) => {
  */
 export const removeFromWatchlist = async (req, res) => {
   const session = await startSession()
-  session.startTransaction()
 
   try {
+    await session.startTransaction()
     const { contentId } = req.params
     const userId = req.user._id
 
@@ -860,9 +860,9 @@ export const removeFromWatchlist = async (req, res) => {
  */
 export const updateWatchlistItem = async (req, res) => {
   const session = await startSession()
-  session.startTransaction()
 
   try {
+    await session.startTransaction()
     const { contentId } = req.params
     const { status, rating, currentEpisode, currentSeason, notes } = req.body
     const userId = req.user._id
@@ -920,7 +920,7 @@ export const updateWatchlistItem = async (req, res) => {
 
     if (status) watchlistItem.status = status
     if (rating !== undefined) watchlistItem.rating = rating
-    if (currentEpisode !== undefined) watchlistItem.currentEpisode = currentEpisode
+    setWatchedEpisode(watchlistItem, currentEpisode)
     if (currentSeason !== undefined) watchlistItem.currentSeason = currentSeason
     if (notes !== undefined) watchlistItem.notes = notes
 
@@ -955,6 +955,20 @@ export const updateWatchlistItem = async (req, res) => {
   } finally {
     session.endSession()
   }
+}
+
+/**
+ * Move a watchlist row to a new episode, remembering where the user left off
+ * so the home feed can report the range watched. No-op when unchanged.
+ *
+ * @param {object} item - Watchlist entry, mutated in place.
+ * @param {number|undefined} episode - New current episode from the request.
+ * @returns {void}
+ */
+function setWatchedEpisode(item, episode) {
+  if (episode === undefined || episode === item.currentEpisode) return
+  item.previousEpisode = item.currentEpisode || 0
+  item.currentEpisode = episode
 }
 
 /**
@@ -1007,6 +1021,8 @@ function syncLegacyUserRating(user, contentId, rating) {
 
 /**
  * Apply a rating delta to the content aggregate scores and persist inside the open session.
+ * No-op when the rating is unchanged: `content.save` rewrites the whole title
+ * (genres, studios, franchise, relations), which is slow and lock-heavy.
  *
  * @param {object} content - Content document to mutate and save.
  * @param {number|null} oldRating - Previous effective rating.
@@ -1015,6 +1031,7 @@ function syncLegacyUserRating(user, contentId, rating) {
  * @returns {Promise<void>}
  */
 async function applyContentRatingChange(content, oldRating, newRating, session) {
+  if (oldRating === newRating) return
   applyUserRatingDelta(content, oldRating, newRating)
   await content.save({ session })
 }
@@ -1028,9 +1045,9 @@ async function applyContentRatingChange(content, oldRating, newRating, session) 
  */
 export const voteContent = async (req, res) => {
   const session = await startSession()
-  session.startTransaction()
 
   try {
+    await session.startTransaction()
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
       await session.abortTransaction()

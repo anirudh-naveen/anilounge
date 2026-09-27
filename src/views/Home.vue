@@ -1,240 +1,447 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <!--
-  Home.vue — catalog landing view.
+  Home.vue — personal landing view.
 
-  Renders the marketing hero and a trending grid of movies and series from the
-  content store. No search or filter chrome; discovery only.
+  A status feed of the viewer's and friends' watchlist changes (or a sign-up
+  prompt for guests), a release sidebar for watchlist titles that falls back
+  to trending releases, the character of the day, and a forum placeholder.
 -->
 <template>
   <div class="home-page">
-    <!-- Hero -->
-    <section class="hero">
+    <section class="home-intro fade-in">
       <div class="container">
-        <div class="hero-content fade-in">
-          <!-- Title: Headline -->
-          <h1 class="hero-title">
-            Welcome to the
-            <br />
-            <span class="gradient-text">Animation Lounge.</span>
+        <template v-if="authStore.isAuthenticated">
+          <p class="kicker">Your lounge</p>
+          <h1 class="home-title">
+            Welcome back<span v-if="authStore.user?.username"
+              >, <span class="gradient-text">{{ authStore.user.username }}</span></span
+            >.
           </h1>
-          <p class="hero-subtitle">
-            AniLounge is a space filled with passion for animated media - find new favorites, record
-            all you've watched, and connect with people across the globe.
+        </template>
+        <template v-else>
+          <h1 class="home-title">
+            Welcome to the <span class="gradient-text">Animation Lounge.</span>
+          </h1>
+          <p class="home-subtitle">
+            Find new favorites, record all you've watched, and connect with people across the globe.
           </p>
-          <!-- Title: Primary CTA -->
-          <div class="hero-actions">
-            <router-link to="/search" class="btn btn-primary btn-large">
-              Browse the space
-            </router-link>
-          </div>
-        </div>
+        </template>
       </div>
     </section>
 
-    <!-- Catalog -->
-    <section class="featured-section">
-      <div class="container">
-        <h2 class="section-title">Spotlight</h2>
-        <!-- Title: Loading State -->
-        <div v-if="contentStore.isLoading" class="loading-container">
-          <div class="spinner"></div>
-          <p>Loading amazing content...</p>
-        </div>
-        <!-- Title: Content Card -->
-        <div v-else-if="featuredContent.length > 0" class="content-grid">
-          <div
-            v-for="item in featuredContent.slice(0, 8)"
-            :key="item._id"
-            class="content-card poster-frame"
-            @click="viewContentDetails(item)"
-          >
-            <div class="content-poster">
-              <img
-                :src="getPosterUrl(item.posterPath || '')"
-                :alt="getDisplayTitle(item)"
-                @error="handleImageError"
-              />
-              <div
-                class="content-type-badge poster-corner-tag poster-corner-tag-right"
-                :class="getContentTypeBadgeClass(item.contentType)"
+    <div class="container home-layout">
+      <div class="home-main">
+        <!-- Status -->
+        <section class="panel status-panel" data-testid="status-panel">
+          <header class="panel-header">
+            <div>
+              <h2 class="panel-title">Status</h2>
+              <p class="panel-sub">Latest watchlist changes from you and your friends.</p>
+            </div>
+            <div v-if="authStore.isAuthenticated" class="feed-tabs" role="tablist">
+              <button
+                v-for="tab in FEED_TABS"
+                :key="tab.value"
+                type="button"
+                role="tab"
+                class="feed-tab"
+                :class="{ active: feedTab === tab.value }"
+                :aria-selected="feedTab === tab.value"
+                :data-testid="`feed-tab-${tab.value}`"
+                @click="feedTab = tab.value"
               >
-                {{ getCardContentTypeDisplay(item.contentType) }}
-              </div>
-              <AiringBadge :content="item" variant="card" />
+                {{ tab.label }}
+              </button>
             </div>
-            <div class="content-info">
-              <h3 class="content-title">{{ getDisplayTitle(item) }}</h3>
-              <p class="content-overview">{{ truncateText(item.overview, 100) }}</p>
-              <div class="content-genres">
-                <span
-                  v-for="genre in getDisplayGenres(item.genres)?.slice(0, 2)"
-                  :key="genre"
-                  class="genre-tag"
-                >
-                  {{ genre }}
+          </header>
+
+          <div v-if="!authStore.isAuthenticated" class="status-signup" data-testid="status-signup">
+            <ul class="signup-preview" aria-hidden="true">
+              <li v-for="n in 3" :key="n" class="preview-row">
+                <span class="preview-poster"></span>
+                <span class="preview-lines">
+                  <span class="preview-line wide"></span>
+                  <span class="preview-line"></span>
                 </span>
+              </li>
+            </ul>
+            <div class="signup-copy">
+              <h3>Track what you watch</h3>
+              <p>
+                Create a free account to build your watchlist and see what you and your friends are
+                watching.
+              </p>
+              <div class="signup-actions">
+                <router-link to="/register" class="btn btn-primary">Register</router-link>
+                <router-link to="/login" class="btn btn-secondary">Log in</router-link>
               </div>
             </div>
-            <ContentHoverPreview
-              :item="item"
-              :is-authenticated="authStore.isAuthenticated"
-              :in-watchlist="contentStore.isInWatchlist(item._id)"
-            />
+          </div>
+
+          <div v-else-if="activityLoading" class="panel-loading">
+            <div class="spinner"></div>
+          </div>
+
+          <ul v-else-if="visibleActivity.length" class="activity-list">
+            <li
+              v-for="entry in visibleActivity"
+              :key="entry.id"
+              class="activity-item"
+              data-testid="activity-item"
+            >
+              <router-link :to="titleRoute(entry.content)" class="activity-poster">
+                <img
+                  :src="getPosterUrl(entry.content.posterPath)"
+                  :alt="getDisplayTitle(entry.content)"
+                  loading="lazy"
+                  @error="handlePosterError"
+                />
+              </router-link>
+              <div class="activity-body">
+                <p class="activity-text">
+                  <span class="activity-user">
+                    {{ entry.user.isSelf ? 'You' : entry.user.username }}
+                  </span>
+                  {{ describeActivity(entry) }}
+                  <router-link :to="titleRoute(entry.content)" class="activity-title">
+                    {{ getDisplayTitle(entry.content) }}
+                  </router-link>
+                </p>
+                <p class="activity-meta">
+                  <span class="status-chip" :class="`status-${entry.status}`">
+                    {{ getWatchlistStatusLabel(entry.status) }}
+                  </span>
+                  <span v-if="entry.rating" class="activity-rating">★ {{ entry.rating }}/10</span>
+                  <time :datetime="entry.at">{{ timeAgo(entry.at, now) }}</time>
+                </p>
+              </div>
+            </li>
+          </ul>
+
+          <div v-else class="panel-empty" data-testid="activity-empty">
+            <p>{{ emptyActivityCopy }}</p>
+            <router-link v-if="feedTab !== 'friends'" to="/search" class="btn btn-secondary">
+              Find something to watch
+            </router-link>
+          </div>
+        </section>
+
+        <!-- Character of the day -->
+        <section
+          v-if="characterLoading || character"
+          class="panel character-bar"
+          data-testid="character-of-the-day"
+        >
+          <div v-if="characterLoading" class="panel-loading">
+            <div class="spinner"></div>
+          </div>
+          <template v-else-if="character">
+            <router-link :to="characterRoute" class="character-portrait">
+              <img
+                v-if="character.imagePath"
+                :src="getPosterUrl(character.imagePath)"
+                :alt="character.name"
+                referrerpolicy="no-referrer"
+                @error="handlePortraitError"
+              />
+              <span v-else class="portrait-fallback" aria-hidden="true">
+                {{ character.name.charAt(0) }}
+              </span>
+            </router-link>
+            <div class="character-body">
+              <p class="kicker">Character of the day</p>
+              <h2 class="character-name">
+                <router-link :to="characterRoute">{{ character.name }}</router-link>
+              </h2>
+              <p v-if="character.nativeName" class="character-native">{{ character.nativeName }}</p>
+              <p v-if="characterBio" class="character-blurb">{{ characterBio }}</p>
+              <div v-if="characterTitles.length" class="character-titles">
+                <span class="titles-label">Appears in</span>
+                <router-link
+                  v-for="title in characterTitles"
+                  :key="title._id"
+                  :to="titleRoute(title)"
+                  class="title-chip"
+                >
+                  {{ getDisplayTitle(title) }}
+                </router-link>
+              </div>
+            </div>
+          </template>
+        </section>
+      </div>
+
+      <!-- Release updates -->
+      <aside class="home-sidebar">
+        <section class="panel updates-panel" data-testid="updates-panel">
+          <header class="panel-header stacked">
+            <h2 class="panel-title">{{ updatesTitle }}</h2>
+            <p class="panel-sub">{{ updatesSubtitle }}</p>
+          </header>
+
+          <div v-if="updatesLoading" class="panel-loading">
+            <div class="spinner"></div>
+          </div>
+          <template v-else-if="updates.items.length">
+            <div v-for="group in updateGroups" :key="group.kind" class="update-group">
+              <h3 class="group-title">{{ group.label }}</h3>
+              <ul class="update-list">
+                <li
+                  v-for="item in group.items"
+                  :key="item.content._id"
+                  class="update-item"
+                  data-testid="update-item"
+                >
+                  <router-link :to="titleRoute(item.content)" class="update-link">
+                    <img
+                      class="update-poster"
+                      :src="getPosterUrl(item.content.posterPath)"
+                      :alt="getDisplayTitle(item.content)"
+                      loading="lazy"
+                      @error="handlePosterError"
+                    />
+                    <span class="update-body">
+                      <span class="update-title">{{ getDisplayTitle(item.content) }}</span>
+                      <span class="update-when" :class="`when-${item.kind}`">
+                        {{ releaseLabel(item, now) }}
+                      </span>
+                      <span v-if="item.via" class="update-via"
+                        >Related to {{ item.via.title }}</span
+                      >
+                    </span>
+                  </router-link>
+                </li>
+              </ul>
+            </div>
+          </template>
+          <p v-else class="panel-empty">No releases to show right now.</p>
+        </section>
+      </aside>
+    </div>
+
+    <!-- Forum -->
+    <section class="container forum-section">
+      <div class="panel forum-panel" data-testid="forum-placeholder">
+        <header class="panel-header">
+          <div>
+            <h2 class="panel-title">Popular in the Forum</h2>
+            <p class="panel-sub">
+              Reviews, episode threads, and franchise talk will be highlighted here.
+            </p>
+          </div>
+          <span class="soon-badge">Coming soon</span>
+        </header>
+        <div class="forum-grid" aria-hidden="true">
+          <div v-for="n in 3" :key="n" class="forum-card">
+            <span class="preview-line short"></span>
+            <span class="preview-line wide"></span>
+            <span class="preview-line"></span>
+            <span class="forum-card-foot">
+              <span class="preview-dot"></span>
+              <span class="preview-line tiny"></span>
+            </span>
           </div>
         </div>
-        <!-- Title: Empty State -->
-        <div v-else class="error-state">
-          <p>No content found. Please try again later.</p>
-        </div>
+        <router-link to="/forum" class="btn btn-secondary forum-link">Visit the Forum</router-link>
       </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed, nextTick } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useContentStore } from '@/stores/content'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import {
-  getPosterUrl,
-  formatGenres,
-  getCardContentTypeDisplay,
-  getContentTypeBadgeClass,
-  getDetailsRouteName,
-} from '@/services/api'
-import { useToast } from 'vue-toastification'
-import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
-import AiringBadge from '@/components/AiringBadge.vue'
-import type { UnifiedContent } from '@/types/content'
+import { getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
+import type { CatalogEntity, EntityAppearance } from '@/types/content'
+import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'
 import { getDisplayTitle } from '@/utils/titles'
+import { getWatchlistStatusLabel } from '@/utils/watchlist'
+import {
+  characterBlurb,
+  describeActivity,
+  mergeActivity,
+  releaseLabel,
+  timeAgo,
+} from '@/utils/homeFeed'
 
-const router = useRouter()
-const route = useRoute()
-const contentStore = useContentStore()
+type FeedTab = 'all' | 'you' | 'friends'
+type AppearanceTitle = Exclude<EntityAppearance['content'], string | undefined>
+
+const FEED_TABS: { value: FeedTab; label: string }[] = [
+  { value: 'all', label: 'Everyone' },
+  { value: 'you', label: 'You' },
+  { value: 'friends', label: 'Friends' },
+]
+
 const authStore = useAuthStore()
-const toast = useToast()
 
-// Get trending content from unified store
-const featuredContent = computed(() => {
-  // Create a trending score that combines multiple factors
-  const sorted = [...contentStore.allContent].sort((a, b) => {
-    // Calculate trending score: unified score + vote count influence + recency bonus
-    const aScore = (a.unifiedScore || 0) * 0.6 // Base rating weight
-    const aVoteWeight = Math.log10((a.voteCount || 1) + 1) * 0.3 // Vote count influence
-    const aRecencyBonus = getRecencyBonus(a.releaseDate) * 0.1 // Recent content bonus
-    const aTrendingScore = aScore + aVoteWeight + aRecencyBonus
+const now = ref(new Date())
+let clock: ReturnType<typeof setInterval> | undefined
 
-    const bScore = (b.unifiedScore || 0) * 0.6
-    const bVoteWeight = Math.log10((b.voteCount || 1) + 1) * 0.3
-    const bRecencyBonus = getRecencyBonus(b.releaseDate) * 0.1
-    const bTrendingScore = bScore + bVoteWeight + bRecencyBonus
+const feedTab = ref<FeedTab>('all')
+const activity = ref<ActivityFeed>({ personal: [], friends: [], friendCount: 0 })
+const activityLoading = ref(false)
 
-    return bTrendingScore - aTrendingScore
-  })
-  return sorted.slice(0, 8) // Show only 8 trending items
+const updates = ref<ReleaseUpdates>({ source: 'trending', items: [] })
+const updatesLoading = ref(true)
+
+const character = ref<CatalogEntity | null>(null)
+const characterLoading = ref(true)
+
+const visibleActivity = computed(() => {
+  if (feedTab.value === 'you') return activity.value.personal
+  if (feedTab.value === 'friends') return activity.value.friends
+  return mergeActivity(activity.value.personal, activity.value.friends)
 })
 
-// Helper functions
-const getRecencyBonus = (releaseDate: string | Date | undefined) => {
-  if (!releaseDate) return 0
-
-  const release = typeof releaseDate === 'string' ? new Date(releaseDate) : releaseDate
-  const now = new Date()
-  const yearsDiff = now.getFullYear() - release.getFullYear()
-
-  // Give bonus for content released in the last 3 years
-  if (yearsDiff <= 3) {
-    return Math.max(0, 3 - yearsDiff) // 3 points for this year, 2 for last year, 1 for 2 years ago
+const emptyActivityCopy = computed(() => {
+  if (feedTab.value !== 'friends') {
+    return "Nothing here yet. Add a title to your watchlist and it'll show up here."
   }
+  if (!activity.value.friendCount) {
+    return 'No friends yet. Friend activity will appear here once friending opens.'
+  }
+  return "Your friends haven't updated their watchlists yet."
+})
 
-  return 0
-}
+const updatesTitle = computed(() => (updates.value.source === 'watchlist' ? 'Updates' : 'Trending'))
 
-const getDisplayGenres = (genres: Array<{ id?: number; name?: string }> | string[]) => {
-  return formatGenres(genres)
-}
+const updatesSubtitle = computed(() => {
+  if (updates.value.source === 'watchlist')
+    return 'New episodes and upcoming titles from your list.'
+  if (authStore.isAuthenticated) return "Nothing new on your watchlist, so here's what's trending."
+  return "What's airing and premiering soon."
+})
 
-const truncateText = (text: string, maxLength: number) => {
-  if (!text) return ''
-  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
-}
+const updateGroups = computed(() => {
+  const groups: { kind: ReleaseUpdate['kind']; label: string; items: ReleaseUpdate[] }[] = [
+    { kind: 'episode', label: 'New episodes', items: [] },
+    { kind: 'premiere', label: 'Upcoming', items: [] },
+  ]
+  for (const item of updates.value.items) {
+    groups.find((group) => group.kind === item.kind)?.items.push(item)
+  }
+  return groups.filter((group) => group.items.length)
+})
 
-const handleImageError = (event: Event) => {
+const characterRoute = computed(() => ({
+  name: 'CharacterDetails',
+  params: { id: character.value?._id || '' },
+  query: { from: '/' },
+}))
+
+const characterBio = computed(() => characterBlurb(character.value?.about))
+
+const characterTitles = computed(() => {
+  const seen = new Set<string>()
+  const titles: AppearanceTitle[] = []
+  for (const row of character.value?.appearances || []) {
+    const content = row.content
+    if (!content || typeof content !== 'object' || seen.has(content._id)) continue
+    seen.add(content._id)
+    titles.push(content)
+  }
+  return titles.slice(0, 3)
+})
+
+const titleRoute = (content: { _id: string; contentType?: string }) => ({
+  name: getDetailsRouteName({ contentType: content.contentType }),
+  params: { id: content._id },
+  query: { from: '/' },
+})
+
+const handlePosterError = (event: Event) => {
   const img = event.target as HTMLImageElement
-  img.src = '/placeholder-movie.jpg'
+  if (!img.src.endsWith('/placeholder-movie.jpg')) img.src = '/placeholder-movie.jpg'
 }
 
-const viewContentDetails = (item: UnifiedContent) => {
-  // Save current scroll position for home page
-  const scrollKey = 'home-page'
-  contentStore.saveScrollPosition(scrollKey)
-
-  const routeName = getDetailsRouteName(item)
-  router.push({
-    name: routeName,
-    params: { id: item._id },
-    query: { from: route.fullPath },
-  })
+const handlePortraitError = (event: Event) => {
+  ;(event.target as HTMLImageElement).style.visibility = 'hidden'
 }
 
-onMounted(async () => {
+const loadActivity = async () => {
+  if (!authStore.isAuthenticated) return
+  activityLoading.value = true
   try {
-    // Handle scroll position restoration when returning from detail pages
-    const previousPage = route.query.from as string
-    if (previousPage && previousPage.includes('/')) {
-      // We're returning from a detail page, restore scroll position
-      const scrollKey = 'home-page'
-      const restored = contentStore.restoreScrollPosition(scrollKey)
-
-      if (!restored) {
-        nextTick(() => {
-          contentStore.scrollToTop()
-        })
-      }
-    } else {
-      // Normal page load, scroll to top
-      contentStore.scrollToTop()
-    }
-
-    // Load popular content (which includes both movies and series)
-    await contentStore.getPopularContent('all', 20)
-
-    // Load watchlist if user is authenticated (now optimized to skip if already loaded)
-    if (authStore.isAuthenticated) {
-      await contentStore.loadWatchlist()
-    }
+    const response = await homeAPI.getActivity()
+    activity.value = response.data.data as ActivityFeed
   } catch (error) {
-    console.error('Error loading home page data:', error)
-    toast.error('Failed to load content. Please try again.')
+    console.error('Error loading home activity:', error)
+  } finally {
+    activityLoading.value = false
   }
+}
+
+const loadUpdates = async () => {
+  try {
+    const response = await homeAPI.getUpdates()
+    updates.value = response.data.data as ReleaseUpdates
+  } catch (error) {
+    console.error('Error loading release updates:', error)
+  } finally {
+    updatesLoading.value = false
+  }
+}
+
+const loadCharacter = async () => {
+  try {
+    const response = await homeAPI.getCharacterOfTheDay()
+    character.value = (response.data.data?.character as CatalogEntity) || null
+  } catch (error) {
+    console.error('Error loading character of the day:', error)
+  } finally {
+    characterLoading.value = false
+  }
+}
+
+onMounted(() => {
+  window.scrollTo({ top: 0 })
+  clock = setInterval(() => {
+    now.value = new Date()
+  }, 60 * 1000)
+  loadActivity()
+  loadUpdates()
+  loadCharacter()
+})
+
+onUnmounted(() => {
+  if (clock) clearInterval(clock)
 })
 </script>
 
 <style scoped>
 .home-page {
   min-height: 100vh;
+  padding-bottom: 4rem;
 }
 
-.hero {
-  padding: 120px 0 80px;
-  text-align: center;
-  color: var(--text-primary);
-  background: transparent;
-}
-
-.hero-content {
-  max-width: 800px;
+.container {
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 0 20px;
 }
 
-.hero-title {
+.home-intro {
+  padding: 3.5rem 0 2rem;
+}
+
+.kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--coral-primary);
+  margin: 0 0 0.5rem;
+}
+
+.home-title {
   font-family: var(--font-display);
-  font-size: 3.5rem;
+  font-size: 2.75rem;
   font-weight: 650;
-  margin-bottom: 1.5rem;
   line-height: 1.15;
   letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin: 0;
 }
 
 .gradient-text {
@@ -244,30 +451,117 @@ onMounted(async () => {
   background-clip: text;
 }
 
-.hero-subtitle {
-  font-size: 1.25rem;
-  margin-bottom: 2rem;
-  color: var(--text-secondary);
+.home-subtitle {
+  margin: 0.9rem 0 0;
+  max-width: 40rem;
+  font-size: 1.1rem;
   line-height: 1.6;
+  color: var(--text-secondary);
 }
 
-.hero-actions {
-  margin-top: 2rem;
+.home-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(250px, 30%, 340px);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.home-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.home-sidebar {
+  position: sticky;
+  top: 96px;
+}
+
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: var(--shadow-md);
+  padding: 1.5rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.panel-header.stacked {
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.panel-sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.panel-loading {
+  display: flex;
+  justify-content: center;
+  padding: 2.5rem 0;
+}
+
+.panel-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-secondary);
+}
+
+.panel-empty p {
+  margin: 0 0 1rem;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--coral-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  line-height: 1.15;
-  padding: 12px 24px;
-  border-radius: 8px;
-  text-decoration: none;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
   font-weight: 600;
-  transition: all 0.3s ease;
+  text-decoration: none;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
   border: none;
   cursor: pointer;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
 }
 
 .btn-primary {
@@ -276,180 +570,484 @@ onMounted(async () => {
   box-shadow: 0 8px 20px rgba(224, 122, 95, 0.24);
 }
 
-.btn-large {
-  padding: 16px 32px;
-  font-size: 1.1rem;
-}
-
-.btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
-}
-
-.featured-section {
-  padding: 80px 0;
-  background: transparent;
-  position: relative;
-}
-
-.featured-section::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(ellipse at top, rgba(255, 252, 240, 0.85), transparent 62%);
-  z-index: 1;
-}
-
-.featured-section .container {
-  position: relative;
-  z-index: 2;
-}
-
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-.section-title {
-  font-family: var(--font-display);
-  font-size: 2.5rem;
-  font-weight: 650;
-  text-align: center;
-  margin-bottom: 3rem;
+.btn-secondary {
+  background: var(--bg-card);
   color: var(--text-primary);
-  letter-spacing: -0.03em;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
-  margin-bottom: 3rem;
-}
-
-.content-card {
-  position: relative;
-  background: #fff;
-  border-radius: 16px;
-  overflow: visible;
-  box-shadow: var(--shadow-md);
-  transition: all 0.3s ease;
-  cursor: pointer;
   border: 1px solid var(--border-color);
-  z-index: 1;
 }
 
-.content-card:hover {
-  transform: translateY(-8px);
-  box-shadow: var(--shadow-spot), var(--shadow-lg);
-  border-color: var(--coral-primary);
-  z-index: 20;
+.btn-secondary:hover {
+  border-color: var(--border-hover);
 }
 
-.content-poster {
-  position: relative;
-  aspect-ratio: 2/3;
+/* Status */
+.feed-tabs {
+  display: inline-flex;
+  padding: 4px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.feed-tab {
+  border: 0;
+  background: transparent;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.feed-tab.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-item {
+  display: flex;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.activity-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.activity-poster {
+  flex-shrink: 0;
+  width: 52px;
+  height: 74px;
+  border-radius: 8px;
   overflow: hidden;
-  border-radius: 12px 12px 0 0;
+  background: var(--bg-secondary);
 }
 
-.content-poster img {
+.activity-poster img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
 }
 
-.content-type-badge {
-  z-index: 2;
+.activity-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
 }
 
-.content-card:hover .content-poster img {
-  transform: scale(1.05);
+.activity-text {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
-.content-info {
-  padding: 1.5rem;
-  border-radius: 0 0 12px 12px;
+.activity-user {
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
-.content-title {
-  font-size: 1.25rem;
+.activity-title {
   font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: var(--text-ink);
-  line-height: 1.3;
+  color: var(--text-primary);
+  text-decoration: none;
 }
 
-.content-overview {
-  color: #666;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  margin-bottom: 1rem;
+.activity-title:hover {
+  color: var(--coral-deep);
 }
 
-.content-genres {
+.activity-meta {
+  margin: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
-.genre-tag {
-  background: rgba(224, 122, 95, 0.14);
-  color: var(--coral-deep);
-  padding: 4px 8px;
+.status-chip {
+  padding: 2px 8px;
   border-radius: 999px;
+  font-weight: 600;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.status-chip.status-watching {
+  background: rgba(61, 139, 217, 0.12);
+  color: var(--tv-badge);
+}
+
+.status-chip.status-completed {
+  background: rgba(43, 187, 173, 0.14);
+  color: #1d8a7f;
+}
+
+.status-chip.status-dropped {
+  background: rgba(217, 74, 74, 0.1);
+  color: var(--movie-badge);
+}
+
+.status-chip.status-plan_to_watch {
+  background: rgba(232, 163, 23, 0.14);
+  color: #a8750f;
+}
+
+.activity-rating {
+  font-weight: 600;
+  color: var(--gold-accent);
+}
+
+.status-signup {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.signup-preview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  opacity: 0.7;
+}
+
+.preview-row {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.preview-poster {
+  width: 40px;
+  height: 56px;
+  border-radius: 6px;
+  background: linear-gradient(160deg, rgba(224, 122, 95, 0.25), rgba(43, 187, 173, 0.2));
+}
+
+.preview-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.preview-line {
+  display: block;
+  height: 9px;
+  width: 55%;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+}
+
+.preview-line.wide {
+  width: 85%;
+}
+
+.preview-line.short {
+  width: 35%;
+}
+
+.preview-line.tiny {
+  width: 25%;
+}
+
+.signup-copy h3 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  margin: 0 0 0.5rem;
+  color: var(--text-primary);
+}
+
+.signup-copy p {
+  margin: 0 0 1.1rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.signup-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Character of the day */
+.character-bar {
+  display: flex;
+  gap: 1.5rem;
+  align-items: stretch;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(224, 122, 95, 0.12), transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(43, 187, 173, 0.1), transparent 50%), var(--bg-card);
+}
+
+.character-bar .panel-loading {
+  width: 100%;
+}
+
+.character-portrait {
+  flex-shrink: 0;
+  width: 132px;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.character-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.portrait-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  color: var(--text-muted);
+}
+
+.character-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.character-name {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.character-name a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.character-name a:hover {
+  color: var(--coral-deep);
+}
+
+.character-native {
+  margin: 0.15rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.character-blurb {
+  margin: 0.65rem 0 0;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.character-titles {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.titles-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-right: 0.2rem;
+}
+
+.title-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  background: rgba(224, 122, 95, 0.12);
+  color: var(--coral-deep);
+}
+
+.title-chip:hover {
+  background: rgba(224, 122, 95, 0.2);
+}
+
+/* Release updates */
+.update-group + .update-group {
+  margin-top: 1.25rem;
+}
+
+.group-title {
+  margin: 0 0 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.update-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.update-link {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.4rem;
+  margin: 0 -0.4rem;
+  border-radius: 10px;
+  text-decoration: none;
+  transition: background 0.2s ease;
+}
+
+.update-link:hover {
+  background: var(--bg-hover);
+}
+
+.update-poster {
+  flex-shrink: 0;
+  width: 42px;
+  height: 60px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--bg-secondary);
+}
+
+.update-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.update-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.update-when {
   font-size: 0.8rem;
   font-weight: 600;
 }
 
-.loading-container {
-  text-align: center;
-  padding: 4rem 0;
+.update-when.when-episode {
+  color: var(--teal-primary);
 }
 
-.loading-container p {
-  color: var(--text-secondary);
-  font-size: 1.1rem;
+.update-when.when-premiere {
+  color: var(--upcoming-color);
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid var(--border-color);
-  border-top: 4px solid var(--coral-primary);
+.update-via {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Forum */
+.forum-section {
+  margin-top: 1.5rem;
+}
+
+.soon-badge {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--navbar-primary);
+  color: var(--tan-light);
+}
+
+.forum-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.forum-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.1rem;
+  border-radius: 14px;
+  border: 1px dashed var(--border-color);
+  background: var(--bg-primary);
+}
+
+.forum-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.preview-dot {
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 1rem;
+  background: var(--bg-secondary);
 }
 
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.error-state {
-  text-align: center;
-  padding: 4rem 0;
-  color: #666;
+.forum-link {
+  margin-top: 1.25rem;
 }
 
 .fade-in {
-  animation: fadeIn 1s ease-in;
+  animation: fadeIn 0.6s ease-out;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -457,32 +1055,60 @@ onMounted(async () => {
   }
 }
 
-@media (max-width: 1200px) {
-  .content-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.25rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .hero-title {
-    font-size: 2.5rem;
-  }
-
-  .content-grid {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 960px) {
+  .home-layout {
     gap: 1rem;
   }
 
-  .stats-grid {
+  .home-main {
+    gap: 1rem;
+  }
+
+  .panel {
+    padding: 1.15rem;
+  }
+
+  .panel-header {
+    flex-direction: column;
+  }
+
+  .status-signup {
     grid-template-columns: 1fr;
+  }
+
+  .forum-section {
+    margin-top: 1rem;
   }
 }
 
-@media (max-width: 480px) {
-  .content-grid {
+@media (max-width: 640px) {
+  .home-layout {
     grid-template-columns: 1fr;
-    gap: 1rem;
+  }
+
+  .home-sidebar {
+    position: static;
+  }
+
+  .home-intro {
+    padding: 2.25rem 0 1.5rem;
+  }
+
+  .home-title {
+    font-size: 2rem;
+  }
+
+  .character-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .character-portrait {
+    width: 110px;
+  }
+
+  .forum-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -7,7 +7,7 @@ import { query } from '../../config/postgres.js'
 import { compileMongoFilter } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId } from '../db/ids.js'
-import Content, { attachContentRelations, mapContentRow } from './Content.js'
+import { attachContentRelations, mapContentRow } from './Content.js'
 
 export const DEMO_USER_EMAIL = 'demo@findanimation.com'
 
@@ -53,6 +53,7 @@ async function loadUserChildren(doc) {
       status: row.status,
       rating: rating ? Number(rating.score) : null,
       currentEpisode: row.current_episode,
+      previousEpisode: row.previous_episode ?? 0,
       currentSeason: row.current_season,
       notes: row.notes,
       addedAt: row.added_at,
@@ -207,71 +208,105 @@ User.prototype.save = async function save() {
     ],
   )
 
+  const watchlistRows = firstByContentId(
+    (this.watchlist || []).map((item) => ({
+      content_id: asId(item.content),
+      status: item.status || 'plan_to_watch',
+      current_episode: item.currentEpisode ?? 0,
+      previous_episode: item.previousEpisode ?? 0,
+      current_season: item.currentSeason ?? 1,
+      notes: item.notes || null,
+      added_at: item.addedAt || new Date(),
+      updated_at: item.updatedAt || new Date(),
+    })),
+  )
   await query('DELETE FROM watchlist WHERE user_id = $1', [this._id])
-  for (const item of this.watchlist || []) {
-    const contentId = asId(item.content)
-    if (!contentId) continue
-    const resolved = await Content.findById(contentId)
-    if (!resolved) continue
+  if (watchlistRows.length) {
     await query(
       `INSERT INTO watchlist (
-         user_id, content_id, status, current_episode, current_season, notes, added_at, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         user_id, content_id, status, current_episode, previous_episode, current_season, notes,
+         added_at, updated_at
+       )
+       SELECT $1, w.id, r.status, r.current_episode, r.previous_episode, r.current_season, r.notes,
+              r.added_at, r.updated_at
+       FROM jsonb_to_recordset($2::jsonb) AS r(
+         content_id text, status text, current_episode int, previous_episode int,
+         current_season int, notes text, added_at timestamptz, updated_at timestamptz
+       )
+       JOIN works w ON w.id::text = r.content_id
        ON CONFLICT (user_id, content_id) DO NOTHING`,
-      [
-        this._id,
-        resolved._id,
-        item.status || 'plan_to_watch',
-        item.currentEpisode ?? 0,
-        item.currentSeason ?? 1,
-        item.notes || null,
-        item.addedAt || new Date(),
-        item.updatedAt || new Date(),
-      ],
+      [this._id, JSON.stringify(watchlistRows)],
     )
   }
 
-  await query('DELETE FROM ratings WHERE user_id = $1', [this._id])
+  // Legacy `ratings` entries override watchlist ratings for the same title.
+  const ratingRows = new Map()
   for (const item of this.watchlist || []) {
     const contentId = asId(item.content)
     if (!contentId || item.rating == null) continue
-    const resolved = await Content.findById(contentId)
-    if (!resolved) continue
-    await query(
-      `INSERT INTO ratings (user_id, content_id, score, rated_at)
-       VALUES ($1,$2,$3,$4)
-       ON CONFLICT (user_id, content_id) DO UPDATE SET score = EXCLUDED.score`,
-      [this._id, resolved._id, item.rating, item.updatedAt || new Date()],
-    )
+    ratingRows.set(contentId, {
+      content_id: contentId,
+      score: item.rating,
+      review: null,
+      rated_at: item.updatedAt || new Date(),
+    })
   }
   for (const item of this.ratings || []) {
     const contentId = asId(item.content)
     if (!contentId || item.rating == null) continue
-    const resolved = await Content.findById(contentId)
-    if (!resolved) continue
+    const previous = ratingRows.get(contentId)
+    ratingRows.set(contentId, {
+      content_id: contentId,
+      score: item.rating,
+      review: item.review || previous?.review || null,
+      rated_at: previous ? previous.rated_at : item.watchedAt || new Date(),
+    })
+  }
+  await query('DELETE FROM ratings WHERE user_id = $1', [this._id])
+  if (ratingRows.size) {
     await query(
       `INSERT INTO ratings (user_id, content_id, score, review, rated_at)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (user_id, content_id) DO UPDATE SET
-         score = EXCLUDED.score,
-         review = COALESCE(EXCLUDED.review, ratings.review)`,
-      [this._id, resolved._id, item.rating, item.review || null, item.watchedAt || new Date()],
+       SELECT $1, w.id, r.score, r.review, r.rated_at
+       FROM jsonb_to_recordset($2::jsonb) AS r(
+         content_id text, score numeric, review text, rated_at timestamptz
+       )
+       JOIN works w ON w.id::text = r.content_id`,
+      [this._id, JSON.stringify([...ratingRows.values()])],
     )
   }
 
+  const favoriteRows = firstByContentId(
+    (this.favoriteEntities || []).map((item) => ({
+      content_id: asId(item.entity),
+      added_at: item.addedAt || new Date(),
+    })),
+  )
   await query('DELETE FROM favorites WHERE user_id = $1', [this._id])
-  for (const item of this.favoriteEntities || []) {
-    const entityId = asId(item.entity)
-    if (!entityId) continue
+  if (favoriteRows.length) {
     await query(
       `INSERT INTO favorites (user_id, content_id, added_at)
-       VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-      [this._id, entityId, item.addedAt || new Date()],
+       SELECT $1, r.content_id::uuid, r.added_at
+       FROM jsonb_to_recordset($2::jsonb) AS r(content_id text, added_at timestamptz)
+       ON CONFLICT DO NOTHING`,
+      [this._id, JSON.stringify(favoriteRows)],
     )
   }
 
   this.$isNew = false
   return this
+}
+
+/**
+ * Drop rows without a `content_id` and keep the first row per id.
+ * @param {Array<{ content_id: string }>} rows
+ * @returns {Array<{ content_id: string }>}
+ */
+function firstByContentId(rows) {
+  const byId = new Map()
+  for (const row of rows) {
+    if (row.content_id && !byId.has(row.content_id)) byId.set(row.content_id, row)
+  }
+  return [...byId.values()]
 }
 
 async function execUserFind(filter, q) {
