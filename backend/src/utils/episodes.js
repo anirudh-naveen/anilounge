@@ -98,6 +98,28 @@ export function mapMalEpisode(episode, index) {
 }
 
 /**
+ * Map one TMDB season summary (from `/tv/{id}`'s `seasons`). Season 0 (specials) is dropped.
+ * @param {object} season
+ * @returns {{ seasonNumber: number, name: string, overview: string, posterPath: string, airDate: string | null, episodeCount: number, voteAverage: number | null } | null}
+ */
+export function mapTmdbSeason(season) {
+  if (!season || typeof season !== 'object') return null
+  const seasonNumber = Number(season.season_number)
+  if (!Number.isFinite(seasonNumber) || seasonNumber < 1) return null
+  const episodeCount = Number(season.episode_count)
+  const voteAverage = Number(season.vote_average)
+  return {
+    seasonNumber,
+    name: asText(season.name) || `Season ${seasonNumber}`,
+    overview: asText(season.overview),
+    posterPath: asText(season.poster_path),
+    airDate: asText(season.air_date) || null,
+    episodeCount: Number.isFinite(episodeCount) && episodeCount > 0 ? episodeCount : 0,
+    voteAverage: Number.isFinite(voteAverage) && voteAverage > 0 ? voteAverage : null,
+  }
+}
+
+/**
  * Season numbers from a TMDB TV document, skipping season 0 (specials/extras).
  * @param {object} [tvDetails]
  * @param {number} [fallbackSeasonCount]

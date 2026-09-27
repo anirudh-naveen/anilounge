@@ -369,13 +369,14 @@ export const tracksEpisodes = (item: {
 
 /**
  * Vue route name for a detail page; specials use `MovieDetails`.
- * @param item - Object with a `contentType`.
- * @returns `'TVShowDetails'` or `'MovieDetails'`.
+ * @param item - Object with a `contentType` or `entityType`.
+ * @returns The title, character, voice-actor, or studio details route.
  */
 export const getDetailsRouteName = (item: { contentType?: string; entityType?: string }) => {
   const kind = item.entityType || item.contentType
   if (kind === 'character') return 'CharacterDetails'
   if (kind === 'voice_actor') return 'VoiceActorDetails'
+  if (kind === 'studio') return 'StudioDetails'
   return item.contentType === 'tv' ? 'TVShowDetails' : 'MovieDetails'
 }
 

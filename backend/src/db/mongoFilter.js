@@ -2,7 +2,8 @@
  * Compile a subset of Mongo filters used by this API into parameterized SQL.
  */
 
-import { asId } from './ids.js'
+import { asId, isUuid } from './ids.js'
+import { kindFromEntityType, mapMalStatusFilterValue } from './kinds.js'
 
 const CONTENT_COLUMNS = {
   title: 'c.title',
@@ -14,12 +15,12 @@ const CONTENT_COLUMNS = {
   posterPath: 'c.poster_path',
   backdropPath: 'c.backdrop_path',
   releaseDate: 'c.release_date',
-  lastAirDate: 'c.last_air_date',
   runtime: 'c.runtime',
   episodeCount: 'c.episode_count',
   seasonCount: 'c.season_count',
   tmdbId: 'c.tmdb_id',
   malId: 'c.mal_id',
+  anilistId: 'c.anilist_id',
   voteAverage: 'c.vote_average',
   voteCount: 'c.vote_count',
   popularity: 'c.popularity',
@@ -27,36 +28,38 @@ const CONTENT_COLUMNS = {
   userRatingAverage: 'c.user_rating_average',
   userRatingCount: 'c.user_rating_count',
   malScore: 'c.mal_score',
-  malScoredBy: 'c.mal_scored_by',
-  malRank: 'c.mal_rank',
-  malStatus: 'c.mal_status',
-  malEpisodes: 'c.mal_episodes',
-  malMediaType: 'c.mal_media_type',
-  malSource: 'c.mal_source',
-  malRating: 'c.mal_rating',
-  nextEpisodeAirDate: 'c.next_episode_air_date',
-  startSeasonYear: 'c.start_season_year',
+  malScoredBy: 'c.mal_votes',
+  malEpisodes: 'c.episode_count',
+  nextEpisodeAirDate: 'c.next_episode_at',
+  startSeasonYear: 'c.start_year',
   startSeason: 'c.start_season',
-  characterSyncAt: 'c.character_sync_at',
-  internalId: 'c.internal_id',
 }
 
 const ENTITY_COLUMNS = {
-  entityType: 'e.entity_type',
   name: 'e.name',
-  englishName: 'e.english_name',
+  englishName: 'COALESCE(ch.english_name, v.english_name)',
   nativeName: 'e.native_name',
   about: 'e.about',
   imagePath: 'e.image_path',
   malId: 'e.mal_id',
   tmdbId: 'e.tmdb_id',
+  anilistId: 'e.anilist_id',
   favoritesCount: 'e.favorites_count',
 }
 
 const USER_COLUMNS = {
   username: 'u.username',
   email: 'u.email',
-  isDemoAccount: 'u.is_demo_account',
+  isDemoAccount: 'u.is_demo',
+}
+
+/**
+ * SQL twin of `titleKey` in `utils/titles.js`: NFKC, lowercase, no whitespace.
+ * @param {string} sqlCol
+ * @returns {string}
+ */
+export function titleKeySql(sqlCol) {
+  return `regexp_replace(lower(normalize(${sqlCol}, NFKC)), '\\s', '', 'g')`
 }
 
 /**
@@ -122,60 +125,74 @@ function tableConfig(table) {
  * @returns {string}
  */
 function compileRelation(table, field, condition, ctx) {
-  if (table !== 'content' && field !== 'alternativeNames' && field !== 'appearances.content') {
-    if (field !== 'alternativeNames') return 'TRUE'
+  if (
+    table !== 'content' &&
+    field !== 'alternativeNames' &&
+    field !== 'appearances.content'
+  ) {
+    return 'TRUE'
+  }
+
+  if (field === 'appearances.content') {
+    const wanted =
+      condition && typeof condition === 'object' && !Array.isArray(condition) && condition.$in
+        ? condition.$in
+        : [condition]
+    const workIds = [...new Set(wanted.map((value) => asId(value)).filter(isUuid))]
+    if (!workIds.length) return 'FALSE'
+    // Start from the works (indexed work_id) rather than probing every person row.
+    const works = `ANY(${pushParam(ctx, workIds)}::uuid[])`
+    return `e.id IN (
+      SELECT a.character_id FROM appearances a WHERE a.work_id = ${works}
+      UNION ALL
+      SELECT vc.voice_id FROM appearances a
+      JOIN voice_credits vc ON vc.appearance_id = a.id
+      WHERE a.work_id = ${works}
+      UNION ALL
+      SELECT sc.studio_id FROM studio_credits sc WHERE sc.work_id = ${works}
+    )`
   }
 
   if (field === 'franchise') {
     const p = pushParam(ctx, condition)
     return `EXISTS (
       SELECT 1 FROM franchise_members fm
-      JOIN franchises f ON f.id = fm.franchise_id
-      WHERE fm.content_id = c.id AND f.name = ${p}
+      JOIN content f ON f.id = fm.franchise_id
+      WHERE fm.member_id = c.id AND f.name = ${p}
     )`
   }
 
   if (field === 'genres' || field === 'genres.name') {
-    return compileExists(ctx, 'content_genres', 'cg', 'content_id', 'name', condition, 'c.id')
+    if (
+      condition &&
+      typeof condition === 'object' &&
+      !(condition instanceof Date) &&
+      (condition.$exists === false || condition.$size === 0)
+    ) {
+      return `NOT EXISTS (SELECT 1 FROM content_genres cg WHERE cg.content_id = c.id)`
+    }
+    const inner = compileLeaf('g.name', condition?.$in ? { $in: condition.$in } : condition, ctx)
+    return `EXISTS (
+      SELECT 1 FROM content_genres cg
+      JOIN genres g ON g.id = cg.genre_id
+      WHERE cg.content_id = c.id AND ${inner}
+    )`
   }
-  if (field === 'studios') {
-    return compileExists(ctx, 'content_studio_names', 'cs', 'content_id', 'name', condition, 'c.id')
-  }
-  if (field === 'productionCompanies') {
-    return compileExists(
-      ctx,
-      'content_production_companies',
-      'cp',
-      'content_id',
-      'name',
-      condition,
-      'c.id',
-    )
+  if (field === 'studios' || field === 'productionCompanies') {
+    return `EXISTS (
+      SELECT 1 FROM studio_credits sc
+      JOIN content st ON st.id = sc.studio_id
+      WHERE sc.work_id = c.id AND ${compileLeaf('st.name', condition, ctx)}
+    )`
   }
   if (field === 'alternativeTitles') {
-    return compileExists(
-      ctx,
-      'content_alternative_titles',
-      'ca',
-      'content_id',
-      'title',
-      condition,
-      'c.id',
-    )
+    return compileExists(ctx, 'content_akas', 'ca', 'content_id', 'name', condition, 'c.id')
   }
   if (field === 'originCountries') {
-    return compileExists(
-      ctx,
-      'content_origin_countries',
-      'cc',
-      'content_id',
-      'country_code',
-      condition,
-      'c.id',
-    )
+    return compileLeaf('c.origin_country', condition, ctx)
   }
   if (field === 'alternativeNames') {
-    return compileExists(ctx, 'entity_alternative_names', 'en', 'entity_id', 'name', condition, 'e.id')
+    return compileExists(ctx, 'content_akas', 'en', 'content_id', 'name', condition, 'e.id')
   }
   return 'TRUE'
 }
@@ -218,6 +235,10 @@ function compileLeaf(sqlCol, condition, ctx) {
     return `${sqlCol} ILIKE ${p} ESCAPE '\\'`
   }
 
+  if (condition && typeof condition === 'object' && typeof condition.$titleKey === 'string') {
+    return `${titleKeySql(sqlCol)} = ${pushParam(ctx, condition.$titleKey)}`
+  }
+
   if (condition && typeof condition === 'object' && !(condition instanceof Date) && !Array.isArray(condition)) {
     const parts = []
     if (condition.$exists === false || condition.$size === 0) {
@@ -239,7 +260,7 @@ function compileLeaf(sqlCol, condition, ctx) {
     }
     if (condition.$nin) {
       const values = condition.$nin.map((value) => asId(value))
-      parts.push(`NOT (${sqlCol} = ANY(${pushParam(ctx, values)}))`)
+      parts.push(`(${sqlCol} = ANY(${pushParam(ctx, values)})) IS NOT TRUE`)
     }
     if (condition.$gt != null) parts.push(`${sqlCol} > ${pushParam(ctx, condition.$gt)}`)
     if (condition.$gte != null) parts.push(`${sqlCol} >= ${pushParam(ctx, condition.$gte)}`)
@@ -263,21 +284,28 @@ function compileNode(table, filter, ctx) {
   if (!filter || typeof filter !== 'object' || Object.keys(filter).length === 0) return 'TRUE'
   const { alias, columns } = tableConfig(table)
 
-  if (Array.isArray(filter.$and)) {
-    return filter.$and.map((part) => `(${compileNode(table, part, ctx)})`).join(' AND ') || 'TRUE'
-  }
-  if (Array.isArray(filter.$or)) {
-    return filter.$or.map((part) => `(${compileNode(table, part, ctx)})`).join(' OR ') || 'TRUE'
-  }
-
   const parts = []
   for (const [field, condition] of Object.entries(filter)) {
-    if (field === '$and' || field === '$or') {
-      parts.push(compileNode(table, { [field]: condition }, ctx))
+    if (field === '$and' && Array.isArray(condition)) {
+      parts.push(condition.map((part) => `(${compileNode(table, part, ctx)})`).join(' AND ') || 'TRUE')
+      continue
+    }
+    if (field === '$or' && Array.isArray(condition)) {
+      parts.push(
+        `(${condition.map((part) => `(${compileNode(table, part, ctx)})`).join(' OR ') || 'TRUE'})`,
+      )
       continue
     }
     if (field === '_id' || field === 'id') {
       parts.push(compileId(alias, condition, ctx))
+      continue
+    }
+    if (field === 'malStatus') {
+      parts.push(compileLeaf('c.airing_status', remapCondition(condition, mapMalStatusFilterValue), ctx))
+      continue
+    }
+    if (field === 'entityType') {
+      parts.push(compileLeaf('e.kind', remapCondition(condition, kindFromEntityType), ctx))
       continue
     }
     if (
@@ -287,7 +315,8 @@ function compileNode(table, filter, ctx) {
       field === 'productionCompanies' ||
       field === 'alternativeTitles' ||
       field === 'originCountries' ||
-      field === 'alternativeNames'
+      field === 'alternativeNames' ||
+      field === 'appearances.content'
     ) {
       parts.push(compileRelation(table, field, condition, ctx))
       continue
@@ -309,17 +338,17 @@ function compileNode(table, filter, ctx) {
  * @returns {string}
  */
 function compileId(alias, condition, ctx) {
-  const idSql = (param) => `(${alias}.id::text = ${param} OR ${alias}.mongo_id = ${param})`
+  const idSql = (param) => `${alias}.id::text = ${param}`
   if (condition && typeof condition === 'object' && !Array.isArray(condition) && !(condition instanceof Date)) {
     if (condition.$in) {
       const values = condition.$in.map((value) => asId(value))
       const p = pushParam(ctx, values)
-      return `(${alias}.id::text = ANY(${p}) OR ${alias}.mongo_id = ANY(${p}))`
+      return `${alias}.id::text = ANY(${p})`
     }
     if (condition.$nin) {
       const values = condition.$nin.map((value) => asId(value))
       const p = pushParam(ctx, values)
-      return `NOT (${alias}.id::text = ANY(${p}) OR ${alias}.mongo_id = ANY(${p}))`
+      return `NOT (${alias}.id::text = ANY(${p}))`
     }
     if (condition.$ne) {
       const p = pushParam(ctx, asId(condition.$ne))
@@ -328,6 +357,23 @@ function compileId(alias, condition, ctx) {
   }
   const p = pushParam(ctx, asId(condition))
   return idSql(p)
+}
+
+/**
+ * @param {unknown} condition
+ * @param {(value: unknown) => string} mapper
+ * @returns {unknown}
+ */
+function remapCondition(condition, mapper) {
+  if (condition && typeof condition === 'object' && !Array.isArray(condition) && !(condition instanceof Date)) {
+    const next = { ...condition }
+    if (next.$in) next.$in = next.$in.map(mapper)
+    if (next.$nin) next.$nin = next.$nin.map(mapper)
+    if (next.$eq != null) next.$eq = mapper(next.$eq)
+    if (next.$ne != null) next.$ne = mapper(next.$ne)
+    return next
+  }
+  return mapper(condition)
 }
 
 /**
@@ -343,13 +389,13 @@ export function compileMongoFilter(filter = {}, table = 'content') {
 
 const SORT_COLUMNS = {
   ...CONTENT_COLUMNS,
-  favoritesCount: 'e.favorites_count',
+  favoritesCount: '(SELECT count(*) FROM favorites f WHERE f.content_id = e.id)',
   name: 'e.name',
   createdAt: 'created_at',
   popularity: 'c.popularity',
   unifiedScore: 'c.unified_score',
   releaseDate: 'c.release_date',
-  nextEpisodeAirDate: 'c.next_episode_air_date',
+  nextEpisodeAirDate: 'c.next_episode_at',
   _id: 'c.id',
 }
 
@@ -378,7 +424,7 @@ export function compileSort(sort, table = 'content') {
     }
     if (field === 'hasScheduleDate') {
       if ('nextEpisodeAirDate' in sort) {
-        parts.push(`(c.next_episode_air_date IS NOT NULL) ${dir}`)
+        parts.push(`(c.next_episode_at IS NOT NULL) ${dir}`)
       } else {
         parts.push(`(c.release_date IS NOT NULL) ${dir}`)
       }

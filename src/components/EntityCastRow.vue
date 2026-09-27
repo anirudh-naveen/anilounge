@@ -45,7 +45,7 @@ import type { CatalogEntity } from '@/types/content'
 import { getDetailsRouteName, getPosterUrl } from '@/services/api'
 import {
   appearanceForContent,
-  cleanCharacterName,
+  canonicalCharacterName,
   displayPersonName,
   highlightedCharacters,
 } from '@/utils/entities'
@@ -72,7 +72,7 @@ const overflowCount = computed(() => Math.max(0, props.items.length - highlighte
 const displayName = (entity: CatalogEntity) =>
   entity.entityType === 'voice_actor'
     ? displayPersonName(entity.name)
-    : cleanCharacterName(entity.name) || entity.name
+    : canonicalCharacterName(entity.name) || entity.name
 
 const roleFor = (entity: CatalogEntity) => {
   if (!props.showRole) return ''
