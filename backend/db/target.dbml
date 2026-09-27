@@ -2,7 +2,7 @@
 // `content` is the shared id. Subtype tables are disjoint: a row is exactly
 // one of movie / series / special / franchise / character / voice / studio.
 
-Enum content_kind {
+Enum title_kind {
   movie
   series
   special

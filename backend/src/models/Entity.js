@@ -29,47 +29,77 @@ function mapEntityRow(row) {
   }
 }
 
-async function loadEntityChildren(doc) {
+/**
+ * Aliases, appearances, and studio credits for many entities in three queries.
+ * @param {object[]} docs
+ * @returns {Promise<object[]>}
+ */
+async function loadEntityChildren(docs) {
+  if (!docs.length) return docs
+  const ids = docs.map((doc) => doc._id)
   const [names, appearances, studioWorks] = await Promise.all([
-    query('SELECT name FROM content_akas WHERE content_id = $1', [doc._id]),
+    query('SELECT content_id, name FROM content_akas WHERE content_id = ANY($1::uuid[])', [ids]),
     query(
-      `SELECT a.*, json_agg(
+      `WITH owners AS (
+         SELECT a.id AS appearance_id, a.character_id AS owner_id
+         FROM appearances a
+         WHERE a.character_id = ANY($1::uuid[])
+         UNION
+         SELECT v.appearance_id, v.voice_id
+         FROM voice_credits v
+         WHERE v.voice_id = ANY($1::uuid[])
+       )
+       SELECT o.owner_id, a.*, json_agg(
          json_build_object(
            'name', vc.name,
            'language', v.language,
            'entity', v.voice_id
          )
        ) FILTER (WHERE v.id IS NOT NULL) AS voice_actors
-       FROM appearances a
+       FROM owners o
+       JOIN appearances a ON a.id = o.appearance_id
        LEFT JOIN voice_credits v ON v.appearance_id = a.id
        LEFT JOIN content vc ON vc.id = v.voice_id
-       WHERE a.character_id = $1 OR EXISTS (
-         SELECT 1 FROM voice_credits vc2 WHERE vc2.appearance_id = a.id AND vc2.voice_id = $1
-       )
-       GROUP BY a.id`,
-      [doc._id],
+       GROUP BY o.owner_id, a.id`,
+      [ids],
     ),
-    query('SELECT work_id FROM studio_credits WHERE studio_id = $1', [doc._id]),
+    query('SELECT studio_id, work_id FROM studio_credits WHERE studio_id = ANY($1::uuid[])', [ids]),
   ])
-  doc.alternativeNames = names.rows.map((row) => row.name)
-  if (doc.entityType === 'studio') {
-    doc.appearances = studioWorks.rows.map((row) => ({
+  const namesById = groupRows(names.rows, 'content_id')
+  const appsById = groupRows(appearances.rows, 'owner_id')
+  const studioById = groupRows(studioWorks.rows, 'studio_id')
+  for (const doc of docs) {
+    const id = String(doc._id)
+    doc.alternativeNames = (namesById.get(id) || []).map((row) => row.name)
+    if (doc.entityType === 'studio') {
+      doc.appearances = (studioById.get(id) || []).map((row) => ({
+        content: row.work_id,
+        character: null,
+        role: 'Supporting',
+        importance: 0,
+        voiceActors: [],
+      }))
+      continue
+    }
+    doc.appearances = (appsById.get(id) || []).map((row) => ({
       content: row.work_id,
-      character: null,
-      role: 'Supporting',
-      importance: 0,
-      voiceActors: [],
+      character: row.character_id,
+      role: appearanceRoleToApi(row.role),
+      importance: row.importance,
+      voiceActors: row.voice_actors || [],
     }))
-    return doc
   }
-  doc.appearances = appearances.rows.map((row) => ({
-    content: row.work_id,
-    character: row.character_id,
-    role: appearanceRoleToApi(row.role),
-    importance: row.importance,
-    voiceActors: row.voice_actors || [],
-  }))
-  return doc
+  return docs
+}
+
+function groupRows(rows, key) {
+  const map = new Map()
+  for (const row of rows) {
+    const id = String(row[key])
+    if (!map.has(id)) map.set(id, [])
+    map.get(id).push(row)
+  }
+  return map
 }
 
 function Entity(data = {}, options = {}) {
@@ -155,47 +185,99 @@ function pick(doc, select) {
   return out
 }
 
-async function workExists(workId) {
-  const id = asId(workId)
-  if (!id) return false
-  const { rows } = await query(
-    `SELECT 1 FROM content WHERE id::text = $1 AND kind IN ('movie', 'series', 'special')`,
-    [id],
-  )
-  return Boolean(rows[0])
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isUuid(value) {
+  return typeof value === 'string' && UUID_SHAPE.test(value)
 }
 
-async function upsertAppearance(workId, characterId, role, importance) {
-  const { rows } = await query(
+/**
+ * Upsert many (work, character) appearances in one statement. Rows whose work
+ * is not watchable content or whose character row is missing are skipped.
+ * @param {Array<{ workId: string, characterId: string, role?: string, importance?: number }>} rows
+ * @returns {Promise<Map<string, string>>} `${workId}:${characterId}` → appearance id
+ */
+async function upsertAppearances(rows) {
+  const byKey = new Map()
+  for (const row of rows) {
+    if (!isUuid(row.workId) || !isUuid(row.characterId)) continue
+    const key = `${row.workId}:${row.characterId}`
+    const existing = byKey.get(key)
+    if (!existing || (Number(row.importance) || 0) > (Number(existing.importance) || 0)) {
+      byKey.set(key, row)
+    }
+  }
+  const list = [...byKey.values()]
+  const ids = new Map()
+  if (!list.length) return ids
+  const { rows: saved } = await query(
     `INSERT INTO appearances (id, work_id, character_id, role, importance)
-     VALUES ($1,$2,$3,$4,$5)
+     SELECT gen_random_uuid(), t.work_id, t.character_id, t.role, t.importance
+     FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::int[])
+       AS t(work_id, character_id, role, importance)
+     JOIN content w ON w.id = t.work_id AND w.kind IN ('movie', 'series', 'special')
+     JOIN characters ch ON ch.content_id = t.character_id
      ON CONFLICT (work_id, character_id) DO UPDATE SET
        role = EXCLUDED.role,
        importance = GREATEST(appearances.importance, EXCLUDED.importance)
-     RETURNING id`,
-    [crypto.randomUUID(), workId, characterId, appearanceRole(role), importance || 0],
+     RETURNING id, work_id::text, character_id::text`,
+    [
+      list.map((row) => row.workId),
+      list.map((row) => row.characterId),
+      list.map((row) => appearanceRole(row.role)),
+      list.map((row) => Math.round(Number(row.importance) || 0)),
+    ],
   )
-  return rows[0]?.id
+  for (const row of saved) ids.set(`${row.work_id}:${row.character_id}`, row.id)
+  return ids
 }
 
-async function insertVoiceCredit(appearanceId, voiceId, language) {
-  if (!appearanceId || !voiceId) return
+/**
+ * Insert voice credits in bulk; credits pointing at non-voice content are dropped.
+ * @param {Array<{ appearanceId: string, voiceId: string, language?: string }>} credits
+ * @returns {Promise<void>}
+ */
+async function insertVoiceCredits(credits) {
+  const list = credits.filter((row) => isUuid(row.appearanceId) && isUuid(row.voiceId))
+  if (!list.length) return
+  const voiceIds = [...new Set(list.map((row) => row.voiceId))]
   try {
-    const existing = await query('SELECT content_id FROM voices WHERE content_id = $1', [voiceId])
-    if (!existing.rows[0]) {
-      const kindRow = await query('SELECT kind FROM content WHERE id = $1', [voiceId])
-      if (kindRow.rows[0]?.kind !== 'voice') return
-      await query('INSERT INTO voices (content_id) VALUES ($1) ON CONFLICT DO NOTHING', [voiceId])
-    }
+    await query(
+      `INSERT INTO voices (content_id)
+       SELECT id FROM content WHERE id = ANY($1::uuid[]) AND kind = 'voice'
+       ON CONFLICT DO NOTHING`,
+      [voiceIds],
+    )
     await query(
       `INSERT INTO voice_credits (appearance_id, voice_id, language)
-       VALUES ($1,$2,$3)
+       SELECT t.appearance_id, t.voice_id, t.language
+       FROM unnest($1::uuid[], $2::uuid[], $3::text[]) AS t(appearance_id, voice_id, language)
+       JOIN voices v ON v.content_id = t.voice_id
        ON CONFLICT DO NOTHING`,
-      [appearanceId, voiceId, language || null],
+      [
+        list.map((row) => row.appearanceId),
+        list.map((row) => row.voiceId),
+        list.map((row) => row.language || null),
+      ],
     )
   } catch (error) {
-    console.error('Failed to save voice credit:', error.message)
+    console.error('Failed to save voice credits:', error.message)
   }
+}
+
+const SUBTYPE_SQL = {
+  character: `WITH dv AS (DELETE FROM voices WHERE content_id = $1),
+                   ds AS (DELETE FROM studios WHERE content_id = $1)
+              INSERT INTO characters (content_id, english_name) VALUES ($1, $2)
+              ON CONFLICT (content_id) DO UPDATE SET english_name = EXCLUDED.english_name`,
+  voice: `WITH dc AS (DELETE FROM characters WHERE content_id = $1),
+               ds AS (DELETE FROM studios WHERE content_id = $1)
+          INSERT INTO voices (content_id, english_name) VALUES ($1, $2)
+          ON CONFLICT (content_id) DO UPDATE SET english_name = EXCLUDED.english_name`,
+  studio: `WITH dc AS (DELETE FROM characters WHERE content_id = $1),
+                dv AS (DELETE FROM voices WHERE content_id = $1)
+           INSERT INTO studios (content_id) VALUES ($1)
+           ON CONFLICT DO NOTHING`,
 }
 
 Entity.prototype.save = async function save() {
@@ -224,97 +306,104 @@ Entity.prototype.save = async function save() {
     ],
   )
 
-  if (kind === 'character') {
-    await query('DELETE FROM voices WHERE content_id = $1', [this._id])
-    await query('DELETE FROM studios WHERE content_id = $1', [this._id])
-    await query(
-      `INSERT INTO characters (content_id, english_name) VALUES ($1, $2)
-       ON CONFLICT (content_id) DO UPDATE SET english_name = EXCLUDED.english_name`,
-      [this._id, this.englishName || null],
-    )
-  } else if (kind === 'voice') {
-    await query('DELETE FROM characters WHERE content_id = $1', [this._id])
-    await query('DELETE FROM studios WHERE content_id = $1', [this._id])
-    await query(
-      `INSERT INTO voices (content_id, english_name) VALUES ($1, $2)
-       ON CONFLICT (content_id) DO UPDATE SET english_name = EXCLUDED.english_name`,
-      [this._id, this.englishName || null],
-    )
-  } else {
-    await query('DELETE FROM characters WHERE content_id = $1', [this._id])
-    await query('DELETE FROM voices WHERE content_id = $1', [this._id])
-    await query(
-      'INSERT INTO studios (content_id) VALUES ($1) ON CONFLICT DO NOTHING',
-      [this._id],
-    )
-  }
+  await query(
+    SUBTYPE_SQL[kind],
+    kind === 'studio' ? [this._id] : [this._id, this.englishName || null],
+  )
 
-  await query('DELETE FROM content_akas WHERE content_id = $1', [this._id])
-  for (const name of [...new Set(this.alternativeNames || [])].filter(Boolean)) {
+  const akas = [...new Set(this.alternativeNames || [])].filter(Boolean)
+  await query('DELETE FROM content_akas WHERE content_id = $1 AND name <> ALL($2::text[])', [
+    this._id,
+    akas,
+  ])
+  if (akas.length) {
     await query(
-      'INSERT INTO content_akas (content_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [this._id, name],
+      `INSERT INTO content_akas (content_id, name)
+       SELECT $1, unnest($2::text[])
+       ON CONFLICT DO NOTHING`,
+      [this._id, akas],
     )
   }
 
   if (kind === 'character') {
-    const seenWorks = new Set()
-    for (const appearance of this.appearances || []) {
-      try {
-        const workId = asId(appearance.content)
-        if (!workId || seenWorks.has(workId) || !(await workExists(workId))) continue
-        seenWorks.add(workId)
-        const appearanceId = await upsertAppearance(
+    const appearances = (this.appearances || [])
+      .map((appearance) => ({ appearance, workId: asId(appearance.content) }))
+      .filter((row) => row.workId)
+    try {
+      const ids = await upsertAppearances(
+        appearances.map(({ appearance, workId }) => ({
           workId,
-          this._id,
-          appearance.role,
-          appearance.importance,
-        )
-        if (!appearanceId) continue
+          characterId: this._id,
+          role: appearance.role,
+          importance: appearance.importance,
+        })),
+      )
+      const credits = []
+      for (const { appearance, workId } of appearances) {
+        const appearanceId = ids.get(`${workId}:${this._id}`)
         for (const credit of appearance.voiceActors || []) {
           const voiceId = credit.entity ? asId(credit.entity) : null
-          if (!voiceId) continue
-          await insertVoiceCredit(appearanceId, voiceId, credit.language)
+          if (appearanceId && voiceId) {
+            credits.push({ appearanceId, voiceId, language: credit.language })
+          }
         }
-      } catch (error) {
-        console.error('Failed to save character appearance:', error.message)
       }
-    }
-    if (seenWorks.size) {
-      const ids = [...seenWorks]
-      await query(
-        `DELETE FROM appearances
-         WHERE character_id = $1
-           AND NOT (work_id::text = ANY($2::text[]))`,
-        [this._id, ids],
-      )
+      await insertVoiceCredits(credits)
+      const keptWorks = [...new Set([...ids.keys()].map((key) => key.split(':')[0]))]
+      if (keptWorks.length) {
+        await query(
+          `DELETE FROM appearances
+           WHERE character_id = $1
+             AND NOT (work_id::text = ANY($2::text[]))`,
+          [this._id, keptWorks],
+        )
+      }
+    } catch (error) {
+      console.error('Failed to save character appearances:', error.message)
     }
   }
 
   if (kind === 'voice') {
-    for (const appearance of this.appearances || []) {
-      const workId = asId(appearance.content)
-      const characterId = asId(appearance.character)
-      if (!workId || !characterId || !(await workExists(workId))) continue
-      const appearanceId = await upsertAppearance(
-        workId,
-        characterId,
-        appearance.role,
-        appearance.importance,
+    const rows = (this.appearances || [])
+      .map((appearance) => ({
+        appearance,
+        workId: asId(appearance.content),
+        characterId: asId(appearance.character),
+      }))
+      .filter((row) => row.workId && row.characterId)
+    try {
+      const ids = await upsertAppearances(
+        rows.map(({ appearance, workId, characterId }) => ({
+          workId,
+          characterId,
+          role: appearance.role,
+          importance: appearance.importance,
+        })),
       )
-      if (!appearanceId) continue
-      await insertVoiceCredit(appearanceId, this._id, appearance.language)
+      await insertVoiceCredits(
+        rows.map(({ appearance, workId, characterId }) => ({
+          appearanceId: ids.get(`${workId}:${characterId}`),
+          voiceId: this._id,
+          language: appearance.language,
+        })),
+      )
+    } catch (error) {
+      console.error('Failed to save voice appearances:', error.message)
     }
   }
 
   if (kind === 'studio') {
     await query('DELETE FROM studio_credits WHERE studio_id = $1', [this._id])
-    for (const appearance of this.appearances || []) {
-      const workId = asId(appearance.content)
-      if (!workId || !(await workExists(workId))) continue
+    const workIds = [
+      ...new Set((this.appearances || []).map((row) => asId(row.content)).filter(isUuid)),
+    ]
+    if (workIds.length) {
       await query(
-        'INSERT INTO studio_credits (work_id, studio_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-        [workId, this._id],
+        `INSERT INTO studio_credits (work_id, studio_id)
+         SELECT w.id, $2 FROM content w
+         WHERE w.id = ANY($1::uuid[]) AND w.kind IN ('movie', 'series', 'special')
+         ON CONFLICT DO NOTHING`,
+        [workIds, this._id],
       )
     }
   }
@@ -344,17 +433,18 @@ async function execFind(filter, q) {
     sql += ` LIMIT $${params.length}`
   }
   const { rows } = await query(sql, params)
-  const docs = []
-  for (const row of rows) {
-    const mapped = mapEntityRow({
-      ...row,
-      english_name: row.character_english || row.voice_english,
-    })
-    const doc = new Entity(mapped, { fromDb: true })
-    await loadEntityChildren(doc)
-    docs.push(q._lean ? doc.toJSON() : doc)
-  }
-  return docs
+  const docs = rows.map(
+    (row) =>
+      new Entity(
+        mapEntityRow({
+          ...row,
+          english_name: row.character_english || row.voice_english,
+        }),
+        { fromDb: true },
+      ),
+  )
+  await loadEntityChildren(docs)
+  return q._lean ? docs.map((doc) => doc.toJSON()) : docs
 }
 
 Entity.find = function find(filter = {}) {

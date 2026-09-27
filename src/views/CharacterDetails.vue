@@ -40,7 +40,7 @@
 
         <div class="character-info">
           <p class="entity-kicker">Character</p>
-          <h1 class="character-title">{{ cleanCharacterName(character.name) || character.name }}</h1>
+          <h1 class="character-title">{{ canonicalCharacterName(character.name) || character.name }}</h1>
           <p v-if="character.nativeName" class="original-title">
             Native Name: {{ character.nativeName }}
           </p>
@@ -133,7 +133,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useEntityStore } from '@/stores/entities'
 import { getDetailsRouteName, getPosterUrl } from '@/services/api'
 import { getDisplayTitle } from '@/utils/titles'
-import { cleanCharacterName, collectVoiceActors, displayPersonName } from '@/utils/entities'
+import { canonicalCharacterName, collectVoiceActors, displayPersonName } from '@/utils/entities'
 import type { CatalogEntity, EntityVoiceCredit } from '@/types/content'
 
 const route = useRoute()

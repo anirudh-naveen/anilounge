@@ -67,6 +67,17 @@ export function displayPersonName(name?: string) {
   return value
 }
 
+export function canonicalCharacterName(value?: string) {
+  return displayPersonName(cleanCharacterName(value))
+}
+
+const canonicalKey = (value?: string) =>
+  canonicalCharacterName(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
 /**
  * Unique voice credits for a character, Japanese first.
  */
@@ -95,11 +106,11 @@ export function matchCharacterByName(
   characterName: string,
   characters: CatalogEntity[],
 ): CatalogEntity | undefined {
-  const target = fold(cleanCharacterName(characterName) || characterName)
+  const target = canonicalKey(characterName)
   if (!target) return undefined
   return characters.find((entity) => {
     const names = [entity.name, entity.englishName, entity.nativeName, ...(entity.alternativeNames || [])]
-    return names.some((name) => fold(name) === target)
+    return names.some((name) => canonicalKey(name) === target)
   })
 }
 
@@ -123,7 +134,7 @@ export function collectVoicedCharacters(entity?: CatalogEntity | null): VoicedCh
     const id =
       populated?._id || (typeof appearance.character === 'string' ? appearance.character : '')
     const name =
-      cleanCharacterName(populated?.name || appearance.characterName) ||
+      canonicalCharacterName(populated?.name || appearance.characterName) ||
       populated?.name ||
       appearance.characterName ||
       ''
