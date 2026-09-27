@@ -140,6 +140,14 @@ export const aiAPI = {
     api.post('/ai/chat', { message, history }),
 }
 
+export const homeAPI = {
+  getActivity: () => api.get('/home/activity'),
+
+  getUpdates: () => api.get('/home/updates'),
+
+  getCharacterOfTheDay: () => api.get('/home/character-of-the-day'),
+}
+
 export const watchlistAPI = {
   addToWatchlist: (data: WatchlistData) => api.post('/watchlist', data),
 

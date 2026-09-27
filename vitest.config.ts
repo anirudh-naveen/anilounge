@@ -7,7 +7,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'jsdom',
-      exclude: [...configDefaults.exclude, 'e2e/**'],
+      // backend/ uses node:test; run it with `npm test` in backend/.
+      exclude: [...configDefaults.exclude, 'e2e/**', 'backend/**'],
       root: fileURLToPath(new URL('./', import.meta.url)),
     },
   }),

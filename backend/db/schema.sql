@@ -254,6 +254,9 @@ CREATE TABLE IF NOT EXISTS watchlist (
 
 CREATE INDEX IF NOT EXISTS watchlist_content_idx ON watchlist (content_id);
 
+-- Episode the user had reached before their latest progress change.
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS previous_episode INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS ratings (
   user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   content_id UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
