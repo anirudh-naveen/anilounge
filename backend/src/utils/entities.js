@@ -257,6 +257,115 @@ export function displayPersonName(value) {
 }
 
 /**
+ * Character display name: strip credit suffixes, then Westernize `"Last, First"`.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function canonicalCharacterName(value) {
+  return displayPersonName(cleanCharacterName(value))
+}
+
+/**
+ * Folded key so `"Natsuki, Subaru"` and `"Subaru Natsuki"` compare equal.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function canonicalCharacterNameKey(value) {
+  return foldEntityName(canonicalCharacterName(value))
+}
+
+/**
+ * Whether two character names are the same person label, ignoring order and punctuation.
+ * @param {unknown} left
+ * @param {unknown} right
+ * @returns {boolean}
+ */
+export function characterNamesEqual(left, right) {
+  const a = canonicalCharacterNameKey(left)
+  const b = canonicalCharacterNameKey(right)
+  return Boolean(a) && a === b
+}
+
+/**
+ * Folded name keys for a character row. Aliases are ignored so a polluted
+ * voice-actor aka cannot chain two different people together.
+ * @param {{ name?: string, englishName?: string } | null | undefined} entity
+ * @returns {Set<string>}
+ */
+export function characterNameKeys(entity) {
+  const keys = new Set()
+  for (const name of [entity?.name, entity?.englishName]) {
+    const key = canonicalCharacterNameKey(name)
+    if (key) keys.add(key)
+  }
+  return keys
+}
+
+/**
+ * Group character documents that share a canonical name (including swapped order).
+ * @param {object[]} [entities]
+ * @returns {object[][]}
+ */
+export function groupCharactersByCanonicalName(entities) {
+  const list = (Array.isArray(entities) ? entities : []).filter((entity) => entity?._id || entity?.id)
+  const parent = list.map((_, index) => index)
+  const find = (index) => {
+    while (parent[index] !== index) {
+      parent[index] = parent[parent[index]]
+      index = parent[index]
+    }
+    return index
+  }
+  const keyToIndex = new Map()
+  list.forEach((entity, index) => {
+    for (const key of characterNameKeys(entity)) {
+      const existing = keyToIndex.get(key)
+      if (existing == null) {
+        keyToIndex.set(key, index)
+        continue
+      }
+      const left = find(existing)
+      const right = find(index)
+      if (left !== right) parent[right] = left
+    }
+  })
+  const groups = new Map()
+  list.forEach((entity, index) => {
+    const root = find(index)
+    if (!groups.has(root)) groups.set(root, [])
+    groups.get(root).push(entity)
+  })
+  return [...groups.values()]
+}
+
+/**
+ * Keep the character with a portrait, MAL id, and the most appearances.
+ * @param {object[]} entities
+ * @returns {object | undefined}
+ */
+export function pickPrimaryCharacter(entities) {
+  const list = Array.isArray(entities) ? entities : []
+  return [...list].sort((left, right) => {
+    const leftImg = characterPortraitPath(left?.imagePath) ? 1 : 0
+    const rightImg = characterPortraitPath(right?.imagePath) ? 1 : 0
+    if (rightImg !== leftImg) return rightImg - leftImg
+    const leftMal = Number(left?.malId) > 0 ? 1 : 0
+    const rightMal = Number(right?.malId) > 0 ? 1 : 0
+    if (rightMal !== leftMal) return rightMal - leftMal
+    const leftApps =
+      Number(left?.appearanceCount) > 0
+        ? Number(left.appearanceCount)
+        : (left?.appearances || []).length
+    const rightApps =
+      Number(right?.appearanceCount) > 0
+        ? Number(right.appearanceCount)
+        : (right?.appearances || []).length
+    if (rightApps !== leftApps) return rightApps - leftApps
+    return String(left?._id || left?.id || '').localeCompare(String(right?._id || right?.id || ''))
+  })[0]
+}
+
+/**
  * Voice-actor photo URL. MAL `voiceactors` paths and TMDB profiles are valid here.
  * @param {unknown} path
  * @returns {string}
@@ -503,17 +612,17 @@ export function highlightedVoiceActors(
  * @returns {object | null}
  */
 export function matchCharacterByName(characterName, characters) {
-  const target = foldEntityName(cleanCharacterName(characterName) || characterName)
+  const target = canonicalCharacterNameKey(characterName)
   if (!target || !Array.isArray(characters)) return null
   return (
     characters.find((entity) => {
-      const names = uniqueEntityNames(
+      const names = [
         entity?.name,
         entity?.englishName,
         entity?.nativeName,
-        entity?.alternativeNames,
-      )
-      return names.some((name) => foldEntityName(name) === target)
+        ...(Array.isArray(entity?.alternativeNames) ? entity.alternativeNames : []),
+      ]
+      return names.some((name) => canonicalCharacterNameKey(name) === target)
     }) || null
   )
 }
@@ -538,7 +647,7 @@ export function serializeEntity(doc, options = {}) {
     name:
       raw.entityType === 'voice_actor'
         ? displayPersonName(raw.name)
-        : cleanCharacterName(raw.name) || raw.name,
+        : canonicalCharacterName(raw.name) || raw.name,
     englishName: raw.englishName || '',
     nativeName: raw.nativeName || '',
     alternativeNames: raw.alternativeNames || [],
@@ -571,7 +680,7 @@ function serializeNestedCharacter(value) {
   return {
     _id: raw._id,
     entityType: 'character',
-    name: cleanCharacterName(raw.name) || raw.name || '',
+    name: canonicalCharacterName(raw.name) || raw.name || '',
     imagePath: characterPortraitPath(raw.imagePath),
   }
 }

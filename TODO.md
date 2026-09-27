@@ -2,9 +2,10 @@
 
 ## Content
 
-1. Fix characters as content
+1. Fix characters as content ✅
    - Character should have images attached.
    - Character should be merged with all of the same name in their home "franchise".
+   - Some character's might have their first and last name switched from english to japanesse/other languages. Merge those characters to one, and collapse the franchise/series/movies thei appear in as well.
 2. Add voice actors as a type of content. ✅
    - They will not have their own tab but will have their own screen and can be clicked and will be searchable and favoritable for the profile.
    - Additionally if the API has pictures for them, include them.

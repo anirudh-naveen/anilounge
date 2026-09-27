@@ -2,12 +2,16 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   appearanceRoleRank,
+  canonicalCharacterName,
+  canonicalCharacterNameKey,
+  characterNamesEqual,
   characterPortraitPath,
   characterUpsertFilter,
   cleanCharacterName,
   entityNamesEqual,
   entityToSearchHit,
   foldEntityName,
+  groupCharactersByCanonicalName,
   highlightedCharacters,
   isCharacterPortrait,
   isUsableCharacterName,
@@ -16,6 +20,7 @@ import {
   mapTmdbCharacterCredits,
   mapVoiceActorFromCredit,
   matchCharacterByName,
+  pickPrimaryCharacter,
   serializeEntity,
   uniqueEntityNames,
 } from './entities.js'
@@ -36,6 +41,10 @@ describe('entity name matching', () => {
     assert.equal(matchCharacterByName('Luffy', characters)?._id, '1')
     assert.equal(matchCharacterByName('Roronoa Zoro', characters)?._id, '2')
     assert.equal(matchCharacterByName('Sanji', characters), null)
+    assert.equal(
+      matchCharacterByName('Natsuki, Subaru', [{ _id: 's', name: 'Subaru Natsuki' }])?._id,
+      's',
+    )
   })
 })
 
@@ -247,6 +256,16 @@ describe('serializeEntity', () => {
     assert.equal(hit.entityType, 'character')
     assert.equal(hit.title, 'Nami')
     assert.equal(hit.posterPath, 'https://cdn.example/nami.jpg')
+    assert.equal(
+      serializeEntity({
+        _id: 's1',
+        entityType: 'character',
+        name: 'Natsuki, Subaru',
+        imagePath: 'https://cdn.example/subaru.jpg',
+        appearances: [],
+      }).name,
+      'Subaru Natsuki',
+    )
   })
 
   it('keeps populated character portraits on voice-actor appearances', () => {
@@ -272,5 +291,50 @@ describe('serializeEntity', () => {
       serialized.appearances[0].character.imagePath.includes('characters'),
       true,
     )
+  })
+})
+
+describe('franchise character name merge keys', () => {
+  it('treats swapped first/last names as the same character', () => {
+    assert.equal(canonicalCharacterName('Natsuki, Subaru'), 'Subaru Natsuki')
+    assert.equal(canonicalCharacterNameKey('Natsuki, Subaru'), 'subaru natsuki')
+    assert.equal(canonicalCharacterNameKey('Subaru Natsuki'), 'subaru natsuki')
+    assert.equal(characterNamesEqual('Natsuki, Subaru', 'Subaru Natsuki'), true)
+    assert.equal(characterNamesEqual('Rem', 'Ram'), false)
+  })
+
+  it('groups swapped-order duplicates and keeps the portrait row', () => {
+    const groups = groupCharactersByCanonicalName([
+      {
+        _id: 'a',
+        name: 'Natsuki, Subaru',
+        appearances: [{ content: 's1' }],
+      },
+      {
+        _id: 'b',
+        name: 'Subaru Natsuki',
+        imagePath: 'https://cdn.myanimelist.net/images/characters/9/subaru.jpg',
+        malId: 118735,
+        appearances: [{ content: 's1' }, { content: 's2' }],
+      },
+      { _id: 'c', name: 'Emilia', appearances: [{ content: 's1' }] },
+    ])
+    const subaru = groups.find((group) => group.length === 2)
+    const emilia = groups.find((group) => group.length === 1)
+    assert.equal(subaru.length, 2)
+    assert.equal(emilia[0]._id, 'c')
+    assert.equal(pickPrimaryCharacter(subaru)._id, 'b')
+    assert.equal(
+      pickPrimaryCharacter([
+        { _id: 'x', name: 'Rem', appearanceCount: 1 },
+        { _id: 'y', name: 'Rem', imagePath: 'https://cdn.example/rem.jpg', appearanceCount: 4 },
+      ])._id,
+      'y',
+    )
+    const mixed = groupCharactersByCanonicalName([
+      { _id: 'a', name: 'Subaru Natsuki', alternativeNames: ['Andrew Stanton'] },
+      { _id: 'b', name: 'Andrew Stanton' },
+    ])
+    assert.equal(mixed.length, 2)
   })
 })

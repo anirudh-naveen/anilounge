@@ -8,8 +8,16 @@
 import Entity from '../models/Entity.js'
 import Content from '../models/Content.js'
 import {
+  charactersInHome,
+  findCharacterForPayload,
+  mergeFranchiseCharactersForWork,
+  siblingMalId,
+} from './characterMerge.js'
+import {
   appearanceRoleRank,
+  canonicalCharacterName,
   characterImportanceScore,
+  characterNamesEqual,
   characterPortraitPath,
   characterUpsertFilter,
   cleanCharacterName,
@@ -35,6 +43,31 @@ const STALE_MS = 7 * 24 * 60 * 60 * 1000
 const JIKAN_GAP_MS = 450
 const FETCH_TIMEOUT_MS = 20000
 const MAX_CHARACTERS_PER_TITLE = 12
+/** A failed or partial Jikan/TMDB ingest is not retried on every page view. */
+const CHARACTER_RETRY_MS = 6 * 60 * 60 * 1000
+const characterSyncAttempts = new Map()
+const CHARACTER_UPSERT_CONCURRENCY = 4
+const voiceActorLocks = new Map()
+
+/**
+ * Serialize work per voice actor so concurrent character upserts sharing an
+ * actor do not create the same person twice.
+ * @template T
+ * @param {string} key
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function withVoiceActorLock(key, fn) {
+  const previous = voiceActorLocks.get(key) || Promise.resolve()
+  const run = previous.then(fn, fn)
+  const settled = run.catch(() => {})
+  voiceActorLocks.set(key, settled)
+  try {
+    return await run
+  } finally {
+    if (voiceActorLocks.get(key) === settled) voiceActorLocks.delete(key)
+  }
+}
 const MAX_VOICED_CHARACTERS = 600
 const JIKAN_HEADERS = {
   Accept: 'application/json',
@@ -210,6 +243,12 @@ export function mergeAppearance(entity, appearance) {
 async function upsertVoiceActorPayload(payload, now = new Date()) {
   const name = displayPersonName(payload?.name)
   if (!name) return null
+  const malId = Number(payload?.malId)
+  const lockKey = Number.isFinite(malId) && malId > 0 ? `mal:${malId}` : `name:${foldEntityName(name)}`
+  return withVoiceActorLock(lockKey, () => upsertVoiceActorPayloadUnlocked(payload, name, now))
+}
+
+async function upsertVoiceActorPayloadUnlocked(payload, name, now) {
   let entity = await Entity.findOne(voiceActorUpsertFilter({ ...payload, name }))
   const malId = Number(payload.malId)
   const hasMalId = Number.isFinite(malId) && malId > 0
@@ -276,40 +315,56 @@ async function attachVoiceActorsToPayload(payload, now, characterId) {
  * @returns {Promise<object[]>}
  */
 async function upsertCharacterPayloads(payloads) {
-  const saved = []
   const now = new Date()
-  for (const payload of payloads) {
-    try {
-      const cleanedName = cleanCharacterName(payload.name) || payload.name
-      if (!isUsableCharacterName(cleanedName)) continue
-      payload.name = cleanedName
+  const workId = payloads.find((payload) => payload?.appearance?.content)?.appearance?.content
+  const homeCharacters = workId ? await charactersInHome(workId) : []
+  const rememberHome = (entity) => {
+    if (!entity?._id) return
+    const id = String(entity._id)
+    const index = homeCharacters.findIndex((row) => String(row._id) === id)
+    if (index >= 0) homeCharacters[index] = entity
+    else homeCharacters.push(entity)
+  }
 
-      let entity = await Entity.findOne(characterUpsertFilter({ ...payload, name: cleanedName }))
-      const malId = Number(payload.malId)
-      const hasMalId = Number.isFinite(malId) && malId > 0
+  const upsertOne = async (payload) => {
+    const cleanedName = canonicalCharacterName(payload.name) || payload.name
+    if (!isUsableCharacterName(cleanedName)) return null
+    payload.name = cleanedName
+    const rowWorkId = payload.appearance?.content || workId
+    const aliases = uniqueEntityNames(
+      payload.alternativeNames,
+      payload.name,
+      cleanCharacterName(payload.name),
+    )
 
-      if (!entity) {
-        entity = new Entity({
-          entityType: 'character',
-          name: cleanedName,
-          englishName: cleanedName,
-          nativeName: payload.nativeName || '',
-          alternativeNames: payload.alternativeNames || [],
-          imagePath: characterPortraitPath(payload.imagePath),
-          appearances: [payload.appearance],
-          lastSyncedAt: now,
-        })
-        if (hasMalId) entity.malId = malId
-        if (payload.tmdbId) entity.tmdbId = payload.tmdbId
-        await entity.save()
-        await attachVoiceActorsToPayload(payload, now, entity._id)
-        if (payload.appearance?.voiceActors?.length) await entity.save()
-        saved.push(entity)
-        continue
-      }
+    const malId = Number(payload.malId)
+    const hasMalId = Number.isFinite(malId) && malId > 0
+    let entity = await findCharacterForPayload(
+      { ...payload, name: cleanedName },
+      rowWorkId,
+      homeCharacters,
+    )
+    if (!entity && hasMalId) {
+      entity = await Entity.findOne({ entityType: 'character', malId })
+    }
 
+    if (!entity) {
+      entity = new Entity({
+        entityType: 'character',
+        name: cleanedName,
+        englishName: cleanedName,
+        nativeName: payload.nativeName || '',
+        alternativeNames: aliases,
+        imagePath: characterPortraitPath(payload.imagePath),
+        appearances: [payload.appearance],
+        lastSyncedAt: now,
+      })
+      if (hasMalId) entity.malId = malId
+      if (payload.tmdbId) entity.tmdbId = payload.tmdbId
+    } else {
       mergeAppearance(entity, payload.appearance)
       if (cleanedName && entity.name !== cleanedName) {
+        entity.alternativeNames = uniqueEntityNames(entity.alternativeNames, entity.name)
         entity.name = cleanedName
         entity.englishName = cleanedName
       }
@@ -317,19 +372,49 @@ async function upsertCharacterPayloads(payloads) {
         entity.imagePath = payload.imagePath
       }
       if (payload.nativeName && !entity.nativeName) entity.nativeName = payload.nativeName
-      const names = uniqueEntityNames(entity.alternativeNames, payload.alternativeNames)
+      const names = uniqueEntityNames(entity.alternativeNames, aliases)
       if (names.length) entity.alternativeNames = names
       if (entity.malId == null) entity.set('malId', undefined)
       entity.lastSyncedAt = now
-      await entity.save()
-      await attachVoiceActorsToPayload(payload, now, entity._id)
-      if (payload.appearance?.voiceActors?.length) await entity.save()
-      saved.push(entity)
+    }
+
+    // Credits are shared by reference with entity.appearances, so VA ids land before the save.
+    await attachVoiceActorsToPayload(payload, now, entity._id)
+    await entity.save()
+    rememberHome(entity)
+    return entity
+  }
+
+  const results = await mapWithConcurrency(payloads, CHARACTER_UPSERT_CONCURRENCY, async (payload) => {
+    try {
+      return await upsertOne(payload)
     } catch (error) {
       console.error(`Character upsert failed for ${payload?.name}:`, error.message)
+      return null
+    }
+  })
+  return results.filter(Boolean)
+}
+
+/**
+ * `Promise.all` over `items` with at most `limit` in flight; keeps input order.
+ * @template T, R
+ * @param {T[]} items
+ * @param {number} limit
+ * @param {(item: T) => Promise<R>} fn
+ * @returns {Promise<R[]>}
+ */
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await fn(items[index])
     }
   }
-  return saved
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
 }
 
 /**
@@ -429,13 +514,15 @@ async function cleanupStaleCharacterAppearances(content) {
  * @param {object[]} docs
  * @returns {boolean}
  */
-function needsCharacterRefresh(content, docs) {
+function needsCharacterRefresh(content, docs, malId) {
   if (!docs.length) return true
   if (docs.some((doc) => !isUsableCharacterName(doc.name))) return true
   if (docs.some((doc) => /\(\s*voices?\s*\)/i.test(String(doc.name || '')))) return true
   const hasMal = docs.some((doc) => doc.malId)
-  if (content.malId && hasMal && docs.some((doc) => !doc.malId)) return true
-  if (content.malId && hasMal && docs.every((doc) => !characterPortraitPath(doc.imagePath))) return true
+  const catalogMalId = Number(malId) > 0 ? Number(malId) : Number(content.malId)
+  if (catalogMalId && hasMal && docs.some((doc) => !doc.malId)) return true
+  if (catalogMalId && docs.every((doc) => !characterPortraitPath(doc.imagePath))) return true
+  if (catalogMalId && docs.every((doc) => !doc.malId)) return true
   return false
 }
 
@@ -472,13 +559,24 @@ async function loadCharactersForContent(content, options = {}) {
     'appearances.content': content._id,
   })
 
-  if (!needsCharacterRefresh(content, docs)) {
+  const key = String(content._id)
+  const lastAttempt = characterSyncAttempts.get(key) || 0
+  if (docs.length && Date.now() - lastAttempt < CHARACTER_RETRY_MS) {
     return highlightedCharacters(docs, content._id, MAX_CHARACTERS_PER_TITLE)
   }
 
-  if (content.malId) {
+  const malId = Number(content.malId) > 0 ? Number(content.malId) : await siblingMalId(content._id)
+  const ingestContent = malId ? { ...content, malId } : content
+
+  if (!needsCharacterRefresh(content, docs, malId)) {
+    characterSyncAttempts.set(key, Date.now())
+    return highlightedCharacters(docs, content._id, MAX_CHARACTERS_PER_TITLE)
+  }
+  characterSyncAttempts.set(key, Date.now())
+
+  if (malId) {
     try {
-      await ingestJikanCharacters(content, options)
+      await ingestJikanCharacters(ingestContent, options)
     } catch (error) {
       console.error('Jikan character ingest failed:', error.message)
     }
@@ -497,7 +595,29 @@ async function loadCharactersForContent(content, options = {}) {
     }
   }
 
-  await cleanupStaleCharacterAppearances(content)
+  await cleanupStaleCharacterAppearances(ingestContent)
+
+  try {
+    await mergeFranchiseCharactersForWork(content._id)
+  } catch (error) {
+    console.error('Franchise character merge failed:', error.message)
+  }
+
+  docs = await Entity.find({
+    entityType: 'character',
+    'appearances.content': content._id,
+  })
+
+  const missingPortraits = docs.filter(
+    (doc) => !characterPortraitPath(doc.imagePath) && Number(doc.malId) > 0,
+  )
+  for (const doc of missingPortraits.slice(0, MAX_CHARACTERS_PER_TITLE)) {
+    try {
+      await ensureCharacterAbout(doc, options)
+    } catch (error) {
+      console.error(`Character portrait backfill failed for ${doc.name}:`, error.message)
+    }
+  }
 
   docs = await Entity.find({
     entityType: 'character',
@@ -655,17 +775,10 @@ async function attachLocalCharactersToVoiceActor(entity) {
   let changed = false
   for (const appearance of entity.appearances || []) {
     if (appearance.character) continue
-    const name = cleanCharacterName(appearance.characterName)
+    const name = canonicalCharacterName(appearance.characterName)
     if (!isUsableCharacterName(name)) continue
     const contentId = appearance.content?._id || appearance.content
-    let match = null
-    if (contentId) {
-      match = await Entity.findOne({
-        entityType: 'character',
-        'appearances.content': contentId,
-        $or: [{ name }, { englishName: name }],
-      })
-    }
+    let match = contentId ? await findCharacterForPayload({ name }, contentId) : null
     if (!match) {
       match = await Entity.findOne(characterUpsertFilter({ name }))
     }
@@ -686,12 +799,20 @@ async function attachLocalCharactersToVoiceActor(entity) {
  * @returns {Promise<object|null>}
  */
 async function upsertCharacterFromVoiceRow(mapped, content, now, byMal) {
+  const cleanedName = canonicalCharacterName(mapped.name) || mapped.name
   let character = byMal.get(mapped.malId) || null
+  if (!character && content?._id) {
+    character = await findCharacterForPayload(
+      { malId: mapped.malId, name: cleanedName },
+      content._id,
+    )
+  }
+  if (character) byMal.set(mapped.malId, character)
   if (!character) {
     character = new Entity({
       entityType: 'character',
-      name: mapped.name,
-      englishName: mapped.name,
+      name: cleanedName,
+      englishName: cleanedName,
       imagePath: characterPortraitPath(mapped.imagePath),
       malId: mapped.malId,
       appearances: content
@@ -722,9 +843,10 @@ async function upsertCharacterFromVoiceRow(mapped, content, now, byMal) {
     character.imagePath = mapped.imagePath
     changed = true
   }
-  if (mapped.name && character.name !== mapped.name && isUsableCharacterName(mapped.name)) {
-    character.name = mapped.name
-    if (!character.englishName) character.englishName = mapped.name
+  if (mapped.name && character.name !== cleanedName && isUsableCharacterName(cleanedName)) {
+    character.alternativeNames = uniqueEntityNames(character.alternativeNames, character.name)
+    character.name = cleanedName
+    if (!character.englishName) character.englishName = cleanedName
     changed = true
   }
   if (changed) await character.save()
@@ -858,11 +980,14 @@ export async function findEntityByName(name, entityType = 'character') {
   const term = String(name || '').trim()
   if (!term) return null
   const candidates = await searchEntities(term, { entityType, limit: 12 })
-  const aliases = uniqueEntityNames(term, displayPersonName(term))
+  const aliases = uniqueEntityNames(term, displayPersonName(term), canonicalCharacterName(term))
   return (
     candidates.find((doc) =>
       uniqueEntityNames(doc.name, doc.englishName, doc.nativeName, doc.alternativeNames).some(
-        (candidate) => aliases.some((alias) => entityNamesEqual(candidate, alias)),
+        (candidate) =>
+          aliases.some(
+            (alias) => characterNamesEqual(candidate, alias) || entityNamesEqual(candidate, alias),
+          ),
       ),
     ) ||
     candidates[0] ||
