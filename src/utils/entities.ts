@@ -1,8 +1,14 @@
 /**
- * entities.ts — helpers for character (and later VA/studio) appearance rows.
+ * entities.ts — helpers for character, voice-actor, and studio appearance rows.
  */
 
-import type { CatalogEntity, EntityAppearance, EntityVoiceCredit } from '@/types/content'
+import type {
+  CatalogEntity,
+  EntityAppearance,
+  EntityVoiceCredit,
+  StudioRef,
+  UnifiedContent,
+} from '@/types/content'
 
 export const HIGHLIGHTED_CHARACTERS_PER_TITLE = 10
 
@@ -112,6 +118,61 @@ export function matchCharacterByName(
     const names = [entity.name, entity.englishName, entity.nativeName, ...(entity.alternativeNames || [])]
     return names.some((name) => canonicalKey(name) === target)
   })
+}
+
+export type StudioWork = Exclude<EntityAppearance['content'], string | undefined>
+
+/**
+ * Release year of a studio credit, or 0 when unknown.
+ */
+export function studioWorkYear(work: StudioWork) {
+  const date = work.releaseDate ? new Date(work.releaseDate) : null
+  const year = date && !Number.isNaN(date.getTime()) ? date.getFullYear() : 0
+  return year || work.startSeasonYear || 0
+}
+
+/**
+ * A studio's catalog titles split into series and movies (specials count as movies),
+ * newest first. Episodes are never studio credits.
+ */
+export function collectStudioWorks(entity?: CatalogEntity | null): {
+  series: StudioWork[]
+  movies: StudioWork[]
+} {
+  const seen = new Set<string>()
+  const works: StudioWork[] = []
+  for (const appearance of entity?.appearances || []) {
+    const content = appearance.content
+    if (!content || typeof content !== 'object' || seen.has(content._id)) continue
+    seen.add(content._id)
+    works.push(content)
+  }
+  works.sort((left, right) => studioWorkYear(right) - studioWorkYear(left))
+  return {
+    series: works.filter((work) => work.contentType === 'tv'),
+    movies: works.filter((work) => work.contentType !== 'tv'),
+  }
+}
+
+/**
+ * Studio chips for a title: persisted studio rows when present, otherwise bare names.
+ */
+export function studioLinksForContent(
+  content?: Pick<UnifiedContent, 'studios' | 'studioEntities' | 'productionCompanies'> | null,
+): Array<{ name: string; id: string }> {
+  const refs: StudioRef[] = content?.studioEntities || []
+  const names = (content?.studios || []).filter(Boolean)
+  const source = names.length ? names : (content?.productionCompanies || []).filter(Boolean)
+  const seen = new Set<string>()
+  const links: Array<{ name: string; id: string }> = []
+  for (const name of source) {
+    const key = fold(name)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    const ref = refs.find((row) => fold(row.name) === key)
+    links.push({ name, id: ref?._id || '' })
+  }
+  return links
 }
 
 export interface VoicedCharacterCard {

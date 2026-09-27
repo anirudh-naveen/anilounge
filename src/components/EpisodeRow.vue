@@ -105,6 +105,7 @@
             </button>
           </div>
         </div>
+        <StudioLinks :content="show" title="Animation studio" heading-tag="h4" />
       </div>
     </template>
   </section>
@@ -113,7 +114,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { CatalogEntity, Episode } from '@/types/content'
+import type { CatalogEntity, Episode, UnifiedContent } from '@/types/content'
 import { getProfileUrl, getStillUrl } from '@/services/api'
 import {
   episodeKey,
@@ -123,6 +124,7 @@ import {
 } from '@/utils/episodes'
 import { cleanCharacterName, matchCharacterByName } from '@/utils/entities'
 import EntityCastRow from '@/components/EntityCastRow.vue'
+import StudioLinks from '@/components/StudioLinks.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -130,9 +132,12 @@ const props = withDefaults(
     loading?: boolean
     characters?: CatalogEntity[]
     contentId?: string
+    /** Parent series; episodes credit its studios. */
+    show?: UnifiedContent | null
   }>(),
   {
     characters: () => [],
+    show: null,
   },
 )
 

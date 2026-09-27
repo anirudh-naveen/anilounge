@@ -14,7 +14,7 @@ export interface UnifiedContent {
   nativeTitle?: string
   originalTitle?: string
   overview: string
-  contentType: 'movie' | 'tv' | 'special' | 'character' | 'voice_actor'
+  contentType: 'movie' | 'tv' | 'special' | 'character' | 'voice_actor' | 'studio'
   posterPath?: string
   backdropPath?: string
   releaseDate?: string | Date
@@ -41,6 +41,8 @@ export interface UnifiedContent {
   malMediaType?: string
   seasonCount?: number
   studios?: string[]
+  /** Studio rows behind `studios`, linking to their detail screens. */
+  studioEntities?: StudioRef[]
   productionCompanies?: string[]
   /** ISO 3166-1 alpha-2 origin countries (`JP`, `US`, …). */
   originCountries?: string[]
@@ -69,6 +71,12 @@ export interface UnifiedContent {
     related: string[]
     franchise: string
   }
+}
+
+export interface StudioRef {
+  _id: string
+  name: string
+  imagePath?: string
 }
 
 /** Voice/acting credit on a single TV episode. */
@@ -116,6 +124,10 @@ export interface EntityAppearance {
         nativeTitle?: string
         posterPath?: string
         contentType?: 'movie' | 'tv' | 'special'
+        releaseDate?: string | Date
+        startSeasonYear?: number
+        unifiedScore?: number
+        malStatus?: string
       }
   character?:
     | string

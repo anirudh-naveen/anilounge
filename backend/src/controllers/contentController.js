@@ -519,6 +519,7 @@ export const getSimilarContent = async (req, res) => {
 
 /**
  * Watchlist/preference hints for catalog chat. Missing user means anonymous.
+ * Favorited studio entities count as favorite studios.
  * @param {object|null|undefined} user
  * @returns {object|null}
  */
@@ -531,9 +532,14 @@ function chatUserContext(user) {
       title: item.content.englishTitle || item.content.title,
       status: item.status,
     }))
+  const favoritedStudios = (user.favoriteEntities || [])
+    .filter((row) => row.kind === 'studio' && row.name)
+    .map((row) => row.name)
   return {
     favoriteGenres: user.preferences?.favoriteGenres || [],
-    favoriteStudios: user.preferences?.favoriteStudios || [],
+    favoriteStudios: [
+      ...new Set([...(user.preferences?.favoriteStudios || []), ...favoritedStudios]),
+    ],
     watchlist: watchlist.map(({ title, status }) => ({ title, status })),
     excludeIds: watchlist
       .filter((item) => item.status === 'completed' || item.status === 'dropped')
