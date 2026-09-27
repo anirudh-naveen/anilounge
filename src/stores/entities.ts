@@ -1,5 +1,5 @@
 /**
- * entities.ts — Pinia store for catalog characters (and later VAs/studios).
+ * entities.ts — Pinia store for catalog characters, voice actors, and studios.
  *
  * Loads title casts, entity detail pages, search hits, and profile favorites.
  */

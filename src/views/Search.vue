@@ -239,6 +239,7 @@
           >
             <div class="result-poster">
               <img
+                :class="{ 'studio-logo': item.contentType === 'studio' && item.posterPath }"
                 :src="getPosterUrl(item.posterPath || '')"
                 :alt="getDisplayTitle(item)"
                 @error="handleImageError"
@@ -1088,6 +1089,12 @@ onMounted(() => {
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
+}
+
+.result-poster img.studio-logo {
+  object-fit: contain;
+  padding: 1.5rem;
+  background: var(--bg-card);
 }
 
 .result-card:hover .result-poster img {

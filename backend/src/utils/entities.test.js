@@ -2,21 +2,32 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   appearanceRoleRank,
+  canonicalCharacterName,
+  canonicalCharacterNameKey,
+  characterNamesEqual,
   characterPortraitPath,
   characterUpsertFilter,
   cleanCharacterName,
+  displayStudioName,
   entityNamesEqual,
   entityToSearchHit,
   foldEntityName,
+  groupCharactersByCanonicalName,
   highlightedCharacters,
   isCharacterPortrait,
   isUsableCharacterName,
   mapJikanCharacterRow,
   mapJikanPersonVoiceRow,
+  mapJikanProducer,
   mapTmdbCharacterCredits,
   mapVoiceActorFromCredit,
   matchCharacterByName,
+  pickJikanProducer,
+  pickPrimaryCharacter,
+  pickTmdbCompany,
   serializeEntity,
+  studioNameKey,
+  studioNamesEqual,
   uniqueEntityNames,
 } from './entities.js'
 
@@ -36,6 +47,10 @@ describe('entity name matching', () => {
     assert.equal(matchCharacterByName('Luffy', characters)?._id, '1')
     assert.equal(matchCharacterByName('Roronoa Zoro', characters)?._id, '2')
     assert.equal(matchCharacterByName('Sanji', characters), null)
+    assert.equal(
+      matchCharacterByName('Natsuki, Subaru', [{ _id: 's', name: 'Subaru Natsuki' }])?._id,
+      's',
+    )
   })
 })
 
@@ -247,6 +262,16 @@ describe('serializeEntity', () => {
     assert.equal(hit.entityType, 'character')
     assert.equal(hit.title, 'Nami')
     assert.equal(hit.posterPath, 'https://cdn.example/nami.jpg')
+    assert.equal(
+      serializeEntity({
+        _id: 's1',
+        entityType: 'character',
+        name: 'Natsuki, Subaru',
+        imagePath: 'https://cdn.example/subaru.jpg',
+        appearances: [],
+      }).name,
+      'Subaru Natsuki',
+    )
   })
 
   it('keeps populated character portraits on voice-actor appearances', () => {
@@ -272,5 +297,117 @@ describe('serializeEntity', () => {
       serialized.appearances[0].character.imagePath.includes('characters'),
       true,
     )
+  })
+
+  it('keeps studio names and logos as-is and trims studio search hits', () => {
+    const serialized = serializeEntity({
+      _id: 'st-1',
+      entityType: 'studio',
+      name: 'Sunrise, Inc.',
+      imagePath: '/pixar-logo.png',
+      appearances: [{ content: 'w1' }, { content: 'w2' }],
+    })
+    assert.equal(serialized.name, 'Sunrise, Inc.')
+    assert.equal(serialized.imagePath, '/pixar-logo.png')
+    assert.equal(serialized.appearances.length, 2)
+    const hit = entityToSearchHit(serialized)
+    assert.equal(hit.contentType, 'studio')
+    assert.deepEqual(hit.appearances, [])
+  })
+})
+
+describe('studio lookups', () => {
+  it('matches studio names across corporate suffixes and punctuation', () => {
+    assert.equal(studioNameKey('Kyoto Animation Co., Ltd.'), 'kyoto animation')
+    assert.equal(studioNamesEqual('Kyoto Animation Co., Ltd.', 'Kyoto Animation'), true)
+    assert.equal(studioNamesEqual('Production I.G', 'production i g'), true)
+    assert.equal(studioNamesEqual('Pixar', 'Pixar Canada'), false)
+    assert.equal(displayStudioName('  Studio   Ghibli '), 'Studio Ghibli')
+  })
+
+  it('maps a Jikan producer and picks the matching search hit', () => {
+    const rows = [
+      {
+        mal_id: 99,
+        titles: [{ type: 'Default', title: 'Kyoto Animation Tokyo' }],
+      },
+      {
+        mal_id: 2,
+        titles: [
+          { type: 'Default', title: 'Kyoto Animation' },
+          { type: 'Japanese', title: '京都アニメーション' },
+          { type: 'Synonym', title: 'KyoAni' },
+        ],
+        images: { jpg: { image_url: 'https://cdn.myanimelist.net/images/company/2.png' } },
+        about: 'Studio in Uji.',
+      },
+    ]
+    const picked = pickJikanProducer(rows, 'Kyoto Animation Co., Ltd.')
+    assert.equal(picked.mal_id, 2)
+    assert.deepEqual(mapJikanProducer(picked), {
+      malId: 2,
+      name: 'Kyoto Animation',
+      nativeName: '京都アニメーション',
+      alternativeNames: ['京都アニメーション', 'KyoAni'],
+      imagePath: 'https://cdn.myanimelist.net/images/company/2.png',
+      about: 'Studio in Uji.',
+    })
+    assert.equal(mapJikanProducer({ mal_id: 0, titles: [] }), null)
+    assert.equal(pickJikanProducer(rows, 'MAPPA'), null)
+  })
+
+  it('prefers the TMDB company with a logo among exact name matches', () => {
+    const results = [
+      { id: 1, name: 'Pixar', logo_path: null },
+      { id: 3, name: 'Pixar', logo_path: '/logo.png' },
+      { id: 219390, name: 'Pixar Canada', logo_path: '/ca.png' },
+    ]
+    assert.equal(pickTmdbCompany(results, 'Pixar').id, 3)
+    assert.equal(pickTmdbCompany(results, 'DreamWorks'), null)
+  })
+})
+
+describe('franchise character name merge keys', () => {
+  it('treats swapped first/last names as the same character', () => {
+    assert.equal(canonicalCharacterName('Natsuki, Subaru'), 'Subaru Natsuki')
+    assert.equal(canonicalCharacterNameKey('Natsuki, Subaru'), 'subaru natsuki')
+    assert.equal(canonicalCharacterNameKey('Subaru Natsuki'), 'subaru natsuki')
+    assert.equal(characterNamesEqual('Natsuki, Subaru', 'Subaru Natsuki'), true)
+    assert.equal(characterNamesEqual('Rem', 'Ram'), false)
+  })
+
+  it('groups swapped-order duplicates and keeps the portrait row', () => {
+    const groups = groupCharactersByCanonicalName([
+      {
+        _id: 'a',
+        name: 'Natsuki, Subaru',
+        appearances: [{ content: 's1' }],
+      },
+      {
+        _id: 'b',
+        name: 'Subaru Natsuki',
+        imagePath: 'https://cdn.myanimelist.net/images/characters/9/subaru.jpg',
+        malId: 118735,
+        appearances: [{ content: 's1' }, { content: 's2' }],
+      },
+      { _id: 'c', name: 'Emilia', appearances: [{ content: 's1' }] },
+    ])
+    const subaru = groups.find((group) => group.length === 2)
+    const emilia = groups.find((group) => group.length === 1)
+    assert.equal(subaru.length, 2)
+    assert.equal(emilia[0]._id, 'c')
+    assert.equal(pickPrimaryCharacter(subaru)._id, 'b')
+    assert.equal(
+      pickPrimaryCharacter([
+        { _id: 'x', name: 'Rem', appearanceCount: 1 },
+        { _id: 'y', name: 'Rem', imagePath: 'https://cdn.example/rem.jpg', appearanceCount: 4 },
+      ])._id,
+      'y',
+    )
+    const mixed = groupCharactersByCanonicalName([
+      { _id: 'a', name: 'Subaru Natsuki', alternativeNames: ['Andrew Stanton'] },
+      { _id: 'b', name: 'Andrew Stanton' },
+    ])
+    assert.equal(mixed.length, 2)
   })
 })

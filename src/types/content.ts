@@ -14,7 +14,7 @@ export interface UnifiedContent {
   nativeTitle?: string
   originalTitle?: string
   overview: string
-  contentType: 'movie' | 'tv' | 'special' | 'character' | 'voice_actor'
+  contentType: 'movie' | 'tv' | 'special' | 'character' | 'voice_actor' | 'studio'
   posterPath?: string
   backdropPath?: string
   releaseDate?: string | Date
@@ -41,6 +41,8 @@ export interface UnifiedContent {
   malMediaType?: string
   seasonCount?: number
   studios?: string[]
+  /** Studio rows behind `studios`, linking to their detail screens. */
+  studioEntities?: StudioRef[]
   productionCompanies?: string[]
   /** ISO 3166-1 alpha-2 origin countries (`JP`, `US`, …). */
   originCountries?: string[]
@@ -71,6 +73,12 @@ export interface UnifiedContent {
   }
 }
 
+export interface StudioRef {
+  _id: string
+  name: string
+  imagePath?: string
+}
+
 /** Voice/acting credit on a single TV episode. */
 export interface EpisodeCastMember {
   name: string
@@ -91,6 +99,29 @@ export interface Episode {
   airDate?: string | null
   runtime?: number | null
   cast: EpisodeCastMember[]
+}
+
+/** One TMDB season of a show, linked to the catalog title for that season when stored. */
+export interface SeasonSummary {
+  seasonNumber: number
+  name: string
+  overview: string
+  posterPath: string
+  airDate?: string | null
+  episodeCount: number
+  voteAverage?: number | null
+  /** Catalog title that is this season (MAL/AniList list seasons separately), or null. */
+  contentId: string | null
+}
+
+/** Episodes and seasons for a TV details page (`GET /content/:id/episodes`). */
+export interface SeasonGuide {
+  episodes: Episode[]
+  seasons?: SeasonSummary[]
+  /** Season the requested title is, when it is one season of a longer show. */
+  currentSeason?: number | null
+  /** Title the episodes and seasons belong to. */
+  seriesId?: string
 }
 
 export interface UnifiedContentWithScore extends UnifiedContent {
@@ -116,6 +147,10 @@ export interface EntityAppearance {
         nativeTitle?: string
         posterPath?: string
         contentType?: 'movie' | 'tv' | 'special'
+        releaseDate?: string | Date
+        startSeasonYear?: number
+        unifiedScore?: number
+        malStatus?: string
       }
   character?:
     | string

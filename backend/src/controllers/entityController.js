@@ -1,5 +1,5 @@
 /**
- * HTTP handlers for catalog entities (characters, and later voice actors / studios).
+ * HTTP handlers for catalog entities (characters, voice actors, and studios).
  *
  * Layer: controller. Ingests character lists for a title on read, supports
  * search/detail, and toggles per-user favorites.
@@ -12,6 +12,7 @@ import User from '../models/User.js'
 import {
   ensureCharacterAbout,
   ensureCharactersForContent,
+  ensureStudioDetails,
   ensureVoiceActorAbout,
   ensureVoiceActorCredits,
   ensureVoiceActorsForCharacter,
@@ -126,6 +127,9 @@ export const getEntityById = async (req, res) => {
     if (entity.entityType === 'voice_actor') {
       await ensureVoiceActorAbout(entity)
       entity = (await ensureVoiceActorCredits(entity)) || entity
+    }
+    if (entity.entityType === 'studio') {
+      await ensureStudioDetails(entity)
     }
     const isFavorited = req.user ? userHasFavorite(req.user, entity._id) : false
     res.json({

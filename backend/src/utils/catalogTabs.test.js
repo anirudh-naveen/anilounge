@@ -66,7 +66,7 @@ describe('Movie catalog Mongo filters', () => {
     assert.equal(normalizeMovieCatalogTab('airing'), 'popular')
   })
 
-  it('matches theatrical movies released in the last eight weeks', () => {
+  it('matches theatrical movies released in the last four months', () => {
     const query = matchMovieCatalogTab('theatres', from)
     assert.equal(query.contentType, 'movie')
     assert.deepEqual(query.malStatus, { $nin: ['not_yet_aired'] })

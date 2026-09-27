@@ -173,25 +173,65 @@ function sameId(a, b) {
 
 async function retargetUsers(fromId, toId) {
   await query(
-    `UPDATE watchlist_entries SET content_id = $2
+    `UPDATE watchlist SET content_id = $2
      WHERE content_id = $1
        AND NOT EXISTS (
-         SELECT 1 FROM watchlist_entries we
-         WHERE we.user_id = watchlist_entries.user_id AND we.content_id = $2
+         SELECT 1 FROM watchlist we
+         WHERE we.user_id = watchlist.user_id AND we.content_id = $2
        )`,
     [fromId, toId],
   )
-  await query('DELETE FROM watchlist_entries WHERE content_id = $1', [fromId])
+  await query('DELETE FROM watchlist WHERE content_id = $1', [fromId])
   await query(
-    `UPDATE user_ratings SET content_id = $2
+    `UPDATE ratings SET content_id = $2
      WHERE content_id = $1
        AND NOT EXISTS (
-         SELECT 1 FROM user_ratings ur
-         WHERE ur.user_id = user_ratings.user_id AND ur.content_id = $2
+         SELECT 1 FROM ratings ur
+         WHERE ur.user_id = ratings.user_id AND ur.content_id = $2
        )`,
     [fromId, toId],
   )
-  await query('DELETE FROM user_ratings WHERE content_id = $1', [fromId])
+  await query('DELETE FROM ratings WHERE content_id = $1', [fromId])
+  await query(
+    `UPDATE favorites SET content_id = $2
+     WHERE content_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM favorites f
+         WHERE f.user_id = favorites.user_id AND f.content_id = $2
+       )`,
+    [fromId, toId],
+  )
+  await query('DELETE FROM favorites WHERE content_id = $1', [fromId])
+  await query(
+    `UPDATE appearances SET work_id = $2
+     WHERE work_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM appearances a
+         WHERE a.work_id = $2 AND a.character_id = appearances.character_id
+       )`,
+    [fromId, toId],
+  )
+  await query('DELETE FROM appearances WHERE work_id = $1', [fromId])
+  await query(
+    `UPDATE studio_credits SET work_id = $2
+     WHERE work_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM studio_credits sc
+         WHERE sc.work_id = $2 AND sc.studio_id = studio_credits.studio_id
+       )`,
+    [fromId, toId],
+  )
+  await query('DELETE FROM studio_credits WHERE work_id = $1', [fromId])
+  await query(
+    `UPDATE franchise_members SET member_id = $2
+     WHERE member_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM franchise_members fm
+         WHERE fm.member_id = $2
+       )`,
+    [fromId, toId],
+  )
+  await query('DELETE FROM franchise_members WHERE member_id = $1', [fromId])
 }
 
 async function retargetRelationships(fromId, toId) {

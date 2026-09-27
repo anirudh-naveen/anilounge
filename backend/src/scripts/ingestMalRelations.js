@@ -73,7 +73,9 @@ async function ingest() {
 
   await connectPostgres()
   const { rows: titles } = await query(
-    `SELECT id, title, mal_id FROM content WHERE mal_id IS NOT NULL ORDER BY mal_id`,
+    `SELECT id, name, mal_id FROM content
+     WHERE mal_id IS NOT NULL AND kind IN ('movie', 'series', 'special')
+     ORDER BY mal_id`,
   )
   const byMal = new Map(titles.map((row) => [Number(row.mal_id), row.id]))
   console.log(`Ingesting MAL relations for ${titles.length} titles`)

@@ -56,6 +56,17 @@ export function foldEntityName(value) {
 }
 
 /**
+ * Dub language of a voice credit, or null when the source did not say
+ * (TMDB credits arrive unlabeled or as "Unknown").
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function knownVoiceLanguage(value) {
+  const language = normalizeEntityName(value)
+  return language && language.toLowerCase() !== 'unknown' ? language : null
+}
+
+/**
  * Case-insensitive name equality after folding punctuation.
  * @param {unknown} left
  * @param {unknown} right
@@ -218,6 +229,15 @@ export function entityImagePath(images, tmdbPath = '') {
 }
 
 /**
+ * AniList serves `default.jpg` when a character or staff member has no picture.
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isPlaceholderImage(value) {
+  return /anilist.*\/default\.(jpe?g|png)$/i.test(value)
+}
+
+/**
  * Whether an image is a character portrait rather than a voice-actor/TMDB headshot.
  * TMDB relative paths (`/abc.jpg`) and MAL `voiceactors` URLs are actor photos.
  * @param {unknown} path
@@ -227,7 +247,7 @@ export function isCharacterPortrait(path) {
   const value = normalizeEntityName(path)
   if (!value) return false
   const lower = value.toLowerCase()
-  if (/questionmark/i.test(lower)) return false
+  if (/questionmark/i.test(lower) || isPlaceholderImage(lower)) return false
   if (lower.includes('voiceactors') || lower.includes('voiceactor')) return false
   if (lower.includes('image.tmdb.org')) return false
   if (value.startsWith('/') && !/^https?:/i.test(value)) return false
@@ -257,14 +277,224 @@ export function displayPersonName(value) {
 }
 
 /**
+ * Character display name: strip credit suffixes, then Westernize `"Last, First"`.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function canonicalCharacterName(value) {
+  return displayPersonName(cleanCharacterName(value))
+}
+
+/**
+ * Folded key so `"Natsuki, Subaru"` and `"Subaru Natsuki"` compare equal.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function canonicalCharacterNameKey(value) {
+  return foldEntityName(canonicalCharacterName(value))
+}
+
+/**
+ * Whether two character names are the same person label, ignoring order and punctuation.
+ * @param {unknown} left
+ * @param {unknown} right
+ * @returns {boolean}
+ */
+export function characterNamesEqual(left, right) {
+  const a = canonicalCharacterNameKey(left)
+  const b = canonicalCharacterNameKey(right)
+  return Boolean(a) && a === b
+}
+
+/**
+ * Folded name keys for a character row. Aliases are ignored so a polluted
+ * voice-actor aka cannot chain two different people together.
+ * @param {{ name?: string, englishName?: string } | null | undefined} entity
+ * @returns {Set<string>}
+ */
+export function characterNameKeys(entity) {
+  const keys = new Set()
+  for (const name of [entity?.name, entity?.englishName]) {
+    const key = canonicalCharacterNameKey(name)
+    if (key) keys.add(key)
+  }
+  return keys
+}
+
+/**
+ * Group character documents that share a canonical name (including swapped order).
+ * @param {object[]} [entities]
+ * @returns {object[][]}
+ */
+export function groupCharactersByCanonicalName(entities) {
+  const list = (Array.isArray(entities) ? entities : []).filter((entity) => entity?._id || entity?.id)
+  const parent = list.map((_, index) => index)
+  const find = (index) => {
+    while (parent[index] !== index) {
+      parent[index] = parent[parent[index]]
+      index = parent[index]
+    }
+    return index
+  }
+  const keyToIndex = new Map()
+  list.forEach((entity, index) => {
+    for (const key of characterNameKeys(entity)) {
+      const existing = keyToIndex.get(key)
+      if (existing == null) {
+        keyToIndex.set(key, index)
+        continue
+      }
+      const left = find(existing)
+      const right = find(index)
+      if (left !== right) parent[right] = left
+    }
+  })
+  const groups = new Map()
+  list.forEach((entity, index) => {
+    const root = find(index)
+    if (!groups.has(root)) groups.set(root, [])
+    groups.get(root).push(entity)
+  })
+  return [...groups.values()]
+}
+
+/**
+ * Keep the character with a portrait, MAL id, AniList id, and the most appearances.
+ * @param {object[]} entities
+ * @returns {object | undefined}
+ */
+export function pickPrimaryCharacter(entities) {
+  const list = Array.isArray(entities) ? entities : []
+  return [...list].sort((left, right) => {
+    const leftImg = characterPortraitPath(left?.imagePath) ? 1 : 0
+    const rightImg = characterPortraitPath(right?.imagePath) ? 1 : 0
+    if (rightImg !== leftImg) return rightImg - leftImg
+    const leftMal = Number(left?.malId) > 0 ? 1 : 0
+    const rightMal = Number(right?.malId) > 0 ? 1 : 0
+    if (rightMal !== leftMal) return rightMal - leftMal
+    const leftAl = Number(left?.anilistId) > 0 ? 1 : 0
+    const rightAl = Number(right?.anilistId) > 0 ? 1 : 0
+    if (rightAl !== leftAl) return rightAl - leftAl
+    const leftApps =
+      Number(left?.appearanceCount) > 0
+        ? Number(left.appearanceCount)
+        : (left?.appearances || []).length
+    const rightApps =
+      Number(right?.appearanceCount) > 0
+        ? Number(right.appearanceCount)
+        : (right?.appearances || []).length
+    if (rightApps !== leftApps) return rightApps - leftApps
+    return String(left?._id || left?.id || '').localeCompare(String(right?._id || right?.id || ''))
+  })[0]
+}
+
+/**
  * Voice-actor photo URL. MAL `voiceactors` paths and TMDB profiles are valid here.
  * @param {unknown} path
  * @returns {string}
  */
 export function voiceActorImagePath(path) {
   const value = normalizeEntityName(path)
-  if (!value || /questionmark/i.test(value)) return ''
+  if (!value || /questionmark/i.test(value) || isPlaceholderImage(value)) return ''
   return value
+}
+
+/**
+ * Studio logo URL (Jikan producer image or TMDB `logo_path`).
+ * @param {unknown} path
+ * @returns {string}
+ */
+export function studioImagePath(path) {
+  return voiceActorImagePath(path)
+}
+
+/**
+ * Studio display name. Unlike people, `"Sunrise, Inc."` must not be reordered.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function displayStudioName(value) {
+  return normalizeEntityName(value).replace(/\s+/g, ' ')
+}
+
+/**
+ * Fold a studio name and drop corporate suffixes so `"Kyoto Animation Co., Ltd."`
+ * matches `"Kyoto Animation"`.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function studioNameKey(value) {
+  return foldEntityName(value)
+    .replace(/\b(co|ltd|inc|llc|corp|corporation|company|limited|k k|kk|gmbh)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Whether two studio labels name the same company.
+ * @param {unknown} left
+ * @param {unknown} right
+ * @returns {boolean}
+ */
+export function studioNamesEqual(left, right) {
+  const a = studioNameKey(left)
+  const b = studioNameKey(right)
+  return Boolean(a) && a === b
+}
+
+/**
+ * Map a Jikan `/producers` row onto studio fields.
+ * @param {object} [row]
+ * @returns {{ malId: number, name: string, nativeName: string, alternativeNames: string[], imagePath: string, about: string } | null}
+ */
+export function mapJikanProducer(row) {
+  const malId = Number(row?.mal_id)
+  if (!Number.isFinite(malId) || malId < 1) return null
+  const titles = Array.isArray(row?.titles) ? row.titles : []
+  const titleOf = (type) =>
+    normalizeEntityName(titles.find((entry) => entry?.type === type)?.title)
+  const name = displayStudioName(titleOf('Default') || titles[0]?.title || row?.name)
+  if (!name) return null
+  return {
+    malId,
+    name,
+    nativeName: titleOf('Japanese'),
+    alternativeNames: uniqueEntityNames(titles.map((entry) => entry?.title)).filter(
+      (title) => title !== name,
+    ),
+    imagePath: studioImagePath(entityImagePath(row?.images)),
+    about: normalizeEntityName(row?.about),
+  }
+}
+
+/**
+ * Jikan producer search hit whose titles match the studio name.
+ * @param {object[]} [rows]
+ * @param {string} name
+ * @returns {object | null}
+ */
+export function pickJikanProducer(rows, name) {
+  const list = Array.isArray(rows) ? rows : []
+  return (
+    list.find((row) =>
+      (Array.isArray(row?.titles) ? row.titles : []).some((entry) =>
+        studioNamesEqual(entry?.title, name),
+      ),
+    ) || null
+  )
+}
+
+/**
+ * TMDB `/search/company` hit that names the same studio, preferring one with a logo.
+ * @param {object[]} [results]
+ * @param {string} name
+ * @returns {object | null}
+ */
+export function pickTmdbCompany(results, name) {
+  const matches = (Array.isArray(results) ? results : []).filter((row) =>
+    studioNamesEqual(row?.name, name),
+  )
+  return matches.find((row) => row?.logo_path) || matches[0] || null
 }
 
 /**
@@ -331,6 +561,8 @@ export function mapJikanCharacterRow(row, contentId) {
       }
     })
     .filter(Boolean)
+    .sort((left, right) => Number(/japanese/i.test(right.language)) - Number(/japanese/i.test(left.language)))
+    .slice(0, 3)
 
   const role = normalizeEntityName(row?.role) || 'Supporting'
   const favorites = Number(row?.favorites ?? character?.favorites) || 0
@@ -426,6 +658,7 @@ export function mapVoiceActorFromCredit(
   const name = displayPersonName(original)
   const malId = Number(credit?.malId)
   const tmdbId = Number(credit?.tmdbId)
+  const anilistId = Number(credit?.anilistId)
   const appearance = {
     characterName: cleanCharacterName(characterName) || characterName || '',
     role: normalizeEntityName(role) || 'Voice',
@@ -438,8 +671,10 @@ export function mapVoiceActorFromCredit(
     name,
     alternativeNames: uniqueEntityNames(original, name),
     imagePath: voiceActorImagePath(credit?.imagePath),
+    nativeName: normalizeEntityName(credit?.nativeName),
     malId: Number.isFinite(malId) && malId > 0 ? malId : undefined,
     tmdbId: Number.isFinite(tmdbId) && tmdbId > 0 ? tmdbId : undefined,
+    anilistId: Number.isFinite(anilistId) && anilistId > 0 ? anilistId : undefined,
     appearance,
   }
 }
@@ -501,17 +736,17 @@ export function highlightedVoiceActors(
  * @returns {object | null}
  */
 export function matchCharacterByName(characterName, characters) {
-  const target = foldEntityName(cleanCharacterName(characterName) || characterName)
+  const target = canonicalCharacterNameKey(characterName)
   if (!target || !Array.isArray(characters)) return null
   return (
     characters.find((entity) => {
-      const names = uniqueEntityNames(
+      const names = [
         entity?.name,
         entity?.englishName,
         entity?.nativeName,
-        entity?.alternativeNames,
-      )
-      return names.some((name) => foldEntityName(name) === target)
+        ...(Array.isArray(entity?.alternativeNames) ? entity.alternativeNames : []),
+      ]
+      return names.some((name) => canonicalCharacterNameKey(name) === target)
     }) || null
   )
 }
@@ -533,18 +768,12 @@ export function serializeEntity(doc, options = {}) {
   return {
     _id: raw._id,
     entityType: raw.entityType,
-    name:
-      raw.entityType === 'voice_actor'
-        ? displayPersonName(raw.name)
-        : cleanCharacterName(raw.name) || raw.name,
+    name: serializedEntityName(raw),
     englishName: raw.englishName || '',
     nativeName: raw.nativeName || '',
     alternativeNames: raw.alternativeNames || [],
     about: raw.about || '',
-    imagePath:
-      raw.entityType === 'character'
-        ? characterPortraitPath(raw.imagePath)
-        : voiceActorImagePath(raw.imagePath),
+    imagePath: serializedEntityImage(raw),
     malId: raw.malId,
     tmdbId: raw.tmdbId,
     favoritesCount: raw.favoritesCount || 0,
@@ -555,6 +784,18 @@ export function serializeEntity(doc, options = {}) {
       return { ...row, character }
     }),
   }
+}
+
+function serializedEntityName(raw) {
+  if (raw.entityType === 'voice_actor') return displayPersonName(raw.name)
+  if (raw.entityType === 'studio') return displayStudioName(raw.name)
+  return canonicalCharacterName(raw.name) || raw.name
+}
+
+function serializedEntityImage(raw) {
+  if (raw.entityType === 'character') return characterPortraitPath(raw.imagePath)
+  if (raw.entityType === 'studio') return studioImagePath(raw.imagePath)
+  return voiceActorImagePath(raw.imagePath)
 }
 
 /**
@@ -569,7 +810,7 @@ function serializeNestedCharacter(value) {
   return {
     _id: raw._id,
     entityType: 'character',
-    name: cleanCharacterName(raw.name) || raw.name || '',
+    name: canonicalCharacterName(raw.name) || raw.name || '',
     imagePath: characterPortraitPath(raw.imagePath),
   }
 }
@@ -593,6 +834,7 @@ export function entityToSearchHit(entity) {
     entityType: serialized.entityType,
     genres: [],
     alternativeTitles: serialized.alternativeNames,
-    appearances: serialized.appearances,
+    // Studios can credit hundreds of titles; search cards never read them.
+    appearances: serialized.entityType === 'studio' ? [] : serialized.appearances,
   }
 }
