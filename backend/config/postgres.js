@@ -6,6 +6,7 @@
  * Request handlers use `query` / `startSession` instead of Mongoose.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks'
 import pg from 'pg'
 import dotenv from 'dotenv'
 
@@ -14,9 +15,12 @@ dotenv.config()
 /** @type {pg.Pool | null} */
 let pool = null
 
-/** Nested transaction clients; `query` uses the innermost. */
-/** @type {pg.PoolClient[]} */
-const txClients = []
+/**
+ * Nested transaction clients for the current async context; `query` uses the
+ * innermost. Must be per-context so concurrent requests never share a client.
+ * @type {AsyncLocalStorage<pg.PoolClient[]>}
+ */
+const txContext = new AsyncLocalStorage()
 
 /**
  * SSL for hosted Postgres; skip for local Docker and Railway private DNS.
@@ -101,26 +105,28 @@ export async function closePostgres() {
  * @returns {Promise<pg.QueryResult>}
  */
 export function query(text, params) {
-  const client = txClients[txClients.length - 1]
+  const client = txContext.getStore()?.at(-1)
   if (client) return client.query(text, params)
   return getPool().query(text, params)
 }
 
 /**
  * Mongoose-shaped session used by watchlist/rating handlers.
- * `startTransaction` pushes this client so subsequent `query` calls join the tx.
+ * `startTransaction` binds this client to the caller's async context so its
+ * later `query` calls (and only those) join the tx. It is deliberately not
+ * `async`: the context switch has to happen in the caller's frame.
  * @returns {Promise<{ startTransaction: Function, commitTransaction: Function, abortTransaction: Function, endSession: Function }>}
  */
 export async function startSession() {
   const client = await getPool().connect()
-  let inStack = false
+  let outerStack = null
   return {
-    async startTransaction() {
-      if (!inStack) {
-        txClients.push(client)
-        inStack = true
+    startTransaction() {
+      if (!outerStack) {
+        outerStack = txContext.getStore() || []
+        txContext.enterWith([...outerStack, client])
       }
-      await client.query('BEGIN')
+      return client.query('BEGIN')
     },
     async commitTransaction() {
       await client.query('COMMIT')
@@ -133,10 +139,9 @@ export async function startSession() {
       }
     },
     endSession() {
-      if (inStack) {
-        const index = txClients.lastIndexOf(client)
-        if (index >= 0) txClients.splice(index, 1)
-        inStack = false
+      if (outerStack) {
+        txContext.enterWith(outerStack)
+        outerStack = null
       }
       client.release()
     },

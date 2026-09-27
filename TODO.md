@@ -17,16 +17,16 @@
    - Additionally if the API has pictures for them, include them.
    - Update content and episodes to use this new feature on click.
    - Update the chatbot to use this as a low tier help for recommending series.
-4. Fix related content
+4. Fix related content ✅
    - Content have incorrect relationships. For example, re:Zero has been connected with Real Girl, when it should only be connected to other re:Zero media.
 
 ## Home
 
-1. Rework the entire homepage
+1. Rework the entire homepage ✅
    a. Display a "status" chunk in the majority of the middle (leaning left, leaving space in the right for b.) displaying the latest watchlist changes personally and with friends. If the user isn't logged in, replace the section with a prompt to register to access the watchlist and see personal and friend's activity.
    b. Have a right side bar displaying updates to content in the watchlist (new episode releases or upcoming titles released). If none are available and/or the user is not logged in, show trending episode/title releases.
    c. Under the status rectangle show a bar for the character of the day.
-   d. Below them all, display popular forum posts.
+   d. Below them all, display popular forum posts. (This will be a placeholder for now until the forum is completed.)
 
 ## Search
 
@@ -57,6 +57,7 @@
 4. Add review system and discussion features for users in a new tab called Forum.
    - Allow users to tag the specified (movies, series, series episodes, and characters) or "franchise" (not sure if this is a current content table yet, if not make it one.)
    - For any associated forums, allow some of the leading forum posts and a few highlighted comments to the associated content's screen.
+   - Update Home with a few highlighted forum posts that refresh every few hours and depend on the user watchlist.
 5. Add an inbox in the profile dropwdown to see any site news, friend invites, comments on a post/comment.
 
 ## Infrastructure
