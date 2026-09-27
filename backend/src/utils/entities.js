@@ -56,6 +56,17 @@ export function foldEntityName(value) {
 }
 
 /**
+ * Dub language of a voice credit, or null when the source did not say
+ * (TMDB credits arrive unlabeled or as "Unknown").
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function knownVoiceLanguage(value) {
+  const language = normalizeEntityName(value)
+  return language && language.toLowerCase() !== 'unknown' ? language : null
+}
+
+/**
  * Case-insensitive name equality after folding punctuation.
  * @param {unknown} left
  * @param {unknown} right
@@ -218,6 +229,15 @@ export function entityImagePath(images, tmdbPath = '') {
 }
 
 /**
+ * AniList serves `default.jpg` when a character or staff member has no picture.
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isPlaceholderImage(value) {
+  return /anilist.*\/default\.(jpe?g|png)$/i.test(value)
+}
+
+/**
  * Whether an image is a character portrait rather than a voice-actor/TMDB headshot.
  * TMDB relative paths (`/abc.jpg`) and MAL `voiceactors` URLs are actor photos.
  * @param {unknown} path
@@ -227,7 +247,7 @@ export function isCharacterPortrait(path) {
   const value = normalizeEntityName(path)
   if (!value) return false
   const lower = value.toLowerCase()
-  if (/questionmark/i.test(lower)) return false
+  if (/questionmark/i.test(lower) || isPlaceholderImage(lower)) return false
   if (lower.includes('voiceactors') || lower.includes('voiceactor')) return false
   if (lower.includes('image.tmdb.org')) return false
   if (value.startsWith('/') && !/^https?:/i.test(value)) return false
@@ -339,7 +359,7 @@ export function groupCharactersByCanonicalName(entities) {
 }
 
 /**
- * Keep the character with a portrait, MAL id, and the most appearances.
+ * Keep the character with a portrait, MAL id, AniList id, and the most appearances.
  * @param {object[]} entities
  * @returns {object | undefined}
  */
@@ -352,6 +372,9 @@ export function pickPrimaryCharacter(entities) {
     const leftMal = Number(left?.malId) > 0 ? 1 : 0
     const rightMal = Number(right?.malId) > 0 ? 1 : 0
     if (rightMal !== leftMal) return rightMal - leftMal
+    const leftAl = Number(left?.anilistId) > 0 ? 1 : 0
+    const rightAl = Number(right?.anilistId) > 0 ? 1 : 0
+    if (rightAl !== leftAl) return rightAl - leftAl
     const leftApps =
       Number(left?.appearanceCount) > 0
         ? Number(left.appearanceCount)
@@ -372,7 +395,7 @@ export function pickPrimaryCharacter(entities) {
  */
 export function voiceActorImagePath(path) {
   const value = normalizeEntityName(path)
-  if (!value || /questionmark/i.test(value)) return ''
+  if (!value || /questionmark/i.test(value) || isPlaceholderImage(value)) return ''
   return value
 }
 
@@ -635,6 +658,7 @@ export function mapVoiceActorFromCredit(
   const name = displayPersonName(original)
   const malId = Number(credit?.malId)
   const tmdbId = Number(credit?.tmdbId)
+  const anilistId = Number(credit?.anilistId)
   const appearance = {
     characterName: cleanCharacterName(characterName) || characterName || '',
     role: normalizeEntityName(role) || 'Voice',
@@ -647,8 +671,10 @@ export function mapVoiceActorFromCredit(
     name,
     alternativeNames: uniqueEntityNames(original, name),
     imagePath: voiceActorImagePath(credit?.imagePath),
+    nativeName: normalizeEntityName(credit?.nativeName),
     malId: Number.isFinite(malId) && malId > 0 ? malId : undefined,
     tmdbId: Number.isFinite(tmdbId) && tmdbId > 0 ? tmdbId : undefined,
+    anilistId: Number.isFinite(anilistId) && anilistId > 0 ? anilistId : undefined,
     appearance,
   }
 }

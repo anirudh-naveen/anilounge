@@ -47,7 +47,7 @@ async function loadCharacterDocs(characterIds) {
   if (!ids.length) return []
   const { rows } = await query(
     `SELECT e.id, e.name, e.native_name, e.about, e.image_path, e.mal_id, e.tmdb_id,
-            ch.english_name
+            e.anilist_id, ch.english_name
      FROM content e
      LEFT JOIN characters ch ON ch.content_id = e.id
      WHERE e.kind = 'character' AND e.id = ANY($1::uuid[])`,
@@ -85,6 +85,7 @@ async function loadCharacterDocs(characterIds) {
       imagePath: row.image_path,
       malId: row.mal_id != null ? Number(row.mal_id) : null,
       tmdbId: row.tmdb_id != null ? Number(row.tmdb_id) : null,
+      anilistId: row.anilist_id != null ? Number(row.anilist_id) : null,
       alternativeNames: akasById.get(id) || [],
       appearanceCount: appsById.get(id) || 0,
       appearances: [],
@@ -232,30 +233,75 @@ export async function charactersInHome(workId) {
   return docs
 }
 
+const SOURCE_ID_FIELDS = ['malId', 'anilistId']
+
+function positiveId(value) {
+  const id = Number(value)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
 /**
- * Find an existing franchise-mate for this payload (MAL id first, then name).
- * @param {{ malId?: number, name?: string }} payload
+ * Whether two characters carry different ids from the same source (MAL or
+ * AniList), which means they are different people even when names match.
+ * @param {object} left
+ * @param {object} right
+ * @returns {boolean}
+ */
+export function characterSourceIdsConflict(left, right) {
+  return SOURCE_ID_FIELDS.some((field) => {
+    const a = positiveId(left?.[field])
+    const b = positiveId(right?.[field])
+    return a != null && b != null && a !== b
+  })
+}
+
+/**
+ * Find an existing character for this payload: MAL id, then AniList id (home
+ * franchise first, then anywhere), then canonical name within the home
+ * franchise when source ids do not conflict.
+ * @param {{ malId?: number, anilistId?: number, name?: string }} payload
  * @param {unknown} workId
  * @param {object[]} [homeCharacters]
  * @returns {Promise<object|null>}
  */
 export async function findCharacterForPayload(payload, workId, homeCharacters) {
-  const malId = Number(payload?.malId)
   const candidates = Array.isArray(homeCharacters)
     ? homeCharacters
     : workId
       ? await charactersInHome(workId)
       : []
-  if (Number.isFinite(malId) && malId > 0) {
-    const fromHome = candidates.find((entity) => Number(entity.malId) === malId)
+  for (const field of SOURCE_ID_FIELDS) {
+    const id = positiveId(payload?.[field])
+    if (!id) continue
+    const fromHome = candidates.find((entity) => positiveId(entity[field]) === id)
     if (fromHome) return hydrateCharacter(fromHome)
-    const byMal = await Entity.findOne({ entityType: 'character', malId })
-    if (byMal) return byMal
+    const byId = await Entity.findOne({ entityType: 'character', [field]: id })
+    if (byId) return byId
   }
+  if (!workId) return null
   const key = canonicalCharacterNameKey(payload?.name)
-  if (!key || !workId) return null
-  const match = candidates.find((entity) => characterNameKeys(entity).has(key))
-  return hydrateCharacter(match)
+  const native = nativeKey(payload?.nativeName)
+  const match =
+    (key &&
+      candidates.find(
+        (entity) =>
+          characterNameKeys(entity).has(key) && !characterSourceIdsConflict(entity, payload),
+      )) ||
+    (native &&
+      candidates.find(
+        (entity) =>
+          nativeKey(entity.nativeName) === native && !characterSourceIdsConflict(entity, payload),
+      ))
+  return hydrateCharacter(match || null)
+}
+
+/**
+ * Native (kanji/kana) name without spaces, for matching across romanizations.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function nativeKey(value) {
+  return typeof value === 'string' ? value.replace(/\s+/g, '') : ''
 }
 
 /**
@@ -270,8 +316,11 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
   const fromId = asId(secondary?._id)
   if (!toId || !fromId || toId === fromId) return primary
 
-  const { rows: stillThere } = await query('SELECT id FROM content WHERE id = $1', [fromId])
-  if (!stillThere[0]) return primary
+  const { rows: pair } = await query(
+    `SELECT id::text FROM content WHERE id = ANY($1::uuid[]) AND kind = 'character'`,
+    [[toId, fromId]],
+  )
+  if (pair.length !== 2) return primary
 
   const canonical =
     canonicalCharacterName(primary.name) || canonicalCharacterName(secondary.name) || primary.name
@@ -299,6 +348,7 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
       : Number(secondary.tmdbId) > 0
         ? Number(secondary.tmdbId)
         : null
+  const keepAnilist = positiveId(primary.anilistId) || positiveId(secondary.anilistId)
 
   const home = Array.isArray(homeIds) && homeIds.length ? new Set(homeIds.map(String)) : null
   const { rows: secondaryApps } = await query(
@@ -368,7 +418,11 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
     [fromId],
   )
 
-  await query('UPDATE content SET mal_id = NULL, tmdb_id = NULL WHERE id = $1', [fromId])
+  await query(
+    `UPDATE content SET mal_id = NULL, tmdb_id = NULL, anilist_id = NULL
+     WHERE id = $1 AND kind = 'character'`,
+    [fromId],
+  )
   await query(
     `UPDATE content SET
        name = $2,
@@ -377,9 +431,10 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
        image_path = COALESCE($5, image_path),
        mal_id = COALESCE($6, mal_id),
        tmdb_id = COALESCE($7, tmdb_id),
+       anilist_id = COALESCE($8, anilist_id),
        updated_at = now()
-     WHERE id = $1`,
-    [toId, canonical, nativeName, about, imagePath, keepMal, keepTmdb],
+     WHERE id = $1 AND kind = 'character'`,
+    [toId, canonical, nativeName, about, imagePath, keepMal, keepTmdb, keepAnilist],
   )
   await query(
     `INSERT INTO characters (content_id, english_name) VALUES ($1, $2)
@@ -387,7 +442,7 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
     [toId, canonical],
   )
   if (!leftover[0]) {
-    await query('DELETE FROM content WHERE id = $1', [fromId])
+    await query(`DELETE FROM content WHERE id = $1 AND kind = 'character'`, [fromId])
   }
 
   primary.name = canonical
@@ -399,6 +454,7 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
   if (about) primary.about = about
   if (keepMal) primary.malId = keepMal
   if (keepTmdb) primary.tmdbId = keepTmdb
+  if (keepAnilist) primary.anilistId = keepAnilist
   return primary
 }
 
@@ -421,6 +477,7 @@ export async function mergeFranchiseCharactersForWork(workId) {
     if (!primary) continue
     for (const secondary of group) {
       if (asId(secondary._id) === asId(primary._id)) continue
+      if (characterSourceIdsConflict(primary, secondary)) continue
       try {
         await mergeCharacterPair(primary, secondary, homeIds)
         merged += 1

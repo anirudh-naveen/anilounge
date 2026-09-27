@@ -34,4 +34,13 @@ describe('compileMongoFilter', () => {
     assert.equal(compiled.params[0], 'tv')
     assert.equal(compiled.params[1], 'upcoming')
   })
+
+  it('compares $titleKey on normalized, lowercased, space-free names', () => {
+    const compiled = compileMongoFilter({
+      $or: [{ title: { $titleKey: 'rezero' } }, { alternativeTitles: { $titleKey: 'rezero' } }],
+    })
+    assert.match(compiled.sql, /regexp_replace\(lower\(normalize\(c\.title, NFKC\)\), '\\s', '', 'g'\) = \$1/)
+    assert.match(compiled.sql, /content_akas ca/)
+    assert.deepEqual(compiled.params, ['rezero', 'rezero'])
+  })
 })

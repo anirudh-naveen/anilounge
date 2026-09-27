@@ -360,6 +360,7 @@
     "db:migrate-legacy": "node src/scripts/migrateLegacyPostgres.js",
     "db:ingest-relations": "node src/scripts/ingestMalRelations.js",
     "db:merge-characters": "node src/scripts/mergeFranchiseCharacters.js",
+    "db:reload": "node src/scripts/reloadCatalog.js",
     "populate-unified": "node src/scripts/populateUnified.js",
     "calculate-user-ratings": "node src/scripts/calculateInitialUserRatings.js",
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -3,7 +3,9 @@
 
   Loads one series by route id and shows poster, titles, season/episode meta,
   watchlist actions, overview, an expandable episode row, studios, and related
-  sequels/prequels.
+  sequels/prequels. Picking a season shows that season's own details: the
+  catalog title for that season when one exists (the route id switches to it),
+  otherwise the show with TMDB's season poster/overview (`?season=N`).
 -->
 <template>
   <div class="tv-details">
@@ -47,6 +49,9 @@
         <div class="show-info">
           <!-- Title: Titles -->
           <h1 class="show-title">{{ getDisplayTitle(show) }}</h1>
+          <p v-if="seasonLabel" class="season-label" data-testid="season-label">
+            {{ seasonLabel }}
+          </p>
           <p v-if="getNativeTitle(show)" class="original-title">
             Native Title: {{ getNativeTitle(show) }}
           </p>
@@ -131,6 +136,8 @@
         :characters="characters"
         :content-id="show._id"
         :show="show"
+        :selected-season="selectedSeason"
+        @select-season="selectSeason"
       />
 
       <!-- Title: Related Loading -->
@@ -298,12 +305,19 @@ import AiringBadge from '@/components/AiringBadge.vue'
 import EpisodeRow from '@/components/EpisodeRow.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
-import type { CatalogEntity, Episode, UnifiedContent } from '@/types/content'
+import type {
+  CatalogEntity,
+  Episode,
+  SeasonGuide,
+  SeasonSummary,
+  UnifiedContent,
+} from '@/types/content'
 import { useEntityStore } from '@/stores/entities'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel } from '@/utils/watchlist'
 import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airing'
+import { findRouteSeason, formatSeasonLabel, seasonContent } from '@/utils/episodes'
 import {
   isMovieCatalogPath,
   isTvCatalogPath,
@@ -331,10 +345,32 @@ const episodes = ref<Episode[]>([])
 const episodesLoading = ref(false)
 const characters = ref<CatalogEntity[]>([])
 const charactersLoading = ref(false)
+/** Details fetched on this page, by id (the route title, its show, and its seasons). */
+const loaded = ref<Record<string, UnifiedContent>>({})
+const seasons = ref<SeasonSummary[]>([])
+/** Title the episodes and seasons belong to (differs from the route when it is one season). */
+const seriesId = ref('')
+const selectedSeason = ref<number | null>(null)
 let detailsRequestId = 0
 let relatedRequestId = 0
 let episodesRequestId = 0
 let charactersRequestId = 0
+let detailsForId = ''
+
+const selectedSeasonInfo = computed(
+  () => seasons.value.find((season) => season.seasonNumber === selectedSeason.value) || null,
+)
+/** Title whose details are on screen: the selected season's own title, else its show. */
+const displayId = computed(() => {
+  const season = selectedSeasonInfo.value
+  if (!season) return route.params.id as string
+  return season.contentId || seriesId.value
+})
+const seasonLabel = computed(() =>
+  seasons.value.length > 1 && selectedSeasonInfo.value
+    ? formatSeasonLabel(selectedSeasonInfo.value)
+    : '',
+)
 
 const watchlistItem = computed(() =>
   show.value ? contentStore.getWatchlistItem(show.value._id) : undefined,
@@ -349,48 +385,107 @@ const getDisplayScore = (content: UnifiedContent) => {
 
 const getDisplayVoteCount = (content: UnifiedContent) => getTotalVoteCount(content)
 
-const loadShow = async (showId: string) => {
-  const requestId = ++detailsRequestId
+const remember = (content: UnifiedContent) => {
+  loaded.value = { ...loaded.value, [content._id]: content }
+}
 
+/**
+ * Put a title's details in `loaded`: cached copy first, then the fresh API copy.
+ * @returns False when the API failed and nothing was cached.
+ */
+const loadDetails = async (contentId: string) => {
+  if (!contentId) return false
+  const cached = loaded.value[contentId] || contentStore.findContentById(contentId)
+  if (cached) remember(cached)
+  try {
+    const response = await contentAPI.getContentById(contentId)
+    const fresh = response.data.data as UnifiedContent
+    contentStore.cacheContent(fresh)
+    remember(fresh)
+    return true
+  } catch (err) {
+    if (!cached) throw err
+    return true
+  }
+}
+
+/**
+ * Show the details for the selected season. Until that title's details
+ * arrive, the previous ones stay on screen.
+ */
+const renderShow = () => {
+  const base = loaded.value[displayId.value]
+  if (!base) return
+  const season = selectedSeasonInfo.value
+  const latest = seasons.value[seasons.value.length - 1]
+  show.value =
+    season && !season.contentId ? seasonContent(base, season, season === latest) : base
+  contentStore.cacheContent(base, true)
+}
+
+watch([loaded, displayId, selectedSeasonInfo], renderShow)
+
+let seasonPillClicked = false
+
+const loadShow = async (showId: string) => {
   if (!showId) {
     error.value = 'No series ID provided'
     loading.value = false
     return
   }
 
-  error.value = ''
-  relatedContent.value = null
-  relatedContentLoading.value = false
-  episodes.value = []
-  characters.value = []
-  contentStore.scrollToTop()
-
-  const cached = contentStore.findContentById(showId)
-  fetchEpisodes(showId)
-  fetchCharacters(showId)
-  if (cached) {
-    show.value = cached
-    loading.value = false
-    fetchRelatedContent(showId)
-  } else {
-    loading.value = true
-    show.value = null
+  const fromPill = seasonPillClicked
+  seasonPillClicked = false
+  const season = findRouteSeason(seasons.value, showId, route.query.season)
+  if (season) {
+    selectedSeason.value = season.seasonNumber
+    if (!fromPill) contentStore.scrollToTop()
+    loadDetails(displayId.value).catch((err) => console.error('Failed to load season:', err))
+    return
   }
 
+  const requestId = ++detailsRequestId
+  error.value = ''
+  show.value = null
+  seasons.value = []
+  seriesId.value = showId
+  selectedSeason.value = null
+  episodes.value = []
+  renderShow()
+  contentStore.scrollToTop()
+  fetchEpisodes(showId)
+
+  loading.value = !loaded.value[showId] && !contentStore.findContentById(showId)
   try {
-    const response = await contentAPI.getContentById(showId)
-    if (requestId !== detailsRequestId) return
-    show.value = response.data.data
-    contentStore.cacheContent(show.value, true)
-    loading.value = false
-    if (!cached) fetchRelatedContent(showId)
+    await loadDetails(showId)
   } catch (err) {
     if (requestId !== detailsRequestId) return
-    if (!cached) {
-      error.value = err instanceof Error ? err.message : 'Failed to load series'
-    }
-    loading.value = false
+    error.value = err instanceof Error ? err.message : 'Failed to load series'
+  } finally {
+    if (requestId === detailsRequestId) loading.value = false
   }
+}
+
+/**
+ * Season pill click. A season with its own catalog title opens that title;
+ * otherwise the show stays and `?season=N` picks the season.
+ */
+const selectSeason = (seasonNumber: number) => {
+  const season = seasons.value.find((item) => item.seasonNumber === seasonNumber)
+  if (!season) {
+    selectedSeason.value = seasonNumber
+    return
+  }
+  const id = season.contentId || seriesId.value
+  const query = { ...route.query }
+  delete query.season
+  if (!season.contentId) query.season = String(seasonNumber)
+  if (id === route.params.id && query.season === route.query.season) {
+    selectedSeason.value = seasonNumber
+    return
+  }
+  seasonPillClicked = true
+  void router.replace({ name: 'TVShowDetails', params: { id }, query })
 }
 
 const goBack = () => {
@@ -502,11 +597,25 @@ const fetchEpisodes = async (contentId: string) => {
   try {
     const response = await contentAPI.getContentEpisodes(contentId)
     if (requestId !== episodesRequestId) return
-    episodes.value = (response.data as { data: { episodes: Episode[] } }).data.episodes || []
+    const guide = (response.data as { data: SeasonGuide }).data
+    episodes.value = guide.episodes || []
+    seasons.value = guide.seasons || []
+    seriesId.value = guide.seriesId || contentId
+    const season =
+      findRouteSeason(seasons.value, contentId, route.query.season) ||
+      seasons.value.find((item) => item.seasonNumber === guide.currentSeason)
+    selectedSeason.value = season?.seasonNumber ?? null
+    if (seasons.value.length > 1) {
+      const ids = new Set(seasons.value.map((item) => item.contentId || seriesId.value))
+      for (const id of ids) {
+        loadDetails(id).catch((err) => console.error('Failed to load season details:', err))
+      }
+    }
   } catch (err) {
     if (requestId !== episodesRequestId) return
     console.error('Failed to fetch episodes:', err)
     episodes.value = []
+    seasons.value = []
   } finally {
     if (requestId === episodesRequestId) {
       episodesLoading.value = false
@@ -578,9 +687,23 @@ const viewContentDetails = async (content: UnifiedContent) => {
   }
 }
 
+// Characters and related titles follow the title on screen (a season's own title, or its show).
 watch(
-  () => route.params.id as string,
-  (showId) => {
+  displayId,
+  (contentId) => {
+    if (!contentId || contentId === detailsForId) return
+    detailsForId = contentId
+    characters.value = []
+    relatedContent.value = null
+    fetchCharacters(contentId)
+    fetchRelatedContent(contentId)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [route.params.id as string, route.query.season] as const,
+  ([showId]) => {
     void loadShow(showId)
   },
   { immediate: true },
@@ -720,6 +843,13 @@ const handleImageError = (event: Event) => {
   color: var(--text-muted);
   font-style: italic;
   margin: 0;
+}
+
+.season-label {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--coral-deep);
 }
 
 .show-meta {
