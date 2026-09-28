@@ -4,7 +4,8 @@
   Serves both `/profile` (the signed-in user) and the shareable `/u/:username`.
   A customizable hero (accent, headline, bio) sits above Favorites, Watchlist,
   and Stats tabs whose order, default, and visibility the owner controls from
-  the Customize panel. Data comes from `/users/:username`, which hides private
+  the Customize panel, which also edits the profile picture and favorite
+  genres. Favorite studios come only from hearting a studio's page. Data comes from `/users/:username`, which hides private
   profiles and hidden tabs from visitors.
 -->
 <template>
@@ -161,11 +162,6 @@
                 <div v-else class="favorite-entity-placeholder">{{ entity.name.charAt(0) }}</div>
                 <span class="card-title">{{ entity.name }}</span>
               </button>
-            </div>
-            <div v-if="group.key === 'studios' && favoriteStudioNames.length" class="genre-tags">
-              <span v-for="studio in favoriteStudioNames" :key="studio" class="genre-tag">
-                {{ studio }}
-              </span>
             </div>
           </div>
         </section>
@@ -353,6 +349,11 @@
           </button>
         </header>
 
+        <div class="field">
+          <span class="field-label">Profile picture</span>
+          <ProfilePictureEditor @changed="onPictureChanged" />
+        </div>
+
         <label class="toggle-row">
           <input v-model="draft.isPublic" type="checkbox" data-testid="toggle-public" />
           <span>
@@ -400,6 +401,8 @@
             placeholder="Tell people what you like to watch"
           ></textarea>
         </label>
+
+        <PreferencesEditor v-model:genres="draftGenres" />
 
         <div class="field">
           <span class="field-label">Tabs</span>
@@ -477,6 +480,8 @@ import { getRatingColorHSL, getRatingTextStyle } from '@/utils/ratingColors'
 import { getDisplayTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel, WATCHLIST_STATUS_OPTIONS } from '@/utils/watchlist'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import PreferencesEditor from '@/components/PreferencesEditor.vue'
+import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type {
   ProfileAccent,
@@ -517,6 +522,7 @@ const showCustomize = ref(false)
 const isSaving = ref(false)
 const draft = ref<ProfileSettings | null>(null)
 const draftBio = ref('')
+const draftGenres = ref<string[]>([])
 
 const username = computed(() =>
   typeof route.params.username === 'string' ? route.params.username : authStore.user?.username,
@@ -595,19 +601,7 @@ const entityGroups = computed(() => {
       label: 'Studios',
       items: favorites.studios,
     },
-  ].filter(
-    (group) => group.items.length || (group.key === 'studios' && favoriteStudioNames.value.length),
-  )
-})
-
-/** Studio names picked in Settings that are not already favorited as studio entities. */
-const favoriteStudioNames = computed(() => {
-  const favorited = new Set(
-    (profile.value?.favorites?.studios || []).map((entity) => entity.name.toLowerCase()),
-  )
-  return (profile.value?.user.preferences.favoriteStudios || []).filter(
-    (name) => !favorited.has(name.toLowerCase()),
-  )
+  ].filter((group) => group.items.length)
 })
 
 const hasAnyFavorites = computed(
@@ -732,7 +726,13 @@ const openCustomize = () => {
     hiddenTabs: [...profile.value.settings.hiddenTabs],
   }
   draftBio.value = profile.value.user.bio || ''
+  draftGenres.value = [...profile.value.user.preferences.favoriteGenres]
   showCustomize.value = true
+}
+
+/** Picture uploads apply immediately; mirror them in the hero. */
+const onPictureChanged = (profilePicture: string | null) => {
+  if (profile.value) profile.value.user.profilePicture = profilePicture
 }
 
 const visibleDraftTabs = computed(() =>
@@ -762,13 +762,15 @@ const saveCustomize = async () => {
   if (!draft.value || !profile.value) return
   isSaving.value = true
   try {
-    const response = await profileAPI.updateSettings({
-      settings: draft.value,
-      bio: draftBio.value,
-    })
+    const preferences = { favoriteGenres: draftGenres.value }
+    const [response] = await Promise.all([
+      profileAPI.updateSettings({ settings: draft.value, bio: draftBio.value }),
+      authStore.updateProfile({ preferences }),
+    ])
     const { settings, bio } = response.data.data as { settings: ProfileSettings; bio: string }
     profile.value.settings = settings
     profile.value.user.bio = bio
+    profile.value.user.preferences = preferences
     profile.value.tabs = settings.tabOrder
     showCustomize.value = false
     toast.success('Profile updated!')

@@ -60,7 +60,7 @@ export interface SessionUser {
   username: string
   email: string
   isDemoAccount?: boolean
-  preferences?: { favoriteGenres: string[]; favoriteStudios: string[] }
+  preferences?: { favoriteGenres: string[] }
 }
 
 /** Result of a cookie refresh: a new access token and user, or null when signed out. */
@@ -183,6 +183,7 @@ export const authAPI = {
   unlockAccount: (email: string, code: string) => api.post('/auth/unlock', { email, code }),
   verifyTwoFactor: (challengeToken: string, code: string) =>
     api.post('/auth/2fa/verify', { challengeToken, code }),
+  removeProfilePicture: () => api.delete('/account/profile-picture'),
   uploadProfilePicture: (formData: FormData) =>
     api.post('/auth/upload-profile-picture', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

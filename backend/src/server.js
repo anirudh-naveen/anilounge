@@ -32,6 +32,9 @@ import {
 } from './utils/allowedFrontends.js'
 import { authLimiter } from './middleware/authRateLimit.js'
 import { ensureDemoAccount } from './services/demoAccount.js'
+import { startInactiveAccountScheduler } from './services/inactiveAccountService.js'
+import { startUnverifiedAccountScheduler } from './services/unverifiedAccountService.js'
+import { emailProvider } from './services/emailService.js'
 
 dotenv.config()
 
@@ -348,6 +351,9 @@ app
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
     console.log(`Health check: http://localhost:${PORT}/health`)
     startContentSyncScheduler()
+    startInactiveAccountScheduler()
+    startUnverifiedAccountScheduler()
+    console.log(`Email delivery: ${emailProvider()}`)
     ensureDemoAccount()
       .then((result) => {
         if (result !== 'ok') console.log(`Demo account ${result}`)

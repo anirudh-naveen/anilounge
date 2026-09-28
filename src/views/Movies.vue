@@ -318,7 +318,7 @@ onMounted(async () => {
 
 .movie-card {
   position: relative;
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 14px;
   overflow: visible;
   box-shadow: var(--shadow-sm);
@@ -398,12 +398,12 @@ onMounted(async () => {
   display: flex;
   gap: 0.35rem;
   font-size: 0.7rem;
-  color: #999;
+  color: var(--text-faint);
 }
 
 .release-year,
 .runtime {
-  background: #f8f9fa;
+  background: var(--bg-muted);
   padding: 2px 6px;
   border-radius: 3px;
 }

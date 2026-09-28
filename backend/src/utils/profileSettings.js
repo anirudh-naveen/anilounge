@@ -1,7 +1,7 @@
 /**
  * Profile customization and preference normalization.
  *
- * Layer: utils. Coerces client-supplied profile settings and genre/studio
+ * Layer: utils. Coerces client-supplied profile settings and favorite-genre
  * preferences into the stored shape, dropping unknown keys and bad values.
  */
 
@@ -55,10 +55,12 @@ export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS)
 }
 
 /**
- * Coerce favorite genre/studio lists to trimmed, de-duplicated strings.
+ * Coerce the favorite genre list to trimmed, de-duplicated strings. Favorite studios
+ * are not a preference: they are studio entities favorited from the catalog, so any
+ * legacy `favoriteStudios` list is dropped.
  *
  * @param {unknown} input - Raw preferences object.
- * @returns {{ favoriteGenres: string[], favoriteStudios: string[] }}
+ * @returns {{ favoriteGenres: string[] }}
  */
 export function normalizePreferences(input) {
   const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
@@ -73,6 +75,5 @@ export function normalizePreferences(input) {
     ].slice(0, PREFERENCE_LIST_MAX)
   return {
     favoriteGenres: clean(raw.favoriteGenres),
-    favoriteStudios: clean(raw.favoriteStudios),
   }
 }

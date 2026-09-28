@@ -244,6 +244,22 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL D
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_pending_secret TEXT;
 
+-- Inactivity cleanup (services/inactiveAccountService.js): accounts unused for a year are
+-- deleted after warning emails. Existing rows start from their last login or sign-up.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
+UPDATE users SET last_active_at = COALESCE(last_login_at, created_at) WHERE last_active_at IS NULL;
+ALTER TABLE users ALTER COLUMN last_active_at SET DEFAULT now();
+-- Smallest "days before deletion" warning already sent since the last activity (NULL = none).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS inactivity_warning_days INTEGER;
+CREATE INDEX IF NOT EXISTS users_last_active_idx ON users (last_active_at) WHERE is_demo = false;
+
+-- Sign-ups that never verified their email are deleted 3 days after sign-up, with a
+-- reminder one day before (services/unverifiedAccountService.js). Only set at sign-up,
+-- so established accounts that change email are never affected.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_signup BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_reminder_sent_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS users_pending_signup_idx ON users (created_at) WHERE pending_signup;
+
 -- Emailed one-time codes (sign-up verification, lockout unlock). Only hashes are stored.
 CREATE TABLE IF NOT EXISTS email_codes (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),

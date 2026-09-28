@@ -71,6 +71,7 @@ function mapUserRow(row) {
     // A missing column (schema not applied yet) reads as verified / 2FA off.
     emailVerified: row.email_verified_at === undefined ? true : Boolean(row.email_verified_at),
     twoFactorEnabled: Boolean(row.two_factor_enabled),
+    pendingSignup: Boolean(row.pending_signup),
     watchlist: [],
     ratings: [],
     favoriteEntities: [],

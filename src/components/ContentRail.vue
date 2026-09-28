@@ -149,7 +149,7 @@ const handleImageError = (event: Event) => {
 .rail-card {
   position: relative;
   flex: 0 0 148px;
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 14px;
   overflow: visible;
   box-shadow: var(--shadow-sm);

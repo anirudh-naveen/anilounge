@@ -68,7 +68,6 @@ export interface User {
   createdAt?: string
   preferences?: {
     favoriteGenres: string[]
-    favoriteStudios: string[]
   }
   watchlist?: WatchlistItem[]
   ratings?: UserRating[]
@@ -168,7 +167,6 @@ export interface UpdateProfileData {
   profilePicture?: string | null
   preferences?: {
     favoriteGenres: string[]
-    favoriteStudios: string[]
   }
 }
 

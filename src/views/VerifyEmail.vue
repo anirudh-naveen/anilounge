@@ -51,6 +51,7 @@
       <!-- Footer -->
       <!-- Title: Resend -->
       <div class="code-footer">
+        <p class="code-note">New accounts that aren't verified within 3 days are removed.</p>
         <p>
           Didn't get it? Check spam, or
           <button
@@ -223,6 +224,11 @@ onBeforeUnmount(() => {
 
 .code-footer p {
   margin: 0;
+}
+
+.code-note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .text-button {

@@ -1,20 +1,58 @@
 /**
  * Outbound email for account security and site notifications.
  *
- * Layer: service. Sends through SMTP (nodemailer) as `notify@anilounge.net` by
- * default. When `SMTP_HOST` is unset (local development), messages are printed
- * to the server console instead so codes and links can still be used.
+ * Layer: service. Sends as `notify@anilounge.net` by default through the first
+ * configured provider:
+ *   1. Resend's HTTPS API (`RESEND_API_KEY`), which works on hosts that block SMTP
+ *      ports (Railway below the Pro plan),
+ *   2. SMTP via nodemailer (`SMTP_HOST`, ...),
+ *   3. otherwise messages are printed to the server console (local development)
+ *      so codes and links can still be used.
  *
- * Env: SMTP_HOST, SMTP_PORT (587), SMTP_SECURE ('true' for 465), SMTP_USER,
- * SMTP_PASS, EMAIL_FROM, PUBLIC_APP_URL (link base; falls back to the first
- * FRONTEND_URL entry, then https://anilounge.net).
+ * Env: RESEND_API_KEY | SMTP_HOST, SMTP_PORT (587), SMTP_SECURE ('true' for 465),
+ * SMTP_USER, SMTP_PASS; EMAIL_FROM, EMAIL_REPLY_TO (optional), PUBLIC_APP_URL (link
+ * base; falls back to the first FRONTEND_URL entry, then https://anilounge.net).
  */
 
 import nodemailer from 'nodemailer'
 
 export const DEFAULT_EMAIL_FROM = 'AniLounge <notify@anilounge.net>'
 
+const RESEND_ENDPOINT = 'https://api.resend.com/emails'
+
 let transporter = null
+
+/**
+ * Which delivery path `sendEmail` will use.
+ * @returns {'resend' | 'smtp' | 'console'}
+ */
+export function emailProvider() {
+  if (process.env.RESEND_API_KEY) return 'resend'
+  if (process.env.SMTP_HOST) return 'smtp'
+  return 'console'
+}
+
+/**
+ * POST one message to Resend.
+ * @param {{ from: string, to: string, subject: string, text: string, html?: string, replyTo?: string }} message
+ * @returns {Promise<void>}
+ * @throws When Resend rejects the message (bad key, unverified domain, ...).
+ */
+async function sendViaResend({ from, to, subject, text, html, replyTo }) {
+  const response = await fetch(RESEND_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from, to, subject, text, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}))
+    throw new Error(`Resend rejected the email (${response.status}): ${body.message || 'unknown error'}`)
+  }
+}
 
 /**
  * Lazily built SMTP transport, or null when SMTP is not configured.
@@ -54,16 +92,23 @@ export function appUrl() {
  */
 export async function sendEmail({ to, subject, text, html }) {
   const from = process.env.EMAIL_FROM || DEFAULT_EMAIL_FROM
-  const transport = getTransporter()
-  if (!transport) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('SMTP_HOST is not set; email was NOT sent. Configure SMTP for production.')
-    }
-    console.log(`\n📧 [email not sent: SMTP disabled]\nFrom: ${from}\nTo: ${to}\nSubject: ${subject}\n\n${text}\n`)
-    return { delivered: false }
+  const replyTo = process.env.EMAIL_REPLY_TO || undefined
+  const provider = emailProvider()
+
+  if (provider === 'resend') {
+    await sendViaResend({ from, to, subject, text, html, replyTo })
+    return { delivered: true }
   }
-  await transport.sendMail({ from, to, subject, text, html })
-  return { delivered: true }
+  if (provider === 'smtp') {
+    await getTransporter().sendMail({ from, to, subject, text, html, replyTo })
+    return { delivered: true }
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    console.error('No email provider configured; email was NOT sent. Set RESEND_API_KEY or SMTP_HOST.')
+  }
+  console.log(`\n📧 [email not sent: no provider configured]\nFrom: ${from}\nTo: ${to}\nSubject: ${subject}\n\n${text}\n`)
+  return { delivered: false }
 }
 
 /**
@@ -89,25 +134,29 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`)
 }
 
+/** Shown to new sign-ups; must match UNVERIFIED_SIGNUP_TTL in unverifiedAccountService. */
+const SIGNUP_REMOVAL_NOTE = 'New accounts that are not verified within 3 days are removed.'
+
 /**
- * Sign-up verification email with a code and a one-click link.
- * @param {{ email: string, username: string }} user
+ * Verification email with a code and a one-click link (sign-up or email change).
+ * @param {{ email: string, username: string, pendingSignup?: boolean }} user - `pendingSignup` adds the 3-day removal note.
  * @param {string} code - Six-digit code.
  * @returns {Promise<{ delivered: boolean }>}
  */
 export function sendVerificationEmail(user, code) {
   const link = `${appUrl()}/verify-email?email=${encodeURIComponent(user.email)}&code=${code}`
+  const note = user.pendingSignup ? ` ${SIGNUP_REMOVAL_NOTE}` : ''
   return sendEmail({
     to: user.email,
     subject: 'Verify your AniLounge email',
-    text: `Hi ${user.username},\n\nYour verification code is ${code}. It expires in 24 hours.\n\nOr open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email.`,
+    text: `Hi ${user.username},\n\nYour verification code is ${code}. It expires in 24 hours.${note}\n\nOr open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email.`,
     html: layout(
       'Verify your email',
       `<p>Hi ${escapeHtml(user.username)}, welcome to AniLounge!</p>
 <p>Your verification code:</p>
 <p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:8px 0 24px">${code}</p>
 <p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Verify email</a></p>
-<p style="color:#5b6578;font-size:14px">The code expires in 24 hours. If you didn't sign up, ignore this email.</p>`,
+<p style="color:#5b6578;font-size:14px">The code expires in 24 hours.${note} If you didn't sign up, ignore this email.</p>`,
     ),
   })
 }
@@ -149,6 +198,93 @@ export function sendEmailChangedNotice(previous, newEmail) {
       'Email changed',
       `<p>Hi ${escapeHtml(previous.username)}, the email on your AniLounge account was changed to <strong>${escapeHtml(newEmail)}</strong>.</p>
 <p style="color:#5b6578;font-size:14px">If you did this, no action is needed. If not, contact support@anilounge.net right away so we can secure your account.</p>`,
+    ),
+  })
+}
+
+/**
+ * Human phrase for a countdown in days ("3 months", "2 weeks", "1 day").
+ * @param {number} days
+ * @returns {string}
+ */
+function describeDays(days) {
+  if (days >= 60) return `${Math.round(days / 30)} months`
+  if (days >= 28) return '1 month'
+  if (days >= 14 && days % 7 === 0) return `${days / 7} weeks`
+  if (days === 7) return '1 week'
+  return days === 1 ? '1 day' : `${days} days`
+}
+
+/**
+ * Warning that an inactive account will be deleted; signing in keeps it.
+ * @param {{ email: string, username: string }} user
+ * @param {number} daysLeft - Whole days until deletion.
+ * @param {Date} deleteAt
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendInactivityWarning(user, daysLeft, deleteAt) {
+  const when = describeDays(daysLeft)
+  const date = deleteAt.toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })
+  const link = `${appUrl()}/login`
+  return sendEmail({
+    to: user.email,
+    subject: `Your AniLounge account will be deleted in ${when}`,
+    text: `Hi ${user.username},\n\nYou haven't used AniLounge in almost a year. To protect your data, inactive accounts are deleted after one year. Your account, watchlist, ratings, and favorites will be permanently deleted on ${date} (in ${when}).\n\nTo keep your account, just sign in before then: ${link}\n\nIf you'd rather let it go, you don't need to do anything.`,
+    html: layout(
+      `Your account will be deleted in ${when}`,
+      `<p>Hi ${escapeHtml(user.username)}, you haven't used AniLounge in almost a year.</p>
+<p>Inactive accounts are deleted after one year. Your account, watchlist, ratings, and favorites will be permanently deleted on <strong>${date}</strong>.</p>
+<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Sign in to keep my account</a></p>
+<p style="color:#5b6578;font-size:14px">If you'd rather let it go, you don't need to do anything.</p>`,
+    ),
+  })
+}
+
+/**
+ * Confirmation sent after an inactive account was deleted.
+ * @param {{ email: string, username: string }} user
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendInactiveAccountDeleted(user) {
+  return sendEmail({
+    to: user.email,
+    subject: 'Your AniLounge account has been deleted',
+    text: `Hi ${user.username},\n\nYour AniLounge account was deleted after a year without activity, as we warned in earlier emails. Your watchlist, ratings, favorites, and profile have been removed.\n\nYou're welcome back anytime: ${appUrl()}/register`,
+    html: layout(
+      'Your account has been deleted',
+      `<p>Hi ${escapeHtml(user.username)}, your AniLounge account was deleted after a year without activity, as we warned in earlier emails.</p>
+<p>Your watchlist, ratings, favorites, and profile have been removed.</p>
+<p style="color:#5b6578;font-size:14px">You're welcome back anytime at <a href="${appUrl()}/register">${appUrl()}</a>.</p>`,
+    ),
+  })
+}
+
+/**
+ * Reminder one day before an unverified sign-up is deleted, with a fresh code.
+ * @param {{ email: string, username: string }} user
+ * @param {string} code - New six-digit code.
+ * @param {Date} deleteAt
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendVerificationReminder(user, code, deleteAt) {
+  const link = `${appUrl()}/verify-email?email=${encodeURIComponent(user.email)}&code=${code}`
+  const when = deleteAt.toLocaleString('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+  })
+  return sendEmail({
+    to: user.email,
+    subject: 'Verify your AniLounge email to keep your account',
+    text: `Hi ${user.username},\n\nYou signed up for AniLounge but haven't verified your email yet. Your account will be deleted on ${when} UTC (in about 1 day) unless you verify it.\n\nYour new verification code is ${code}. Or open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email and the account will be removed.`,
+    html: layout(
+      'Verify your email to keep your account',
+      `<p>Hi ${escapeHtml(user.username)}, you signed up for AniLounge but haven't verified your email yet.</p>
+<p>Your account will be deleted on <strong>${when} UTC</strong> (in about 1 day) unless you verify it.</p>
+<p>Your new verification code:</p>
+<p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:8px 0 24px">${code}</p>
+<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Verify email</a></p>
+<p style="color:#5b6578;font-size:14px">If you didn't sign up, ignore this email and the account will be removed.</p>`,
     ),
   })
 }

@@ -11,6 +11,7 @@ import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import User, { DEMO_USER_EMAIL } from '../models/User.js'
 import { endSession, revokeAllSessions, startSession } from '../services/sessionService.js'
+import { touchUserActivity } from '../services/inactiveAccountService.js'
 import { validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
 import path from 'path'
@@ -114,6 +115,7 @@ async function completeLogin(user, req, res, message) {
   await user.save()
 
   logLoginAttempt(user.email, true, req.ip, req.get('User-Agent'), user._id)
+  touchUserActivity(user._id).catch((error) => console.error('Activity update failed:', error))
 
   const accessToken = await startSession(res, user._id)
 
@@ -152,7 +154,8 @@ function rejectLocked(user, res) {
 
 /**
  * Create an unverified user from validated username/email/password and email a
- * verification code. No session is issued until the email is verified.
+ * verification code. No session is issued until the email is verified; sign-ups
+ * left unverified are deleted after 3 days (see unverifiedAccountService).
  *
  * @param {import('express').Request} req - `body.username`, `body.email`, `body.password` (email is lowercased).
  * @param {import('express').Response} res - 201 `{ verificationRequired, email }`, 400 validation/duplicate, or 500.
@@ -183,9 +186,15 @@ export const register = async (req, res) => {
     })
 
     await user.save()
+    // Starts the 3-day window to verify before the sign-up is removed.
+    await query('UPDATE users SET pending_signup = true WHERE id = $1', [user._id])
+    user.pendingSignup = true
 
     const code = await issueEmailCode(user._id, 'verify_email')
-    await sendVerificationEmail(user, code)
+    // The account exists either way; a failed send can be retried from the verify page.
+    await sendVerificationEmail(user, code).catch((error) =>
+      console.error('Failed to send verification email:', error.message),
+    )
 
     res.status(201).json({
       success: true,
@@ -715,7 +724,57 @@ export const deleteAccount = async (req, res) => {
 }
 
 /**
+ * Delete a locally stored profile picture file (remote URLs are left alone).
+ * @param {string | null | undefined} profilePicture - Stored path like `/uploads/profiles/x.jpg`.
+ * @returns {void}
+ */
+function deleteProfilePictureFile(profilePicture) {
+  if (!profilePicture || profilePicture.startsWith('http')) return
+  const picturePath = path.join(process.cwd(), 'uploads', 'profiles', path.basename(profilePicture))
+  fs.promises.unlink(picturePath).catch(() => {})
+}
+
+/**
+ * Remove the authenticated user's profile picture. The demo account's is read-only.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res - 200 `{ data: { user } }`, 403 demo, or 500.
+ * @returns {Promise<void>}
+ */
+export const removeProfilePicture = async (req, res) => {
+  try {
+    if (req.user.isDemo()) {
+      return res.status(403).json({
+        success: false,
+        message: "The demo account's profile picture cannot be changed.",
+      })
+    }
+    const user = await User.findById(req.user._id)
+    deleteProfilePictureFile(user.profilePicture)
+    user.profilePicture = null
+    await user.save()
+    res.json({
+      success: true,
+      message: 'Profile picture removed.',
+      data: {
+        user: {
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          profilePicture: null,
+          preferences: user.preferences,
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Remove profile picture error:', error)
+    res.status(500).json({ success: false, message: 'Server error removing profile picture.' })
+  }
+}
+
+/**
  * Store a multer-uploaded profile image, deleting any previous file on disk.
+ * The demo account's picture is read-only (the uploaded file is discarded).
  *
  * @param {import('express').Request} req - `req.file` from upload middleware; `req.user._id`.
  * @param {import('express').Response} res - 200 `{ data: { user } }`, 400 no file, 404, or 500.
@@ -723,6 +782,14 @@ export const deleteAccount = async (req, res) => {
  */
 export const uploadProfilePicture = async (req, res) => {
   try {
+    if (req.user.isDemo()) {
+      if (req.file) fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(403).json({
+        success: false,
+        message: "The demo account's profile picture cannot be changed.",
+      })
+    }
+
     if (!req.file) {
       return res.status(400).json({
         success: false,

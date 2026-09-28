@@ -302,14 +302,13 @@ onBeforeUnmount(() => {
   display: none;
   flex-direction: column;
   align-items: stretch;
-  background: white;
+  background: var(--bg-card);
   border-radius: 10px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
   overflow: visible;
   z-index: 40;
   text-align: left;
   cursor: default;
-  color-scheme: light;
 }
 
 .hover-preview.is-adding {
@@ -342,7 +341,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 0.45rem;
   min-width: 0;
-  background: white;
+  background: var(--bg-card);
   border-radius: 10px;
 }
 
@@ -361,14 +360,14 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
-  color: #222;
+  color: var(--text-strong);
   line-height: 1.25;
 }
 
 .hover-preview-native {
   margin: 0.15rem 0 0;
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-body);
   font-style: italic;
   line-height: 1.2;
 }
@@ -381,7 +380,7 @@ onBeforeUnmount(() => {
 
 .hover-preview-overview {
   margin: 0;
-  color: #555;
+  color: var(--text-body);
   font-size: 0.8rem;
   line-height: 1.4;
 }
@@ -393,8 +392,8 @@ onBeforeUnmount(() => {
 }
 
 .meta-chip {
-  background: #f4f4f4;
-  color: #555;
+  background: var(--bg-muted);
+  color: var(--text-body);
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 0.7rem;
@@ -413,8 +412,8 @@ onBeforeUnmount(() => {
 }
 
 .genre-tag {
-  background: #f0f0f0;
-  color: #666;
+  background: var(--bg-muted);
+  color: var(--text-body);
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 0.7rem;
@@ -458,15 +457,15 @@ onBeforeUnmount(() => {
   gap: 0.2rem;
   font-size: 0.72rem;
   font-weight: 600;
-  color: #555;
+  color: var(--text-body);
 }
 
 .form-control {
   width: 100%;
-  border: 1px solid #e4e4e4;
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  background: #f7f7f7;
-  color: #222;
+  background: var(--bg-muted);
+  color: var(--text-strong);
   font-size: 0.8rem;
   font-weight: 500;
   padding: 0.4rem 0.5rem;
@@ -475,8 +474,8 @@ onBeforeUnmount(() => {
 
 .form-control:focus {
   outline: none;
-  border-color: #c8c8c8;
-  background: #fff;
+  border-color: var(--text-faint);
+  background: var(--bg-card);
 }
 
 .form-notes {
@@ -492,9 +491,9 @@ onBeforeUnmount(() => {
 
 .form-cancel {
   flex: 0 0 auto;
-  border: 1px solid #e0e0e0;
-  background: #f4f4f4;
-  color: #555;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+  color: var(--text-body);
   border-radius: 6px;
   padding: 0.45rem 0.7rem;
   font-weight: 600;
@@ -508,7 +507,7 @@ onBeforeUnmount(() => {
 }
 
 .form-cancel:hover {
-  background: #ececec;
+  background: var(--bg-muted-hover);
 }
 
 .form-submit {
