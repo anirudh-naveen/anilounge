@@ -6,6 +6,8 @@ import type { PublicProfile } from '@/types/profile'
 
 const getPublicProfile = vi.fn()
 const updateSettings = vi.fn()
+const updateProfile = vi.fn()
+const authState = { isDemoUser: false }
 
 vi.mock('vue-toastification', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
@@ -23,8 +25,18 @@ vi.mock('@/services/api', async (importOriginal) => {
   }
 })
 
+vi.mock('vue-cropperjs', () => ({ default: { template: '<div />' } }))
+vi.mock('vue-cropperjs/node_modules/cropperjs/dist/cropper.css', () => ({}))
+
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ isAuthenticated: true, user: { username: 'mika' } }),
+  useAuthStore: () => ({
+    isAuthenticated: true,
+    user: { username: 'mika' },
+    get isDemoUser() {
+      return authState.isDemoUser
+    },
+    updateProfile: (...args: unknown[]) => updateProfile(...args),
+  }),
 }))
 
 vi.mock('@/stores/favorites', () => ({
@@ -43,7 +55,7 @@ const buildProfile = (overrides: Partial<PublicProfile> = {}): PublicProfile => 
     profilePicture: null,
     bio: 'Mostly mecha.',
     createdAt: '2025-01-02T00:00:00Z',
-    preferences: { favoriteGenres: ['Mecha'], favoriteStudios: [] },
+    preferences: { favoriteGenres: ['Mecha'] },
   },
   settings: {
     isPublic: true,
@@ -125,6 +137,9 @@ describe('Profile', () => {
   beforeEach(() => {
     getPublicProfile.mockReset()
     updateSettings.mockReset()
+    updateProfile.mockReset()
+    updateProfile.mockResolvedValue({})
+    authState.isDemoUser = false
   })
 
   it('loads a shared profile by username and shows favorites first', async () => {
@@ -186,5 +201,36 @@ describe('Profile', () => {
     )
     expect(wrapper.find('[data-testid="customize-panel"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Private')
+  })
+
+  it('saves favorite genres from the Customize panel, with no studio type-in', async () => {
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
+    const { wrapper } = await mountAt('/profile')
+
+    await wrapper.get('[data-testid="customize-profile"]').trigger('click')
+    const romance = wrapper.findAll('.genre-option').find((node) => node.text() === 'Romance')!
+    await romance.trigger('click')
+    expect(wrapper.find('[data-testid="studio-input"]').exists()).toBe(false)
+
+    updateSettings.mockResolvedValue({
+      data: { data: { settings: buildProfile().settings, bio: 'Mostly mecha.' } },
+    })
+    await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
+    await flushPromises()
+
+    expect(updateProfile).toHaveBeenCalledWith({
+      preferences: { favoriteGenres: ['Mecha', 'Romance'] },
+    })
+    expect(wrapper.text()).toContain('Romance')
+  })
+
+  it('locks the profile picture for the demo account', async () => {
+    authState.isDemoUser = true
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
+    const { wrapper } = await mountAt('/profile')
+
+    await wrapper.get('[data-testid="customize-profile"]').trigger('click')
+    expect(wrapper.find('[data-testid="picture-demo-note"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="picture-input"]').exists()).toBe(false)
   })
 })

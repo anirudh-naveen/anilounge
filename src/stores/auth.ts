@@ -267,7 +267,8 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null
 
       const response = await authAPI.uploadProfilePicture(formData)
-      user.value = response.data.data.user
+      // The upload response is a partial user; keep fields like isDemoAccount.
+      user.value = { ...user.value, ...response.data.data.user }
 
       return response.data
     } catch (err: unknown) {
@@ -278,6 +279,15 @@ export const useAuthStore = defineStore('auth', () => {
       isLoading.value = false
     }
   }
+
+  /**
+   * Removes the profile picture. Rejected by the server for the demo account.
+   */
+  const removeProfilePicture = () =>
+    run('Failed to remove profile picture', async () => {
+      await authAPI.removeProfilePicture()
+      if (user.value) user.value = { ...user.value, profilePicture: undefined }
+    })
 
   let restoring: Promise<void> | null = null
 
@@ -317,6 +327,7 @@ export const useAuthStore = defineStore('auth', () => {
     changePassword,
     deleteAccount,
     uploadProfilePicture,
+    removeProfilePicture,
     restoreSession,
     signOutEverywhere,
   }

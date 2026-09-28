@@ -44,10 +44,16 @@ describe('normalizeProfileSettings', () => {
 })
 
 describe('normalizePreferences', () => {
-  it('keeps trimmed unique strings only', () => {
+  it('keeps trimmed unique genre strings only', () => {
+    assert.deepEqual(normalizePreferences({ favoriteGenres: [' Action ', 'Action', 3, ''] }), {
+      favoriteGenres: ['Action'],
+    })
+  })
+
+  it('drops typed-in favorite studios (studios are favorited as content)', () => {
     assert.deepEqual(
-      normalizePreferences({ favoriteGenres: [' Action ', 'Action', 3, ''], favoriteStudios: 'x' }),
-      { favoriteGenres: ['Action'], favoriteStudios: [] },
+      normalizePreferences({ favoriteGenres: [], favoriteStudios: ['Studio Trigger'] }),
+      { favoriteGenres: [] },
     )
   })
 })

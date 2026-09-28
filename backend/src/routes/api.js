@@ -246,6 +246,7 @@ router.delete(
 )
 
 /** Account security status and authenticator-app 2FA management. */
+router.delete('/account/profile-picture', authController.removeProfilePicture)
 router.get('/account/security', securityController.getSecurityStatus)
 router.post('/account/sessions/revoke-all', securityController.signOutEverywhere)
 router.post('/account/2fa/setup', securityController.startTwoFactorSetup)

@@ -114,7 +114,8 @@ export async function consumeEmailCode(userId, purpose, code) {
  */
 export async function markEmailVerified(userId) {
   await query(
-    'UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1',
+    `UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()),
+       pending_signup = false WHERE id = $1`,
     [userId],
   )
 }

@@ -54,7 +54,7 @@ export interface PublicProfile {
     profilePicture?: string | null
     bio: string
     createdAt?: string
-    preferences: { favoriteGenres: string[]; favoriteStudios: string[] }
+    preferences: { favoriteGenres: string[] }
   }
   settings: ProfileSettings
   isOwner: boolean

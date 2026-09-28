@@ -8,6 +8,7 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import { endSession, rotateSession } from '../services/sessionService.js'
+import { touchUserActivity } from '../services/inactiveAccountService.js'
 
 /**
  * Verify the Bearer JWT and attach the matching user to the request.
@@ -47,6 +48,7 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     req.user = user
+    touchUserActivity(user._id).catch((error) => console.error('Activity update failed:', error))
     next()
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -133,6 +135,9 @@ export const refreshAccessToken = async (req, res) => {
       })
     }
     const user = session ? await User.findById(session.userId) : null
+    if (user) {
+      touchUserActivity(user._id).catch((error) => console.error('Activity update failed:', error))
+    }
     if (!session || !user) {
       return res.status(401).json({ success: false, code: 'NO_SESSION', message: 'Not signed in.' })
     }
