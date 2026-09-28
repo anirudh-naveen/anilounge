@@ -41,7 +41,7 @@
    - Stats should show elements like watchtime, wathctime split throughout the year, most watched genres, etc.
 2. Add option to delete account. ✅
    - Deny this option for the demo account.
-3. Add email verification for sign up and password lockouts.
+3. Add email verification for sign up and password lockouts. ✅
    - Additionally give option to set up 2FA.
    - The email will be from notify@anilounge.net. This email will be used for all notifications, like announcements as well.
 4. Make sure accounts are safe from basic cyber attacks.

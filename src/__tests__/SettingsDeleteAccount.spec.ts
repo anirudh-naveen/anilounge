@@ -30,6 +30,18 @@ vi.mock('@/stores/auth', () => ({
   }),
 }))
 
+vi.mock('@/services/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api')>()
+  return {
+    ...actual,
+    securityAPI: {
+      getStatus: vi.fn().mockResolvedValue({
+        data: { data: { twoFactorEnabled: false, backupCodesRemaining: 0 } },
+      }),
+    },
+  }
+})
+
 vi.mock('@/stores/favorites', () => ({
   useFavoritesStore: () => ({ reset: resetFavorites }),
 }))

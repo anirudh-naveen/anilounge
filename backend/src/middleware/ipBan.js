@@ -38,6 +38,12 @@ export const checkIPBan = async (req, res, next) => {
       ip = ip.replace('::ffff:', '')
     }
 
+    // The emailed unlock code proves account ownership, so a locked-out user can
+    // always reach the unlock endpoint even from the IP their failed attempts banned.
+    if (req.method === 'POST' && req.originalUrl.split('?')[0] === '/api/auth/unlock') {
+      return next()
+    }
+
     // Skip IP ban check for localhost/development
     if (
       ip === '::1' ||
@@ -213,6 +219,27 @@ export const unbanIP = async (ip) => {
 }
 
 /**
+ * Lift an active brute-force ban for `ip` (used after an emailed account unlock).
+ * Bans for other reasons are left in place.
+ *
+ * @param {string} ip - Client address as seen on the request.
+ * @returns {Promise<boolean>} True when a ban was lifted.
+ */
+export const liftBruteForceBan = async (ip) => {
+  const raw = String(ip || '')
+  if (!raw) return false
+  // Bans are written with the raw `req.ip` but checked normalized; clear both forms.
+  let lifted = false
+  for (const address of new Set([raw, raw.replace(/^::ffff:/, '')])) {
+    const ban = await IPBan.isIPBanned(address)
+    if (ban?.reason !== 'brute_force') continue
+    await IPBan.unbanIP(address)
+    lifted = true
+  }
+  return lifted
+}
+
+/**
  * Aggregate ban counts from the IPBan collection.
  *
  * @returns {Promise<object>} Stats object from `IPBan.getBanStats()`.
@@ -285,6 +312,7 @@ export default {
   checkIPBan,
   banIPForBot,
   banIPForBruteForce,
+  liftBruteForceBan,
   banIPForSuspiciousActivity,
   banIPForRateLimit,
   manuallyBanIP,

@@ -72,6 +72,16 @@ const router = createRouter({
       component: () => import('@/views/Login.vue'),
     },
     {
+      path: '/verify-email',
+      name: 'verifyEmail',
+      component: () => import('@/views/VerifyEmail.vue'),
+    },
+    {
+      path: '/unlock-account',
+      name: 'unlockAccount',
+      component: () => import('@/views/UnlockAccount.vue'),
+    },
+    {
       path: '/register',
       name: 'register',
       component: () => import('@/views/Register.vue'),

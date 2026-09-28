@@ -30,7 +30,7 @@ import {
   extraFrontendOriginsFromEnv,
   isAllowedCorsOrigin,
 } from './utils/allowedFrontends.js'
-import { isDemoEmail } from './models/User.js'
+import { authLimiter } from './middleware/authRateLimit.js'
 import { ensureDemoAccount } from './services/demoAccount.js'
 
 dotenv.config()
@@ -113,19 +113,6 @@ const generalLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
-
-/** Auth paths: 5 attempts per IP per 15 minutes to slow credential stuffing. Demo logins are exempt. */
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 auth requests per IP per window
-  skip: (req) => req.method === 'POST' && req.path === '/login' && isDemoEmail(req.body?.email),
-  message: {
-    success: false,
-    message: 'Too many authentication attempts, please try again later.',
   },
   standardHeaders: true,
   legacyHeaders: false,
