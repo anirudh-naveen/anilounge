@@ -60,10 +60,14 @@ api.interceptors.request.use(
   },
 )
 
+/** Sign-in steps whose 401 means "wrong password/code", not "session expired". */
+const CREDENTIAL_PATHS = ['/auth/login', '/auth/2fa/verify', '/auth/verify-email', '/auth/unlock']
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isCredentialStep = CREDENTIAL_PATHS.includes(String(error.config?.url || ''))
+    if (error.response?.status === 401 && !isCredentialStep) {
       // Expired/invalid access token: drop the session and send the user to login.
       localStorage.removeItem('token')
       localStorage.removeItem('user')
@@ -81,6 +85,11 @@ export const authAPI = {
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/auth/change-password', data),
   deleteAccount: (password: string) => api.delete('/account', { data: { password } }),
+  verifyEmail: (email: string, code: string) => api.post('/auth/verify-email', { email, code }),
+  resendVerification: (email: string) => api.post('/auth/resend-verification', { email }),
+  unlockAccount: (email: string, code: string) => api.post('/auth/unlock', { email, code }),
+  verifyTwoFactor: (challengeToken: string, code: string) =>
+    api.post('/auth/2fa/verify', { challengeToken, code }),
   uploadProfilePicture: (formData: FormData) =>
     api.post('/auth/upload-profile-picture', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -88,7 +97,8 @@ export const authAPI = {
 }
 
 export const entityAPI = {
-  search: (params: { q: string; type?: string; limit?: number }) => api.get('/entities', { params }),
+  search: (params: { q: string; type?: string; limit?: number }) =>
+    api.get('/entities', { params }),
 
   getById: (id: string) => api.get(`/entities/${id}`),
 
@@ -101,6 +111,19 @@ export const entityAPI = {
   favorite: (id: string) => api.post(`/entities/${id}/favorite`),
 
   unfavorite: (id: string) => api.delete(`/entities/${id}/favorite`),
+}
+
+export const securityAPI = {
+  getStatus: () => api.get('/account/security'),
+
+  startTwoFactorSetup: () => api.post('/account/2fa/setup', {}),
+
+  enableTwoFactor: (code: string) => api.post('/account/2fa/enable', { code }),
+
+  disableTwoFactor: (password: string, code: string) =>
+    api.post('/account/2fa/disable', { password, code }),
+
+  newBackupCodes: (code: string) => api.post('/account/2fa/backup-codes', { code }),
 }
 
 export const profileAPI = {

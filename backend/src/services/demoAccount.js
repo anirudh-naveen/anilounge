@@ -6,6 +6,7 @@
  * fresh local one). Called on server start and by `scripts/createDemoUser.js`.
  */
 
+import { query } from '../../config/postgres.js'
 import User, { DEMO_USER_EMAIL } from '../models/User.js'
 
 export const DEMO_USER_PASSWORD = 'DemoPassword123!'
@@ -18,6 +19,10 @@ export const DEMO_USER_PASSWORD = 'DemoPassword123!'
  */
 export async function ensureDemoAccount() {
   const existing = await User.findOne({ email: DEMO_USER_EMAIL })
+  // Login skips verification for the demo account; keep the row consistent anyway.
+  if (existing && !existing.emailVerified) {
+    await query('UPDATE users SET email_verified_at = now() WHERE id = $1', [existing._id])
+  }
   if (!existing) {
     const demoUser = new User({
       username: 'DemoUser',
@@ -28,6 +33,9 @@ export async function ensureDemoAccount() {
       isDemoAccount: true,
     })
     await demoUser.save()
+    await query('UPDATE users SET email_verified_at = now() WHERE id = $1', [demoUser._id]).catch(
+      () => {}, // Column may not exist before `npm run db:schema`.
+    )
     return 'created'
   }
 

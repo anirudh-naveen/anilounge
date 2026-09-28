@@ -233,6 +233,41 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- Email verification. The temporary default marks accounts that existed before this
+-- column as verified; dropping it right after means new sign-ups start unverified.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE users ALTER COLUMN email_verified_at DROP DEFAULT;
+
+-- Authenticator-app (TOTP) two-factor auth. `two_factor_pending_secret` holds a secret
+-- during setup until the user confirms a code from it.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_pending_secret TEXT;
+
+-- Emailed one-time codes (sign-up verification, lockout unlock). Only hashes are stored.
+CREATE TABLE IF NOT EXISTS email_codes (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  purpose      TEXT NOT NULL CHECK (purpose IN ('verify_email', 'unlock_account')),
+  code_hash    TEXT NOT NULL,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  consumed_at  TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS email_codes_user_purpose_idx ON email_codes (user_id, purpose, created_at DESC);
+
+-- Single-use 2FA recovery codes (hashed).
+CREATE TABLE IF NOT EXISTS two_factor_backup_codes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  code_hash  TEXT NOT NULL,
+  used_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS two_factor_backup_codes_user_idx ON two_factor_backup_codes (user_id);
+
 CREATE TABLE IF NOT EXISTS friendships (
   follower_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   followee_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,

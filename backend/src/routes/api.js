@@ -11,6 +11,7 @@ import contentController from '../controllers/contentController.js'
 import entityController from '../controllers/entityController.js'
 import homeController from '../controllers/homeController.js'
 import profileController from '../controllers/profileController.js'
+import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
@@ -66,6 +67,20 @@ router.post(
   ],
   bruteForceProtection.prevent,
   authController.login,
+)
+
+/** Email verification, lockout unlock, and the 2FA login step (public; codes are attempt-limited). */
+router.post(
+  '/auth/verify-email',
+  [body('email').isEmail(), body('code').isString()],
+  authController.verifyEmail,
+)
+router.post('/auth/resend-verification', [body('email').isEmail()], authController.resendVerification)
+router.post('/auth/unlock', [body('email').isEmail(), body('code').isString()], authController.unlockAccount)
+router.post(
+  '/auth/2fa/verify',
+  [body('challengeToken').isString(), body('code').isString()],
+  authController.verifyTwoFactorLogin,
 )
 
 /** Public token rotation; no access JWT required. */
@@ -217,6 +232,17 @@ router.delete(
   [body('password').isString().notEmpty().withMessage('Password is required')],
   authController.deleteAccount,
 )
+
+/** Account security status and authenticator-app 2FA management. */
+router.get('/account/security', securityController.getSecurityStatus)
+router.post('/account/2fa/setup', securityController.startTwoFactorSetup)
+router.post('/account/2fa/enable', [body('code').isString()], securityController.enableTwoFactor)
+router.post(
+  '/account/2fa/disable',
+  [body('password').isString(), body('code').isString()],
+  securityController.turnOffTwoFactor,
+)
+router.post('/account/2fa/backup-codes', [body('code').isString()], securityController.newBackupCodes)
 
 /** Profile customization; kept off `/auth` so it is not throttled by the login limiter. */
 router.put(

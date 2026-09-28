@@ -225,6 +225,151 @@
               </div>
             </div>
 
+            <!-- Title: Two-Factor Authentication -->
+            <div class="setting-item" data-testid="two-factor">
+              <div class="setting-info">
+                <h3>Two-Factor Authentication</h3>
+                <p v-if="authStore.isDemoUser">Disabled for the demo account</p>
+                <p v-else-if="twoFactor.enabled">
+                  On · {{ twoFactor.backupCodesRemaining }} backup codes left
+                </p>
+                <p v-else>Require a code from an authenticator app when you sign in</p>
+              </div>
+
+              <div v-if="authStore.isDemoUser" class="setting-control">
+                <p class="demo-restriction">The shared demo account cannot use two-factor.</p>
+              </div>
+
+              <!-- Backup codes (shown once) -->
+              <div v-else-if="twoFactorMode === 'codes'" class="setting-control two-factor-panel">
+                <p class="two-factor-note">
+                  Save these backup codes somewhere safe. Each works once if you lose your phone.
+                  They won't be shown again.
+                </p>
+                <ul class="backup-codes" data-testid="backup-codes">
+                  <li v-for="backupCode in backupCodes" :key="backupCode">{{ backupCode }}</li>
+                </ul>
+                <div class="delete-actions">
+                  <button type="button" class="btn btn-secondary" @click="copyBackupCodes">
+                    Copy
+                  </button>
+                  <button type="button" class="btn btn-primary" @click="finishTwoFactorFlow">
+                    I've saved them
+                  </button>
+                </div>
+              </div>
+
+              <!-- Setup -->
+              <form
+                v-else-if="twoFactorMode === 'setup' && twoFactorSetup"
+                class="setting-control two-factor-panel"
+                @submit.prevent="enableTwoFactor"
+              >
+                <p class="two-factor-note">
+                  Scan this with Google Authenticator, 1Password, Authy, or a similar app.
+                </p>
+                <img
+                  :src="twoFactorSetup.qrCodeDataUrl"
+                  alt="Two-factor QR code"
+                  class="two-factor-qr"
+                />
+                <p class="two-factor-note">
+                  Can't scan? Enter this key:
+                  <code class="two-factor-secret">{{ twoFactorSetup.secret }}</code>
+                </p>
+                <input
+                  v-model="twoFactorCodeInput"
+                  type="text"
+                  class="form-input"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="6"
+                  placeholder="6-digit code from the app"
+                  data-testid="two-factor-setup-code"
+                />
+                <div class="delete-actions">
+                  <button type="button" class="btn btn-secondary" @click="finishTwoFactorFlow">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    class="btn btn-primary"
+                    :disabled="twoFactorBusy || twoFactorCodeInput.trim().length !== 6"
+                  >
+                    Turn on
+                  </button>
+                </div>
+              </form>
+
+              <!-- Disable / regenerate -->
+              <form
+                v-else-if="twoFactorMode === 'disable' || twoFactorMode === 'regenerate'"
+                class="setting-control two-factor-panel"
+                @submit.prevent="
+                  twoFactorMode === 'disable' ? disableTwoFactor() : regenerateCodes()
+                "
+              >
+                <input
+                  v-if="twoFactorMode === 'disable'"
+                  v-model="twoFactorPassword"
+                  type="password"
+                  class="form-input"
+                  placeholder="Current password"
+                  autocomplete="current-password"
+                />
+                <input
+                  v-model="twoFactorCodeInput"
+                  type="text"
+                  class="form-input"
+                  autocomplete="one-time-code"
+                  maxlength="9"
+                  placeholder="Authenticator or backup code"
+                />
+                <div class="delete-actions">
+                  <button type="button" class="btn btn-secondary" @click="finishTwoFactorFlow">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    :class="['btn', twoFactorMode === 'disable' ? 'btn-danger' : 'btn-primary']"
+                    :disabled="
+                      twoFactorBusy ||
+                      !twoFactorCodeInput.trim() ||
+                      (twoFactorMode === 'disable' && !twoFactorPassword)
+                    "
+                  >
+                    {{ twoFactorMode === 'disable' ? 'Turn off' : 'Create new codes' }}
+                  </button>
+                </div>
+              </form>
+
+              <!-- Idle -->
+              <div v-else class="setting-control two-factor-actions">
+                <template v-if="twoFactor.enabled">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    @click="twoFactorMode = 'regenerate'"
+                  >
+                    New backup codes
+                  </button>
+                  <button type="button" class="btn btn-danger" @click="twoFactorMode = 'disable'">
+                    Turn off
+                  </button>
+                </template>
+                <button
+                  v-else
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="twoFactorBusy"
+                  data-testid="two-factor-start"
+                  @click="startTwoFactorSetup"
+                >
+                  Set up
+                </button>
+              </div>
+            </div>
+
             <!-- Title: Delete Account -->
             <div class="setting-item danger-item" data-testid="delete-account">
               <div class="setting-info">
@@ -247,9 +392,7 @@
                 </button>
               </div>
               <form v-else class="setting-control delete-form" @submit.prevent="deleteAccount">
-                <p class="delete-warning">
-                  This cannot be undone. Enter your password to confirm.
-                </p>
+                <p class="delete-warning">This cannot be undone. Enter your password to confirm.</p>
                 <input
                   v-model="deletePassword"
                   type="password"
@@ -340,6 +483,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { securityAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
@@ -542,6 +686,97 @@ const changePassword = async () => {
   }
 }
 
+type TwoFactorMode = 'idle' | 'setup' | 'codes' | 'disable' | 'regenerate'
+
+const twoFactor = ref({ enabled: false, backupCodesRemaining: 0 })
+const twoFactorMode = ref<TwoFactorMode>('idle')
+const twoFactorSetup = ref<{ secret: string; qrCodeDataUrl: string } | null>(null)
+const twoFactorCodeInput = ref('')
+const twoFactorPassword = ref('')
+const twoFactorBusy = ref(false)
+const backupCodes = ref<string[]>([])
+
+const apiMessage = (err: unknown, fallback: string) =>
+  (err as { response?: { data?: { message?: string } } }).response?.data?.message || fallback
+
+const loadSecurityStatus = async () => {
+  if (authStore.isDemoUser) return
+  try {
+    const response = await securityAPI.getStatus()
+    const data = response.data.data
+    twoFactor.value = {
+      enabled: Boolean(data.twoFactorEnabled),
+      backupCodesRemaining: data.backupCodesRemaining || 0,
+    }
+  } catch (err) {
+    console.error('Failed to load security settings:', err)
+  }
+}
+
+/** Run a 2FA action with the busy flag and a toast on failure. */
+const withTwoFactorBusy = async (fallback: string, action: () => Promise<void>) => {
+  twoFactorBusy.value = true
+  try {
+    await action()
+  } catch (err) {
+    toast.error(apiMessage(err, fallback))
+    twoFactorCodeInput.value = ''
+  } finally {
+    twoFactorBusy.value = false
+  }
+}
+
+const startTwoFactorSetup = () =>
+  withTwoFactorBusy('Could not start setup', async () => {
+    const response = await securityAPI.startTwoFactorSetup()
+    twoFactorSetup.value = response.data.data
+    twoFactorCodeInput.value = ''
+    twoFactorMode.value = 'setup'
+  })
+
+const enableTwoFactor = () =>
+  withTwoFactorBusy('That code did not match', async () => {
+    const response = await securityAPI.enableTwoFactor(twoFactorCodeInput.value.trim())
+    backupCodes.value = response.data.data.backupCodes
+    twoFactor.value = { enabled: true, backupCodesRemaining: backupCodes.value.length }
+    twoFactorSetup.value = null
+    twoFactorMode.value = 'codes'
+    toast.success('Two-factor authentication is on')
+  })
+
+const regenerateCodes = () =>
+  withTwoFactorBusy('That code is not valid', async () => {
+    const response = await securityAPI.newBackupCodes(twoFactorCodeInput.value.trim())
+    backupCodes.value = response.data.data.backupCodes
+    twoFactor.value.backupCodesRemaining = backupCodes.value.length
+    twoFactorMode.value = 'codes'
+  })
+
+const disableTwoFactor = () =>
+  withTwoFactorBusy('Could not turn off two-factor', async () => {
+    await securityAPI.disableTwoFactor(twoFactorPassword.value, twoFactorCodeInput.value.trim())
+    twoFactor.value = { enabled: false, backupCodesRemaining: 0 }
+    finishTwoFactorFlow()
+    toast.success('Two-factor authentication is off')
+  })
+
+const copyBackupCodes = async () => {
+  try {
+    await navigator.clipboard.writeText(backupCodes.value.join('\n'))
+    toast.success('Backup codes copied')
+  } catch {
+    toast.error('Copy failed; write them down instead')
+  }
+}
+
+const finishTwoFactorFlow = () => {
+  twoFactorMode.value = 'idle'
+  twoFactorSetup.value = null
+  twoFactorCodeInput.value = ''
+  twoFactorPassword.value = ''
+  backupCodes.value = []
+}
+
 const showDeleteConfirm = ref(false)
 const deletePassword = ref('')
 const deleteAcknowledged = ref(false)
@@ -718,6 +953,7 @@ onMounted(() => {
   email.value = authStore.user?.email || ''
   selectedGenres.value = [...(authStore.user?.preferences?.favoriteGenres || [])]
   selectedStudios.value = [...(authStore.user?.preferences?.favoriteStudios || [])]
+  loadSecurityStatus()
 })
 </script>
 
@@ -957,6 +1193,55 @@ onMounted(() => {
   font-size: 0.9rem;
   margin: 0;
   padding: 0.75rem 0;
+}
+
+.two-factor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.two-factor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.two-factor-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.two-factor-qr {
+  width: 180px;
+  height: 180px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: #fff;
+}
+
+.two-factor-secret {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.backup-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  font-family: monospace;
+  font-size: 0.95rem;
+  list-style: none;
 }
 
 .danger-item .setting-info h3 {
