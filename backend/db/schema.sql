@@ -260,6 +260,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_signup BOOLEAN NOT NULL DEFAU
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_reminder_sent_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS users_pending_signup_idx ON users (created_at) WHERE pending_signup;
 
+-- Opt-out for announcement emails (services/announcementService.js). Security and
+-- account emails ignore it.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS announcement_emails BOOLEAN NOT NULL DEFAULT true;
+
 -- Emailed one-time codes (sign-up verification, lockout unlock). Only hashes are stored.
 CREATE TABLE IF NOT EXISTS email_codes (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -10,13 +10,15 @@
  *      so codes and links can still be used.
  *
  * Env: RESEND_API_KEY | SMTP_HOST, SMTP_PORT (587), SMTP_SECURE ('true' for 465),
- * SMTP_USER, SMTP_PASS; EMAIL_FROM, EMAIL_REPLY_TO (optional), PUBLIC_APP_URL (link
- * base; falls back to the first FRONTEND_URL entry, then https://anilounge.net).
+ * SMTP_USER, SMTP_PASS; EMAIL_FROM, EMAIL_REPLY_TO (optional), SUPPORT_EMAIL (feedback
+ * recipient, default support@anilounge.net), PUBLIC_APP_URL (link base; falls back to
+ * the first FRONTEND_URL entry, then https://anilounge.net).
  */
 
 import nodemailer from 'nodemailer'
 
 export const DEFAULT_EMAIL_FROM = 'AniLounge <notify@anilounge.net>'
+export const DEFAULT_SUPPORT_EMAIL = 'support@anilounge.net'
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
@@ -34,23 +36,33 @@ export function emailProvider() {
 
 /**
  * POST one message to Resend.
- * @param {{ from: string, to: string, subject: string, text: string, html?: string, replyTo?: string }} message
+ * @param {{ from: string, to: string, subject: string, text: string, html?: string, replyTo?: string, headers?: Record<string, string> }} message
  * @returns {Promise<void>}
  * @throws When Resend rejects the message (bad key, unverified domain, ...).
  */
-async function sendViaResend({ from, to, subject, text, html, replyTo }) {
+async function sendViaResend({ from, to, subject, text, html, replyTo, headers }) {
   const response = await fetch(RESEND_ENDPOINT, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from, to, subject, text, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+    body: JSON.stringify({
+      from,
+      to,
+      subject,
+      text,
+      html,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      ...(headers ? { headers } : {}),
+    }),
     signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
-    throw new Error(`Resend rejected the email (${response.status}): ${body.message || 'unknown error'}`)
+    throw new Error(
+      `Resend rejected the email (${response.status}): ${body.message || 'unknown error'}`,
+    )
   }
 }
 
@@ -79,35 +91,51 @@ function getTransporter() {
  */
 export function appUrl() {
   const configured =
-    process.env.PUBLIC_APP_URL || String(process.env.FRONTEND_URL || '').split(',')[0].trim()
+    process.env.PUBLIC_APP_URL ||
+    String(process.env.FRONTEND_URL || '')
+      .split(',')[0]
+      .trim()
   return (configured || 'https://anilounge.net').replace(/\/+$/, '')
 }
 
 /**
- * Send one email. Used for security mail now and announcements later.
+ * Address that receives bug reports and other site feedback.
+ * @returns {string}
+ */
+export function supportEmail() {
+  return process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL
+}
+
+/**
+ * Send one email (security mail, feedback, and announcements).
  *
- * @param {{ to: string, subject: string, text: string, html?: string }} message
+ * @param {{ to: string, subject: string, text: string, html?: string, replyTo?: string, headers?: Record<string, string> }} message
+ *   `replyTo` overrides EMAIL_REPLY_TO; `headers` adds raw headers such as List-Unsubscribe.
  * @returns {Promise<{ delivered: boolean }>} `delivered` is false when logged to the console instead.
  * @throws When SMTP is configured and the send fails.
  */
-export async function sendEmail({ to, subject, text, html }) {
+export async function sendEmail({ to, subject, text, html, replyTo, headers }) {
   const from = process.env.EMAIL_FROM || DEFAULT_EMAIL_FROM
-  const replyTo = process.env.EMAIL_REPLY_TO || undefined
+  replyTo = replyTo || process.env.EMAIL_REPLY_TO || undefined
   const provider = emailProvider()
 
   if (provider === 'resend') {
-    await sendViaResend({ from, to, subject, text, html, replyTo })
+    await sendViaResend({ from, to, subject, text, html, replyTo, headers })
     return { delivered: true }
   }
   if (provider === 'smtp') {
-    await getTransporter().sendMail({ from, to, subject, text, html, replyTo })
+    await getTransporter().sendMail({ from, to, subject, text, html, replyTo, headers })
     return { delivered: true }
   }
 
   if (process.env.NODE_ENV === 'production') {
-    console.error('No email provider configured; email was NOT sent. Set RESEND_API_KEY or SMTP_HOST.')
+    console.error(
+      'No email provider configured; email was NOT sent. Set RESEND_API_KEY or SMTP_HOST.',
+    )
   }
-  console.log(`\n📧 [email not sent: no provider configured]\nFrom: ${from}\nTo: ${to}\nSubject: ${subject}\n\n${text}\n`)
+  console.log(
+    `\n📧 [email not sent: no provider configured]\nFrom: ${from}\nTo: ${to}\nSubject: ${subject}\n\n${text}\n`,
+  )
   return { delivered: false }
 }
 
@@ -117,11 +145,15 @@ export async function sendEmail({ to, subject, text, html }) {
  * @param {string} bodyHtml
  * @returns {string}
  */
-function layout(heading, bodyHtml) {
+function layout(
+  heading,
+  bodyHtml,
+  footerHtml = 'AniLounge · You received this because of activity on your account.',
+) {
   return `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:Arial,sans-serif;color:#152238">
 <div style="max-width:480px;margin:32px auto;background:#fff;border-radius:12px;padding:32px">
 <h1 style="font-size:22px;margin:0 0 16px">${heading}</h1>${bodyHtml}
-<p style="font-size:12px;color:#8b93a6;margin-top:32px">AniLounge · You received this because of activity on your account.</p>
+<p style="font-size:12px;color:#8b93a6;margin-top:32px">${footerHtml}</p>
 </div></body></html>`
 }
 
@@ -285,6 +317,72 @@ export function sendVerificationReminder(user, code, deleteAt) {
 <p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:8px 0 24px">${code}</p>
 <p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Verify email</a></p>
 <p style="color:#5b6578;font-size:14px">If you didn't sign up, ignore this email and the account will be removed.</p>`,
+    ),
+  })
+}
+
+/**
+ * Forward a beta feedback submission to the support inbox. Everything in `feedback`
+ * comes from the public form, so it is escaped and the subject is flattened.
+ * @param {{ id: string, type: string, message: string, email: string, timestamp: string, userAgent: string, url: string }} feedback
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendFeedbackEmail(feedback) {
+  const type = String(feedback.type).replace(/\s+/g, ' ').trim().slice(0, 60)
+  const replyTo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feedback.email) ? feedback.email : undefined
+  const details = [
+    ['Type', type],
+    ['From', feedback.email],
+    ['Page', feedback.url],
+    ['Submitted', feedback.timestamp],
+    ['Browser', feedback.userAgent],
+    ['ID', feedback.id],
+  ]
+  return sendEmail({
+    to: supportEmail(),
+    replyTo,
+    subject: `[AniLounge feedback] ${type}`,
+    text: `${feedback.message}\n\n${details.map(([label, value]) => `${label}: ${value}`).join('\n')}`,
+    html: layout(
+      `Feedback: ${escapeHtml(type)}`,
+      `<p style="white-space:pre-wrap">${escapeHtml(feedback.message)}</p>
+<table style="font-size:13px;color:#5b6578;margin-top:24px">${details
+        .map(
+          ([label, value]) =>
+            `<tr><td style="padding-right:12px;vertical-align:top">${label}</td><td>${escapeHtml(value)}</td></tr>`,
+        )
+        .join('')}</table>`,
+      'AniLounge · Sent from the beta feedback form.',
+    ),
+  })
+}
+
+/**
+ * One announcement to one user, with a one-click unsubscribe link and header.
+ * `bodyText` is written by the site owner; paragraphs are split on blank lines.
+ * @param {{ email: string, username: string }} user
+ * @param {{ subject: string, bodyText: string }} announcement
+ * @param {string} unsubscribeUrl
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendAnnouncementEmail(user, { subject, bodyText }, unsubscribeUrl) {
+  const paragraphs = bodyText
+    .trim()
+    .split(/\n\s*\n/)
+    .map((block) => `<p>${escapeHtml(block.trim()).replace(/\n/g, '<br>')}</p>`)
+    .join('\n')
+  return sendEmail({
+    to: user.email,
+    subject,
+    headers: {
+      'List-Unsubscribe': `<${unsubscribeUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
+    text: `Hi ${user.username},\n\n${bodyText.trim()}\n\n—\nYou're receiving this because you have an AniLounge account. Unsubscribe from announcements: ${unsubscribeUrl}`,
+    html: layout(
+      escapeHtml(subject),
+      `<p>Hi ${escapeHtml(user.username)},</p>\n${paragraphs}`,
+      `AniLounge · You're receiving this because you have an AniLounge account. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#8b93a6">Unsubscribe from announcements</a>.`,
     ),
   })
 }

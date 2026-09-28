@@ -359,6 +359,7 @@
     "dev": "nodemon src/server.js",
     "db:schema": "node src/scripts/applySchema.js",
     "email:test": "node src/scripts/sendTestEmail.js",
+    "email:announce": "node src/scripts/sendAnnouncement.js",
     "db:migrate-mongo": "node src/scripts/migrateMongoToPostgres.js",
     "db:migrate-legacy": "node src/scripts/migrateLegacyPostgres.js",
     "db:ingest-relations": "node src/scripts/ingestMalRelations.js",
