@@ -454,6 +454,8 @@ export const useContentStore = defineStore('content', () => {
         filteredResults.sort((a, b) => (b.unifiedScore || 0) - (a.unifiedScore || 0))
       }
 
+      // Voice actor and studio names are not results themselves; a match pulls in
+      // the catalog titles they are credited on, after the direct title matches.
       if (searchTerm) {
         try {
           const entityResponse = await entityAPI.search({
@@ -461,26 +463,37 @@ export const useContentStore = defineStore('content', () => {
             type: 'all',
             limit: 24,
           })
-          const entityHits = ((entityResponse.data?.data || []) as UnifiedContent[]).filter(
-            (hit) =>
-              hit.entityType === 'character' ||
-              hit.entityType === 'voice_actor' ||
-              hit.entityType === 'studio',
-          )
-          const seen = new Set(filteredResults.map((item) => item._id))
-          const extra = entityHits.filter((hit) => hit?._id && !seen.has(hit._id))
-          extra.sort((left, right) => {
-            const leftName = getSearchableTitles(left).map((title) => title.toLowerCase())
-            const rightName = getSearchableTitles(right).map((title) => title.toLowerCase())
-            const leftExact = leftName.includes(searchTerm)
-            const rightExact = rightName.includes(searchTerm)
-            if (leftExact && !rightExact) return -1
-            if (!leftExact && rightExact) return 1
-            return 0
-          })
-          filteredResults = [...extra, ...filteredResults]
+          const entityHits = (entityResponse.data?.data || []) as UnifiedContent[]
+          const creditedIds = new Set<string>()
+          const studioIds = new Set<string>()
+          const studioNames = new Set<string>()
+          for (const hit of entityHits) {
+            if (hit.entityType === 'voice_actor') {
+              for (const row of hit.appearances || []) {
+                const id = typeof row.content === 'string' ? row.content : row.content?._id
+                if (id) creditedIds.add(String(id))
+              }
+            } else if (hit.entityType === 'studio') {
+              studioIds.add(String(hit._id))
+              getSearchableTitles(hit).forEach((name) => studioNames.add(name.toLowerCase()))
+            }
+          }
+
+          if (creditedIds.size || studioIds.size) {
+            const seen = new Set(filteredResults.map((item) => item._id))
+            const credited = allContent.value.filter(
+              (item) =>
+                !seen.has(item._id) &&
+                matchesContentTypeFilter(item.contentType, contentType) &&
+                (creditedIds.has(item._id) ||
+                  (item.studioEntities || []).some((studio) => studioIds.has(String(studio._id))) ||
+                  (item.studios || []).some((studio) => studioNames.has(studio.toLowerCase()))),
+            )
+            credited.sort((a, b) => (b.unifiedScore || 0) - (a.unifiedScore || 0))
+            filteredResults = [...filteredResults, ...credited]
+          }
         } catch (entityError) {
-          console.error('Character search failed:', entityError)
+          console.error('Entity search failed:', entityError)
         }
       }
 
