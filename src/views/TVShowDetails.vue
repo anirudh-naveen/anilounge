@@ -176,6 +176,7 @@
               class="content-card"
               @click="viewContentDetails(sequel)"
             >
+              <FavoriteHeart :content-id="sequel._id" />
               <img
                 v-if="sequel.posterPath"
                 :src="getPosterUrl(sequel.posterPath)"
@@ -210,6 +211,7 @@
               class="content-card"
               @click="viewContentDetails(prequel)"
             >
+              <FavoriteHeart :content-id="prequel._id" />
               <img
                 v-if="prequel.posterPath"
                 :src="getPosterUrl(prequel.posterPath)"
@@ -244,6 +246,7 @@
               class="content-card"
               @click="viewContentDetails(related)"
             >
+              <FavoriteHeart :content-id="related._id" />
               <img
                 v-if="related.posterPath"
                 :src="getPosterUrl(related.posterPath)"
@@ -324,6 +327,7 @@ import {
   movieCatalogLocationFromUrl,
   tvCatalogLocationFromUrl,
 } from '@/utils/catalogTabs'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const route = useRoute()
 const router = useRouter()

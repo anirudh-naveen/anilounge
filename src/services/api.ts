@@ -15,6 +15,7 @@ import type {
   UpdateWatchlistData,
   ContentParams,
 } from '@/types'
+import type { ProfileSettings } from '@/types/profile'
 import { getDisplayTitle } from '@/utils/titles'
 
 const STALE_RAILWAY_HOST = 'find-animation-production.up.railway.app'
@@ -98,6 +99,19 @@ export const entityAPI = {
   favorite: (id: string) => api.post(`/entities/${id}/favorite`),
 
   unfavorite: (id: string) => api.delete(`/entities/${id}/favorite`),
+}
+
+export const profileAPI = {
+  getPublicProfile: (username: string) => api.get(`/users/${encodeURIComponent(username)}`),
+
+  updateSettings: (data: { settings?: Partial<ProfileSettings>; bio?: string }) =>
+    api.put('/profile/settings', data),
+
+  getFavoriteContentIds: () => api.get('/favorites/content'),
+
+  favoriteContent: (id: string) => api.post(`/content/${id}/favorite`),
+
+  unfavoriteContent: (id: string) => api.delete(`/content/${id}/favorite`),
 }
 
 export const contentAPI = {

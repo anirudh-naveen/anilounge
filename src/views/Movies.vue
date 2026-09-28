@@ -68,6 +68,7 @@
               {{ getCardContentTypeDisplay(movie.contentType) }}
             </div>
             <AiringBadge :content="movie" variant="card" />
+            <FavoriteHeart :content-id="movie._id" />
           </div>
           <div class="movie-info">
             <h3 class="movie-title">{{ getDisplayTitle(movie) }}</h3>
@@ -143,6 +144,7 @@ import {
   parseMovieCatalogPage,
   type MovieCatalogTab,
 } from '@/utils/catalogTabs'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const router = useRouter()
 const route = useRoute()

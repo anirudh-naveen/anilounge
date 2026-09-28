@@ -223,8 +223,9 @@ export const getFavoriteEntities = async (req, res) => {
     const user = await User.findById(req.user._id).populate({
       path: 'favoriteEntities.entity',
     })
+    // Title favorites share the table but are not populated as entities.
     const favorites = (user?.favoriteEntities || [])
-      .filter((row) => row.entity)
+      .filter((row) => row.entity && typeof row.entity === 'object')
       .sort((left, right) => new Date(right.addedAt) - new Date(left.addedAt))
       .map((row) => serializeEntity(row.entity, { isFavorited: true }))
     res.json({ success: true, data: favorites })

@@ -158,6 +158,7 @@
 import { onMounted, ref, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
 import ChatLauncher from '@/components/ChatLauncher.vue'
 import BetaBanner from '@/components/BetaBanner.vue'
@@ -205,6 +206,7 @@ const handleClickOutside = (event: Event) => {
 const handleLogout = () => {
   if (confirm('Are you sure you want to logout?')) {
     authStore.logout()
+    useFavoritesStore().reset()
     toast.success('Logged out successfully!')
     router.push('/')
     closeDropdown()

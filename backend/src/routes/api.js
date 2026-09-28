@@ -10,6 +10,7 @@ import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
 import entityController from '../controllers/entityController.js'
 import homeController from '../controllers/homeController.js'
+import profileController from '../controllers/profileController.js'
 import * as authController from '../controllers/authController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
@@ -122,6 +123,9 @@ router.post(
   contentController.aiChat,
 )
 
+/** Shareable user profile; optional auth lets owners see private profiles and hidden tabs. */
+router.get('/users/:username', optionalAuthenticate, profileController.getPublicProfile)
+
 /** Beta feedback is public and stored in-process (see feedbackController). */
 router.post('/feedback', feedbackController.submitFeedback)
 router.get('/feedback', feedbackController.getFeedback)
@@ -206,6 +210,18 @@ router.get('/content/:contentId/my-rating', validateObjectId, contentController.
 router.get('/favorites', entityController.getFavoriteEntities)
 router.post('/entities/:id/favorite', validateObjectId, entityController.favoriteEntity)
 router.delete('/entities/:id/favorite', validateObjectId, entityController.unfavoriteEntity)
+
+/** Profile customization; kept off `/auth` so it is not throttled by the login limiter. */
+router.put(
+  '/profile/settings',
+  [body('settings').optional().isObject(), body('bio').optional().isString()],
+  profileController.updateProfileSettings,
+)
+
+/** Title favorites (movies, series, and specials) behind the card heart. */
+router.get('/favorites/content', profileController.getFavoriteContentIds)
+router.post('/content/:id/favorite', validateObjectId, profileController.toggleContentFavorite)
+router.delete('/content/:id/favorite', validateObjectId, profileController.toggleContentFavorite)
 
 /** Homepage status feed: the viewer's and accepted friends' watchlist changes. */
 router.get('/home/activity', homeController.getActivity)
