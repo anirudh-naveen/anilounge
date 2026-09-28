@@ -264,6 +264,15 @@ CREATE INDEX IF NOT EXISTS users_pending_signup_idx ON users (created_at) WHERE 
 -- account emails ignore it.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS announcement_emails BOOLEAN NOT NULL DEFAULT true;
 
+-- Profile pictures live in the database (services/avatarService.js) so they survive
+-- redeploys and work from every environment that shares this database.
+CREATE TABLE IF NOT EXISTS user_avatars (
+  user_id       UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+  content_type  TEXT NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp', 'image/gif')),
+  data          BYTEA NOT NULL CHECK (octet_length(data) <= 2097152),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Emailed one-time codes (sign-up verification, lockout unlock). Only hashes are stored.
 CREATE TABLE IF NOT EXISTS email_codes (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,0 +1,81 @@
+/**
+ * Profile picture storage in Postgres.
+ *
+ * Layer: service. Pictures are small cropped images, stored in `user_avatars` so
+ * they survive redeploys (Railway disks are ephemeral) and are visible from every
+ * environment sharing the database. `users.profile_picture` holds a versioned URL
+ * (`/api/avatars/:userId?v=...`) that is served with long-lived caching.
+ */
+
+import { query } from '../../config/postgres.js'
+
+export const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+/**
+ * Identify an image by its leading bytes; the uploaded MIME type is not trusted.
+ * @param {Buffer} buffer
+ * @returns {'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | null}
+ */
+export function detectImageType(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return null
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg'
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return 'image/png'
+  }
+  if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+    return 'image/webp'
+  }
+  const gif = buffer.toString('ascii', 0, 6)
+  if (gif === 'GIF87a' || gif === 'GIF89a') return 'image/gif'
+  return null
+}
+
+/**
+ * Public URL for a user's stored avatar; the version busts caches after a change.
+ * @param {string} userId
+ * @param {Date} [updatedAt=new Date()]
+ * @returns {string}
+ */
+export function avatarUrl(userId, updatedAt = new Date()) {
+  return `/api/avatars/${userId}?v=${updatedAt.getTime()}`
+}
+
+/**
+ * Store (or replace) a user's avatar.
+ * @param {string} userId
+ * @param {Buffer} data
+ * @param {string} contentType - From `detectImageType`.
+ * @returns {Promise<string>} The URL to save as `users.profile_picture`.
+ */
+export async function saveAvatar(userId, data, contentType) {
+  const { rows } = await query(
+    `INSERT INTO user_avatars (user_id, content_type, data, updated_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (user_id) DO UPDATE
+       SET content_type = EXCLUDED.content_type, data = EXCLUDED.data, updated_at = now()
+     RETURNING updated_at`,
+    [userId, contentType, data],
+  )
+  return avatarUrl(userId, new Date(rows[0].updated_at))
+}
+
+/**
+ * @param {string} userId
+ * @returns {Promise<{ contentType: string, data: Buffer, updatedAt: Date } | null>}
+ */
+export async function getAvatar(userId) {
+  const { rows } = await query(
+    'SELECT content_type, data, updated_at FROM user_avatars WHERE user_id = $1',
+    [userId],
+  )
+  if (!rows[0]) return null
+  return { contentType: rows[0].content_type, data: rows[0].data, updatedAt: rows[0].updated_at }
+}
+
+/**
+ * @param {string} userId
+ * @returns {Promise<void>}
+ */
+export async function deleteAvatar(userId) {
+  await query('DELETE FROM user_avatars WHERE user_id = $1', [userId])
+}

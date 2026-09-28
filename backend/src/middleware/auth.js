@@ -151,6 +151,8 @@ export const refreshAccessToken = async (req, res) => {
           username: user.username,
           email: user.email,
           isDemoAccount: user.isDemo(),
+          profilePicture: user.profilePicture,
+          createdAt: user.createdAt,
           preferences: user.preferences,
         },
       },

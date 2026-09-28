@@ -3,8 +3,8 @@
  *
  * Layer: controller. Issues JWTs via auth middleware helpers, requires email
  * verification for new accounts, enforces lockout (with an emailed unlock link)
- * after failed logins, runs the 2FA login step, and writes profile pictures
- * under `uploads/profiles`.
+ * after failed logins, runs the 2FA login step, and stores profile pictures
+ * (in Postgres via avatarService).
  */
 
 import crypto from 'crypto'
@@ -12,6 +12,7 @@ import jwt from 'jsonwebtoken'
 import User, { DEMO_USER_EMAIL } from '../models/User.js'
 import { endSession, revokeAllSessions, startSession } from '../services/sessionService.js'
 import { touchUserActivity } from '../services/inactiveAccountService.js'
+import { deleteAvatar, detectImageType, saveAvatar } from '../services/avatarService.js'
 import { validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
 import path from 'path'
@@ -128,6 +129,8 @@ async function completeLogin(user, req, res, message) {
         username: user.username,
         email: user.email,
         isDemoAccount: user.isDemo(),
+        profilePicture: user.profilePicture,
+        createdAt: user.createdAt,
         watchlist: user.watchlist,
         preferences: user.preferences,
       },
@@ -698,15 +701,8 @@ export const deleteAccount = async (req, res) => {
     await endSession(req, res)
     await query('DELETE FROM users WHERE id = $1 AND is_demo = false', [user._id])
 
-    if (user.profilePicture && !user.profilePicture.startsWith('http')) {
-      const picturePath = path.join(
-        process.cwd(),
-        'uploads',
-        'profiles',
-        path.basename(user.profilePicture),
-      )
-      fs.promises.unlink(picturePath).catch(() => {})
-    }
+    // The stored avatar row is removed by ON DELETE CASCADE.
+    deleteProfilePictureFile(user.profilePicture)
 
     logAccountDeletion(user._id, req.ip, req.get('User-Agent'))
 
@@ -724,12 +720,13 @@ export const deleteAccount = async (req, res) => {
 }
 
 /**
- * Delete a locally stored profile picture file (remote URLs are left alone).
- * @param {string | null | undefined} profilePicture - Stored path like `/uploads/profiles/x.jpg`.
+ * Delete a legacy on-disk profile picture (`/uploads/profiles/...`); database-stored
+ * avatars and remote URLs are left alone.
+ * @param {string | null | undefined} profilePicture - Stored path.
  * @returns {void}
  */
 function deleteProfilePictureFile(profilePicture) {
-  if (!profilePicture || profilePicture.startsWith('http')) return
+  if (!profilePicture?.startsWith('/uploads/')) return
   const picturePath = path.join(process.cwd(), 'uploads', 'profiles', path.basename(profilePicture))
   fs.promises.unlink(picturePath).catch(() => {})
 }
@@ -751,6 +748,7 @@ export const removeProfilePicture = async (req, res) => {
     }
     const user = await User.findById(req.user._id)
     deleteProfilePictureFile(user.profilePicture)
+    await deleteAvatar(user._id)
     user.profilePicture = null
     await user.save()
     res.json({
@@ -773,8 +771,8 @@ export const removeProfilePicture = async (req, res) => {
 }
 
 /**
- * Store a multer-uploaded profile image, deleting any previous file on disk.
- * The demo account's picture is read-only (the uploaded file is discarded).
+ * Store an uploaded profile image in the database (bytes checked to be a real image).
+ * The demo account's picture is read-only.
  *
  * @param {import('express').Request} req - `req.file` from upload middleware; `req.user._id`.
  * @param {import('express').Response} res - 200 `{ data: { user } }`, 400 no file, 404, or 500.
@@ -783,7 +781,6 @@ export const removeProfilePicture = async (req, res) => {
 export const uploadProfilePicture = async (req, res) => {
   try {
     if (req.user.isDemo()) {
-      if (req.file) fs.promises.unlink(req.file.path).catch(() => {})
       return res.status(403).json({
         success: false,
         message: "The demo account's profile picture cannot be changed.",
@@ -805,23 +802,20 @@ export const uploadProfilePicture = async (req, res) => {
       })
     }
 
-    if (user.profilePicture) {
-      const oldPicturePath = path.join(
-        process.cwd(),
-        'uploads',
-        'profiles',
-        path.basename(user.profilePicture),
-      )
-      if (fs.existsSync(oldPicturePath)) {
-        fs.unlinkSync(oldPicturePath)
-      }
+    // Trust the bytes, not the declared type: a renamed script is not an image.
+    const contentType = detectImageType(req.file.buffer)
+    if (!contentType) {
+      return res.status(400).json({
+        success: false,
+        message: 'That file is not a valid JPG, PNG, GIF, or WebP image.',
+      })
     }
 
-    const profilePicturePath = `/uploads/profiles/${req.file.filename}`
-    user.profilePicture = profilePicturePath
+    deleteProfilePictureFile(user.profilePicture)
+    user.profilePicture = await saveAvatar(user._id, req.file.buffer, contentType)
     await user.save()
 
-    logFileUpload(req.file.filename, user._id, req.ip, true)
+    logFileUpload(req.file.originalname, user._id, req.ip, true)
 
     res.json({
       success: true,
@@ -839,7 +833,7 @@ export const uploadProfilePicture = async (req, res) => {
   } catch (error) {
     console.error('Upload profile picture error:', error)
 
-    logFileUpload(req.file?.filename || 'unknown', req.user?._id, req.ip, false, error)
+    logFileUpload(req.file?.originalname || 'unknown', req.user?._id, req.ip, false, error)
 
     res.status(500).json({
       success: false,

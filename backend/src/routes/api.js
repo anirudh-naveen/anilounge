@@ -144,6 +144,9 @@ router.post(
   contentController.aiChat,
 )
 
+/** Profile pictures (stored in Postgres); public so avatars load for visitors. */
+router.get('/avatars/:id', validateObjectId, profileController.getAvatarImage)
+
 /** Shareable user profile; optional auth lets owners see private profiles and hidden tabs. */
 router.get('/users/:username', optionalAuthenticate, profileController.getPublicProfile)
 
