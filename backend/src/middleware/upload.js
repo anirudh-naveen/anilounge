@@ -1,5 +1,5 @@
 /**
- * Multer disk storage for profile pictures under `uploads/profiles`.
+ * Multer in-memory upload for profile pictures (stored in Postgres by avatarService).
  *
  * Layer: middleware. Default export is the configured `upload` instance;
  * `handleUploadError` maps multer failures to 400 JSON.
@@ -7,31 +7,9 @@
 
 import multer from 'multer'
 import path from 'path'
-import fs from 'fs'
-import crypto from 'crypto'
 
-const uploadsDir = path.join(process.cwd(), 'uploads', 'profiles')
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true })
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir)
-  },
-  filename: (req, file, cb) => {
-    const randomBytes = crypto.randomBytes(16).toString('hex')
-    const timestamp = Date.now()
-    const ext = path.extname(file.originalname).toLowerCase()
-
-    // Non-image extensions are forced to .jpg so the stored path cannot carry an executable suffix.
-    const safeExt = ext.match(/^\.(jpg|jpeg|png|gif|webp)$/) ? ext : '.jpg'
-
-    const userId = String(req.user._id).replace(/[^a-f0-9]/gi, '')
-
-    cb(null, `profile-${userId}-${timestamp}-${randomBytes}${safeExt}`)
-  },
-})
+// Kept in memory: the controller validates the bytes and stores them in Postgres.
+const storage = multer.memoryStorage()
 
 /**
  * Accept only image MIME types/extensions and reject executable-like original names.
@@ -67,7 +45,7 @@ const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 2 * 1024 * 1024, // 2MB (the client uploads a 300x300 crop)
     files: 1, // Only one file at a time
   },
 })
@@ -86,7 +64,7 @@ export const handleUploadError = (error, req, res, next) => {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        message: 'File size too large. Maximum 5MB allowed.',
+        message: 'File size too large. Maximum 2MB allowed.',
       })
     }
     if (error.code === 'LIMIT_FILE_COUNT') {

@@ -3,8 +3,8 @@
  *
  * Configures the backend base URL, keeps the access token in memory (renewed
  * from the httpOnly session cookie on 401), and exports auth, content, AI, and
- * watchlist endpoints used by Pinia stores and views. Dev points at
- * `localhost:5001`; production uses the Railway API.
+ * watchlist endpoints used by Pinia stores and views. Both dev (Vite proxy) and
+ * production (Vercel rewrite) call the API on the same origin under `/api`.
  */
 
 import axios from 'axios'
@@ -22,14 +22,16 @@ import { getDisplayTitle } from '@/utils/titles'
 const STALE_RAILWAY_HOST = 'find-animation-production.up.railway.app'
 
 function resolveApiBaseUrl(): string {
+  // Development: vite.config.ts proxies `/api` to the local backend, so the session
+  // cookie is same-origin (a cross-origin localhost:5001 cookie is dropped by Safari).
+  if (import.meta.env.DEV) return '/api'
+
   const configured = import.meta.env.VITE_API_URL as string | undefined
   const usable = configured && !configured.includes(STALE_RAILWAY_HOST) ? configured : undefined
-
-  // Routes are mounted under `/api`; accept a bare origin like `http://localhost:5001`.
+  // Routes are mounted under `/api`; accept a bare origin like `https://api.example.com`.
   if (usable) return /\/api\/?$/.test(usable) ? usable : `${usable.replace(/\/+$/, '')}/api`
-  if (import.meta.env.DEV) return 'http://localhost:5001/api'
-  // Same-origin `/api` is proxied to Railway by vercel.json, so preview
-  // deployments do not hit CORS or a renamed Railway hostname.
+  // Same-origin `/api` is proxied to Railway by vercel.json, so the session cookie is
+  // first-party and preview deployments do not hit CORS or a renamed Railway hostname.
   return '/api'
 }
 
@@ -60,6 +62,8 @@ export interface SessionUser {
   username: string
   email: string
   isDemoAccount?: boolean
+  profilePicture?: string | null
+  createdAt?: string
   preferences?: { favoriteGenres: string[] }
 }
 

@@ -8,15 +8,12 @@
 <template>
   <div class="picture-editor">
     <!-- Title: Preview -->
-    <div class="current-picture">
-      <img
-        v-if="authStore.user?.profilePicture"
-        :src="getProfilePictureUrl(authStore.user.profilePicture)"
-        alt="Profile Picture"
-        class="profile-picture-preview"
-      />
-      <div v-else class="profile-picture-placeholder">{{ initials }}</div>
-    </div>
+    <UserAvatar
+      :src="authStore.user?.profilePicture"
+      :name="authStore.user?.username"
+      :size="72"
+      class="current-picture"
+    />
 
     <!-- Title: Controls -->
     <p v-if="authStore.isDemoUser" class="picture-note" data-testid="picture-demo-note">
@@ -90,11 +87,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useToast } from 'vue-toastification'
 import VueCropper from 'vue-cropperjs'
 import 'vue-cropperjs/node_modules/cropperjs/dist/cropper.css'
-import { API_HOST } from '@/services/api'
+import UserAvatar from '@/components/UserAvatar.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const emit = defineEmits<{ changed: [profilePicture: string | null] }>()
@@ -118,11 +115,6 @@ const cropper = ref<{
     imageSmoothingQuality?: string
   }) => HTMLCanvasElement | null
 } | null>(null)
-
-const initials = computed(() => (authStore.user?.username || '').slice(0, 2).toUpperCase())
-
-const getProfilePictureUrl = (profilePicture: string) =>
-  profilePicture.startsWith('http') ? profilePicture : `${API_HOST}${profilePicture}`
 
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement
@@ -214,24 +206,6 @@ const removeProfilePicture = async () => {
   border-radius: 50%;
   overflow: hidden;
   border: 3px solid var(--blend-color);
-}
-
-.profile-picture-preview {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.profile-picture-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--blend-color);
-  color: white;
-  font-size: 1.5rem;
-  font-weight: 700;
 }
 
 .upload-controls {
