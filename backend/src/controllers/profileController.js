@@ -13,6 +13,7 @@ import Entity from '../models/Entity.js'
 import User from '../models/User.js'
 import { serializeEntity } from '../utils/entities.js'
 import { computeProfileStats } from '../utils/profileStats.js'
+import { getAvatar } from '../services/avatarService.js'
 import {
   normalizePreferences,
   normalizeProfileSettings,
@@ -273,7 +274,38 @@ export const toggleContentFavorite = async (req, res) => {
   }
 }
 
+/**
+ * Serve a user's profile picture from the database. URLs carry a `?v=` version,
+ * so responses are cached for a year and a new upload gets a new URL.
+ *
+ * @param {import('express').Request} req - `params.id` is the user id.
+ * @param {import('express').Response} res - 200 image bytes, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const getAvatarImage = async (req, res) => {
+  try {
+    const avatar = await getAvatar(req.params.id)
+    if (!avatar) {
+      return res.status(404).json({ success: false, message: 'No profile picture.' })
+    }
+    res.set({
+      'Content-Type': avatar.contentType,
+      'Content-Length': String(avatar.data.length),
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Last-Modified': new Date(avatar.updatedAt).toUTCString(),
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    })
+    res.send(avatar.data)
+  } catch (error) {
+    console.error('Error serving avatar:', error)
+    res.status(500).json({ success: false, message: 'Error loading picture' })
+  }
+}
+
 export default {
+  getAvatarImage,
   getPublicProfile,
   updateProfileSettings,
   getFavoriteContentIds,

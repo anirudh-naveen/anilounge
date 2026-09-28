@@ -3,6 +3,8 @@
 /**
  * Read-only diagnostic script: print beta feedback from GET /api/feedback.
  * Run against a live API (API_URL, default localhost:5001). Does not mutate the database.
+ * The endpoint is admin-only: set ADMIN_ACCESS_TOKEN to an access token for an account
+ * listed in the server's ADMIN_EMAILS.
  */
 import fetch from 'node-fetch'
 
@@ -16,7 +18,15 @@ async function viewFeedback() {
   try {
     console.log('Fetching beta feedback...\n')
 
-    const response = await fetch(`${API_BASE_URL}/feedback`)
+    const token = process.env.ADMIN_ACCESS_TOKEN
+    if (!token) {
+      console.error('Set ADMIN_ACCESS_TOKEN to an admin access token.')
+      process.exitCode = 1
+      return
+    }
+    const response = await fetch(`${API_BASE_URL}/feedback`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     const result = await response.json()
 
     if (result.success) {

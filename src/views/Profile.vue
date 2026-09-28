@@ -32,13 +32,12 @@
           <div class="hero-body">
             <!-- Title: Avatar -->
             <div class="avatar">
-              <img
-                v-if="profile.user.profilePicture"
-                :src="getProfilePictureUrl(profile.user.profilePicture)"
-                alt="Profile Picture"
+              <UserAvatar
+                :src="profile.user.profilePicture"
+                :name="profile.user.username"
+                :size="112"
                 class="profile-picture"
               />
-              <div v-else class="avatar-placeholder">{{ userInitials }}</div>
             </div>
 
             <!-- Title: Name and Bio -->
@@ -470,7 +469,6 @@ import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import {
-  API_HOST,
   getContentTypeDisplay,
   getDetailsRouteName,
   getPosterUrl,
@@ -482,6 +480,7 @@ import { getWatchlistStatusLabel, WATCHLIST_STATUS_OPTIONS } from '@/utils/watch
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import PreferencesEditor from '@/components/PreferencesEditor.vue'
 import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type {
   ProfileAccent,
@@ -531,8 +530,6 @@ const username = computed(() =>
 const accentStyle = computed(() => ({
   '--profile-accent': ACCENT_COLORS[profile.value?.settings.accent || 'coral'],
 }))
-
-const userInitials = computed(() => (profile.value?.user.username || '').slice(0, 2).toUpperCase())
 
 const favoriteGenres = computed(() => profile.value?.user.preferences.favoriteGenres || [])
 
@@ -797,12 +794,6 @@ const formatDate = (dateString: string | undefined) => {
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-const getProfilePictureUrl = (profilePicture: string) => {
-  if (!profilePicture) return ''
-  if (profilePicture.startsWith('http')) return profilePicture
-  return `${API_HOST}${profilePicture}`
-}
-
 /** Swap in the placeholder once; a failing placeholder must not retrigger `error` forever. */
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
@@ -873,27 +864,9 @@ const handleImageError = (event: Event) => {
   margin-top: -56px;
 }
 
-.profile-picture,
-.avatar-placeholder {
-  width: 112px;
-  height: 112px;
-  border-radius: 50%;
+.profile-picture {
   border: 4px solid var(--bg-card);
   box-shadow: var(--shadow-md);
-}
-
-.profile-picture {
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--profile-accent);
-  color: #fff;
-  font-size: 2rem;
-  font-weight: 700;
 }
 
 .hero-info {

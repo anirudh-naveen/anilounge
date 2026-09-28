@@ -1,18 +1,19 @@
 /**
  * Admin HTTP routes for IP-ban inspection and manual ban/unban.
  *
- * Layer: router. Every path requires `authMiddleware`. Handlers call helpers
- * from `ipBan` middleware rather than talking to Mongo directly.
+ * Layer: router. Every path requires `authMiddleware` and `adminOnly` (ADMIN_EMAILS).
+ * Handlers call helpers from `ipBan` middleware rather than talking to Mongo directly.
  */
 
 import express from 'express'
 import authMiddleware from '../middleware/auth.js'
+import adminOnly from '../middleware/adminOnly.js'
 import { manuallyBanIP, unbanIP, getBanStats, getActiveBans } from '../middleware/ipBan.js'
 
 const router = express.Router()
 
-/** Every admin route requires a valid Bearer token. */
-router.use(authMiddleware)
+/** Every admin route requires a valid Bearer token for an allowlisted admin. */
+router.use(authMiddleware, adminOnly)
 
 /**
  * Return aggregate IP-ban counts from the ban collection.
