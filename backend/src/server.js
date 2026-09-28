@@ -54,6 +54,15 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
+/** Short HMAC secrets make access tokens forgeable by brute force. */
+if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('JWT_SECRET must be at least 32 characters in production.')
+    process.exit(1)
+  }
+  console.warn('JWT_SECRET is shorter than 32 characters; use a long random value.')
+}
+
 const app = express()
 const PORT = process.env.PORT || 5001
 

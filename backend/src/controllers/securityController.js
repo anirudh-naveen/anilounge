@@ -1,11 +1,13 @@
 /**
- * Signed-in account security: status and authenticator-app 2FA management.
+ * Signed-in account security: status, sessions, and authenticator-app 2FA management.
  *
- * Layer: controller. Mounted under `/account` (authenticated). The shared demo
- * account cannot enable 2FA so it can never be locked behind a code.
+ * Layer: controller. Mounted under `/account` (authenticated). Also signs a user
+ * out of every session. The shared demo account cannot enable 2FA so it can never
+ * be locked behind a code.
  */
 
 import User from '../models/User.js'
+import { endSession, revokeAllSessions } from '../services/sessionService.js'
 import {
   beginTwoFactorSetup,
   confirmTwoFactorSetup,
@@ -142,7 +144,26 @@ export const newBackupCodes = async (req, res) => {
   }
 }
 
+/**
+ * Sign out of every browser and device, including this one.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res - 200 `{ revoked }` or 500.
+ * @returns {Promise<void>}
+ */
+export const signOutEverywhere = async (req, res) => {
+  try {
+    const revoked = await revokeAllSessions(req.user._id)
+    await endSession(req, res)
+    res.json({ success: true, message: 'Signed out everywhere.', data: { revoked } })
+  } catch (error) {
+    console.error('Sign out everywhere error:', error)
+    res.status(500).json({ success: false, message: 'Error signing out other sessions' })
+  }
+}
+
 export default {
+  signOutEverywhere,
   getSecurityStatus,
   startTwoFactorSetup,
   enableTwoFactor,

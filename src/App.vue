@@ -172,7 +172,7 @@ const toast = useToast()
 const showDropdown = ref(false)
 
 onMounted(() => {
-  authStore.initAuth()
+  authStore.restoreSession()
   // Close dropdown when clicking outside
   document.addEventListener('click', handleClickOutside)
 })
@@ -203,9 +203,9 @@ const handleClickOutside = (event: Event) => {
   }
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
   if (confirm('Are you sure you want to logout?')) {
-    authStore.logout()
+    await authStore.logout()
     useFavoritesStore().reset()
     toast.success('Logged out successfully!')
     router.push('/')

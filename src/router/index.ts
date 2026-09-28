@@ -115,24 +115,19 @@ const router = createRouter({
 })
 
 /**
- * Route guard. Redirects unauthenticated users away from `meta.requiresAuth` routes.
+ * Route guard. Restores the session once, then redirects unauthenticated users away
+ * from `meta.requiresAuth` routes.
  *
  * @param to - Target location
- * @param from - Prior location
- * @param next - Vue Router next()
  */
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
-  // Initialize auth if not already done
-  if (!authStore.user && localStorage.getItem('token')) {
-    authStore.initAuth()
-  }
+  // Wait for the session cookie check so a signed-in reload is not bounced to /login.
+  await authStore.restoreSession()
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
-  } else {
-    next()
+    return '/login'
   }
 })
 
