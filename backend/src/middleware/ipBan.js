@@ -261,10 +261,11 @@ export const getBanStats = async () => {
  */
 export const getActiveBans = async () => {
   try {
+    // IPBan.find already orders by banned_at DESC.
     const bans = await IPBan.find({
       isActive: true,
       expiresAt: { $gt: new Date() },
-    }).sort({ bannedAt: -1 })
+    })
 
     return bans
   } catch (error) {

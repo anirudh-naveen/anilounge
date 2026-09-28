@@ -133,20 +133,12 @@
             <div v-if="authStore.isAuthenticated" class="user-menu">
               <div class="user-dropdown" :class="{ active: showDropdown }">
                 <button @click="toggleDropdown" class="user-trigger">
-                  <div class="user-avatar">
-                    <img
-                      v-if="authStore.user?.profilePicture"
-                      :src="getProfilePictureUrl(authStore.user.profilePicture)"
-                      alt="Profile Picture"
-                      class="profile-picture-nav"
-                    />
-                    <span v-else class="avatar-placeholder" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="8" r="4" />
-                        <path d="M4.5 20.25c0-3.6 3.36-6.25 7.5-6.25s7.5 2.65 7.5 6.25" />
-                      </svg>
-                    </span>
-                  </div>
+                  <UserAvatar
+                    :src="authStore.user?.profilePicture"
+                    :name="authStore.user?.username"
+                    :size="32"
+                    data-testid="nav-avatar"
+                  />
                   <span class="user-name">{{ authStore.user?.username }}</span>
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
                 </button>
@@ -198,7 +190,7 @@ import { useFavoritesStore } from '@/stores/favorites'
 import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
-import { API_HOST } from '@/services/api'
+import UserAvatar from '@/components/UserAvatar.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -224,13 +216,6 @@ const toggleDropdown = () => {
 
 const closeDropdown = () => {
   showDropdown.value = false
-}
-
-const getProfilePictureUrl = (profilePicture: string) => {
-  if (profilePicture.startsWith('http')) {
-    return profilePicture
-  }
-  return `${API_HOST}${profilePicture}`
 }
 
 const handleClickOutside = (event: Event) => {
@@ -442,37 +427,6 @@ const handleLogout = async () => {
   background: rgba(224, 122, 95, 0.22);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(224, 122, 95, 0.18);
-}
-
-.user-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--blend-color);
-}
-
-.profile-picture-nav {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--text-on-accent);
-}
-
-.avatar-placeholder svg {
-  width: 18px;
-  height: 18px;
 }
 
 .user-name {
