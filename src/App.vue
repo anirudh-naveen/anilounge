@@ -2,7 +2,7 @@
   App.vue — root application shell (view).
 
   Owns site-wide chrome: beta banner, primary navigation, authenticated user
-  menu, router outlet, floating AI assistant, and footer.
+  menu, router outlet, and footer. The AI assistant lives in the Search view.
 -->
 <template>
   <div id="app" class="min-h-screen">
@@ -180,10 +180,6 @@
       <router-view :key="route.path" />
     </main>
 
-    <!-- Overlays -->
-    <!-- Title: AI Assistant -->
-    <ChatLauncher />
-
     <!-- Footer -->
     <!-- Title: Copyright -->
     <footer class="footer">
@@ -201,7 +197,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
-import ChatLauncher from '@/components/ChatLauncher.vue'
 import BetaBanner from '@/components/BetaBanner.vue'
 import { API_HOST } from '@/services/api'
 

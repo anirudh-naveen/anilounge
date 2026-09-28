@@ -37,7 +37,7 @@ const mountApp = async () => {
   const wrapper = mount(App, {
     global: {
       plugins: [pinia, router],
-      stubs: { BetaBanner: true, ChatLauncher: true },
+      stubs: { BetaBanner: true },
     },
   })
   await flushPromises()
@@ -58,6 +58,11 @@ describe('App', () => {
     expect(wrapper.find('.auth-buttons').text()).toContain('Login')
     expect(wrapper.find('.auth-buttons').text()).toContain('Register')
     expect(wrapper.find('a[href="/watchlist"]').exists()).toBe(false)
+  })
+
+  it('does not render the AI assistant outside Search', async () => {
+    const wrapper = await mountApp()
+    expect(wrapper.find('[data-testid="chat-launcher"]').exists()).toBe(false)
   })
 
   it('switches the page to dark mode from the navbar toggle', async () => {

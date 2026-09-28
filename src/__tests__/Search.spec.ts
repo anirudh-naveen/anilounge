@@ -4,6 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Search from '@/views/Search.vue'
 import { defaultSearchFilters, hasActiveSearchFilters, useContentStore } from '@/stores/content'
+import type { UnifiedContent } from '@/types/content'
+import { contentAPI, entityAPI } from '@/services/api'
 
 const toastInfo = vi.fn()
 
@@ -50,6 +52,7 @@ const mountPage = async (path = '/search') => {
         PaginationNav: true,
         ContentHoverPreview: true,
         AiringBadge: true,
+        ChatLauncher: true,
       },
     },
   })
@@ -252,13 +255,20 @@ describe('Search browse rails', () => {
     window.scrollTo = vi.fn()
   })
 
+  it('hosts the AI assistant launcher', async () => {
+    const { wrapper } = await mountPage()
+    expect(wrapper.find('chat-launcher-stub').exists()).toBe(true)
+  })
+
   it('shows movie rails and keeps filters collapsed by default', async () => {
     const { wrapper } = await mountPage()
 
     expect(wrapper.get('[data-testid="browse-type-movie"]').attributes('aria-selected')).toBe(
       'true',
     )
-    expect(wrapper.get('[data-testid="browse-rail-popular"]').text()).toContain('Currently Trending')
+    expect(wrapper.get('[data-testid="browse-rail-popular"]').text()).toContain(
+      'Currently Trending',
+    )
     expect(wrapper.get('[data-testid="browse-rail-theatres"]').text()).toContain('In Theatres Now')
     expect(wrapper.get('[data-testid="browse-rail-upcoming"]').text()).toContain(
       'Upcoming Highlights',
@@ -291,5 +301,70 @@ describe('Search browse rails', () => {
     )
     expect(wrapper.find('[data-testid="filter-genre"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('Type:')
+  })
+
+  it('never shows characters, voice actors, or studios as results', async () => {
+    const { wrapper, store } = await mountPage()
+    const results = [
+      { _id: 'm1', title: 'Spirited Away', contentType: 'movie' as const, genres: [] },
+      { _id: 'c1', title: 'Chihiro Ogino', contentType: 'character', entityType: 'character' },
+      { _id: 'va1', title: 'Rumi Hiiragi', contentType: 'voice_actor', entityType: 'voice_actor' },
+      { _id: 's1', title: 'Studio Ghibli', contentType: 'studio', entityType: 'studio' },
+    ] as unknown as UnifiedContent[]
+
+    vi.spyOn(store, 'searchContent').mockImplementation(async () => {
+      store.searchResults = results
+      return { success: true, data: { content: results, pagination: store.pagination } }
+    })
+
+    await wrapper.get('input[type="text"], input[type="search"]').setValue('spirited')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Spirited Away')
+    expect(wrapper.text()).not.toContain('Chihiro Ogino')
+    expect(wrapper.text()).not.toContain('Rumi Hiiragi')
+    expect(wrapper.text()).not.toContain('Studio Ghibli')
+  })
+})
+
+describe('content store search', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('returns titles credited to matching voice actors and studios, not the people', async () => {
+    const catalog = [
+      { _id: 'm1', title: 'Spirited Away', contentType: 'movie', studios: ['Studio Ghibli'] },
+      { _id: 'm2', title: 'Your Name', contentType: 'movie', studios: ['CoMix Wave Films'] },
+      { _id: 't1', title: 'Frieren', contentType: 'tv', studios: ['Madhouse'] },
+      { _id: 'm3', title: 'Paprika', contentType: 'movie', studios: ['Madhouse'] },
+    ]
+    vi.mocked(contentAPI.getContent).mockResolvedValueOnce({
+      data: { success: true, data: catalog, pagination: { totalItems: catalog.length } },
+    } as never)
+    vi.mocked(entityAPI.search).mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: [
+          {
+            _id: 'va1',
+            title: 'Mone Kamishiraishi',
+            entityType: 'voice_actor',
+            appearances: [{ content: 'm2' }, { content: { _id: 't1' } }],
+          },
+          { _id: 's1', title: 'Madhouse', entityType: 'studio', appearances: [] },
+        ],
+      },
+    } as never)
+
+    const store = useContentStore()
+    await store.searchContent('kamishiraishi', 'movie')
+    const ids = store.searchResults.map((item) => item._id)
+
+    expect(ids).toEqual(expect.arrayContaining(['m2', 'm3']))
+    expect(ids).not.toContain('va1')
+    expect(ids).not.toContain('s1')
+    expect(ids).not.toContain('m1')
+    expect(ids).not.toContain('t1')
   })
 })
