@@ -30,32 +30,33 @@
 
 ## Search
 
-1. Have the AI bubble only appear in the Search section ✅
+1. Have the AI bubble only appear in the Search section
+2. Characters are returning in the Series/Movies sections. Do not return them there.
 
 ## Watchlist
 
 ## Profile
 
-1. Make the profile a more customizable screen with tabs that display the user's Favorites, Watchlist, and Stats as tabs.
+1. Make the profile a more customizable screen with tabs that display the user's Favorites, Watchlist, and Stats as tabs. ✅
    - This must be a customizable place for the user.
    - This user profile must be sharable to the public.
    - Content should have a heart icon to add/remove it to favorites on hover.
    - Stats should show elements like watchtime, wathctime split throughout the year, most watched genres, etc.
-2. Add option to delete account.
+2. Add option to delete account. ✅
    - Deny this option for the demo account.
-3. Add email verification for sign up and password lockouts.
+3. Add email verification for sign up and password lockouts. ✅
    - Additionally give option to set up 2FA.
    - The email will be from notify@anilounge.net. This email will be used for all notifications, like announcements as well.
-4. Make sure accounts are safe from basic cyber attacks.
-5. Have the accounts be auto-logged in on the browser if the cookie/ip location is the same.
+4. Make sure accounts are safe from basic cyber attacks. ✅
+5. Have the accounts be auto-logged in on the browser if the cookie/ip location is the same. ✅
    - Should only be necessary cookies.
    - Dont skirt legality.
-6. Add a toggle for a new dark mode.
-7. Remove the preferences/profile image section in settings and update the profile customization stage to include those, if applicable.
+6. Add a toggle for a new dark mode. ✅
+7. Remove the preferences/profile image section in settings and update the profile customization stage to include those, if applicable. ✅
 
 - Additionally disable changing the demo account profile picture changing.
 
-8. Auto delete accounts after a year of no use, with alerts coming in 3 months, 1 month, 2 weeks, 1 week, and a day before deletion, as well as after deletion.
+8. Auto delete accounts after a year of no use, with alerts coming in 3 months, 1 month, 2 weeks, 1 week, and a day before deletion, as well as after deletion. ✅
 
 ## Forum
 

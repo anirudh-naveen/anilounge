@@ -1,14 +1,16 @@
 /**
  * In-memory beta-feedback HTTP handlers.
  *
- * Layer: controller. Stores submissions in process memory (not Mongo) and logs
- * an email-shaped notification; nodemailer is not wired up.
+ * Layer: controller. Stores submissions in process memory (not Postgres) and emails
+ * each one to the support inbox (SUPPORT_EMAIL, default support@anilounge.net).
  */
+
+import { sendFeedbackEmail } from '../services/emailService.js'
 
 const feedbackStore = []
 
 /**
- * Validate and append a feedback record, then log a notification payload.
+ * Validate and append a feedback record, then email it to support.
  *
  * @param {import('express').Request} req - `body.type` and `body.message` required; email/timestamp/userAgent/url optional.
  * @param {import('express').Response} res - 200 `{ data: { id } }`, 400 if type/message missing, or 500.
@@ -39,7 +41,10 @@ export const submitFeedback = async (req, res) => {
     // In-process only; not persisted across restarts.
     feedbackStore.push(feedback)
 
-    await sendFeedbackEmail(feedback)
+    // A mail outage should not lose the submission or fail the form.
+    await sendFeedbackEmail(feedback).catch((error) => {
+      console.error('Feedback email failed:', error)
+    })
 
     console.log('Beta Feedback Received:', feedback)
 
@@ -58,7 +63,7 @@ export const submitFeedback = async (req, res) => {
 }
 
 /**
- * Return every in-memory feedback record (no auth gate on this controller).
+ * Return every in-memory feedback record. The route restricts this to admins.
  *
  * @param {import('express').Request} req - Unused; listing is unfiltered.
  * @param {import('express').Response} res - 200 `{ data: feedbackStore }` or 500.
@@ -76,24 +81,5 @@ export const getFeedback = async (req, res) => {
       success: false,
       message: 'Failed to retrieve feedback',
     })
-  }
-}
-
-/**
- * Log a notification-shaped payload; does not send mail until nodemailer is configured.
- *
- * @param {object} feedback - Stored feedback row (`type`, `email`, `message`, `timestamp`).
- * @returns {Promise<void>}
- */
-const sendFeedbackEmail = async (feedback) => {
-  try {
-    console.log('Email notification for feedback:', {
-      subject: `Beta Feedback: ${feedback.type}`,
-      from: feedback.email,
-      message: feedback.message,
-      timestamp: feedback.timestamp,
-    })
-  } catch (error) {
-    console.error('Email notification error:', error)
   }
 }

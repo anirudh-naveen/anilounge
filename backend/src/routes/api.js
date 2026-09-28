@@ -13,6 +13,7 @@ import homeController from '../controllers/homeController.js'
 import profileController from '../controllers/profileController.js'
 import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
+import adminOnly from '../middleware/adminOnly.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
   optionalAuthenticate,
@@ -146,9 +147,9 @@ router.post(
 /** Shareable user profile; optional auth lets owners see private profiles and hidden tabs. */
 router.get('/users/:username', optionalAuthenticate, profileController.getPublicProfile)
 
-/** Beta feedback is public and stored in-process (see feedbackController). */
+/** Anyone can submit beta feedback; only admins can list it (it holds submitter emails). */
 router.post('/feedback', feedbackController.submitFeedback)
-router.get('/feedback', feedbackController.getFeedback)
+router.get('/feedback', authMiddleware, adminOnly, feedbackController.getFeedback)
 
 /** All routes below require a valid Bearer access token. */
 router.use(authMiddleware)

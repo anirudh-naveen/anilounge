@@ -13,6 +13,7 @@ import dotenv from 'dotenv'
 import connectDB from '../config/database.js'
 import apiRoutes from './routes/api.js'
 import adminRoutes from './routes/admin.js'
+import emailRoutes from './routes/email.js'
 import { sanitizeHtmlInput, sanitizeXSS } from './middleware/security.js'
 import { securityLogger, securityMonitor } from './middleware/securityLogger.js'
 import {
@@ -235,6 +236,12 @@ app.use(async (req, res, next) => {
     }
   }
 })
+
+/**
+ * Email links (announcement unsubscribe) skip the bot and referer checks: mail providers
+ * POST one-click unsubscribes from their own servers. Links are HMAC-signed.
+ */
+app.use('/api/email', emailRoutes)
 
 /** Bot UA filter, NoSQL-injection scan, then progressive delay after 50 requests / 15 min. */
 app.use(antiBotProtection)
