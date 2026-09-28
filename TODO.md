@@ -30,6 +30,8 @@
 
 ## Search
 
+1. Have the AI bubble only appear in the Search section
+
 ## Watchlist
 
 ## Profile
@@ -38,14 +40,22 @@
    - This must be a customizable place for the user.
    - This user profile must be sharable to the public.
    - Content should have a heart icon to add/remove it to favorites on hover.
+   - Stats should show elements like watchtime, wathctime split throughout the year, most watched genres, etc.
 2. Add option to delete account.
    - Deny this option for the demo account.
 3. Add email verification for sign up and password lockouts.
    - Additionally give option to set up 2FA.
    - The email will be from notify@anilounge.net. This email will be used for all notifications, like announcements as well.
 4. Make sure accounts are safe from basic cyber attacks.
-5. Have the accounts be auto-logged in on the browser.
-6. Add a toggle for a new dark mofe.
+5. Have the accounts be auto-logged in on the browser if the cookie/ip location is the same.
+   - Should only be necessary cookies.
+   - Dont skirt legality.
+6. Add a toggle for a new dark mode.
+7. Remove the preferences/profile image section in settings and update the profile customization stage to include those, if applicable.
+
+- Additionally disable changing the demo account profile picture changing.
+
+8. Auto delete accounts after a year of no use, with alerts coming in 3 months, 1 month, 2 weeks, 1 week, and a day before deletion, as well as after deletion.
 
 ## Forum
 
@@ -63,5 +73,6 @@
 ## Infrastructure
 
 1. Migrate from MongoDB to a Relational Database. ✅
-2. Create CI/CD test blockers before PRs.
-3. Switch the recipient email of the site to support@anilounge.net. Confirm recipient email is setup for bug reports and emails.
+2. Switch the recipient email of the site for bug/fixes to support@anilounge.net. Confirm recipient email is setup for bug reports and emails.
+3. Add a way so that I can send announcements to all users using the email notify@anilounge.net.
+4. Create more CI/CD test blockers before PRs.

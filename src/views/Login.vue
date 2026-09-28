@@ -1,8 +1,9 @@
 <!--
   Login.vue — authentication view.
 
-  Email/password sign-in form against the auth store. Links to registration
-  when the user does not already have an account.
+  Email/password sign-in form against the auth store, followed by an
+  authenticator-code step for accounts with 2FA. Unverified accounts are sent
+  to email verification; locked accounts get a link to the unlock page.
 -->
 <template>
   <div class="login-page">
@@ -14,8 +15,42 @@
           <p class="login-subtitle">Welcome back to the lobby</p>
         </div>
 
+        <!-- Two-Factor -->
+        <!-- Title: Code Step -->
+        <form
+          v-if="challengeToken"
+          class="login-form"
+          data-testid="two-factor-form"
+          @submit.prevent="handleTwoFactor"
+        >
+          <p class="step-hint">
+            Enter the 6-digit code from your authenticator app, or one of your backup codes.
+          </p>
+          <div class="form-group">
+            <label for="two-factor-code" class="form-label">Verification code</label>
+            <input
+              id="two-factor-code"
+              v-model="twoFactorCode"
+              type="text"
+              class="input code-input"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              placeholder="123456"
+              maxlength="9"
+              required
+            />
+          </div>
+          <button type="submit" class="btn btn-primary btn-large" :disabled="authStore.isLoading">
+            {{ authStore.isLoading ? 'Verifying...' : 'Verify' }}
+          </button>
+          <div v-if="authStore.error" class="error-message">{{ authStore.error }}</div>
+          <button type="button" class="text-button" @click="resetTwoFactor">
+            Use a different account
+          </button>
+        </form>
+
         <!-- Form -->
-        <form @submit.prevent="handleLogin" class="login-form">
+        <form v-else @submit.prevent="handleLogin" class="login-form">
           <!-- Title: Email -->
           <div class="form-group">
             <label for="email" class="form-label">Email</label>
@@ -50,6 +85,13 @@
           <!-- Title: Error -->
           <div v-if="authStore.error" class="error-message">
             {{ authStore.error }}
+            <router-link
+              v-if="authStore.errorCode === 'ACCOUNT_LOCKED'"
+              :to="{ name: 'unlockAccount', query: { email: form.email } }"
+              class="error-link"
+            >
+              I have an unlock code
+            </router-link>
           </div>
         </form>
 
@@ -83,20 +125,54 @@ const form = ref({
   email: '',
   password: '',
 })
+const challengeToken = ref<string | null>(null)
+const twoFactorCode = ref('')
+
+const finishLogin = async () => {
+  toast.success('Login successful!')
+  // Wait for next tick to ensure auth state is updated
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  router.push('/')
+}
 
 const handleLogin = async () => {
   try {
-    await authStore.login(form.value)
-    toast.success('Login successful!')
-
-    // Wait for next tick to ensure auth state is updated
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    router.push('/')
+    const result = await authStore.login(form.value)
+    if (result.requiresTwoFactor) {
+      challengeToken.value = result.challengeToken
+      twoFactorCode.value = ''
+      return
+    }
+    await finishLogin()
   } catch {
+    if (authStore.errorCode === 'EMAIL_NOT_VERIFIED') {
+      toast.info('Please verify your email to finish signing up.')
+      router.push({ name: 'verifyEmail', query: { email: form.value.email } })
+      return
+    }
     // Error is already set in the auth store, just show toast
     toast.error(authStore.error || 'Login failed. Please check your credentials.')
   }
+}
+
+const handleTwoFactor = async () => {
+  if (!challengeToken.value) return
+  try {
+    await authStore.verifyTwoFactor(challengeToken.value, twoFactorCode.value.trim())
+    await finishLogin()
+  } catch {
+    if (authStore.errorCode === 'CHALLENGE_EXPIRED' || authStore.errorCode === 'ACCOUNT_LOCKED') {
+      challengeToken.value = null
+    }
+    twoFactorCode.value = ''
+    toast.error(authStore.error || 'Verification failed.')
+  }
+}
+
+const resetTwoFactor = () => {
+  challengeToken.value = null
+  twoFactorCode.value = ''
+  form.value.password = ''
 }
 </script>
 
@@ -176,6 +252,35 @@ const handleLogin = async () => {
   border-radius: 8px;
   font-size: 0.9rem;
   text-align: center;
+}
+
+.step-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.code-input {
+  font-size: 1.4rem;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.text-button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.error-link {
+  display: block;
+  margin-top: 0.4rem;
+  color: white;
+  font-weight: 600;
 }
 
 .login-footer {

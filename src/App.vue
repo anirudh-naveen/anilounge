@@ -90,6 +90,46 @@
 
           <!-- Title: User Menu / Auth Actions -->
           <div class="nav-actions">
+            <!-- Title: Theme Toggle -->
+            <button
+              type="button"
+              class="theme-toggle"
+              :aria-label="
+                resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+              "
+              :title="resolvedTheme === 'dark' ? 'Light mode' : 'Dark mode'"
+              data-testid="theme-toggle"
+              @click="toggleTheme"
+            >
+              <svg
+                v-if="resolvedTheme === 'dark'"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="4.25" />
+                <path
+                  stroke-linecap="round"
+                  d="M12 2.75v2M12 19.25v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2.75 12h2M19.25 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+                />
+              </svg>
+              <svg
+                v-else
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linejoin="round"
+                  d="M20.25 14.4A8.25 8.25 0 0 1 9.6 3.75a8.25 8.25 0 1 0 10.65 10.65Z"
+                />
+              </svg>
+            </button>
+
             <div v-if="authStore.isAuthenticated" class="user-menu">
               <div class="user-dropdown" :class="{ active: showDropdown }">
                 <button @click="toggleDropdown" class="user-trigger">
@@ -158,6 +198,8 @@
 import { onMounted, ref, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useFavoritesStore } from '@/stores/favorites'
+import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import ChatLauncher from '@/components/ChatLauncher.vue'
 import BetaBanner from '@/components/BetaBanner.vue'
@@ -169,9 +211,10 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 const showDropdown = ref(false)
+const { resolved: resolvedTheme, toggle: toggleTheme } = useTheme()
 
 onMounted(() => {
-  authStore.initAuth()
+  authStore.restoreSession()
   // Close dropdown when clicking outside
   document.addEventListener('click', handleClickOutside)
 })
@@ -202,9 +245,10 @@ const handleClickOutside = (event: Event) => {
   }
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
   if (confirm('Are you sure you want to logout?')) {
-    authStore.logout()
+    await authStore.logout()
+    useFavoritesStore().reset()
     toast.success('Logged out successfully!')
     router.push('/')
     closeDropdown()
@@ -613,8 +657,32 @@ const handleLogout = () => {
   padding: 2rem 0;
 }
 
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8edf5;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.theme-toggle svg {
+  width: 19px;
+  height: 19px;
+}
+
 .footer {
-  background: #eef0f4;
+  background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   padding: 1.75rem 0;
   text-align: center;

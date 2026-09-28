@@ -804,14 +804,14 @@ onUnmounted(() => {
   padding: 0.5rem;
   border: 2px solid var(--text-primary);
   border-radius: 6px;
-  background: #fff;
-  color: #333;
+  background: var(--bg-card);
+  color: var(--text-strong);
   font-size: 0.9rem;
 }
 
 .status-filter-select:focus {
   outline: none;
-  background: white;
+  background: var(--bg-card);
   border-color: var(--coral-primary);
   box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
 }

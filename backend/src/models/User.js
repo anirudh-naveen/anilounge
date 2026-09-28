@@ -8,8 +8,51 @@ import { compileMongoFilter } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId } from '../db/ids.js'
 import { attachContentRelations, mapContentRow } from './Content.js'
+import { normalizePreferences, normalizeProfileSettings } from '../utils/profileSettings.js'
 
 export const DEMO_USER_EMAIL = 'demo@findanimation.com'
+
+/**
+ * Whether an email (as typed at login) belongs to the shared demo account.
+ * @param {unknown} email
+ * @returns {boolean}
+ */
+export function isDemoEmail(email) {
+  return typeof email === 'string' && email.trim().toLowerCase() === DEMO_USER_EMAIL
+}
+
+/** Optional `users` columns added after the base schema; saves skip any a database lacks. */
+const OPTIONAL_USER_COLUMNS = ['preferences', 'profile_settings']
+let optionalColumnsPromise = null
+
+/**
+ * Optional `users` columns present in the connected database, looked up once per process.
+ * Lets the API keep saving users (and logging in) before `npm run db:schema` has run.
+ * @returns {Promise<Set<string>>}
+ */
+function presentOptionalColumns() {
+  if (!optionalColumnsPromise) {
+    optionalColumnsPromise = query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = current_schema() AND table_name = 'users'
+         AND column_name = ANY($1::text[])`,
+      [OPTIONAL_USER_COLUMNS],
+    )
+      .then(({ rows }) => {
+        const present = new Set(rows.map((row) => row.column_name))
+        const missing = OPTIONAL_USER_COLUMNS.filter((column) => !present.has(column))
+        if (missing.length) {
+          console.warn(`users table is missing ${missing.join(', ')}; run npm run db:schema`)
+        }
+        return present
+      })
+      .catch((error) => {
+        optionalColumnsPromise = null
+        throw error
+      })
+  }
+  return optionalColumnsPromise
+}
 
 function mapUserRow(row) {
   return {
@@ -25,10 +68,15 @@ function mapUserRow(row) {
     lockUntil: row.lock_until,
     lastLogin: row.last_login_at,
     createdAt: row.created_at,
+    // A missing column (schema not applied yet) reads as verified / 2FA off.
+    emailVerified: row.email_verified_at === undefined ? true : Boolean(row.email_verified_at),
+    twoFactorEnabled: Boolean(row.two_factor_enabled),
+    pendingSignup: Boolean(row.pending_signup),
     watchlist: [],
     ratings: [],
     favoriteEntities: [],
-    preferences: { favoriteGenres: [], favoriteStudios: [] },
+    preferences: normalizePreferences(row.preferences),
+    profileSettings: normalizeProfileSettings(row.profile_settings),
   }
 }
 
@@ -72,7 +120,6 @@ async function loadUserChildren(doc) {
     name: row.name,
     addedAt: row.added_at,
   }))
-  doc.preferences = { favoriteGenres: [], favoriteStudios: [] }
   return doc
 }
 
@@ -138,11 +185,12 @@ function User(data = {}, options = {}) {
     lock_until: data.lockUntil || null,
     last_login_at: data.lastLogin || null,
     created_at: data.createdAt || new Date(),
+    preferences: data.preferences,
+    profile_settings: data.profileSettings,
   }))
   if (data.watchlist) this.watchlist = data.watchlist
   if (data.ratings) this.ratings = data.ratings
   if (data.favoriteEntities) this.favoriteEntities = data.favoriteEntities
-  if (data.preferences) this.preferences = data.preferences
   this.$isNew = !options.fromDb
 }
 
@@ -179,33 +227,35 @@ User.prototype.save = async function save() {
         ? this.lockUntil
         : new Date(this.lockUntil)
 
+  const columns = {
+    id: this._id,
+    username: this.username,
+    email: this.email,
+    password_hash: passwordHash,
+    profile_picture: this.profilePicture || null,
+    bio: this.bio || null,
+    is_demo: Boolean(this.isDemoAccount) || this.email === DEMO_USER_EMAIL,
+    failed_login_attempts: this.failedLoginAttempts || 0,
+    lock_until: lockUntil,
+    last_login_at: this.lastLogin || null,
+  }
+  const optional = await presentOptionalColumns()
+  if (optional.has('preferences')) {
+    columns.preferences = JSON.stringify(normalizePreferences(this.preferences))
+  }
+  if (optional.has('profile_settings')) {
+    columns.profile_settings = JSON.stringify(normalizeProfileSettings(this.profileSettings))
+  }
+  const names = Object.keys(columns)
+  const placeholders = names.map((_, index) => `$${index + 1}`)
+  const updates = names
+    .filter((name) => name !== 'id')
+    .map((name) => `${name} = EXCLUDED.${name}`)
   await query(
-    `INSERT INTO users (
-       id, username, email, password_hash, profile_picture, bio, is_demo,
-       failed_login_attempts, lock_until, last_login_at, created_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, COALESCE((SELECT created_at FROM users WHERE id=$1), now()))
-     ON CONFLICT (id) DO UPDATE SET
-       username = EXCLUDED.username,
-       email = EXCLUDED.email,
-       password_hash = EXCLUDED.password_hash,
-       profile_picture = EXCLUDED.profile_picture,
-       bio = EXCLUDED.bio,
-       is_demo = EXCLUDED.is_demo,
-       failed_login_attempts = EXCLUDED.failed_login_attempts,
-       lock_until = EXCLUDED.lock_until,
-       last_login_at = EXCLUDED.last_login_at`,
-    [
-      this._id,
-      this.username,
-      this.email,
-      passwordHash,
-      this.profilePicture || null,
-      this.bio || null,
-      Boolean(this.isDemoAccount) || this.email === DEMO_USER_EMAIL,
-      this.failedLoginAttempts || 0,
-      lockUntil,
-      this.lastLogin || null,
-    ],
+    `INSERT INTO users (${names.join(', ')}, created_at)
+     VALUES (${placeholders.join(', ')}, COALESCE((SELECT created_at FROM users WHERE id=$1), now()))
+     ON CONFLICT (id) DO UPDATE SET ${updates.join(', ')}`,
+    Object.values(columns),
   )
 
   const watchlistRows = firstByContentId(

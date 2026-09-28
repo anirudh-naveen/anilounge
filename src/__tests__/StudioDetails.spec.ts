@@ -16,6 +16,10 @@ vi.mock('@/stores/entities', () => ({
   }),
 }))
 
+vi.mock('@/stores/favorites', () => ({
+  useFavoritesStore: () => ({ isFavorite: () => false, load: vi.fn().mockResolvedValue(undefined), toggle: vi.fn() }),
+}))
+
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAuthenticated: true,

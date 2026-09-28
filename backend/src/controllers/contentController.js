@@ -538,9 +538,8 @@ function chatUserContext(user) {
     .map((row) => row.name)
   return {
     favoriteGenres: user.preferences?.favoriteGenres || [],
-    favoriteStudios: [
-      ...new Set([...(user.preferences?.favoriteStudios || []), ...favoritedStudios]),
-    ],
+    // Favorite studios are studio pages the user has hearted.
+    favoriteStudios: [...new Set(favoritedStudios)],
     watchlist: watchlist.map(({ title, status }) => ({ title, status })),
     excludeIds: watchlist
       .filter((item) => item.status === 'completed' || item.status === 'dropped')

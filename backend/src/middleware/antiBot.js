@@ -8,6 +8,7 @@
 import slowDown from 'express-slow-down'
 import { banIPForBot, banIPForSuspiciousActivity } from './ipBan.js'
 import { isAllowedReferer } from '../utils/allowedFrontends.js'
+import { isDemoEmail } from '../models/User.js'
 
 /**
  * Block suspicious/minimal User-Agents and more than 10 requests per second per IP+UA.
@@ -96,7 +97,7 @@ export const progressiveSlowdown = slowDown({
 export const bruteForceProtection = {
   /**
    * Count auth attempts per IP in a 15-minute window; 5th+ attempt is 429.
-   * Entirely skipped when `NODE_ENV` is not `production`.
+   * Entirely skipped when `NODE_ENV` is not `production` and for demo-account logins.
    *
    * @param {import('express').Request} req - Uses `req.ip` as the attempt key.
    * @param {import('express').Response} res - 429 when the production cap is exceeded.
@@ -104,6 +105,8 @@ export const bruteForceProtection = {
    * @returns {void}
    */
   prevent: (req, res, next) => {
+    if (isDemoEmail(req.body?.email)) return next()
+
     const ip = req.ip
     const key = `brute-force-${ip}`
 

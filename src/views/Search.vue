@@ -251,6 +251,10 @@
                 {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
               <AiringBadge :content="item" variant="card" />
+              <FavoriteHeart
+                v-if="!(item as any).source && !isCatalogEntity(item)"
+                :content-id="item._id"
+              />
             </div>
             <div class="result-info">
               <h3 class="result-title">{{ getDisplayTitle(item) }}</h3>
@@ -367,6 +371,7 @@ import {
   normalizeBrowseType,
   type BrowseContentType,
 } from '@/utils/catalogTabs'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -776,12 +781,13 @@ onMounted(() => {
   border: none;
   border-radius: 8px;
   font-size: 1rem;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .search-input:focus {
   outline: none;
-  background: white;
+  background: var(--bg-card);
   box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.35);
 }
 
@@ -915,15 +921,15 @@ onMounted(() => {
   padding: 0.5rem;
   border: 2px solid var(--text-primary);
   border-radius: 6px;
-  background: #fff;
-  color: #333;
+  background: var(--bg-card);
+  color: var(--text-strong);
   font-size: 0.9rem;
   transition: all 0.3s ease;
 }
 
 .filter-group select:focus {
   outline: none;
-  background: white;
+  background: var(--bg-card);
   border-color: var(--coral-primary);
   box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
 }
@@ -931,7 +937,7 @@ onMounted(() => {
 .filter-group select:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-  background: #f3f3f3;
+  background: var(--bg-muted);
 }
 
 .rating-slider {
@@ -977,7 +983,7 @@ onMounted(() => {
   height: 16px;
   border-radius: 50%;
   border: none;
-  background: #fff;
+  background: var(--bg-card);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
@@ -988,7 +994,7 @@ onMounted(() => {
   height: 16px;
   border-radius: 50%;
   border: none;
-  background: #fff;
+  background: var(--bg-card);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
@@ -1060,7 +1066,7 @@ onMounted(() => {
 
 .result-card {
   position: relative;
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 14px;
   overflow: visible;
   box-shadow: var(--shadow-sm);
@@ -1124,7 +1130,7 @@ onMounted(() => {
 
 .result-native-title {
   font-size: 0.75rem;
-  color: #666;
+  color: var(--text-body);
   font-style: italic;
   margin: -0.2rem 0 0.35rem;
   line-height: 1.2;
@@ -1163,13 +1169,13 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 0.35rem;
   font-size: 0.7rem;
-  color: #999;
+  color: var(--text-faint);
 }
 
 .release-year,
 .runtime,
 .episodes {
-  background: #f8f9fa;
+  background: var(--bg-muted);
   padding: 2px 6px;
   border-radius: 3px;
 }
