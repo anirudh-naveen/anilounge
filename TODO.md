@@ -30,7 +30,7 @@
 
 ## Search
 
-1. Have the AI bubble only appear in the Search section
+1. Have the AI bubble only appear in the Search section ✅
 
 ## Watchlist
 

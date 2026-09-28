@@ -4,8 +4,8 @@
 
   Movies/Series toggle, search field, collapsible filters, and horizontal
   catalog rails (trending, in theatres / airing, upcoming). Search results
-  replace the rails. Backed by the content store. The site-wide AI assistant
-  can also fill these results.
+  replace the rails. Backed by the content store. Hosts the floating AI
+  assistant, which can also fill these results.
 -->
 <template>
   <div class="search-page">
@@ -324,6 +324,9 @@
         />
       </div>
     </div>
+
+    <!-- AI Assistant -->
+    <ChatLauncher />
   </div>
 </template>
 
@@ -350,6 +353,7 @@ import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import ContentRail from '@/components/ContentRail.vue'
+import ChatLauncher from '@/components/ChatLauncher.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
@@ -409,43 +413,39 @@ const filteredResults = computed(() => {
   let results = [...searchResults.value]
   const active = appliedFilters.value
 
-  // Apply type filter (Movies includes specials). Characters stay visible in text search.
+  // Characters, voice actors, and studios are never results themselves.
+  results = results.filter((item) => !isCatalogEntity(item))
+
+  // Apply type filter (Movies includes specials)
   if (active.type !== 'all') {
-    results = results.filter(
-      (item) => isCatalogEntity(item) || matchesContentTypeFilter(item.contentType, active.type),
-    )
+    results = results.filter((item) => matchesContentTypeFilter(item.contentType, active.type))
   }
 
   // Apply rating range (1–10). Full span includes unrated titles.
   if (!(active.ratingMin === 1 && active.ratingMax === 10)) {
-    results = results.filter(
-      (item) => isCatalogEntity(item) || ratingMatchesFilter(item, active.ratingMin, active.ratingMax),
+    results = results.filter((item) =>
+      ratingMatchesFilter(item, active.ratingMin, active.ratingMax),
     )
   }
 
   // Apply year filter
   if (active.year !== 'all') {
-    results = results.filter((item) => isCatalogEntity(item) || matchesYearFilter(item, active.year))
+    results = results.filter((item) => matchesYearFilter(item, active.year))
   }
 
   // Apply season filter (movies and series)
   if (active.season !== 'all') {
-    results = results.filter(
-      (item) => isCatalogEntity(item) || matchesSeasonFilter(item, active.season),
-    )
+    results = results.filter((item) => matchesSeasonFilter(item, active.season))
   }
 
   // Apply status filter (completed / airing / upcoming)
   if (active.status !== 'all') {
-    results = results.filter(
-      (item) => isCatalogEntity(item) || matchesStatusFilter(item, active.status),
-    )
+    results = results.filter((item) => matchesStatusFilter(item, active.status))
   }
 
   // Apply genre filter
   if (active.genre !== 'all') {
     results = results.filter((item) => {
-      if (isCatalogEntity(item)) return true
       if (!item.genres || !Array.isArray(item.genres)) return false
       return item.genres.some((genre) => {
         const genreName = typeof genre === 'string' ? genre : genre.name
@@ -457,7 +457,6 @@ const filteredResults = computed(() => {
   // Apply language filter (this is a simplified implementation)
   if (active.language !== 'all') {
     results = results.filter((item) => {
-      if (isCatalogEntity(item)) return true
       // For now, we'll assume Japanese content based on MAL data
       // This could be enhanced with actual language data from TMDB
       if (active.language === 'Japanese') {
@@ -479,9 +478,7 @@ const filteredResults = computed(() => {
 
   // Apply country of origin
   if (active.country !== 'all') {
-    results = results.filter(
-      (item) => isCatalogEntity(item) || matchesCountryFilter(item, active.country),
-    )
+    results = results.filter((item) => matchesCountryFilter(item, active.country))
   }
 
   return applySort(

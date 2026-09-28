@@ -141,7 +141,7 @@ describe('Home', () => {
     expect(wrapper.find('[data-testid="status-signup"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="status-signup"]').text()).toContain('Register')
     expect(getActivity).not.toHaveBeenCalled()
-    expect(wrapper.get('[data-testid="updates-panel"]').text()).toContain('Trending releases')
+    expect(wrapper.get('[data-testid="updates-panel"] .panel-title').text()).toBe('Trending')
   })
 
   it('shows personal and friend activity with tabs', async () => {
@@ -184,7 +184,7 @@ describe('Home', () => {
     getUpdates.mockResolvedValue({ data: { data: updatesPayload('watchlist') } })
     const wrapper = await mountHome()
     const panel = wrapper.get('[data-testid="updates-panel"]')
-    expect(panel.text()).toContain('Watchlist updates')
+    expect(panel.get('.panel-title').text()).toBe('Updates')
     expect(panel.text()).toContain('New episodes')
     expect(panel.text()).toContain('Ep 12 · in 5h')
     expect(panel.text()).toContain('Upcoming')

@@ -1,39 +1,44 @@
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { createMemoryHistory, createRouter } from 'vue-router'
 import ChatLauncher from '@/components/ChatLauncher.vue'
 import { useContentStore } from '@/stores/content'
+import type { UnifiedContent } from '@/types/content'
 
 vi.mock('vue-toastification', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn() }),
 }))
 
+const mountLauncher = () => {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  return mount(ChatLauncher, {
+    global: {
+      plugins: [pinia],
+      stubs: { Chatbot: true },
+    },
+  })
+}
+
 describe('ChatLauncher', () => {
   it('opens the chatbot from the floating button', async () => {
-    const pinia = createPinia()
-    setActivePinia(pinia)
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/', name: 'home', component: { template: '<div />' } },
-        { path: '/search', name: 'search', component: { template: '<div />' } },
-      ],
-    })
-    await router.push('/')
-    await router.isReady()
+    const wrapper = mountLauncher()
 
-    const wrapper = mount(ChatLauncher, {
-      global: {
-        plugins: [pinia, router],
-        stubs: { Chatbot: true },
-      },
-    })
-
-    expect(wrapper.find('[data-testid="chatbot"]').exists()).toBe(false)
+    expect(wrapper.find('chatbot-stub').exists()).toBe(false)
     await wrapper.get('[data-testid="chat-launcher"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('chatbot-stub').exists()).toBe(true)
-    expect(useContentStore()).toBeTruthy()
+  })
+
+  it('loads chatbot recommendations into the search results', async () => {
+    const wrapper = mountLauncher()
+    const store = useContentStore()
+    const results = [{ _id: 'a1', title: 'Frieren' }] as unknown as UnifiedContent[]
+
+    await wrapper.get('[data-testid="chat-launcher"]').trigger('click')
+    wrapper.getComponent({ name: 'Chatbot' }).vm.$emit('search-results', results)
+    await flushPromises()
+
+    expect(store.searchResults).toEqual(results)
   })
 })
