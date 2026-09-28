@@ -7,9 +7,10 @@
  * under `uploads/profiles`.
  */
 
+import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import User, { DEMO_USER_EMAIL } from '../models/User.js'
-import { generateAccessToken, generateRefreshToken } from '../middleware/auth.js'
+import { endSession, revokeAllSessions, startSession } from '../services/sessionService.js'
 import { validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
 import path from 'path'
@@ -30,11 +31,17 @@ import {
   resendWaitSeconds,
   verifyTwoFactorCode,
 } from '../services/accountSecurityService.js'
-import { sendUnlockEmail, sendVerificationEmail } from '../services/emailService.js'
+import {
+  sendEmailChangedNotice,
+  sendUnlockEmail,
+  sendVerificationEmail,
+} from '../services/emailService.js'
 
 const MAX_FAILED_LOGINS = 5
 const LOCK_DURATION_MS = 30 * 60 * 1000
 const TWO_FACTOR_CHALLENGE_TTL = '5m'
+/** bcrypt hash (cost 12) of a random throwaway string; compared against for unknown emails. */
+const TIMING_DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 12)
 
 /**
  * 400 response for express-validator failures, or null when the body is valid.
@@ -45,9 +52,10 @@ const TWO_FACTOR_CHALLENGE_TTL = '5m'
 function rejectInvalid(req, res) {
   const errors = validationResult(req)
   if (errors.isEmpty()) return null
+  const [first] = errors.array()
   return res.status(400).json({
     success: false,
-    message: 'Validation failed.',
+    message: typeof first?.msg === 'string' && first.msg !== 'Invalid value' ? first.msg : 'Validation failed.',
     errors: errors.array(),
   })
 }
@@ -107,8 +115,7 @@ async function completeLogin(user, req, res, message) {
 
   logLoginAttempt(user.email, true, req.ip, req.get('User-Agent'), user._id)
 
-  const accessToken = generateAccessToken(user._id)
-  const refreshToken = await generateRefreshToken(user._id)
+  const accessToken = await startSession(res, user._id)
 
   res.json({
     success: true,
@@ -123,7 +130,6 @@ async function completeLogin(user, req, res, message) {
         preferences: user.preferences,
       },
       accessToken,
-      refreshToken,
     },
   })
 }
@@ -215,6 +221,9 @@ export const login = async (req, res) => {
 
     const user = await User.findOne({ email: normalizedEmail })
     if (!user) {
+      // Spend the same bcrypt time as a real check so response timing does not reveal
+      // which emails have accounts.
+      await bcrypt.compare(String(password || ''), TIMING_DUMMY_HASH)
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials.',
@@ -246,7 +255,7 @@ export const login = async (req, res) => {
       const challengeToken = jwt.sign(
         { userId: user._id, purpose: 'two_factor' },
         process.env.JWT_SECRET,
-        { expiresIn: TWO_FACTOR_CHALLENGE_TTL },
+        { expiresIn: TWO_FACTOR_CHALLENGE_TTL, algorithm: 'HS256' },
       )
       return res.json({
         success: true,
@@ -279,7 +288,9 @@ export const verifyTwoFactorLogin = async (req, res) => {
     const { challengeToken, code } = req.body || {}
     let payload
     try {
-      payload = jwt.verify(String(challengeToken || ''), process.env.JWT_SECRET)
+      payload = jwt.verify(String(challengeToken || ''), process.env.JWT_SECRET, {
+        algorithms: ['HS256'],
+      })
     } catch {
       payload = null
     }
@@ -468,27 +479,47 @@ export const getProfile = async (req, res) => {
 
 /**
  * Patch username, email, and/or preferences for the authenticated user.
+ * Changing email requires `currentPassword`, marks the new address unverified,
+ * emails it a verification code, and notifies the old address. The demo
+ * account's username and email are read-only.
  *
- * @param {import('express').Request} req - Optional `body.username`, `body.email`, `body.preferences`.
- * @param {import('express').Response} res - 200 `{ data: { user } }` (password omitted), 400 duplicate, or 500.
+ * @param {import('express').Request} req - Optional `body.username`, `body.email` (+ `body.currentPassword`), `body.preferences`.
+ * @param {import('express').Response} res - 200 `{ data: { user, emailVerificationSent } }`, 400 invalid/duplicate/wrong password, 403 demo, or 500.
  * @returns {Promise<void>}
  */
 export const updateProfile = async (req, res) => {
   try {
-    const { username, email, preferences } = req.body
+    if (rejectInvalid(req, res)) return
 
-    const updateData = {}
-    if (username) updateData.username = username
-    if (email) updateData.email = email.toLowerCase().trim()
-    if (preferences) updateData.preferences = preferences
+    const { username, email, preferences, currentPassword } = req.body
+    const user = await User.findById(req.user._id)
+    const normalizedEmail = email ? normalizeEmail(email) : null
+    const changesUsername = Boolean(username) && username !== user.username
+    const changesEmail = Boolean(normalizedEmail) && normalizedEmail !== user.email
 
-    if (username || email) {
-      const normalizedEmail = email ? email.toLowerCase().trim() : null
+    if ((changesUsername || changesEmail) && user.isDemo()) {
+      return res.status(403).json({
+        success: false,
+        message: 'The demo account username and email cannot be changed.',
+      })
+    }
+    if (changesEmail) {
+      const passwordOk =
+        typeof currentPassword === 'string' && (await user.comparePassword(currentPassword))
+      if (!passwordOk) {
+        return res.status(400).json({
+          success: false,
+          message: 'Enter your current password to change your email.',
+        })
+      }
+    }
+
+    if (changesUsername || changesEmail) {
       const existingUser = await User.findOne({
         _id: { $ne: req.user._id },
         $or: [
-          ...(username ? [{ username }] : []),
-          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+          ...(changesUsername ? [{ username }] : []),
+          ...(changesEmail ? [{ email: normalizedEmail }] : []),
         ],
       })
 
@@ -500,15 +531,28 @@ export const updateProfile = async (req, res) => {
       }
     }
 
-    const user = await User.findByIdAndUpdate(req.user._id, updateData, {
-      new: true,
-      runValidators: true,
-    }).select('-password')
+    const previousEmail = user.email
+    if (changesUsername) user.username = username
+    if (changesEmail) user.email = normalizedEmail
+    if (preferences) user.preferences = { ...user.preferences, ...preferences }
+    await user.save()
+
+    if (changesEmail) {
+      await query('UPDATE users SET email_verified_at = NULL WHERE id = $1', [user._id])
+      user.emailVerified = false
+      const code = await issueEmailCode(user._id, 'verify_email')
+      await sendVerificationEmail(user, code)
+      sendEmailChangedNotice({ email: previousEmail, username: user.username }, user.email).catch(
+        (error) => console.error('Failed to send email-change notice:', error),
+      )
+    }
 
     res.json({
       success: true,
-      message: 'Profile updated successfully.',
-      data: { user },
+      message: changesEmail
+        ? 'Profile updated. Check your new email for a verification code.'
+        : 'Profile updated successfully.',
+      data: { user, emailVerificationSent: changesEmail },
     })
   } catch (error) {
     console.error('Update profile error:', error)
@@ -522,6 +566,7 @@ export const updateProfile = async (req, res) => {
 /**
  * Replace the authenticated user's password after verifying the current one.
  * Complexity rules match registration (8+ chars, mixed case, number, special).
+ * Revokes all other sessions and starts a fresh one for this browser.
  * The shared demo account cannot change its password.
  *
  * @param {import('express').Request} req - `body.currentPassword`, `body.newPassword`.
@@ -575,9 +620,13 @@ export const changePassword = async (req, res) => {
 
     await User.findByIdAndUpdate(req.user._id, { password: hashedNewPassword })
 
+    // Sign out every other browser; keep this one signed in with a fresh session.
+    await revokeAllSessions(req.user._id)
+    await startSession(res, req.user._id)
+
     res.json({
       success: true,
-      message: 'Password changed successfully.',
+      message: 'Password changed successfully. Other devices have been signed out.',
     })
   } catch (error) {
     console.error('Change password error:', error)
@@ -637,6 +686,7 @@ export const deleteAccount = async (req, res) => {
       })
     }
 
+    await endSession(req, res)
     await query('DELETE FROM users WHERE id = $1 AND is_demo = false', [user._id])
 
     if (user.profilePicture && !user.profilePicture.startsWith('http')) {

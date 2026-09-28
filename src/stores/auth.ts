@@ -1,21 +1,24 @@
 /**
  * auth.ts — Pinia auth store.
  *
- * Holds the current user and JWT, persists them to localStorage, and exposes
+ * Holds the current user and in-memory access token (restored from the httpOnly
+ * session cookie, so users stay signed in across browser restarts), and exposes
  * login (with the 2FA step), register and email verification, profile, and
  * session helpers used by views and the router.
  */
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { authAPI } from '@/services/api'
+import { authAPI, onSessionChange, refreshSession, setAccessToken } from '@/services/api'
 import type { User, LoginCredentials, RegisterData, UpdateProfileData } from '@/types'
 
 const DEMO_USER_EMAIL = 'demo@findanimation.com'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
-  const token = ref<string | null>(localStorage.getItem('token'))
+  // In memory only: page scripts never persist the access token. The httpOnly session
+  // cookie restores it on load (`restoreSession`) and when it expires (api interceptor).
+  const token = ref<string | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
@@ -38,16 +41,32 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * Stores a signed-in user plus access token in memory and localStorage.
+   * Stores a signed-in user plus access token in memory.
    * @param userData - User returned by a sign-in endpoint.
    * @param authToken - Access JWT.
    */
   const setSession = (userData: User, authToken: string) => {
     user.value = userData
     token.value = authToken
-    localStorage.setItem('token', authToken)
-    localStorage.setItem('user', JSON.stringify(userData))
+    setAccessToken(authToken)
   }
+
+  /** Forgets the session in this tab without calling the server. */
+  const clearSession = () => {
+    user.value = null
+    token.value = null
+    setAccessToken(null)
+  }
+
+  // Keep the store in step with refreshes done by the api interceptor.
+  onSessionChange((session) => {
+    if (session) {
+      token.value = session.accessToken
+      if (!user.value) user.value = session.user as User
+    } else {
+      clearSession()
+    }
+  })
 
   /**
    * Runs an auth call with shared loading/error handling.
@@ -121,17 +140,27 @@ export const useAuthStore = defineStore('auth', () => {
     })
 
   /**
-   * Clears the in-memory session and removes token/user from localStorage.
+   * Signs out this browser: revokes the session cookie server-side and clears local state.
    */
-  const logout = () => {
-    user.value = null
-    token.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+  const logout = async () => {
+    try {
+      await authAPI.logout()
+    } catch (err) {
+      console.error('Sign-out request failed:', err)
+    }
+    clearSession()
   }
 
   /**
-   * Reloads the user from `/auth/profile` using the stored token.
+   * Revokes every session for this account (all browsers and devices), including this one.
+   */
+  const signOutEverywhere = async () => {
+    await authAPI.signOutEverywhere()
+    clearSession()
+  }
+
+  /**
+   * Reloads the user from `/auth/profile` using the in-memory token.
    * Logs out only on 401; other failures leave the session intact.
    * @returns Resolves when the profile is stored, or immediately if there is no token.
    */
@@ -141,20 +170,19 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authAPI.getProfile()
       user.value = response.data.data.user
-      localStorage.setItem('user', JSON.stringify(user.value))
     } catch (err: unknown) {
       console.error('Error loading user:', err)
       const apiError = err as { response?: { status?: number } }
-      // Only logout on 401 (expired/invalid token); keep the session for other failures.
+      // A 401 here means the cookie refresh also failed; keep the session for other failures.
       if (apiError.response?.status === 401) {
-        logout()
+        clearSession()
       }
       throw err
     }
   }
 
   /**
-   * Updates profile fields and writes the returned user back to localStorage.
+   * Updates profile fields and stores the returned user.
    * @param data - Partial profile payload (username, email, picture, preferences).
    * @returns The update API payload.
    */
@@ -165,7 +193,6 @@ export const useAuthStore = defineStore('auth', () => {
 
       const response = await authAPI.updateProfile(data)
       user.value = response.data.data.user
-      localStorage.setItem('user', JSON.stringify(user.value))
 
       return response.data
     } catch (err: unknown) {
@@ -219,7 +246,7 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null
 
       await authAPI.deleteAccount(password)
-      logout()
+      clearSession()
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { message?: string } } }
       error.value = apiError.response?.data?.message || 'Account deletion failed'
@@ -241,7 +268,6 @@ export const useAuthStore = defineStore('auth', () => {
 
       const response = await authAPI.uploadProfilePicture(formData)
       user.value = response.data.data.user
-      localStorage.setItem('user', JSON.stringify(user.value))
 
       return response.data
     } catch (err: unknown) {
@@ -253,23 +279,24 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  let restoring: Promise<void> | null = null
+
   /**
-   * Hydrates `user` from localStorage when a token is already present.
-   * Clears both token and user if the saved JSON is invalid.
+   * Restores a signed-in session from the httpOnly cookie (keeps users logged in across
+   * browser restarts). Runs once; later calls return the same promise.
    */
-  const initAuth = () => {
-    const savedUser = localStorage.getItem('user')
-    if (savedUser && token.value) {
-      try {
-        user.value = JSON.parse(savedUser)
-      } catch (error) {
-        console.error('Error parsing saved user:', error)
-        localStorage.removeItem('user')
-        localStorage.removeItem('token')
-        user.value = null
-        token.value = null
-      }
+  const restoreSession = () => {
+    if (!restoring) {
+      // Tokens used to be kept in localStorage; drop anything left from older builds.
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      restoring = refreshSession()
+        .then((session) => {
+          if (session) setSession(session.user as User, session.accessToken)
+        })
+        .catch((err) => console.error('Session restore failed:', err))
     }
+    return restoring
   }
 
   return {
@@ -290,6 +317,7 @@ export const useAuthStore = defineStore('auth', () => {
     changePassword,
     deleteAccount,
     uploadProfilePicture,
-    initAuth,
+    restoreSession,
+    signOutEverywhere,
   }
 })

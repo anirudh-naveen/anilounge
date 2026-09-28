@@ -133,3 +133,22 @@ export function sendUnlockEmail(user, code) {
     ),
   })
 }
+
+/**
+ * Security notice to the previous address after an email change.
+ * @param {{ email: string, username: string }} previous - Old address and username.
+ * @param {string} newEmail
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendEmailChangedNotice(previous, newEmail) {
+  return sendEmail({
+    to: previous.email,
+    subject: 'Your AniLounge email was changed',
+    text: `Hi ${previous.username},\n\nThe email on your AniLounge account was changed to ${newEmail}. If you did this, no action is needed. If not, contact support@anilounge.net right away so we can secure your account.`,
+    html: layout(
+      'Email changed',
+      `<p>Hi ${escapeHtml(previous.username)}, the email on your AniLounge account was changed to <strong>${escapeHtml(newEmail)}</strong>.</p>
+<p style="color:#5b6578;font-size:14px">If you did this, no action is needed. If not, contact support@anilounge.net right away so we can secure your account.</p>`,
+    ),
+  })
+}

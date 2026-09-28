@@ -404,6 +404,13 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS refresh_tokens_user_idx ON refresh_tokens (user_id);
+
+-- Tokens are stored as SHA-256 hashes (services/sessionService.js). `revoked_at`
+-- separates a two-tab refresh race from reuse of a stolen, already-rotated token.
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+-- Retire refresh tokens stored in plain text before hashing (128 hex chars vs 64).
+UPDATE refresh_tokens SET is_revoked = true
+  WHERE is_revoked = false AND char_length(token) <> 64;
 CREATE INDEX IF NOT EXISTS refresh_tokens_expiry_idx ON refresh_tokens (expires_at)
   WHERE is_revoked = false;
 

@@ -1,13 +1,13 @@
 /**
  * JWT authentication middleware and token helpers.
  *
- * Layer: middleware. Verifies Bearer access tokens, mints 15-minute access and
- * 7-day refresh tokens, and exposes refresh/revoke route handlers.
+ * Layer: middleware. Verifies Bearer access tokens (HS256 only) and exposes the
+ * cookie-based refresh/logout handlers backed by `services/sessionService.js`.
  */
 
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
-import RefreshToken from '../models/RefreshToken.js'
+import { endSession, rotateSession } from '../services/sessionService.js'
 
 /**
  * Verify the Bearer JWT and attach the matching user to the request.
@@ -35,7 +35,7 @@ export const authenticateToken = async (req, res, next) => {
         message: 'Server configuration error',
       })
     }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
 
     const user = await User.findById(decoded.userId).select('-password')
 
@@ -87,7 +87,7 @@ export const optionalAuthenticate = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
     const user = await User.findById(decoded.userId)
       .select('-password')
       .populate({ path: 'watchlist.content', select: 'title englishTitle contentType' })
@@ -99,112 +99,83 @@ export const optionalAuthenticate = async (req, res, next) => {
 }
 
 /**
- * Sign a short-lived access JWT for `userId`.
+ * Reject cookie-authenticated calls that do not carry the header only our app's
+ * XHR client sends (a cross-site form cannot set it). Complements SameSite=Lax.
  *
- * @param {import('mongoose').Types.ObjectId|string} userId - Subject stored as `userId` in the payload.
- * @returns {string} Signed token that expires in 15 minutes.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {boolean} True when a 403 was sent.
  */
-export const generateAccessToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '15m' })
+function rejectMissingCsrfHeader(req, res) {
+  if (req.get('X-Requested-With') === 'XMLHttpRequest') return false
+  res.status(403).json({ success: false, message: 'Missing request header.' })
+  return true
 }
 
 /**
- * Persist and return a refresh token document's token string (7-day lifetime in the model).
+ * Restore or extend a browser session from the refresh cookie: rotates the cookie and
+ * returns a new access token plus the user (this is what keeps people signed in).
  *
- * @param {import('mongoose').Types.ObjectId|string} userId - Owner of the refresh token row.
- * @returns {Promise<string>} Opaque refresh token string.
- */
-export const generateRefreshToken = async (userId) => {
-  const refreshToken = await RefreshToken.createToken(userId)
-  return refreshToken.token
-}
-
-/**
- * Alias of `generateAccessToken` for callers that still use the legacy name.
- *
- * @param {import('mongoose').Types.ObjectId|string} userId - Subject of the JWT.
- * @returns {string} Signed access token (15m).
- */
-export const generateToken = generateAccessToken
-
-/**
- * Rotate a valid refresh token: revoke the old row and issue a new access+refresh pair.
- *
- * @param {import('express').Request} req - Reads `body.refreshToken`.
- * @param {import('express').Response} res - 200 `{ accessToken, refreshToken }`, 401 if missing/expired, or 500.
+ * @param {import('express').Request} req - Reads the `al_refresh` cookie.
+ * @param {import('express').Response} res - 200 `{ accessToken, user }`, 401 `NO_SESSION` or `REFRESH_RACE`, 403, or 500.
  * @returns {Promise<void>}
  */
 export const refreshAccessToken = async (req, res) => {
   try {
-    const { refreshToken } = req.body
+    if (rejectMissingCsrfHeader(req, res)) return
 
-    if (!refreshToken) {
+    const session = await rotateSession(req, res)
+    if (session?.retry) {
       return res.status(401).json({
         success: false,
-        message: 'Refresh token required',
+        code: 'REFRESH_RACE',
+        message: 'Session was refreshed in another tab; retry.',
       })
     }
-
-    const tokenDoc = await RefreshToken.findOne({
-      token: refreshToken,
-      isRevoked: false,
-    }).populate('userId')
-
-    if (!tokenDoc || tokenDoc.expiresAt < new Date()) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid or expired refresh token',
-      })
+    const user = session ? await User.findById(session.userId) : null
+    if (!session || !user) {
+      return res.status(401).json({ success: false, code: 'NO_SESSION', message: 'Not signed in.' })
     }
-
-    tokenDoc.isRevoked = true
-    await tokenDoc.save()
-
-    const userId = tokenDoc.userId?._id || tokenDoc.userId
-    const newAccessToken = generateAccessToken(userId)
-    const newRefreshToken = await generateRefreshToken(userId)
 
     res.json({
       success: true,
-      message: 'Token refreshed successfully',
       data: {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
+        accessToken: session.accessToken,
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          isDemoAccount: user.isDemo(),
+          preferences: user.preferences,
+        },
       },
     })
   } catch (error) {
     console.error('Refresh token error:', error)
     res.status(500).json({
       success: false,
-      message: 'Server error refreshing token',
+      message: 'Server error refreshing session',
     })
   }
 }
 
 /**
- * Mark a refresh token revoked (logout). Succeeds even if the body omits the token.
+ * Log out this browser: revoke its refresh token and clear the cookie.
  *
- * @param {import('express').Request} req - Optional `body.refreshToken`.
- * @param {import('express').Response} res - 200 on success or 500.
+ * @param {import('express').Request} req - Reads the `al_refresh` cookie.
+ * @param {import('express').Response} res - 200 on success, 403, or 500.
  * @returns {Promise<void>}
  */
 export const revokeRefreshToken = async (req, res) => {
   try {
-    const { refreshToken } = req.body
-
-    if (refreshToken) {
-      await RefreshToken.updateOne({ token: refreshToken }, { isRevoked: true })
-    }
-
-    res.json({
-      success: true,
-      message: 'Token revoked successfully',
-    })
+    if (rejectMissingCsrfHeader(req, res)) return
+    await endSession(req, res)
+    res.json({ success: true, message: 'Signed out.' })
   } catch (error) {
     console.error('Revoke token error:', error)
     res.status(500).json({
       success: false,
-      message: 'Server error revoking token',
+      message: 'Server error signing out',
     })
   }
 }

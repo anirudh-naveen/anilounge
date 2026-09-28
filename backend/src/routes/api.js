@@ -26,15 +26,20 @@ import { isCatalogId } from '../db/ids.js'
 
 const router = express.Router()
 
+/** 3-20 characters; letters, numbers, dot, dash, underscore (matches the DB length check). */
+const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,20}$/
+
 /** Public credential routes (must stay above `authMiddleware`). Password rules match registration. */
 router.post(
   '/auth/register',
   [
-    body('username').isLength({ min: 3 }).withMessage('Username must be at least 3 characters'),
+    body('username')
+      .matches(USERNAME_PATTERN)
+      .withMessage('Username must be 3-20 letters, numbers, dots, dashes, or underscores'),
     body('email').isEmail().withMessage('Valid email is required'),
     body('password')
-      .isLength({ min: 8 })
-      .withMessage('Password must be at least 8 characters')
+      .isLength({ min: 8, max: 128 })
+      .withMessage('Password must be 8-128 characters')
       .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
       .withMessage(
         'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
@@ -83,7 +88,7 @@ router.post(
   authController.verifyTwoFactorLogin,
 )
 
-/** Public token rotation; no access JWT required. */
+/** Session cookie refresh and logout; no access JWT required (cookie + X-Requested-With). */
 router.post('/auth/refresh', refreshAccessToken)
 router.post('/auth/revoke', revokeRefreshToken)
 
@@ -152,7 +157,14 @@ router.use(authMiddleware)
 router.get('/auth/profile', authController.getProfile)
 router.put(
   '/auth/profile',
-  [body('preferences').optional().isObject()],
+  [
+    body('preferences').optional().isObject(),
+    body('username')
+      .optional()
+      .matches(USERNAME_PATTERN)
+      .withMessage('Username must be 3-20 letters, numbers, dots, dashes, or underscores'),
+    body('email').optional().isEmail().withMessage('Valid email is required'),
+  ],
   authController.updateProfile,
 )
 router.put(
@@ -160,8 +172,8 @@ router.put(
   [
     body('currentPassword').notEmpty().withMessage('Current password is required'),
     body('newPassword')
-      .isLength({ min: 6 })
-      .withMessage('New password must be at least 6 characters'),
+      .isLength({ min: 8, max: 128 })
+      .withMessage('New password must be 8-128 characters'),
   ],
   authController.changePassword,
 )
@@ -235,6 +247,7 @@ router.delete(
 
 /** Account security status and authenticator-app 2FA management. */
 router.get('/account/security', securityController.getSecurityStatus)
+router.post('/account/sessions/revoke-all', securityController.signOutEverywhere)
 router.post('/account/2fa/setup', securityController.startTwoFactorSetup)
 router.post('/account/2fa/enable', [body('code').isString()], securityController.enableTwoFactor)
 router.post(

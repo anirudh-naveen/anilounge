@@ -163,6 +163,8 @@ export interface RegisterData {
 export interface UpdateProfileData {
   username?: string
   email?: string
+  /** Required by the server when `email` changes. */
+  currentPassword?: string
   profilePicture?: string | null
   preferences?: {
     favoriteGenres: string[]

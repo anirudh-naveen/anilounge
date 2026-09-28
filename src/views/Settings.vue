@@ -23,9 +23,13 @@
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Username</h3>
-                <p>Change your display name</p>
+                <p v-if="authStore.isDemoUser">Locked for the demo account</p>
+                <p v-else>3-20 letters, numbers, dots, dashes, or underscores</p>
               </div>
-              <div class="setting-control">
+              <div v-if="authStore.isDemoUser" class="setting-control">
+                <p class="demo-restriction">The shared demo account's username cannot change.</p>
+              </div>
+              <div v-else class="setting-control">
                 <input
                   v-model="username"
                   type="text"
@@ -46,19 +50,32 @@
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Email</h3>
-                <p>Change your email address</p>
+                <p v-if="authStore.isDemoUser">Locked for the demo account</p>
+                <p v-else>We'll send a code to the new address to verify it</p>
               </div>
-              <div class="setting-control">
+              <div v-if="authStore.isDemoUser" class="setting-control">
+                <p class="demo-restriction">The shared demo account's email cannot change.</p>
+              </div>
+              <div v-else class="setting-control">
                 <input
                   v-model="email"
                   type="email"
                   class="form-input"
                   placeholder="Enter new email"
                 />
+                <input
+                  v-if="emailChanged"
+                  v-model="emailPassword"
+                  type="password"
+                  class="form-input"
+                  placeholder="Current password"
+                  autocomplete="current-password"
+                  data-testid="email-change-password"
+                />
                 <button
                   @click="updateEmail"
                   class="btn btn-primary"
-                  :disabled="!email || email === authStore.user?.email"
+                  :disabled="!emailChanged || !emailPassword"
                 >
                   Update
                 </button>
@@ -370,6 +387,27 @@
               </div>
             </div>
 
+            <!-- Title: Sessions -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <h3>Signed-in Devices</h3>
+                <p>
+                  This browser stays signed in for 30 days. Sign out everywhere if you used a shared
+                  computer or think someone else has access.
+                </p>
+              </div>
+              <div class="setting-control">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  data-testid="sign-out-everywhere"
+                  @click="signOutEverywhere"
+                >
+                  Sign out of all devices
+                </button>
+              </div>
+            </div>
+
             <!-- Title: Delete Account -->
             <div class="setting-item danger-item" data-testid="delete-account">
               <div class="setting-info">
@@ -624,16 +662,42 @@ const updateUsername = async () => {
     await authStore.updateProfile({ username: username.value })
     toast.success('Username updated successfully')
   } catch {
-    toast.error('Failed to update username')
+    toast.error(authStore.error || 'Failed to update username')
   }
 }
 
+const emailPassword = ref('')
+const emailChanged = computed(
+  () => Boolean(email.value) && email.value.trim().toLowerCase() !== authStore.user?.email,
+)
+
 const updateEmail = async () => {
   try {
-    await authStore.updateProfile({ email: email.value })
+    const result = await authStore.updateProfile({
+      email: email.value,
+      currentPassword: emailPassword.value,
+    })
+    emailPassword.value = ''
+    if (result?.data?.emailVerificationSent) {
+      toast.success('Email updated. Enter the code we sent to verify it.')
+      router.push({ name: 'verifyEmail', query: { email: authStore.user?.email } })
+      return
+    }
     toast.success('Email updated successfully')
   } catch {
-    toast.error('Failed to update email')
+    toast.error(authStore.error || 'Failed to update email')
+  }
+}
+
+const signOutEverywhere = async () => {
+  if (!confirm('Sign out of AniLounge on every device, including this one?')) return
+  try {
+    await authStore.signOutEverywhere()
+    useFavoritesStore().reset()
+    toast.success('Signed out of all devices')
+    router.push('/login')
+  } catch {
+    toast.error('Could not sign out other devices')
   }
 }
 
