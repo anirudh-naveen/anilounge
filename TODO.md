@@ -39,7 +39,7 @@
    - This user profile must be sharable to the public.
    - Content should have a heart icon to add/remove it to favorites on hover.
    - Stats should show elements like watchtime, wathctime split throughout the year, most watched genres, etc.
-2. Add option to delete account.
+2. Add option to delete account. ✅
    - Deny this option for the demo account.
 3. Add email verification for sign up and password lockouts.
    - Additionally give option to set up 2FA.
