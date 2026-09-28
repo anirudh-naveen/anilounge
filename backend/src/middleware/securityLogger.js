@@ -19,6 +19,7 @@ const SECURITY_EVENTS = {
   UNAUTHORIZED_ACCESS: 'UNAUTHORIZED_ACCESS',
   SQL_INJECTION_ATTEMPT: 'SQL_INJECTION_ATTEMPT',
   XSS_ATTEMPT: 'XSS_ATTEMPT',
+  ACCOUNT_DELETED: 'ACCOUNT_DELETED',
 }
 
 /**
@@ -56,6 +57,7 @@ const getSeverityLevel = (event) => {
     SECURITY_EVENTS.LOGIN_FAILED,
     SECURITY_EVENTS.RATE_LIMIT_EXCEEDED,
     SECURITY_EVENTS.INVALID_TOKEN,
+    SECURITY_EVENTS.ACCOUNT_DELETED,
   ]
 
   if (highSeverity.includes(event)) return 'HIGH'
@@ -132,6 +134,18 @@ export const securityLogger = (req, res, next) => {
 export const logSecurityEvent = (event, details) => {
   const logEntry = createSecurityLogEntry(event, details)
   writeSecurityLog(logEntry)
+}
+
+/**
+ * Record a user permanently deleting their own account.
+ *
+ * @param {string} userId - Deleted user's id.
+ * @param {string} ip - Client address.
+ * @param {string} userAgent - Request User-Agent.
+ * @returns {void}
+ */
+export const logAccountDeletion = (userId, ip, userAgent) => {
+  logSecurityEvent(SECURITY_EVENTS.ACCOUNT_DELETED, { userId, ip, userAgent })
 }
 
 /**
@@ -324,6 +338,7 @@ export default {
   logSecurityEvent,
   logLoginAttempt,
   logAccountLockout,
+  logAccountDeletion,
   logFileUpload,
   logRateLimitExceeded,
   logInvalidToken,

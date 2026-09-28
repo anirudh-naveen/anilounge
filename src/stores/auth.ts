@@ -167,6 +167,32 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * Permanently deletes the signed-in account (password re-check), then clears the session.
+   * Rejected for the shared demo account.
+   * @param password - Current password, re-entered to confirm.
+   */
+  const deleteAccount = async (password: string) => {
+    if (isDemoUser.value) {
+      error.value = 'The demo account cannot be deleted.'
+      throw new Error(error.value)
+    }
+
+    try {
+      isLoading.value = true
+      error.value = null
+
+      await authAPI.deleteAccount(password)
+      logout()
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string } } }
+      error.value = apiError.response?.data?.message || 'Account deletion failed'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
    * Uploads a profile picture and persists the returned user.
    * @param formData - Multipart body containing the image file.
    * @returns The upload API payload.
@@ -222,6 +248,7 @@ export const useAuthStore = defineStore('auth', () => {
     loadUser,
     updateProfile,
     changePassword,
+    deleteAccount,
     uploadProfilePicture,
     initAuth,
   }

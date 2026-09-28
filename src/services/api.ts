@@ -24,7 +24,8 @@ function resolveApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_URL as string | undefined
   const usable = configured && !configured.includes(STALE_RAILWAY_HOST) ? configured : undefined
 
-  if (usable) return usable
+  // Routes are mounted under `/api`; accept a bare origin like `http://localhost:5001`.
+  if (usable) return /\/api\/?$/.test(usable) ? usable : `${usable.replace(/\/+$/, '')}/api`
   if (import.meta.env.DEV) return 'http://localhost:5001/api'
   // Same-origin `/api` is proxied to Railway by vercel.json, so preview
   // deployments do not hit CORS or a renamed Railway hostname.
@@ -79,6 +80,7 @@ export const authAPI = {
   updateProfile: (data: UpdateProfileData) => api.put('/auth/profile', data),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/auth/change-password', data),
+  deleteAccount: (password: string) => api.delete('/account', { data: { password } }),
   uploadProfilePicture: (formData: FormData) =>
     api.post('/auth/upload-profile-picture', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

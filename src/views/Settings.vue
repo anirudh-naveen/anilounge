@@ -224,6 +224,63 @@
                 <p class="demo-restriction">The shared demo account cannot change its password.</p>
               </div>
             </div>
+
+            <!-- Title: Delete Account -->
+            <div class="setting-item danger-item" data-testid="delete-account">
+              <div class="setting-info">
+                <h3>Delete Account</h3>
+                <p v-if="authStore.isDemoUser">Disabled for the demo account</p>
+                <p v-else>
+                  Permanently remove your account, watchlist, ratings, favorites, and profile.
+                </p>
+              </div>
+              <div v-if="authStore.isDemoUser" class="setting-control">
+                <p class="demo-restriction">The shared demo account cannot be deleted.</p>
+              </div>
+              <div v-else-if="!showDeleteConfirm" class="setting-control">
+                <button
+                  class="btn btn-danger"
+                  data-testid="delete-account-start"
+                  @click="showDeleteConfirm = true"
+                >
+                  Delete Account
+                </button>
+              </div>
+              <form v-else class="setting-control delete-form" @submit.prevent="deleteAccount">
+                <p class="delete-warning">
+                  This cannot be undone. Enter your password to confirm.
+                </p>
+                <input
+                  v-model="deletePassword"
+                  type="password"
+                  class="form-input"
+                  placeholder="Current password"
+                  autocomplete="current-password"
+                  data-testid="delete-account-password"
+                />
+                <label class="delete-ack">
+                  <input
+                    v-model="deleteAcknowledged"
+                    type="checkbox"
+                    data-testid="delete-account-ack"
+                  />
+                  I understand my account and data will be permanently deleted.
+                </label>
+                <div class="delete-actions">
+                  <button type="button" class="btn btn-secondary" @click="cancelDeleteAccount">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    class="btn btn-danger"
+                    :disabled="!canDeleteAccount"
+                    data-testid="delete-account-confirm"
+                  >
+                    {{ isDeletingAccount ? 'Deleting...' : 'Delete Permanently' }}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </div>
@@ -282,7 +339,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
 import { API_HOST } from '@/services/api'
 import VueCropper from 'vue-cropperjs'
@@ -295,6 +354,7 @@ defineOptions({
 
 const authStore = useAuthStore()
 const toast = useToast()
+const router = useRouter()
 
 // Form data
 const username = ref('')
@@ -479,6 +539,41 @@ const changePassword = async () => {
     confirmPassword.value = ''
   } catch {
     toast.error('Failed to change password')
+  }
+}
+
+const showDeleteConfirm = ref(false)
+const deletePassword = ref('')
+const deleteAcknowledged = ref(false)
+const isDeletingAccount = ref(false)
+
+const canDeleteAccount = computed(
+  () =>
+    !authStore.isDemoUser &&
+    deletePassword.value.length > 0 &&
+    deleteAcknowledged.value &&
+    !isDeletingAccount.value,
+)
+
+const cancelDeleteAccount = () => {
+  showDeleteConfirm.value = false
+  deletePassword.value = ''
+  deleteAcknowledged.value = false
+}
+
+const deleteAccount = async () => {
+  if (!canDeleteAccount.value) return
+  isDeletingAccount.value = true
+  try {
+    await authStore.deleteAccount(deletePassword.value)
+    useFavoritesStore().reset()
+    toast.success('Your account has been deleted')
+    router.push('/')
+  } catch {
+    toast.error(authStore.error || 'Failed to delete account')
+    deletePassword.value = ''
+  } finally {
+    isDeletingAccount.value = false
   }
 }
 
@@ -862,6 +957,40 @@ onMounted(() => {
   font-size: 0.9rem;
   margin: 0;
   padding: 0.75rem 0;
+}
+
+.danger-item .setting-info h3 {
+  color: #c0392b;
+}
+
+.delete-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.delete-warning {
+  margin: 0;
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.delete-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.delete-ack input {
+  margin-top: 0.2rem;
+}
+
+.delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 @media (max-width: 768px) {

@@ -211,6 +211,13 @@ router.get('/favorites', entityController.getFavoriteEntities)
 router.post('/entities/:id/favorite', validateObjectId, entityController.favoriteEntity)
 router.delete('/entities/:id/favorite', validateObjectId, entityController.unfavoriteEntity)
 
+/** Permanent self-service account deletion (password re-check; demo account refused). Off `/auth` for the same reason. */
+router.delete(
+  '/account',
+  [body('password').isString().notEmpty().withMessage('Password is required')],
+  authController.deleteAccount,
+)
+
 /** Profile customization; kept off `/auth` so it is not throttled by the login limiter. */
 router.put(
   '/profile/settings',

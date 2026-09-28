@@ -11,7 +11,13 @@ import { validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
 import path from 'path'
 import fs from 'fs'
-import { logLoginAttempt, logAccountLockout, logFileUpload } from '../middleware/securityLogger.js'
+import {
+  logLoginAttempt,
+  logAccountLockout,
+  logAccountDeletion,
+  logFileUpload,
+} from '../middleware/securityLogger.js'
+import { query } from '../../config/postgres.js'
 import { banIPForBruteForce } from '../middleware/ipBan.js'
 
 /**
@@ -357,6 +363,82 @@ export const changePassword = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error changing password.',
+    })
+  }
+}
+
+/**
+ * Permanently delete the authenticated user's account after re-checking their password.
+ * Watchlist, ratings, favorites, friendships, posts, messages, and refresh tokens are
+ * removed by `ON DELETE CASCADE`; the uploaded profile picture file is removed too.
+ * The shared demo account cannot be deleted.
+ *
+ * @param {import('express').Request} req - `body.password`; `req.user` from auth middleware.
+ * @param {import('express').Response} res - 200 on success, 400 missing/incorrect password, 403 demo, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const deleteAccount = async (req, res) => {
+  try {
+    if (req.user.isDemo()) {
+      return res.status(403).json({
+        success: false,
+        message: 'The demo account cannot be deleted.',
+      })
+    }
+
+    const { password } = req.body || {}
+    if (typeof password !== 'string' || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required to delete your account.',
+      })
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+      })
+    }
+    if (user.isDemo()) {
+      return res.status(403).json({
+        success: false,
+        message: 'The demo account cannot be deleted.',
+      })
+    }
+
+    const isPasswordValid = await user.comparePassword(password)
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is incorrect.',
+      })
+    }
+
+    await query('DELETE FROM users WHERE id = $1 AND is_demo = false', [user._id])
+
+    if (user.profilePicture && !user.profilePicture.startsWith('http')) {
+      const picturePath = path.join(
+        process.cwd(),
+        'uploads',
+        'profiles',
+        path.basename(user.profilePicture),
+      )
+      fs.promises.unlink(picturePath).catch(() => {})
+    }
+
+    logAccountDeletion(user._id, req.ip, req.get('User-Agent'))
+
+    res.json({
+      success: true,
+      message: 'Your account has been deleted.',
+    })
+  } catch (error) {
+    console.error('Delete account error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Server error deleting account.',
     })
   }
 }
