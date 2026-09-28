@@ -8,6 +8,13 @@ vi.mock('vue-toastification', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn() }),
 }))
 
+const refreshSession = vi.fn()
+
+vi.mock('@/services/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api')>()
+  return { ...actual, refreshSession: () => refreshSession() }
+})
+
 const mountApp = async () => {
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -40,6 +47,8 @@ const mountApp = async () => {
 describe('App', () => {
   beforeEach(() => {
     localStorage.clear()
+    refreshSession.mockReset()
+    refreshSession.mockResolvedValue(null)
   })
 
   it('renders the shell with guest auth actions', async () => {
@@ -51,9 +60,28 @@ describe('App', () => {
     expect(wrapper.find('a[href="/watchlist"]').exists()).toBe(false)
   })
 
-  it('shows the watchlist tab and user menu for a saved session', async () => {
-    localStorage.setItem('token', 'token')
-    localStorage.setItem('user', JSON.stringify({ id: 'u1', username: 'ani', email: 'a@b.co' }))
+  it('switches the page to dark mode from the navbar toggle', async () => {
+    document.documentElement.dataset.theme = 'light'
+    const wrapper = await mountApp()
+    await wrapper.get('[data-testid="theme-toggle"]').trigger('click')
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    await wrapper.get('[data-testid="theme-toggle"]').trigger('click')
+    expect(document.documentElement.dataset.theme).toBe('light')
+  })
+
+  it('removes access tokens left in localStorage by older builds', async () => {
+    localStorage.setItem('token', 'stale')
+    localStorage.setItem('user', '{}')
+    await mountApp()
+    expect(localStorage.getItem('token')).toBeNull()
+    expect(localStorage.getItem('user')).toBeNull()
+  })
+
+  it('restores a signed-in session from the cookie and shows the user menu', async () => {
+    refreshSession.mockResolvedValue({
+      accessToken: 'token',
+      user: { id: 'u1', username: 'ani', email: 'a@b.co' },
+    })
     const wrapper = await mountApp()
     expect(wrapper.find('.auth-buttons').exists()).toBe(false)
     expect(wrapper.find('.user-name').text()).toBe('ani')

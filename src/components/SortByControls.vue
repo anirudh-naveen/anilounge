@@ -102,14 +102,14 @@ const toggleDirection = () => {
   padding: 0.5rem;
   border: 2px solid var(--text-primary);
   border-radius: 6px;
-  background: #fff;
-  color: #333;
+  background: var(--bg-card);
+  color: var(--text-strong);
   font-size: 0.9rem;
 }
 
 .sort-select:focus {
   outline: none;
-  background: white;
+  background: var(--bg-card);
   border-color: var(--coral-primary);
   box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
 }
@@ -119,7 +119,7 @@ const toggleDirection = () => {
   width: 38px;
   border: 2px solid var(--text-primary);
   border-radius: 6px;
-  background: #fff;
+  background: var(--bg-card);
   color: #8a8a8a;
   cursor: pointer;
   display: flex;
@@ -129,7 +129,7 @@ const toggleDirection = () => {
 }
 
 .sort-dir-btn:hover {
-  background: white;
+  background: var(--bg-card);
 }
 
 .sort-dir-btn svg {
@@ -143,7 +143,7 @@ const toggleDirection = () => {
 }
 
 .dir-arrow.active {
-  color: #555;
+  color: var(--text-body);
   stroke-width: 2.25;
 }
 </style>

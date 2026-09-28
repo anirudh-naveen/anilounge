@@ -65,6 +65,7 @@
               Series
             </div>
             <AiringBadge :content="show" variant="card" />
+            <FavoriteHeart :content-id="show._id" />
           </div>
           <div class="show-info">
             <h3 class="show-title">{{ getDisplayTitle(show) }}</h3>
@@ -138,6 +139,7 @@ import {
   tvCatalogScrollKey,
   type TvCatalogTab,
 } from '@/utils/catalogTabs'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -313,7 +315,7 @@ onMounted(async () => {
 
 .show-card {
   position: relative;
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 14px;
   overflow: visible;
   box-shadow: var(--shadow-sm);
@@ -394,13 +396,13 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 0.35rem;
   font-size: 0.7rem;
-  color: #999;
+  color: var(--text-faint);
 }
 
 .release-year,
 .episodes,
 .seasons {
-  background: #f8f9fa;
+  background: var(--bg-muted);
   padding: 2px 6px;
   border-radius: 3px;
 }

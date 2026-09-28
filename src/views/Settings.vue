@@ -23,9 +23,13 @@
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Username</h3>
-                <p>Change your display name</p>
+                <p v-if="authStore.isDemoUser">Locked for the demo account</p>
+                <p v-else>3-20 letters, numbers, dots, dashes, or underscores</p>
               </div>
-              <div class="setting-control">
+              <div v-if="authStore.isDemoUser" class="setting-control">
+                <p class="demo-restriction">The shared demo account's username cannot change.</p>
+              </div>
+              <div v-else class="setting-control">
                 <input
                   v-model="username"
                   type="text"
@@ -46,19 +50,32 @@
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Email</h3>
-                <p>Change your email address</p>
+                <p v-if="authStore.isDemoUser">Locked for the demo account</p>
+                <p v-else>We'll send a code to the new address to verify it</p>
               </div>
-              <div class="setting-control">
+              <div v-if="authStore.isDemoUser" class="setting-control">
+                <p class="demo-restriction">The shared demo account's email cannot change.</p>
+              </div>
+              <div v-else class="setting-control">
                 <input
                   v-model="email"
                   type="email"
                   class="form-input"
                   placeholder="Enter new email"
                 />
+                <input
+                  v-if="emailChanged"
+                  v-model="emailPassword"
+                  type="password"
+                  class="form-input"
+                  placeholder="Current password"
+                  autocomplete="current-password"
+                  data-testid="email-change-password"
+                />
                 <button
                   @click="updateEmail"
                   class="btn btn-primary"
-                  :disabled="!email || email === authStore.user?.email"
+                  :disabled="!emailChanged || !emailPassword"
                 >
                   Update
                 </button>
@@ -67,114 +84,36 @@
           </div>
         </div>
 
-        <!-- Profile Picture -->
+        <!-- Appearance -->
         <div class="settings-section">
-          <h2>Profile Picture</h2>
+          <h2>Appearance</h2>
           <div class="settings-card">
-            <!-- Title: Upload -->
+            <!-- Title: Theme -->
             <div class="setting-item">
               <div class="setting-info">
-                <h3>Profile Picture</h3>
-                <p>Upload a profile picture to personalize your account</p>
+                <h3>Theme</h3>
+                <p>System follows your device's light or dark setting</p>
               </div>
               <div class="setting-control">
-                <div class="profile-picture-section">
-                  <div class="current-picture">
-                    <img
-                      v-if="authStore.user?.profilePicture"
-                      :src="getProfilePictureUrl(authStore.user.profilePicture)"
-                      alt="Profile Picture"
-                      class="profile-picture-preview"
-                    />
-                    <div v-else class="profile-picture-placeholder">
-                      <i class="fas fa-user"></i>
-                    </div>
-                  </div>
-                  <div class="upload-controls">
-                    <input
-                      ref="fileInput"
-                      type="file"
-                      accept="image/*"
-                      @change="handleFileSelect"
-                      style="display: none"
-                    />
-                    <button @click="fileInput?.click()" class="btn btn-secondary">
-                      <i class="fas fa-upload"></i>
-                      Choose Picture
-                    </button>
-                    <button
-                      v-if="authStore.user?.profilePicture"
-                      @click="removeProfilePicture"
-                      class="btn btn-danger"
-                    >
-                      <i class="fas fa-trash"></i>
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Preferences -->
-        <div class="settings-section">
-          <h2>Preferences</h2>
-          <div class="settings-card">
-            <!-- Title: Favorite Genres -->
-            <div class="setting-item">
-              <div class="setting-info">
-                <h3>Favorite Genres</h3>
-                <p>Select your preferred genres</p>
-              </div>
-              <div class="setting-control">
-                <div class="genre-selection">
-                  <div
-                    v-for="genre in availableGenres"
-                    :key="genre"
-                    class="genre-option"
-                    :class="{ selected: selectedGenres.includes(genre) }"
-                    @click="toggleGenre(genre)"
+                <div class="theme-options" role="radiogroup" aria-label="Theme">
+                  <button
+                    v-for="option in THEME_OPTIONS"
+                    :key="option.value"
+                    type="button"
+                    role="radio"
+                    class="theme-option"
+                    :class="{ selected: themePreference === option.value }"
+                    :aria-checked="themePreference === option.value"
+                    :data-testid="`theme-${option.value}`"
+                    @click="setThemePreference(option.value)"
                   >
-                    {{ genre }}
-                  </div>
+                    {{ option.label }}
+                  </button>
                 </div>
-                <button @click="updateGenres" class="btn btn-primary" :disabled="!hasGenreChanges">
-                  Save Genres
-                </button>
-              </div>
-            </div>
-
-            <!-- Title: Favorite Studios -->
-            <div class="setting-item">
-              <div class="setting-info">
-                <h3>Favorite Studios</h3>
-                <p>Add your favorite animation studios</p>
-              </div>
-              <div class="setting-control">
-                <div class="studio-input">
-                  <input
-                    v-model="newStudio"
-                    type="text"
-                    class="form-input"
-                    placeholder="Enter studio name"
-                    @keyup.enter="addStudio"
-                  />
-                  <button @click="addStudio" class="btn btn-secondary">Add</button>
-                </div>
-                <div class="studio-list">
-                  <div v-for="studio in selectedStudios" :key="studio" class="studio-item">
-                    <span>{{ studio }}</span>
-                    <button @click="removeStudio(studio)" class="remove-btn">×</button>
-                  </div>
-                </div>
-                <button
-                  @click="updateStudios"
-                  class="btn btn-primary"
-                  :disabled="!hasStudioChanges"
-                >
-                  Save Studios
-                </button>
+                <p class="setting-hint">
+                  Profile picture and favorite genres/studios now live in your profile's
+                  <router-link to="/profile">Customize</router-link> panel.
+                </p>
               </div>
             </div>
           </div>
@@ -224,56 +163,228 @@
                 <p class="demo-restriction">The shared demo account cannot change its password.</p>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Title: Image Crop -->
-    <div v-if="showCropModal" class="crop-modal-overlay" @click="closeCropModal">
-      <div class="crop-modal" @click.stop>
-        <div class="crop-modal-header">
-          <h3>Crop Profile Picture</h3>
-          <button @click="closeCropModal" class="close-btn">&times;</button>
-        </div>
-        <div class="crop-container">
-          <vue-cropper
-            ref="cropper"
-            :src="cropImageUrl"
-            :aspect-ratio="1"
-            :view-mode="1"
-            :drag-mode="'move'"
-            :auto-crop-area="0.8"
-            :background="false"
-            :responsive="true"
-            :restore="false"
-            :check-cross-origin="false"
-            :check-orientation="false"
-            :modal="true"
-            :guides="true"
-            :center="true"
-            :highlight="true"
-            :crop-box-movable="true"
-            :crop-box-resizable="true"
-            :toggle-drag-mode-on-dblclick="false"
-            :size="1"
-            :min-container-width="200"
-            :min-container-height="200"
-            :min-canvas-width="0"
-            :min-canvas-height="0"
-            :min-crop-box-width="0"
-            :min-crop-box-height="0"
-            :ready="onCropperReady"
-            :cropstart="onCropStart"
-            :cropmove="onCropMove"
-            :cropend="onCropEnd"
-            :crop="onCrop"
-            :zoom="onZoom"
-          />
-        </div>
-        <div class="crop-controls">
-          <button @click="closeCropModal" class="btn btn-secondary">Cancel</button>
-          <button @click="cropAndUpload" class="btn btn-primary">Apply Crop</button>
+            <!-- Title: Two-Factor Authentication -->
+            <div class="setting-item" data-testid="two-factor">
+              <div class="setting-info">
+                <h3>Two-Factor Authentication</h3>
+                <p v-if="authStore.isDemoUser">Disabled for the demo account</p>
+                <p v-else-if="twoFactor.enabled">
+                  On · {{ twoFactor.backupCodesRemaining }} backup codes left
+                </p>
+                <p v-else>Require a code from an authenticator app when you sign in</p>
+              </div>
+
+              <div v-if="authStore.isDemoUser" class="setting-control">
+                <p class="demo-restriction">The shared demo account cannot use two-factor.</p>
+              </div>
+
+              <!-- Backup codes (shown once) -->
+              <div v-else-if="twoFactorMode === 'codes'" class="setting-control two-factor-panel">
+                <p class="two-factor-note">
+                  Save these backup codes somewhere safe. Each works once if you lose your phone.
+                  They won't be shown again.
+                </p>
+                <ul class="backup-codes" data-testid="backup-codes">
+                  <li v-for="backupCode in backupCodes" :key="backupCode">{{ backupCode }}</li>
+                </ul>
+                <div class="delete-actions">
+                  <button type="button" class="btn btn-secondary" @click="copyBackupCodes">
+                    Copy
+                  </button>
+                  <button type="button" class="btn btn-primary" @click="finishTwoFactorFlow">
+                    I've saved them
+                  </button>
+                </div>
+              </div>
+
+              <!-- Setup -->
+              <form
+                v-else-if="twoFactorMode === 'setup' && twoFactorSetup"
+                class="setting-control two-factor-panel"
+                @submit.prevent="enableTwoFactor"
+              >
+                <p class="two-factor-note">
+                  Scan this with Google Authenticator, 1Password, Authy, or a similar app.
+                </p>
+                <img
+                  :src="twoFactorSetup.qrCodeDataUrl"
+                  alt="Two-factor QR code"
+                  class="two-factor-qr"
+                />
+                <p class="two-factor-note">
+                  Can't scan? Enter this key:
+                  <code class="two-factor-secret">{{ twoFactorSetup.secret }}</code>
+                </p>
+                <input
+                  v-model="twoFactorCodeInput"
+                  type="text"
+                  class="form-input"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="6"
+                  placeholder="6-digit code from the app"
+                  data-testid="two-factor-setup-code"
+                />
+                <div class="delete-actions">
+                  <button type="button" class="btn btn-secondary" @click="finishTwoFactorFlow">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    class="btn btn-primary"
+                    :disabled="twoFactorBusy || twoFactorCodeInput.trim().length !== 6"
+                  >
+                    Turn on
+                  </button>
+                </div>
+              </form>
+
+              <!-- Disable / regenerate -->
+              <form
+                v-else-if="twoFactorMode === 'disable' || twoFactorMode === 'regenerate'"
+                class="setting-control two-factor-panel"
+                @submit.prevent="
+                  twoFactorMode === 'disable' ? disableTwoFactor() : regenerateCodes()
+                "
+              >
+                <input
+                  v-if="twoFactorMode === 'disable'"
+                  v-model="twoFactorPassword"
+                  type="password"
+                  class="form-input"
+                  placeholder="Current password"
+                  autocomplete="current-password"
+                />
+                <input
+                  v-model="twoFactorCodeInput"
+                  type="text"
+                  class="form-input"
+                  autocomplete="one-time-code"
+                  maxlength="9"
+                  placeholder="Authenticator or backup code"
+                />
+                <div class="delete-actions">
+                  <button type="button" class="btn btn-secondary" @click="finishTwoFactorFlow">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    :class="['btn', twoFactorMode === 'disable' ? 'btn-danger' : 'btn-primary']"
+                    :disabled="
+                      twoFactorBusy ||
+                      !twoFactorCodeInput.trim() ||
+                      (twoFactorMode === 'disable' && !twoFactorPassword)
+                    "
+                  >
+                    {{ twoFactorMode === 'disable' ? 'Turn off' : 'Create new codes' }}
+                  </button>
+                </div>
+              </form>
+
+              <!-- Idle -->
+              <div v-else class="setting-control two-factor-actions">
+                <template v-if="twoFactor.enabled">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    @click="twoFactorMode = 'regenerate'"
+                  >
+                    New backup codes
+                  </button>
+                  <button type="button" class="btn btn-danger" @click="twoFactorMode = 'disable'">
+                    Turn off
+                  </button>
+                </template>
+                <button
+                  v-else
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="twoFactorBusy"
+                  data-testid="two-factor-start"
+                  @click="startTwoFactorSetup"
+                >
+                  Set up
+                </button>
+              </div>
+            </div>
+
+            <!-- Title: Sessions -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <h3>Signed-in Devices</h3>
+                <p>
+                  This browser stays signed in for 30 days. Sign out everywhere if you used a shared
+                  computer or think someone else has access.
+                </p>
+              </div>
+              <div class="setting-control">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  data-testid="sign-out-everywhere"
+                  @click="signOutEverywhere"
+                >
+                  Sign out of all devices
+                </button>
+              </div>
+            </div>
+
+            <!-- Title: Delete Account -->
+            <div class="setting-item danger-item" data-testid="delete-account">
+              <div class="setting-info">
+                <h3>Delete Account</h3>
+                <p v-if="authStore.isDemoUser">Disabled for the demo account</p>
+                <p v-else>
+                  Permanently remove your account, watchlist, ratings, favorites, and profile.
+                </p>
+              </div>
+              <div v-if="authStore.isDemoUser" class="setting-control">
+                <p class="demo-restriction">The shared demo account cannot be deleted.</p>
+              </div>
+              <div v-else-if="!showDeleteConfirm" class="setting-control">
+                <button
+                  class="btn btn-danger"
+                  data-testid="delete-account-start"
+                  @click="showDeleteConfirm = true"
+                >
+                  Delete Account
+                </button>
+              </div>
+              <form v-else class="setting-control delete-form" @submit.prevent="deleteAccount">
+                <p class="delete-warning">This cannot be undone. Enter your password to confirm.</p>
+                <input
+                  v-model="deletePassword"
+                  type="password"
+                  class="form-input"
+                  placeholder="Current password"
+                  autocomplete="current-password"
+                  data-testid="delete-account-password"
+                />
+                <label class="delete-ack">
+                  <input
+                    v-model="deleteAcknowledged"
+                    type="checkbox"
+                    data-testid="delete-account-ack"
+                  />
+                  I understand my account and data will be permanently deleted.
+                </label>
+                <div class="delete-actions">
+                  <button type="button" class="btn btn-secondary" @click="cancelDeleteAccount">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    class="btn btn-danger"
+                    :disabled="!canDeleteAccount"
+                    data-testid="delete-account-confirm"
+                  >
+                    {{ isDeletingAccount ? 'Deleting...' : 'Delete Permanently' }}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -282,11 +393,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { securityAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
-import { API_HOST } from '@/services/api'
-import VueCropper from 'vue-cropperjs'
-import 'vue-cropperjs/node_modules/cropperjs/dist/cropper.css'
+import { useTheme, type ThemePreference } from '@/composables/useTheme'
 
 // Component name for Vue devtools
 defineOptions({
@@ -295,91 +407,23 @@ defineOptions({
 
 const authStore = useAuthStore()
 const toast = useToast()
+const router = useRouter()
 
 // Form data
 const username = ref('')
 const email = ref('')
-const selectedGenres = ref<string[]>([])
-const selectedStudios = ref<string[]>([])
-const newStudio = ref('')
 const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
-const fileInput = ref<HTMLInputElement>()
 
-// Image cropping
-const showCropModal = ref(false)
-const cropImageUrl = ref('')
-const cropper = ref<{
-  getCroppedCanvas: (options?: {
-    width?: number
-    height?: number
-    imageSmoothingEnabled?: boolean
-    imageSmoothingQuality?: string
-  }) => HTMLCanvasElement | null
-} | null>(null)
-const selectedFile = ref<File | null>(null)
-
-// Available genres
-const availableGenres = [
-  'Action',
-  'Adventure',
-  'Comedy',
-  'Crime',
-  'Documentary',
-  'Drama',
-  'Family',
-  'Fantasy',
-  'History',
-  'Horror',
-  'Music',
-  'Mystery',
-  'Romance',
-  'Science Fiction',
-  'Thriller',
-  'War',
-  'Western',
-  'Biography',
-  'Film Noir',
-  'Musical',
-  'Sport',
-  'Superhero',
-  'Supernatural',
-  'Psychological',
-  'Slice of Life',
-  'Mecha',
-  'School',
-  'Ecchi',
-  'Harem',
-  'Josei',
-  'Seinen',
-  'Shoujo',
-  'Shounen',
-  'Isekai',
-  'Martial Arts',
-  'Military',
-  'Police',
-  'Samurai',
-  'Space',
-  'Vampire',
-  'Zombie',
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
 ]
+const { preference: themePreference, setPreference: setThemePreference } = useTheme()
 
 // Computed properties
-const hasGenreChanges = computed(() => {
-  const currentGenres = authStore.user?.preferences?.favoriteGenres || []
-  return (
-    JSON.stringify([...selectedGenres.value].sort()) !== JSON.stringify([...currentGenres].sort())
-  )
-})
-
-const hasStudioChanges = computed(() => {
-  const currentStudios = authStore.user?.preferences?.favoriteStudios || []
-  return (
-    JSON.stringify([...selectedStudios.value].sort()) !== JSON.stringify([...currentStudios].sort())
-  )
-})
-
 const canChangePassword = computed(() => {
   return (
     !authStore.isDemoUser &&
@@ -392,72 +436,47 @@ const canChangePassword = computed(() => {
 })
 
 // Methods
-const toggleGenre = (genre: string) => {
-  const index = selectedGenres.value.indexOf(genre)
-  if (index > -1) {
-    selectedGenres.value.splice(index, 1)
-  } else {
-    selectedGenres.value.push(genre)
-  }
-}
-
-const addStudio = () => {
-  if (newStudio.value.trim() && !selectedStudios.value.includes(newStudio.value.trim())) {
-    selectedStudios.value.push(newStudio.value.trim())
-    newStudio.value = ''
-  }
-}
-
-const removeStudio = (studio: string) => {
-  const index = selectedStudios.value.indexOf(studio)
-  if (index > -1) {
-    selectedStudios.value.splice(index, 1)
-  }
-}
-
 const updateUsername = async () => {
   try {
     await authStore.updateProfile({ username: username.value })
     toast.success('Username updated successfully')
   } catch {
-    toast.error('Failed to update username')
+    toast.error(authStore.error || 'Failed to update username')
   }
 }
+
+const emailPassword = ref('')
+const emailChanged = computed(
+  () => Boolean(email.value) && email.value.trim().toLowerCase() !== authStore.user?.email,
+)
 
 const updateEmail = async () => {
   try {
-    await authStore.updateProfile({ email: email.value })
+    const result = await authStore.updateProfile({
+      email: email.value,
+      currentPassword: emailPassword.value,
+    })
+    emailPassword.value = ''
+    if (result?.data?.emailVerificationSent) {
+      toast.success('Email updated. Enter the code we sent to verify it.')
+      router.push({ name: 'verifyEmail', query: { email: authStore.user?.email } })
+      return
+    }
     toast.success('Email updated successfully')
   } catch {
-    toast.error('Failed to update email')
+    toast.error(authStore.error || 'Failed to update email')
   }
 }
 
-const updateGenres = async () => {
+const signOutEverywhere = async () => {
+  if (!confirm('Sign out of AniLounge on every device, including this one?')) return
   try {
-    await authStore.updateProfile({
-      preferences: {
-        favoriteGenres: selectedGenres.value,
-        favoriteStudios: authStore.user?.preferences?.favoriteStudios || [],
-      },
-    })
-    toast.success('Favorite genres updated successfully')
+    await authStore.signOutEverywhere()
+    useFavoritesStore().reset()
+    toast.success('Signed out of all devices')
+    router.push('/login')
   } catch {
-    toast.error('Failed to update favorite genres')
-  }
-}
-
-const updateStudios = async () => {
-  try {
-    await authStore.updateProfile({
-      preferences: {
-        favoriteGenres: authStore.user?.preferences?.favoriteGenres || [],
-        favoriteStudios: selectedStudios.value,
-      },
-    })
-    toast.success('Favorite studios updated successfully')
-  } catch {
-    toast.error('Failed to update favorite studios')
+    toast.error('Could not sign out other devices')
   }
 }
 
@@ -482,147 +501,137 @@ const changePassword = async () => {
   }
 }
 
-const getProfilePictureUrl = (profilePicture: string) => {
-  if (!profilePicture) return ''
-  if (profilePicture.startsWith('http')) {
-    return profilePicture
-  }
-  return `${API_HOST}${profilePicture}`
-}
+type TwoFactorMode = 'idle' | 'setup' | 'codes' | 'disable' | 'regenerate'
 
-const handleFileSelect = async (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
+const twoFactor = ref({ enabled: false, backupCodesRemaining: 0 })
+const twoFactorMode = ref<TwoFactorMode>('idle')
+const twoFactorSetup = ref<{ secret: string; qrCodeDataUrl: string } | null>(null)
+const twoFactorCodeInput = ref('')
+const twoFactorPassword = ref('')
+const twoFactorBusy = ref(false)
+const backupCodes = ref<string[]>([])
 
-  if (!file) return
+const apiMessage = (err: unknown, fallback: string) =>
+  (err as { response?: { data?: { message?: string } } }).response?.data?.message || fallback
 
-  // Validate file type
-  const allowedTypes = [
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-    'image/gif',
-    'image/webp',
-    'image/svg+xml',
-  ]
-
-  if (!allowedTypes.includes(file.type)) {
-    toast.error('Please select a valid image file (JPG, PNG, GIF, WebP, or SVG)')
-    return
-  }
-
-  // Validate file size (5MB limit)
-  if (file.size > 5 * 1024 * 1024) {
-    toast.error('File size must be less than 5MB')
-    return
-  }
-
-  // Open crop modal
-  openCropModal(file)
-}
-
-const removeProfilePicture = async () => {
+const loadSecurityStatus = async () => {
+  if (authStore.isDemoUser) return
   try {
-    await authStore.updateProfile({ profilePicture: null })
-    toast.success('Profile picture removed successfully')
-  } catch {
-    toast.error('Failed to remove profile picture')
-  }
-}
-
-const openCropModal = (file: File) => {
-  selectedFile.value = file
-  cropImageUrl.value = URL.createObjectURL(file)
-  showCropModal.value = true
-}
-
-const closeCropModal = () => {
-  showCropModal.value = false
-  if (cropImageUrl.value) {
-    URL.revokeObjectURL(cropImageUrl.value)
-    cropImageUrl.value = ''
-  }
-  selectedFile.value = null
-}
-
-const cropAndUpload = async () => {
-  if (!selectedFile.value || !cropper.value) return
-
-  try {
-    // Get cropped canvas
-    const canvas = cropper.value.getCroppedCanvas({
-      width: 300,
-      height: 300,
-      imageSmoothingEnabled: true,
-      imageSmoothingQuality: 'high',
-    })
-
-    if (!canvas) {
-      toast.error('Failed to crop image')
-      return
+    const response = await securityAPI.getStatus()
+    const data = response.data.data
+    twoFactor.value = {
+      enabled: Boolean(data.twoFactorEnabled),
+      backupCodesRemaining: data.backupCodesRemaining || 0,
     }
-
-    // Convert canvas to blob
-    canvas.toBlob(
-      async (blob: Blob | null) => {
-        if (!blob) {
-          toast.error('Failed to process cropped image')
-          return
-        }
-
-        // Create new file from blob
-        const croppedFile = new File([blob], selectedFile.value!.name, {
-          type: blob.type,
-          lastModified: Date.now(),
-        })
-
-        // Upload the cropped file
-        const formData = new FormData()
-        formData.append('profilePicture', croppedFile)
-
-        await authStore.uploadProfilePicture(formData)
-        toast.success('Profile picture uploaded successfully')
-        closeCropModal()
-      },
-      'image/jpeg',
-      0.9,
-    )
-  } catch {
-    toast.error('Failed to upload profile picture')
+  } catch (err) {
+    console.error('Failed to load security settings:', err)
   }
 }
 
-// Cropper event handlers
-const onCropperReady = () => {
-  // Cropper is ready
+/** Run a 2FA action with the busy flag and a toast on failure. */
+const withTwoFactorBusy = async (fallback: string, action: () => Promise<void>) => {
+  twoFactorBusy.value = true
+  try {
+    await action()
+  } catch (err) {
+    toast.error(apiMessage(err, fallback))
+    twoFactorCodeInput.value = ''
+  } finally {
+    twoFactorBusy.value = false
+  }
 }
 
-const onCropStart = () => {
-  // Crop started
+const startTwoFactorSetup = () =>
+  withTwoFactorBusy('Could not start setup', async () => {
+    const response = await securityAPI.startTwoFactorSetup()
+    twoFactorSetup.value = response.data.data
+    twoFactorCodeInput.value = ''
+    twoFactorMode.value = 'setup'
+  })
+
+const enableTwoFactor = () =>
+  withTwoFactorBusy('That code did not match', async () => {
+    const response = await securityAPI.enableTwoFactor(twoFactorCodeInput.value.trim())
+    backupCodes.value = response.data.data.backupCodes
+    twoFactor.value = { enabled: true, backupCodesRemaining: backupCodes.value.length }
+    twoFactorSetup.value = null
+    twoFactorMode.value = 'codes'
+    toast.success('Two-factor authentication is on')
+  })
+
+const regenerateCodes = () =>
+  withTwoFactorBusy('That code is not valid', async () => {
+    const response = await securityAPI.newBackupCodes(twoFactorCodeInput.value.trim())
+    backupCodes.value = response.data.data.backupCodes
+    twoFactor.value.backupCodesRemaining = backupCodes.value.length
+    twoFactorMode.value = 'codes'
+  })
+
+const disableTwoFactor = () =>
+  withTwoFactorBusy('Could not turn off two-factor', async () => {
+    await securityAPI.disableTwoFactor(twoFactorPassword.value, twoFactorCodeInput.value.trim())
+    twoFactor.value = { enabled: false, backupCodesRemaining: 0 }
+    finishTwoFactorFlow()
+    toast.success('Two-factor authentication is off')
+  })
+
+const copyBackupCodes = async () => {
+  try {
+    await navigator.clipboard.writeText(backupCodes.value.join('\n'))
+    toast.success('Backup codes copied')
+  } catch {
+    toast.error('Copy failed; write them down instead')
+  }
 }
 
-const onCropMove = () => {
-  // Crop moved
+const finishTwoFactorFlow = () => {
+  twoFactorMode.value = 'idle'
+  twoFactorSetup.value = null
+  twoFactorCodeInput.value = ''
+  twoFactorPassword.value = ''
+  backupCodes.value = []
 }
 
-const onCropEnd = () => {
-  // Crop ended
+const showDeleteConfirm = ref(false)
+const deletePassword = ref('')
+const deleteAcknowledged = ref(false)
+const isDeletingAccount = ref(false)
+
+const canDeleteAccount = computed(
+  () =>
+    !authStore.isDemoUser &&
+    deletePassword.value.length > 0 &&
+    deleteAcknowledged.value &&
+    !isDeletingAccount.value,
+)
+
+const cancelDeleteAccount = () => {
+  showDeleteConfirm.value = false
+  deletePassword.value = ''
+  deleteAcknowledged.value = false
 }
 
-const onCrop = () => {
-  // Crop completed
-}
-
-const onZoom = () => {
-  // Zoom changed
+const deleteAccount = async () => {
+  if (!canDeleteAccount.value) return
+  isDeletingAccount.value = true
+  try {
+    await authStore.deleteAccount(deletePassword.value)
+    useFavoritesStore().reset()
+    toast.success('Your account has been deleted')
+    router.push('/')
+  } catch {
+    toast.error(authStore.error || 'Failed to delete account')
+    deletePassword.value = ''
+  } finally {
+    isDeletingAccount.value = false
+  }
 }
 
 // Initialize form data
 onMounted(() => {
   username.value = authStore.user?.username || ''
   email.value = authStore.user?.email || ''
-  selectedGenres.value = [...(authStore.user?.preferences?.favoriteGenres || [])]
-  selectedStudios.value = [...(authStore.user?.preferences?.favoriteStudios || [])]
+  loadSecurityStatus()
 })
 </script>
 
@@ -682,7 +691,7 @@ onMounted(() => {
   grid-template-columns: 1fr 2fr;
   gap: 2rem;
   padding: 1.5rem 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .setting-item:last-child {
@@ -769,89 +778,6 @@ onMounted(() => {
   background: #5a6268;
 }
 
-.genre-selection {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.genre-option {
-  padding: 0.75rem 1rem;
-  border: 2px solid var(--text-muted);
-  border-radius: 8px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-  font-weight: 500;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-}
-
-.genre-option:hover {
-  border-color: var(--blend-color);
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px);
-}
-
-.genre-option.selected {
-  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
-  color: white;
-  border-color: var(--blend-color);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  transform: translateY(-2px);
-}
-
-.studio-input {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.studio-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.studio-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
-  padding: 0.5rem 0.75rem;
-  border-radius: 20px;
-  color: white;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.remove-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.2s;
-}
-
-.remove-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
-}
-
 .password-form {
   display: grid;
   gap: 1rem;
@@ -864,68 +790,124 @@ onMounted(() => {
   padding: 0.75rem 0;
 }
 
+.two-factor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.two-factor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.two-factor-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.two-factor-qr {
+  width: 180px;
+  height: 180px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: #fff;
+}
+
+.two-factor-secret {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.backup-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  font-family: monospace;
+  font-size: 0.95rem;
+  list-style: none;
+}
+
+.theme-options {
+  display: inline-flex;
+  padding: 0.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+
+.theme-option {
+  padding: 0.45rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.theme-option.selected {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.setting-hint {
+  margin: 0.75rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.danger-item .setting-info h3 {
+  color: #c0392b;
+}
+
+.delete-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.delete-warning {
+  margin: 0;
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.delete-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.delete-ack input {
+  margin-top: 0.2rem;
+}
+
+.delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 @media (max-width: 768px) {
   .setting-item {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
-
-  .genre-selection {
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  }
-}
-
-/* Profile Picture Styles */
-.profile-picture-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.current-picture {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 3px solid var(--blend-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.profile-picture-preview {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.profile-picture-placeholder {
-  width: 100%;
-  height: 100%;
-  background: var(--blend-color);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 3rem;
-}
-
-.upload-controls {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.upload-controls .btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-width: 140px;
-  text-align: center;
-  white-space: nowrap;
 }
 
 .btn-secondary {
@@ -944,91 +926,5 @@ onMounted(() => {
 
 .btn-danger:hover:not(:disabled) {
   background: #c0392b;
-}
-
-@media (max-width: 768px) {
-  .upload-controls {
-    flex-direction: column;
-    width: 100%;
-  }
-
-  .upload-controls .btn {
-    width: 100%;
-  }
-}
-
-/* Image Cropping Modal Styles */
-.crop-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.crop-modal {
-  background: var(--bg-card);
-  border-radius: 12px;
-  padding: 2rem;
-  max-width: 600px;
-  width: 90%;
-  max-height: 80vh;
-  backdrop-filter: blur(10px);
-}
-
-.crop-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.crop-modal-header h3 {
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  font-size: 2rem;
-  cursor: pointer;
-  padding: 0;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s;
-}
-
-.close-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.crop-container {
-  margin-bottom: 1.5rem;
-  max-height: 400px;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-.crop-container img {
-  max-width: 100%;
-  max-height: 400px;
-  display: block;
-}
-
-.crop-controls {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
 }
 </style>

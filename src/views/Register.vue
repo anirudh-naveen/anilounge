@@ -3,7 +3,8 @@
   Register.vue — registration view.
 
   Username, email, and password form that creates an account via the auth
-  store. Client-side checks cover password match and complexity.
+  store, then sends the user to email verification. Client-side checks cover
+  password match and complexity.
 -->
 <template>
   <div class="register-page">
@@ -11,8 +12,8 @@
       <div class="register-container">
         <!-- Page Header -->
         <div class="register-header">
-          <h1 class="register-title">Sign Up</h1>
-          <p class="register-subtitle">Create your AniLounge account and take a seat</p>
+          <h1 class="register-title">Register</h1>
+          <p class="register-subtitle">Create your AniLounge account</p>
         </div>
 
         <!-- Form -->
@@ -135,11 +136,11 @@ const handleRegister = async () => {
   }
 
   try {
-    await authStore.register(form.value)
-    toast.success('Account created successfully!')
-    router.push('/')
+    const { email } = await authStore.register(form.value)
+    toast.success('Account created! Check your email for a verification code.')
+    router.push({ name: 'verifyEmail', query: { email } })
   } catch {
-    toast.error('Registration failed. Please try again.')
+    toast.error(authStore.error || 'Registration failed. Please try again.')
   }
 }
 </script>

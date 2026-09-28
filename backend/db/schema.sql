@@ -229,6 +229,61 @@ CREATE TABLE IF NOT EXISTS users (
   CHECK (char_length(username) BETWEEN 3 AND 20)
 );
 
+-- Favorite genres/studios and public profile customization (see utils/profileSettings.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- Email verification. The temporary default marks accounts that existed before this
+-- column as verified; dropping it right after means new sign-ups start unverified.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE users ALTER COLUMN email_verified_at DROP DEFAULT;
+
+-- Authenticator-app (TOTP) two-factor auth. `two_factor_pending_secret` holds a secret
+-- during setup until the user confirms a code from it.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_pending_secret TEXT;
+
+-- Inactivity cleanup (services/inactiveAccountService.js): accounts unused for a year are
+-- deleted after warning emails. Existing rows start from their last login or sign-up.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
+UPDATE users SET last_active_at = COALESCE(last_login_at, created_at) WHERE last_active_at IS NULL;
+ALTER TABLE users ALTER COLUMN last_active_at SET DEFAULT now();
+-- Smallest "days before deletion" warning already sent since the last activity (NULL = none).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS inactivity_warning_days INTEGER;
+CREATE INDEX IF NOT EXISTS users_last_active_idx ON users (last_active_at) WHERE is_demo = false;
+
+-- Sign-ups that never verified their email are deleted 3 days after sign-up, with a
+-- reminder one day before (services/unverifiedAccountService.js). Only set at sign-up,
+-- so established accounts that change email are never affected.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_signup BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_reminder_sent_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS users_pending_signup_idx ON users (created_at) WHERE pending_signup;
+
+-- Emailed one-time codes (sign-up verification, lockout unlock). Only hashes are stored.
+CREATE TABLE IF NOT EXISTS email_codes (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  purpose      TEXT NOT NULL CHECK (purpose IN ('verify_email', 'unlock_account')),
+  code_hash    TEXT NOT NULL,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  consumed_at  TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS email_codes_user_purpose_idx ON email_codes (user_id, purpose, created_at DESC);
+
+-- Single-use 2FA recovery codes (hashed).
+CREATE TABLE IF NOT EXISTS two_factor_backup_codes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  code_hash  TEXT NOT NULL,
+  used_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS two_factor_backup_codes_user_idx ON two_factor_backup_codes (user_id);
+
 CREATE TABLE IF NOT EXISTS friendships (
   follower_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   followee_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -365,6 +420,13 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS refresh_tokens_user_idx ON refresh_tokens (user_id);
+
+-- Tokens are stored as SHA-256 hashes (services/sessionService.js). `revoked_at`
+-- separates a two-tab refresh race from reuse of a stolen, already-rotated token.
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+-- Retire refresh tokens stored in plain text before hashing (128 hex chars vs 64).
+UPDATE refresh_tokens SET is_revoked = true
+  WHERE is_revoked = false AND char_length(token) <> 64;
 CREATE INDEX IF NOT EXISTS refresh_tokens_expiry_idx ON refresh_tokens (expires_at)
   WHERE is_revoked = false;
 

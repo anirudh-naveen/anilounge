@@ -17,6 +17,16 @@
       rel="stylesheet"
     />
     <title>AniLounge</title>
+    <script>
+      // Apply the saved theme before first paint (see src/composables/useTheme.ts).
+      try {
+        var saved = localStorage.getItem('anilounge-theme')
+        var dark =
+          saved === 'dark' ||
+          (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -30,6 +30,11 @@ import {
   extraFrontendOriginsFromEnv,
   isAllowedCorsOrigin,
 } from './utils/allowedFrontends.js'
+import { authLimiter } from './middleware/authRateLimit.js'
+import { ensureDemoAccount } from './services/demoAccount.js'
+import { startInactiveAccountScheduler } from './services/inactiveAccountService.js'
+import { startUnverifiedAccountScheduler } from './services/unverifiedAccountService.js'
+import { emailProvider } from './services/emailService.js'
 
 dotenv.config()
 
@@ -50,6 +55,15 @@ if (process.env.NODE_ENV === 'production') {
     console.warn('Missing environment variables (development mode):', missingVars.join(', '))
     console.warn('Server will start but authentication features may not work')
   }
+}
+
+/** Short HMAC secrets make access tokens forgeable by brute force. */
+if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('JWT_SECRET must be at least 32 characters in production.')
+    process.exit(1)
+  }
+  console.warn('JWT_SECRET is shorter than 32 characters; use a long random value.')
 }
 
 const app = express()
@@ -111,18 +125,6 @@ const generalLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
-
-/** Auth paths: 5 attempts per IP per 15 minutes to slow credential stuffing. */
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 auth requests per IP per window
-  message: {
-    success: false,
-    message: 'Too many authentication attempts, please try again later.',
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -341,13 +343,22 @@ app.use((err, req, res, next) => {
   }
 })
 
-// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync scheduler on listen.
+// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync scheduler
+// and makes sure the README demo login exists and is unlocked.
 app
   .listen(PORT, () => {
     console.log(`Find Animation API server running on port ${PORT}`)
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
     console.log(`Health check: http://localhost:${PORT}/health`)
     startContentSyncScheduler()
+    startInactiveAccountScheduler()
+    startUnverifiedAccountScheduler()
+    console.log(`Email delivery: ${emailProvider()}`)
+    ensureDemoAccount()
+      .then((result) => {
+        if (result !== 'ok') console.log(`Demo account ${result}`)
+      })
+      .catch((error) => console.error('Demo account check failed:', error.message))
   })
   .on('error', (err) => {
     if (err.code === 'EADDRINUSE') {

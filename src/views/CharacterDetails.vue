@@ -106,6 +106,7 @@
             :data-testid="`appearance-${row.id}`"
             @click="openTitle(row)"
           >
+            <FavoriteHeart :content-id="row.id" />
             <img
               v-if="row.posterPath"
               :src="getPosterUrl(row.posterPath)"
@@ -135,6 +136,7 @@ import { getDetailsRouteName, getPosterUrl } from '@/services/api'
 import { getDisplayTitle } from '@/utils/titles'
 import { canonicalCharacterName, collectVoiceActors, displayPersonName } from '@/utils/entities'
 import type { CatalogEntity, EntityVoiceCredit } from '@/types/content'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const route = useRoute()
 const router = useRouter()

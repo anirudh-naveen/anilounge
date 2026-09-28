@@ -10,6 +10,8 @@ import { body } from 'express-validator'
 import contentController from '../controllers/contentController.js'
 import entityController from '../controllers/entityController.js'
 import homeController from '../controllers/homeController.js'
+import profileController from '../controllers/profileController.js'
+import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
@@ -24,15 +26,20 @@ import { isCatalogId } from '../db/ids.js'
 
 const router = express.Router()
 
+/** 3-20 characters; letters, numbers, dot, dash, underscore (matches the DB length check). */
+const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,20}$/
+
 /** Public credential routes (must stay above `authMiddleware`). Password rules match registration. */
 router.post(
   '/auth/register',
   [
-    body('username').isLength({ min: 3 }).withMessage('Username must be at least 3 characters'),
+    body('username')
+      .matches(USERNAME_PATTERN)
+      .withMessage('Username must be 3-20 letters, numbers, dots, dashes, or underscores'),
     body('email').isEmail().withMessage('Valid email is required'),
     body('password')
-      .isLength({ min: 8 })
-      .withMessage('Password must be at least 8 characters')
+      .isLength({ min: 8, max: 128 })
+      .withMessage('Password must be 8-128 characters')
       .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
       .withMessage(
         'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
@@ -67,7 +74,21 @@ router.post(
   authController.login,
 )
 
-/** Public token rotation; no access JWT required. */
+/** Email verification, lockout unlock, and the 2FA login step (public; codes are attempt-limited). */
+router.post(
+  '/auth/verify-email',
+  [body('email').isEmail(), body('code').isString()],
+  authController.verifyEmail,
+)
+router.post('/auth/resend-verification', [body('email').isEmail()], authController.resendVerification)
+router.post('/auth/unlock', [body('email').isEmail(), body('code').isString()], authController.unlockAccount)
+router.post(
+  '/auth/2fa/verify',
+  [body('challengeToken').isString(), body('code').isString()],
+  authController.verifyTwoFactorLogin,
+)
+
+/** Session cookie refresh and logout; no access JWT required (cookie + X-Requested-With). */
 router.post('/auth/refresh', refreshAccessToken)
 router.post('/auth/revoke', revokeRefreshToken)
 
@@ -122,6 +143,9 @@ router.post(
   contentController.aiChat,
 )
 
+/** Shareable user profile; optional auth lets owners see private profiles and hidden tabs. */
+router.get('/users/:username', optionalAuthenticate, profileController.getPublicProfile)
+
 /** Beta feedback is public and stored in-process (see feedbackController). */
 router.post('/feedback', feedbackController.submitFeedback)
 router.get('/feedback', feedbackController.getFeedback)
@@ -133,7 +157,14 @@ router.use(authMiddleware)
 router.get('/auth/profile', authController.getProfile)
 router.put(
   '/auth/profile',
-  [body('preferences').optional().isObject()],
+  [
+    body('preferences').optional().isObject(),
+    body('username')
+      .optional()
+      .matches(USERNAME_PATTERN)
+      .withMessage('Username must be 3-20 letters, numbers, dots, dashes, or underscores'),
+    body('email').optional().isEmail().withMessage('Valid email is required'),
+  ],
   authController.updateProfile,
 )
 router.put(
@@ -141,8 +172,8 @@ router.put(
   [
     body('currentPassword').notEmpty().withMessage('Current password is required'),
     body('newPassword')
-      .isLength({ min: 6 })
-      .withMessage('New password must be at least 6 characters'),
+      .isLength({ min: 8, max: 128 })
+      .withMessage('New password must be 8-128 characters'),
   ],
   authController.changePassword,
 )
@@ -206,6 +237,38 @@ router.get('/content/:contentId/my-rating', validateObjectId, contentController.
 router.get('/favorites', entityController.getFavoriteEntities)
 router.post('/entities/:id/favorite', validateObjectId, entityController.favoriteEntity)
 router.delete('/entities/:id/favorite', validateObjectId, entityController.unfavoriteEntity)
+
+/** Permanent self-service account deletion (password re-check; demo account refused). Off `/auth` for the same reason. */
+router.delete(
+  '/account',
+  [body('password').isString().notEmpty().withMessage('Password is required')],
+  authController.deleteAccount,
+)
+
+/** Account security status and authenticator-app 2FA management. */
+router.delete('/account/profile-picture', authController.removeProfilePicture)
+router.get('/account/security', securityController.getSecurityStatus)
+router.post('/account/sessions/revoke-all', securityController.signOutEverywhere)
+router.post('/account/2fa/setup', securityController.startTwoFactorSetup)
+router.post('/account/2fa/enable', [body('code').isString()], securityController.enableTwoFactor)
+router.post(
+  '/account/2fa/disable',
+  [body('password').isString(), body('code').isString()],
+  securityController.turnOffTwoFactor,
+)
+router.post('/account/2fa/backup-codes', [body('code').isString()], securityController.newBackupCodes)
+
+/** Profile customization; kept off `/auth` so it is not throttled by the login limiter. */
+router.put(
+  '/profile/settings',
+  [body('settings').optional().isObject(), body('bio').optional().isString()],
+  profileController.updateProfileSettings,
+)
+
+/** Title favorites (movies, series, and specials) behind the card heart. */
+router.get('/favorites/content', profileController.getFavoriteContentIds)
+router.post('/content/:id/favorite', validateObjectId, profileController.toggleContentFavorite)
+router.delete('/content/:id/favorite', validateObjectId, profileController.toggleContentFavorite)
 
 /** Homepage status feed: the viewer's and accepted friends' watchlist changes. */
 router.get('/home/activity', homeController.getActivity)

@@ -62,6 +62,69 @@
   --shadow-lg: 0 20px 44px rgba(21, 34, 56, 0.14);
   --shadow-glow: 0 0 28px rgba(224, 122, 95, 0.22);
   --shadow-spot: 0 -12px 28px rgba(255, 252, 240, 0.9);
+
+  /* Component surfaces and text that used to be hard-coded (same light values) */
+  --bg-muted: #f4f4f4;
+  --bg-muted-hover: #ececec;
+  --text-strong: #222222;
+  --text-body: #555555;
+  --text-faint: #999999;
+  --border-subtle: #e4e4e4;
+  --poster-spot: rgba(255, 252, 240, 0.95);
+  --page-background:
+    radial-gradient(720px 280px at 18% 0%, rgba(255, 255, 255, 0.9), transparent 58%),
+    radial-gradient(560px 240px at 78% 8%, rgba(255, 248, 230, 0.55), transparent 52%),
+    radial-gradient(640px 320px at 8% 88%, rgba(224, 122, 95, 0.08), transparent 50%),
+    radial-gradient(580px 280px at 96% 86%, rgba(43, 187, 173, 0.08), transparent 48%),
+    linear-gradient(180deg, #f7f8fa 0%, #e9ecf1 100%);
+
+  color-scheme: light;
+}
+
+/* Dark mode: set by the theme toggle (`data-theme` on <html>, see composables/useTheme.ts). */
+:root[data-theme='dark'] {
+  --primary-color: #0f1726;
+  --secondary-color: #1a2436;
+  --accent-color: #243049;
+
+  --navbar-primary: #0b1220;
+  --navbar-secondary: #111a2c;
+
+  --coral-deep: #f08e73;
+
+  --text-primary: #e8edf5;
+  --text-secondary: #aab3c5;
+  --text-muted: #7d879b;
+  --text-ink: #e8edf5;
+
+  --bg-primary: #0f1726;
+  --bg-secondary: #172133;
+  --bg-card: #182234;
+  --bg-hover: rgba(224, 122, 95, 0.16);
+  --bg-parchment: #1c273b;
+
+  --border-color: rgba(232, 237, 245, 0.1);
+  --border-hover: rgba(224, 122, 95, 0.55);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 44px rgba(0, 0, 0, 0.5);
+  --shadow-spot: 0 0 0 transparent;
+
+  --bg-muted: #202b40;
+  --bg-muted-hover: #27334b;
+  --text-strong: #eef2f8;
+  --text-body: #b9c2d3;
+  --text-faint: #7d879b;
+  --border-subtle: rgba(232, 237, 245, 0.12);
+  --poster-spot: transparent;
+  --page-background:
+    radial-gradient(720px 280px at 18% 0%, rgba(123, 107, 176, 0.12), transparent 58%),
+    radial-gradient(640px 320px at 8% 88%, rgba(224, 122, 95, 0.08), transparent 50%),
+    radial-gradient(580px 280px at 96% 86%, rgba(43, 187, 173, 0.08), transparent 48%),
+    linear-gradient(180deg, #111a2b 0%, #0b1220 100%);
+
+  color-scheme: dark;
 }
 
 * {
@@ -72,12 +135,8 @@
 
 body {
   font-family: var(--font-body);
-  background:
-    radial-gradient(720px 280px at 18% 0%, rgba(255, 255, 255, 0.9), transparent 58%),
-    radial-gradient(560px 240px at 78% 8%, rgba(255, 248, 230, 0.55), transparent 52%),
-    radial-gradient(640px 320px at 8% 88%, rgba(224, 122, 95, 0.08), transparent 50%),
-    radial-gradient(580px 280px at 96% 86%, rgba(43, 187, 173, 0.08), transparent 48%),
-    linear-gradient(180deg, #f7f8fa 0%, #e9ecf1 100%);
+  background: var(--page-background);
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
@@ -95,7 +154,7 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(21, 34, 56, 0.06);
+  background: var(--border-color);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -189,7 +248,7 @@ html {
 /* Gallery poster mount + ceiling spotlight */
 .poster-frame {
   position: relative;
-  background: #fff;
+  background: var(--bg-card);
   overflow: visible;
 }
 
@@ -203,7 +262,7 @@ html {
   pointer-events: none;
   z-index: 4;
   opacity: 0.55;
-  background: radial-gradient(ellipse at center, rgba(255, 252, 240, 0.95), transparent 72%);
+  background: radial-gradient(ellipse at center, var(--poster-spot), transparent 72%);
   transition: opacity 0.25s ease;
 }
 

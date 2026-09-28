@@ -1,8 +1,9 @@
 /**
  * api.ts — Axios API client and content display helpers.
  *
- * Configures the backend base URL, attaches JWTs, and exports auth, content,
- * AI, and watchlist endpoints used by Pinia stores and views. Dev points at
+ * Configures the backend base URL, keeps the access token in memory (renewed
+ * from the httpOnly session cookie on 401), and exports auth, content, AI, and
+ * watchlist endpoints used by Pinia stores and views. Dev points at
  * `localhost:5001`; production uses the Railway API.
  */
 
@@ -15,6 +16,7 @@ import type {
   UpdateWatchlistData,
   ContentParams,
 } from '@/types'
+import type { ProfileSettings } from '@/types/profile'
 import { getDisplayTitle } from '@/utils/titles'
 
 const STALE_RAILWAY_HOST = 'find-animation-production.up.railway.app'
@@ -23,7 +25,8 @@ function resolveApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_URL as string | undefined
   const usable = configured && !configured.includes(STALE_RAILWAY_HOST) ? configured : undefined
 
-  if (usable) return usable
+  // Routes are mounted under `/api`; accept a bare origin like `http://localhost:5001`.
+  if (usable) return /\/api\/?$/.test(usable) ? usable : `${usable.replace(/\/+$/, '')}/api`
   if (import.meta.env.DEV) return 'http://localhost:5001/api'
   // Same-origin `/api` is proxied to Railway by vercel.json, so preview
   // deployments do not hit CORS or a renamed Railway hostname.
@@ -41,15 +44,87 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    // Required by the cookie-based session endpoints (a cross-site form cannot send it).
+    'X-Requested-With': 'XMLHttpRequest',
   },
-  withCredentials: true, // Required for CORS requests with credentials
+  withCredentials: true, // Sends the httpOnly session cookie to /auth/refresh and /auth/revoke
 })
+
+// ---------------------------------------------------------------------------
+// Session: the access token lives only in memory; an httpOnly cookie restores it.
+// ---------------------------------------------------------------------------
+
+/** Signed-in user fields returned by `/auth/refresh`. */
+export interface SessionUser {
+  id: string
+  username: string
+  email: string
+  isDemoAccount?: boolean
+  preferences?: { favoriteGenres: string[] }
+}
+
+/** Result of a cookie refresh: a new access token and user, or null when signed out. */
+export type RefreshedSession = { accessToken: string; user: SessionUser } | null
+
+let accessToken: string | null = null
+let refreshInFlight: Promise<RefreshedSession> | null = null
+const sessionListeners = new Set<(session: RefreshedSession) => void>()
+
+/** Set (or clear) the in-memory access token sent as `Authorization: Bearer`. */
+export const setAccessToken = (token: string | null) => {
+  accessToken = token
+}
+
+/** Be told when a background refresh renews or ends the session. Returns an unsubscribe. */
+export const onSessionChange = (listener: (session: RefreshedSession) => void) => {
+  sessionListeners.add(listener)
+  return () => sessionListeners.delete(listener)
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const requestRefresh = async (): Promise<RefreshedSession> => {
+  // One retry covers another tab rotating the same cookie a moment earlier.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await api.post('/auth/refresh', {}, { skipAuthRefresh: true })
+      return response.data.data as RefreshedSession
+    } catch (err) {
+      const code = (err as { response?: { data?: { code?: string } } }).response?.data?.code
+      if (code !== 'REFRESH_RACE' || attempt === 1) return null
+      await wait(300)
+    }
+  }
+  return null
+}
+
+/**
+ * Exchange the session cookie for a fresh access token. Concurrent callers share one
+ * request, and tabs take turns (Web Locks) so they do not rotate the same cookie at once.
+ * @returns The new token and user, or null when there is no valid session.
+ */
+export const refreshSession = (): Promise<RefreshedSession> => {
+  if (!refreshInFlight) {
+    const run = () => requestRefresh()
+    const locked: Promise<RefreshedSession> =
+      typeof navigator !== 'undefined' && navigator.locks
+        ? // The DOM typings do not unwrap the callback's promise; the runtime does.
+          (navigator.locks.request(
+            'anilounge-session-refresh',
+            run,
+          ) as unknown as Promise<RefreshedSession>)
+        : run()
+    refreshInFlight = locked.finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
+}
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`
     }
     return config
   },
@@ -58,15 +133,37 @@ api.interceptors.request.use(
   },
 )
 
+/** Sign-in steps whose 401 means "wrong password/code", not "session expired". */
+const CREDENTIAL_PATHS = ['/auth/login', '/auth/2fa/verify', '/auth/verify-email', '/auth/unlock']
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Expired/invalid access token: drop the session and send the user to login.
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      window.location.href = '/login'
+  async (error) => {
+    const config = error.config
+    const isCredentialStep = CREDENTIAL_PATHS.includes(String(config?.url || ''))
+    if (
+      error.response?.status !== 401 ||
+      isCredentialStep ||
+      !config ||
+      config.skipAuthRefresh ||
+      config.retriedAfterRefresh
+    ) {
+      return Promise.reject(error)
     }
+
+    // Access token expired: renew it from the session cookie and replay the request once.
+    const hadSession = Boolean(accessToken)
+    const session = await refreshSession()
+    sessionListeners.forEach((listener) => listener(session))
+    if (session) {
+      setAccessToken(session.accessToken)
+      config.retriedAfterRefresh = true
+      config.headers.Authorization = `Bearer ${session.accessToken}`
+      return api(config)
+    }
+
+    setAccessToken(null)
+    if (hadSession) window.location.href = '/login'
     return Promise.reject(error)
   },
 )
@@ -75,9 +172,18 @@ export const authAPI = {
   register: (userData: RegisterData) => api.post('/auth/register', userData),
   login: (credentials: LoginCredentials) => api.post('/auth/login', credentials),
   getProfile: () => api.get('/auth/profile'),
+  logout: () => api.post('/auth/revoke', {}, { skipAuthRefresh: true }),
+  signOutEverywhere: () => api.post('/account/sessions/revoke-all', {}),
   updateProfile: (data: UpdateProfileData) => api.put('/auth/profile', data),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/auth/change-password', data),
+  deleteAccount: (password: string) => api.delete('/account', { data: { password } }),
+  verifyEmail: (email: string, code: string) => api.post('/auth/verify-email', { email, code }),
+  resendVerification: (email: string) => api.post('/auth/resend-verification', { email }),
+  unlockAccount: (email: string, code: string) => api.post('/auth/unlock', { email, code }),
+  verifyTwoFactor: (challengeToken: string, code: string) =>
+    api.post('/auth/2fa/verify', { challengeToken, code }),
+  removeProfilePicture: () => api.delete('/account/profile-picture'),
   uploadProfilePicture: (formData: FormData) =>
     api.post('/auth/upload-profile-picture', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -85,7 +191,8 @@ export const authAPI = {
 }
 
 export const entityAPI = {
-  search: (params: { q: string; type?: string; limit?: number }) => api.get('/entities', { params }),
+  search: (params: { q: string; type?: string; limit?: number }) =>
+    api.get('/entities', { params }),
 
   getById: (id: string) => api.get(`/entities/${id}`),
 
@@ -98,6 +205,32 @@ export const entityAPI = {
   favorite: (id: string) => api.post(`/entities/${id}/favorite`),
 
   unfavorite: (id: string) => api.delete(`/entities/${id}/favorite`),
+}
+
+export const securityAPI = {
+  getStatus: () => api.get('/account/security'),
+
+  startTwoFactorSetup: () => api.post('/account/2fa/setup', {}),
+
+  enableTwoFactor: (code: string) => api.post('/account/2fa/enable', { code }),
+
+  disableTwoFactor: (password: string, code: string) =>
+    api.post('/account/2fa/disable', { password, code }),
+
+  newBackupCodes: (code: string) => api.post('/account/2fa/backup-codes', { code }),
+}
+
+export const profileAPI = {
+  getPublicProfile: (username: string) => api.get(`/users/${encodeURIComponent(username)}`),
+
+  updateSettings: (data: { settings?: Partial<ProfileSettings>; bio?: string }) =>
+    api.put('/profile/settings', data),
+
+  getFavoriteContentIds: () => api.get('/favorites/content'),
+
+  favoriteContent: (id: string) => api.post(`/content/${id}/favorite`),
+
+  unfavoriteContent: (id: string) => api.delete(`/content/${id}/favorite`),
 }
 
 export const contentAPI = {
