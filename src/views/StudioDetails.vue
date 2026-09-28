@@ -84,6 +84,7 @@
             :data-testid="`studio-work-${work._id}`"
             @click="openWork(work)"
           >
+            <FavoriteHeart :content-id="work._id" />
             <img
               v-if="work.posterPath"
               :src="getPosterUrl(work.posterPath)"
@@ -124,6 +125,7 @@ import { getCardContentTypeDisplay, getDetailsRouteName, getPosterUrl } from '@/
 import { getDisplayTitle } from '@/utils/titles'
 import { collectStudioWorks, studioWorkYear, type StudioWork } from '@/utils/entities'
 import type { CatalogEntity } from '@/types/content'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const route = useRoute()
 const router = useRouter()

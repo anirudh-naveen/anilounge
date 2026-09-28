@@ -40,6 +40,7 @@
             {{ getCardContentTypeDisplay(item.contentType) }}
           </div>
           <AiringBadge :content="item" variant="card" />
+          <FavoriteHeart :content-id="item._id" />
         </div>
         <div class="rail-info">
           <h3 class="rail-card-title">{{ getDisplayTitle(item) }}</h3>
@@ -60,6 +61,7 @@ import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { getDisplayTitle } from '@/utils/titles'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 withDefaults(
   defineProps<{

@@ -229,6 +229,10 @@ CREATE TABLE IF NOT EXISTS users (
   CHECK (char_length(username) BETWEEN 3 AND 20)
 );
 
+-- Favorite genres/studios and public profile customization (see utils/profileSettings.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 CREATE TABLE IF NOT EXISTS friendships (
   follower_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   followee_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,

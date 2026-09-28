@@ -81,6 +81,7 @@ export const register = async (req, res) => {
 /**
  * Authenticate with email/password and issue access plus refresh tokens.
  * Five failed logins lock the account for 30 minutes and ban the IP for brute force.
+ * The shared demo account is exempt from lockouts so it always stays reachable.
  *
  * @param {import('express').Request} req - `body.email`, `body.password`; uses `req.ip` and User-Agent for logs/bans.
  * @param {import('express').Response} res - 200 `{ user, accessToken, refreshToken }`, 401/423, 400, or 500.
@@ -109,7 +110,8 @@ export const login = async (req, res) => {
       })
     }
 
-    const isLocked = user.lockUntil && user.lockUntil > Date.now()
+    const isDemo = user.isDemo()
+    const isLocked = !isDemo && user.lockUntil && user.lockUntil > Date.now()
     if (isLocked) {
       const lockTimeRemaining = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60))
       return res.status(423).json({
@@ -122,6 +124,14 @@ export const login = async (req, res) => {
 
     if (!isPasswordValid) {
       logLoginAttempt(normalizedEmail, false, req.ip, req.get('User-Agent'), user._id)
+
+      // The demo password is public; wrong guesses must not lock recruiters out.
+      if (isDemo) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid credentials.',
+        })
+      }
 
       user.failedLoginAttempts += 1
 
@@ -204,9 +214,11 @@ export const getProfile = async (req, res) => {
           isDemoAccount: user.isDemo(),
           profilePicture: user.profilePicture,
           createdAt: user.createdAt,
+          bio: user.bio || '',
           watchlist: user.watchlist,
           ratings: user.ratings,
           preferences: user.preferences,
+          profileSettings: user.profileSettings,
         },
       },
     })

@@ -30,6 +30,8 @@ import {
   extraFrontendOriginsFromEnv,
   isAllowedCorsOrigin,
 } from './utils/allowedFrontends.js'
+import { isDemoEmail } from './models/User.js'
+import { ensureDemoAccount } from './services/demoAccount.js'
 
 dotenv.config()
 
@@ -116,10 +118,11 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-/** Auth paths: 5 attempts per IP per 15 minutes to slow credential stuffing. */
+/** Auth paths: 5 attempts per IP per 15 minutes to slow credential stuffing. Demo logins are exempt. */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 auth requests per IP per window
+  skip: (req) => req.method === 'POST' && req.path === '/login' && isDemoEmail(req.body?.email),
   message: {
     success: false,
     message: 'Too many authentication attempts, please try again later.',
@@ -341,13 +344,19 @@ app.use((err, req, res, next) => {
   }
 })
 
-// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync scheduler on listen.
+// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync scheduler
+// and makes sure the README demo login exists and is unlocked.
 app
   .listen(PORT, () => {
     console.log(`Find Animation API server running on port ${PORT}`)
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
     console.log(`Health check: http://localhost:${PORT}/health`)
     startContentSyncScheduler()
+    ensureDemoAccount()
+      .then((result) => {
+        if (result !== 'ok') console.log(`Demo account ${result}`)
+      })
+      .catch((error) => console.error('Demo account check failed:', error.message))
   })
   .on('error', (err) => {
     if (err.code === 'EADDRINUSE') {

@@ -34,10 +34,11 @@
 
 ## Profile
 
-1. Make the profile a more customizable screen with tabs that display the user's Favorites, Watchlist, and Stats as tabs.
+1. Make the profile a more customizable screen with tabs that display the user's Favorites, Watchlist, and Stats as tabs. ✅
    - This must be a customizable place for the user.
    - This user profile must be sharable to the public.
    - Content should have a heart icon to add/remove it to favorites on hover.
+   - Stats should show elements like watchtime, wathctime split throughout the year, most watched genres, etc.
 2. Add option to delete account.
    - Deny this option for the demo account.
 3. Add email verification for sign up and password lockouts.
@@ -45,7 +46,7 @@
    - The email will be from notify@anilounge.net. This email will be used for all notifications, like announcements as well.
 4. Make sure accounts are safe from basic cyber attacks.
 5. Have the accounts be auto-logged in on the browser.
-6. Add a toggle for a new dark mofe.
+6. Add a toggle for a new dark mode.
 
 ## Forum
 

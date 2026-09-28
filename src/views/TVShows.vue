@@ -65,6 +65,7 @@
               Series
             </div>
             <AiringBadge :content="show" variant="card" />
+            <FavoriteHeart :content-id="show._id" />
           </div>
           <div class="show-info">
             <h3 class="show-title">{{ getDisplayTitle(show) }}</h3>
@@ -138,6 +139,7 @@ import {
   tvCatalogScrollKey,
   type TvCatalogTab,
 } from '@/utils/catalogTabs'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const router = useRouter()
 const route = useRoute()
