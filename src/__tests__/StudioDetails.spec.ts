@@ -17,7 +17,11 @@ vi.mock('@/stores/entities', () => ({
 }))
 
 vi.mock('@/stores/favorites', () => ({
-  useFavoritesStore: () => ({ isFavorite: () => false, load: vi.fn().mockResolvedValue(undefined), toggle: vi.fn() }),
+  useFavoritesStore: () => ({
+    isFavorite: () => false,
+    load: vi.fn().mockResolvedValue(undefined),
+    toggle: vi.fn(),
+  }),
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -166,15 +170,19 @@ describe('studio helpers', () => {
   })
 
   it('falls back to production companies and dedupes studio names', () => {
-    expect(
-      studioLinksForContent({ studios: [], productionCompanies: ['Pixar', 'pixar'] }),
-    ).toEqual([{ name: 'Pixar', id: '' }])
+    expect(studioLinksForContent({ studios: [], productionCompanies: ['Pixar', 'pixar'] })).toEqual(
+      [{ name: 'Pixar', id: '' }],
+    )
   })
 
   it('dedupes studio works and never includes unpopulated rows', () => {
     const works = collectStudioWorks({
       ...studio,
-      appearances: [...studio.appearances, ...studio.appearances.slice(0, 1), { content: 'raw-id' }],
+      appearances: [
+        ...studio.appearances,
+        ...studio.appearances.slice(0, 1),
+        { content: 'raw-id' },
+      ],
     })
     expect(works.series.map((work) => work._id)).toEqual(['show-2', 'show-1'])
     expect(works.movies.map((work) => work._id)).toEqual(['special-1', 'movie-1'])

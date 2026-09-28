@@ -1,8 +1,8 @@
 <!--
-  ChatLauncher.vue — site-wide AI assistant trigger (component).
+  ChatLauncher.vue — AI assistant trigger (component).
 
-  Replaces the old bottom-right feedback FAB. Opens the catalog chatbot on
-  every page and sends recommendation cards into Search.
+  Floating button rendered only by the Search view. Opens the catalog chatbot
+  and loads its recommendation cards into the search results.
 -->
 <template>
   <div class="chat-launcher">
@@ -28,24 +28,18 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import Chatbot from '@/components/Chatbot.vue'
 import { defaultSearchFilters, useContentStore } from '@/stores/content'
 import type { UnifiedContent } from '@/types/content'
 
 const open = ref(false)
-const router = useRouter()
-const route = useRoute()
 const contentStore = useContentStore()
 
-const onSearchResults = async (results: UnifiedContent[]) => {
+const onSearchResults = (results: UnifiedContent[]) => {
   const reset = defaultSearchFilters()
   contentStore.searchResults = results
   contentStore.searchFilters = reset
   contentStore.searchAppliedFilters = { ...reset }
-  if (route.name !== 'search') {
-    await router.push({ name: 'search' })
-  }
 }
 </script>
 
