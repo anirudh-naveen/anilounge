@@ -37,6 +37,8 @@ Deployment --
 ## Homepage
 
 <img width="1710" height="676" alt="image" src="https://github.com/user-attachments/assets/ee9e5bc0-9f44-421f-92cd-e315e0abd51c" />
+<img width="856" height="745" alt="image" src="https://github.com/user-attachments/assets/282fbfdc-de62-492d-9f24-cc37226f6deb" />
+
 
 ## Search
 
