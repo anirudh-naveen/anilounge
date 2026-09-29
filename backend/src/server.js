@@ -35,6 +35,7 @@ import { authLimiter } from './middleware/authRateLimit.js'
 import { ensureDemoAccount } from './services/demoAccount.js'
 import { startInactiveAccountScheduler } from './services/inactiveAccountService.js'
 import { startUnverifiedAccountScheduler } from './services/unverifiedAccountService.js'
+import { startFriendRequestCleanupScheduler } from './services/friendService.js'
 import { emailProvider } from './services/emailService.js'
 
 dotenv.config()
@@ -360,6 +361,7 @@ app
     startContentSyncScheduler()
     startInactiveAccountScheduler()
     startUnverifiedAccountScheduler()
+    startFriendRequestCleanupScheduler()
     console.log(`Email delivery: ${emailProvider()}`)
     ensureDemoAccount()
       .then((result) => {

@@ -10,6 +10,7 @@ import { contentTypeFromKind } from '../db/kinds.js'
 import { mapContentRow } from '../models/Content.js'
 import Entity from '../models/Entity.js'
 import { ensureCharacterAbout, serializeEntityDetails } from './entityService.js'
+import { friendIds } from './friendService.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const RECENT_EPISODE_DAYS = 3
@@ -175,18 +176,12 @@ async function watchlistActivity(userIds, viewerId, limit) {
  * @returns {Promise<{ personal: object[], friends: object[], friendCount: number }>}
  */
 export async function getActivityFeed(userId, { limit = 12 } = {}) {
-  const { rows } = await query(
-    `SELECT CASE WHEN follower_id = $1 THEN followee_id ELSE follower_id END AS friend_id
-     FROM friendships
-     WHERE status = 'accepted' AND (follower_id = $1 OR followee_id = $1)`,
-    [userId],
-  )
-  const friendIds = [...new Set(rows.map((row) => String(row.friend_id)))]
-  const [personal, friends] = await Promise.all([
+  const friends = await friendIds(userId)
+  const [personal, friendActivity] = await Promise.all([
     watchlistActivity([String(userId)], userId, limit),
-    watchlistActivity(friendIds, userId, limit),
+    watchlistActivity(friends, userId, limit),
   ])
-  return { personal, friends, friendCount: friendIds.length }
+  return { personal, friends: friendActivity, friendCount: friends.length }
 }
 
 const UPDATE_WINDOW_SQL = `(

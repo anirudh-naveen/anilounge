@@ -162,16 +162,37 @@ export function logoUrl() {
 }
 
 /**
+ * Where users manage optional emails (Settings → Email).
+ * @returns {string}
+ */
+export function emailSettingsLink() {
+  return `${appUrl()}/settings#email`
+}
+
+/**
+ * Footer for account and security emails, which cannot be turned off.
+ * @returns {string}
+ */
+function accountFooterHtml() {
+  return `AniLounge · This is an account email about activity on your account, so it can't be turned off. <a href="${emailSettingsLink()}" style="color:#8b93a6">Manage other emails</a>.`
+}
+
+/**
+ * Plain-text version of the account footer, appended to account email bodies.
+ * @param {string} text
+ * @returns {string}
+ */
+function withAccountFooter(text) {
+  return `${text}\n\n—\nThis is an account email, so it can't be turned off. Manage other emails: ${emailSettingsLink()}`
+}
+
+/**
  * Minimal branded HTML wrapper; content is trusted template markup, not user input.
  * @param {string} heading
  * @param {string} bodyHtml
  * @returns {string}
  */
-function layout(
-  heading,
-  bodyHtml,
-  footerHtml = 'AniLounge · You received this because of activity on your account.',
-) {
+function layout(heading, bodyHtml, footerHtml = accountFooterHtml()) {
   return `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:Arial,sans-serif;color:#152238">
 <div style="max-width:480px;margin:32px auto;background:#fff;border-radius:12px;padding:32px">
 <h1 style="font-size:22px;margin:0 0 16px">${heading}</h1>${bodyHtml}
@@ -206,7 +227,7 @@ export function sendVerificationEmail(user, code) {
   return sendEmail({
     to: user.email,
     subject: 'Verify your AniLounge email',
-    text: `Hi ${user.username},\n\nYour verification code is ${code}. It expires in 24 hours.${note}\n\nOr open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email.`,
+    text: withAccountFooter(`Hi ${user.username},\n\nYour verification code is ${code}. It expires in 24 hours.${note}\n\nOr open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email.`),
     html: layout(
       'Verify your email',
       `<p>Hi ${escapeHtml(user.username)}, welcome to AniLounge!</p>
@@ -229,7 +250,7 @@ export function sendUnlockEmail(user, code) {
   return sendEmail({
     to: user.email,
     subject: 'Your AniLounge account was locked',
-    text: `Hi ${user.username},\n\nYour account was locked after several failed sign-in attempts. If this was you, unlock it now with code ${code} or this link: ${link}\n\nThe link expires in 1 hour. Otherwise the lock lifts on its own in 30 minutes. If this wasn't you, consider changing your password after signing in.`,
+    text: withAccountFooter(`Hi ${user.username},\n\nYour account was locked after several failed sign-in attempts. If this was you, unlock it now with code ${code} or this link: ${link}\n\nThe link expires in 1 hour. Otherwise the lock lifts on its own in 30 minutes. If this wasn't you, consider changing your password after signing in.`),
     html: layout(
       'Account locked',
       `<p>Hi ${escapeHtml(user.username)}, your account was locked after several failed sign-in attempts.</p>
@@ -250,7 +271,7 @@ export function sendEmailChangedNotice(previous, newEmail) {
   return sendEmail({
     to: previous.email,
     subject: 'Your AniLounge email was changed',
-    text: `Hi ${previous.username},\n\nThe email on your AniLounge account was changed to ${newEmail}. If you did this, no action is needed. If not, contact support@anilounge.net right away so we can secure your account.`,
+    text: withAccountFooter(`Hi ${previous.username},\n\nThe email on your AniLounge account was changed to ${newEmail}. If you did this, no action is needed. If not, contact support@anilounge.net right away so we can secure your account.`),
     html: layout(
       'Email changed',
       `<p>Hi ${escapeHtml(previous.username)}, the email on your AniLounge account was changed to <strong>${escapeHtml(newEmail)}</strong>.</p>
@@ -286,7 +307,7 @@ export function sendInactivityWarning(user, daysLeft, deleteAt) {
   return sendEmail({
     to: user.email,
     subject: `Your AniLounge account will be deleted in ${when}`,
-    text: `Hi ${user.username},\n\nYou haven't used AniLounge in almost a year. To protect your data, inactive accounts are deleted after one year. Your account, watchlist, ratings, and favorites will be permanently deleted on ${date} (in ${when}).\n\nTo keep your account, just sign in before then: ${link}\n\nIf you'd rather let it go, you don't need to do anything.`,
+    text: withAccountFooter(`Hi ${user.username},\n\nYou haven't used AniLounge in almost a year. To protect your data, inactive accounts are deleted after one year. Your account, watchlist, ratings, and favorites will be permanently deleted on ${date} (in ${when}).\n\nTo keep your account, just sign in before then: ${link}\n\nIf you'd rather let it go, you don't need to do anything.`),
     html: layout(
       `Your account will be deleted in ${when}`,
       `<p>Hi ${escapeHtml(user.username)}, you haven't used AniLounge in almost a year.</p>
@@ -306,7 +327,7 @@ export function sendInactiveAccountDeleted(user) {
   return sendEmail({
     to: user.email,
     subject: 'Your AniLounge account has been deleted',
-    text: `Hi ${user.username},\n\nYour AniLounge account was deleted after a year without activity, as we warned in earlier emails. Your watchlist, ratings, favorites, and profile have been removed.\n\nYou're welcome back anytime: ${appUrl()}/register`,
+    text: withAccountFooter(`Hi ${user.username},\n\nYour AniLounge account was deleted after a year without activity, as we warned in earlier emails. Your watchlist, ratings, favorites, and profile have been removed.\n\nYou're welcome back anytime: ${appUrl()}/register`),
     html: layout(
       'Your account has been deleted',
       `<p>Hi ${escapeHtml(user.username)}, your AniLounge account was deleted after a year without activity, as we warned in earlier emails.</p>
@@ -333,7 +354,7 @@ export function sendVerificationReminder(user, code, deleteAt) {
   return sendEmail({
     to: user.email,
     subject: 'Verify your AniLounge email to keep your account',
-    text: `Hi ${user.username},\n\nYou signed up for AniLounge but haven't verified your email yet. Your account will be deleted on ${when} UTC (in about 1 day) unless you verify it.\n\nYour new verification code is ${code}. Or open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email and the account will be removed.`,
+    text: withAccountFooter(`Hi ${user.username},\n\nYou signed up for AniLounge but haven't verified your email yet. Your account will be deleted on ${when} UTC (in about 1 day) unless you verify it.\n\nYour new verification code is ${code}. Or open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email and the account will be removed.`),
     html: layout(
       'Verify your email to keep your account',
       `<p>Hi ${escapeHtml(user.username)}, you signed up for AniLounge but haven't verified your email yet.</p>
@@ -342,6 +363,41 @@ export function sendVerificationReminder(user, code, deleteAt) {
 <p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:8px 0 24px">${code}</p>
 <p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Verify email</a></p>
 <p style="color:#5b6578;font-size:14px">If you didn't sign up, ignore this email and the account will be removed.</p>`,
+    ),
+  })
+}
+
+/**
+ * New friend request notice. The requester's username and note are user input, so
+ * they are escaped; the note is quoted as written.
+ * @param {{ email: string, username: string }} recipient
+ * @param {{ username: string }} requester
+ * @param {string} note - Optional note sent with the request ('' for none).
+ * @param {Date} expiresAt - When the request is removed if unanswered.
+ * @param {string} unsubscribeUrl - One-click opt-out from friend request emails.
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendFriendRequestEmail(recipient, requester, note, expiresAt, unsubscribeUrl) {
+  const link = `${appUrl()}/friends`
+  const expires = expiresAt.toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })
+  const noteText = note ? `\n\nTheir note: "${note}"` : ''
+  const noteHtml = note
+    ? `<p style="margin:16px 0;padding:12px 16px;background:#f4f5f7;border-radius:8px;white-space:pre-wrap">${escapeHtml(note)}</p>`
+    : ''
+  return sendEmail({
+    to: recipient.email,
+    subject: `${requester.username} sent you a friend request on AniLounge`,
+    headers: {
+      'List-Unsubscribe': `<${unsubscribeUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
+    text: `Hi ${recipient.username},\n\n${requester.username} wants to be friends on AniLounge.${noteText}\n\nAccept or decline it here: ${link}\n\nThe request expires on ${expires} if you don't answer.\n\n—\nStop getting friend request emails: ${unsubscribeUrl}`,
+    html: layout(
+      'New friend request',
+      `<p>Hi ${escapeHtml(recipient.username)}, <strong>${escapeHtml(requester.username)}</strong> wants to be friends on AniLounge.</p>${noteHtml}
+<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">View request</a></p>
+<p style="color:#5b6578;font-size:14px">The request expires on ${expires} if you don't answer.</p>`,
+      `AniLounge · You're receiving this because someone sent you a friend request. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#8b93a6">Stop friend request emails</a> or <a href="${emailSettingsLink()}" style="color:#8b93a6">manage all emails</a>.`,
     ),
   })
 }
@@ -407,7 +463,7 @@ export function sendAnnouncementEmail(user, { subject, bodyText }, unsubscribeUr
     html: layout(
       escapeHtml(subject),
       `<p>Hi ${escapeHtml(user.username)},</p>\n${paragraphs}`,
-      `AniLounge · You're receiving this because you have an AniLounge account. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#8b93a6">Unsubscribe from announcements</a>.`,
+      `AniLounge · You're receiving this because you have an AniLounge account. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#8b93a6">Unsubscribe from announcements</a> or <a href="${emailSettingsLink()}" style="color:#8b93a6">manage all emails</a>.`,
     ),
   })
 }
