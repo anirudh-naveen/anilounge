@@ -7,6 +7,8 @@
  */
 
 import adminService from '../services/adminService.js'
+import adminLinks from '../services/adminLinks.js'
+import { LOG_CATEGORIES, listLogMonths, readLogMonth } from '../services/adminLog.js'
 import { sendError } from '../utils/httpError.js'
 
 /**
@@ -50,11 +52,85 @@ export const getContent = async (req, res) => {
  */
 export const updateContent = async (req, res) => {
   try {
-    const data = await adminService.updateContent(req.params.id, req.body || {})
-    console.log(`Admin ${req.user._id} edited content ${req.params.id}`)
+    const data = await adminService.updateContent(req.params.id, req.body || {}, req.user)
     res.json({ success: true, message: 'Saved.', data })
   } catch (error) {
     sendError(res, error, 'Error saving content')
+  }
+}
+
+/**
+ * Add or remove a link (character in a title, voice actor for a character, studio
+ * for a title), then return the editor row the admin is looking at.
+ *
+ * @param {import('express').Request} req - `params.op` (add|remove), `body.link` `{ type, workId, characterId?, voiceId?, studioId?, role? }`, `body.editorId`.
+ * @param {import('express').Response} res - 200 `{ data }` (editor row), 400, or 500.
+ * @returns {Promise<void>}
+ */
+export const changeLink = async (req, res) => {
+  try {
+    const { link, editorId } = req.body || {}
+    if (req.params.op === 'add') await adminLinks.addLink(req.user, link)
+    else await adminLinks.removeLink(req.user, link)
+    const data = await adminService.getEditableContent(editorId)
+    res.json({ success: true, message: req.params.op === 'add' ? 'Added.' : 'Removed.', data })
+  } catch (error) {
+    sendError(res, error, 'Error updating links')
+  }
+}
+
+/**
+ * Set a title's cast order.
+ *
+ * @param {import('express').Request} req - `params.id` (title), `body.characterIds` in the new order.
+ * @param {import('express').Response} res - 200 `{ data }` (editor row), 400, or 500.
+ * @returns {Promise<void>}
+ */
+export const reorderCast = async (req, res) => {
+  try {
+    await adminLinks.reorderCast(req.user, req.params.id, req.body?.characterIds)
+    const data = await adminService.getEditableContent(req.params.id)
+    res.json({ success: true, message: 'Cast order saved.', data })
+  } catch (error) {
+    sendError(res, error, 'Error saving cast order')
+  }
+}
+
+/**
+ * Change a character's role in a title.
+ *
+ * @param {import('express').Request} req - `body` `{ workId, characterId, role, editorId }`.
+ * @param {import('express').Response} res - 200 `{ data }` (editor row), 400, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const setAppearanceRole = async (req, res) => {
+  try {
+    await adminLinks.setAppearanceRole(req.user, req.body || {})
+    const data = await adminService.getEditableContent(req.body?.editorId)
+    res.json({ success: true, message: 'Role saved.', data })
+  } catch (error) {
+    sendError(res, error, 'Error saving role')
+  }
+}
+
+/**
+ * Admin log: months with entries, and one month's lines (read-only).
+ *
+ * @param {import('express').Request} req - `query.month` (YYYY-MM, default newest), `query.category` (admin|moderation|sync).
+ * @param {import('express').Response} res - 200 `{ data: { months, month, entries } }` or 500.
+ * @returns {Promise<void>}
+ */
+export const getLog = async (req, res) => {
+  try {
+    const months = await listLogMonths()
+    const month = months.some((row) => row.month === req.query.month)
+      ? req.query.month
+      : months[0]?.month || null
+    const category = LOG_CATEGORIES.includes(req.query.category) ? req.query.category : undefined
+    const entries = month ? await readLogMonth(month, category) : []
+    res.json({ success: true, data: { months, month, entries } })
+  } catch (error) {
+    sendError(res, error, 'Error loading the admin log')
   }
 }
 
@@ -183,10 +259,26 @@ export const setBan = async (req, res) => {
 }
 
 /**
- * Public: staff accounts, for the creator/admin badges shown next to usernames.
+ * Set a user's cosmetic roles (Developer, Artist, Influencer); badges only.
+ *
+ * @param {import('express').Request} req - `params.id`, `body.roles` (full list).
+ * @param {import('express').Response} res - 200 `{ data: user }`, 400, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const setCosmeticRoles = async (req, res) => {
+  try {
+    const data = await adminService.setCosmeticRoles(req.user, req.params.id, req.body?.roles)
+    res.json({ success: true, message: `Roles updated for ${data.username}.`, data })
+  } catch (error) {
+    sendError(res, error, 'Error updating roles')
+  }
+}
+
+/**
+ * Public: accounts with badges (creator/admin and cosmetic roles) for usernames.
  *
  * @param {import('express').Request} req
- * @param {import('express').Response} res - 200 `{ data: [{ id, username, role }] }` or 500.
+ * @param {import('express').Response} res - 200 `{ data: [{ id, username, role, cosmetic }] }` or 500.
  * @returns {Promise<void>}
  */
 export const listStaff = async (req, res) => {
@@ -202,6 +294,10 @@ export default {
   searchContent,
   getContent,
   updateContent,
+  changeLink,
+  reorderCast,
+  setAppearanceRole,
+  getLog,
   listSyncChanges,
   countSyncChanges,
   resolveSyncChanges,
@@ -210,4 +306,5 @@ export default {
   muteUser,
   setBan,
   listStaff,
+  setCosmeticRoles,
 }

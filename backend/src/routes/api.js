@@ -171,7 +171,7 @@ router.get('/avatars/:id', validateObjectId, profileController.getAvatarImage)
 /** Shareable user profile; optional auth lets owners see private profiles and hidden tabs. */
 router.get('/users/:username', optionalAuthenticate, profileController.getPublicProfile)
 
-/** Staff accounts for the creator/admin badges next to usernames. */
+/** Accounts with badges (creator/admin and cosmetic roles) next to usernames. */
 router.get('/staff', adminController.listStaff)
 
 /** Anyone can submit beta feedback; only admins can list it (it holds submitter emails). */
@@ -338,6 +338,21 @@ router.patch(
   [body('changes').optional().isObject(), body('unlock').optional().isArray({ max: 20 })],
   adminController.updateContent,
 )
+router.post(
+  '/admin/links/:op(add|remove)',
+  adminOnly,
+  [body('link').isObject(), body('editorId').isString()],
+  adminController.changeLink,
+)
+router.put('/admin/links/role', adminOnly, adminController.setAppearanceRole)
+router.put(
+  '/admin/content/:id/cast-order',
+  adminOnly,
+  validateObjectId,
+  [body('characterIds').isArray({ max: 500 })],
+  adminController.reorderCast,
+)
+router.get('/admin/log', adminOnly, adminController.getLog)
 router.get('/admin/sync-changes', adminOnly, adminController.listSyncChanges)
 router.get('/admin/sync-changes/count', adminOnly, adminController.countSyncChanges)
 router.post(
@@ -353,6 +368,13 @@ router.put(
   validateObjectId,
   [body('role').isIn(['user', 'admin'])],
   adminController.setUserRole,
+)
+router.put(
+  '/admin/users/:id/cosmetic-roles',
+  adminOnly,
+  validateObjectId,
+  [body('roles').isArray({ max: 3 })],
+  adminController.setCosmeticRoles,
 )
 router.post(
   '/admin/users/:id/mute',

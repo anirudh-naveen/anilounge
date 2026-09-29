@@ -65,6 +65,25 @@ CREATE TABLE IF NOT EXISTS content_sync_changes (
 );
 CREATE INDEX IF NOT EXISTS content_sync_changes_created_idx ON content_sync_changes (created_at DESC);
 
+-- Admin log (services/adminLog.js): append-only record of admin actions, moderation, and
+-- sync changes, read by month on the admin page. No foreign keys, so deleting a user or
+-- title never touches it; the trigger refuses UPDATE and DELETE.
+CREATE TABLE IF NOT EXISTS admin_log (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  category        TEXT NOT NULL CHECK (category IN ('admin', 'moderation', 'sync')),
+  actor_id        UUID,
+  actor_username  TEXT,
+  message         TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS admin_log_created_idx ON admin_log (created_at DESC);
+
+CREATE OR REPLACE FUNCTION admin_log_append_only() RETURNS trigger LANGUAGE plpgsql AS
+  'BEGIN RAISE EXCEPTION ''admin_log is append-only''; END';
+DROP TRIGGER IF EXISTS admin_log_no_change ON admin_log;
+CREATE TRIGGER admin_log_no_change BEFORE UPDATE OR DELETE ON admin_log
+  FOR EACH ROW EXECUTE FUNCTION admin_log_append_only();
+
 CREATE TABLE IF NOT EXISTS movies (
   content_id       UUID PRIMARY KEY REFERENCES content (id) ON DELETE CASCADE,
   original_title   TEXT,
@@ -230,6 +249,27 @@ CREATE TABLE IF NOT EXISTS studio_credits (
   PRIMARY KEY (work_id, studio_id)
 );
 
+-- Admin link editing (services/adminLinks.js). Links an admin adds or reorders are
+-- marked so the catalog sync never deletes or reshuffles them; links an admin removes
+-- are remembered in admin_link_removals so the sync does not add them back.
+-- `appearances.position` is the admin's cast order (NULL = the sync's order).
+ALTER TABLE appearances ADD COLUMN IF NOT EXISTS position INTEGER;
+ALTER TABLE appearances ADD COLUMN IF NOT EXISTS admin_locked BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE voice_credits ADD COLUMN IF NOT EXISTS admin_added BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE studio_credits ADD COLUMN IF NOT EXISTS admin_added BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS admin_link_removals (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  link_kind   TEXT NOT NULL CHECK (link_kind IN ('appearance', 'voice_credit', 'studio_credit')),
+  work_id     UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  -- The character (appearance, voice_credit) or studio (studio_credit).
+  other_id    UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  voice_id    UUID REFERENCES content (id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS admin_link_removals_unique ON admin_link_removals
+  (link_kind, work_id, other_id, COALESCE(voice_id, '00000000-0000-0000-0000-000000000000'::uuid));
+
 -- ---------------------------------------------------------------------------
 -- Accounts
 -- ---------------------------------------------------------------------------
@@ -287,6 +327,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin', 'creator'));
 CREATE UNIQUE INDEX IF NOT EXISTS users_single_creator ON users ((true)) WHERE role = 'creator';
+
+-- Cosmetic roles (services/adminService.js): badges next to the username with no
+-- permissions. Any mix; the creator and admins assign them from the admin page.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cosmetic_roles TEXT[] NOT NULL DEFAULT '{}'
+  CHECK (cosmetic_roles <@ ARRAY['developer', 'artist', 'influencer']::text[]);
 
 -- Moderation (services/adminService.js). A muted user can't do anything other people see
 -- until `muted_until` (year 9999 = until unmuted). A banned user can't sign in.

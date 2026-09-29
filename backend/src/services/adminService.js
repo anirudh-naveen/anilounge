@@ -13,7 +13,7 @@
 
 import { query, startSession } from '../../config/postgres.js'
 import { isCatalogId, isUuid } from '../db/ids.js'
-import { appearanceRoleToApi, contentTypeFromKind } from '../db/kinds.js'
+import { contentTypeFromKind } from '../db/kinds.js'
 import Content, { loadAdminOverrides } from '../models/Content.js'
 import {
   isAdminUser,
@@ -35,6 +35,8 @@ import { isMuted, muteEndsAt, MUTE_DURATIONS } from '../utils/accountStatus.js'
 import { HttpError } from '../utils/httpError.js'
 import { escapeLike } from './friendService.js'
 import { revokeAllSessions } from './sessionService.js'
+import { loadManagedLinks } from './adminLinks.js'
+import { describeRow, logAction, quoteValue } from './adminLog.js'
 import {
   LIVE_NOTICE_SQL,
   NOTICE_TTL_DAYS,
@@ -44,8 +46,6 @@ import {
 } from './syncGuard.js'
 
 const PAGE_SIZE = 25
-/** Most linked rows returned per group in the editor. */
-const LINK_LIMIT = 60
 /** Roles the creator can hand out from the admin page ('creator' is set by script only). */
 export const ASSIGNABLE_ROLES = ['user', 'admin']
 export const USER_FILTERS = ['all', 'staff', 'muted', 'banned']
@@ -96,15 +96,16 @@ function cleanReason(reason) {
 /**
  * Search one kind of catalog row by name (native names and aliases too). With no
  * term, the most recently updated rows come first.
- * @param {{ q?: string, type?: string, page?: unknown }} params - `type` is a content kind.
+ * @param {{ q?: string, type?: string, page?: unknown }} params - `type` is a content kind, or 'work'.
  * @returns {Promise<{ items: object[], page: number, pageSize: number, total: number }>}
  */
 export async function searchContent({ q, type, page } = {}) {
-  const kind = EDITABLE_KINDS.includes(type) ? type : 'movie'
+  // 'work' searches movies, series, and specials together (for adding links).
+  const kinds = type === 'work' ? WATCHABLE_KINDS : [EDITABLE_KINDS.includes(type) ? type : 'movie']
   const term = typeof q === 'string' ? q.trim().slice(0, 100) : ''
   const current = pageNumber(page)
-  const params = [kind]
-  let where = 'c.kind = $1'
+  const params = [kinds]
+  let where = 'c.kind = ANY($1::text[])'
   if (term) {
     params.push(`%${escapeLike(term)}%`)
     where += ` AND (c.name ILIKE $2 OR c.native_name ILIKE $2
@@ -156,98 +157,6 @@ export async function searchContent({ q, type, page } = {}) {
 }
 
 /**
- * @param {object} row - `{ id, kind, name, image_path, note? }`
- * @returns {{ id: string, kind: string, name: string, imagePath: string | null, note: string | null }}
- */
-function linkView(row) {
-  return {
-    id: row.id,
-    kind: row.kind,
-    name: row.name,
-    imagePath: row.image_path || null,
-    note: row.note || null,
-  }
-}
-
-/**
- * Rows connected to a catalog row, grouped for the editor so an admin can jump
- * between a title and its cast, voice actors, studios, and related titles.
- * @param {string} id
- * @param {string} kind
- * @returns {Promise<Array<{ key: string, label: string, items: object[] }>>}
- */
-async function loadLinks(id, kind) {
-  const run = async (sql) => (await query(sql, [id])).rows.map(linkView)
-  const cols = 'c.id, c.kind, c.name, c.image_path'
-
-  if (WATCHABLE_KINDS.includes(kind)) {
-    const [characters, voices, studios, related] = await Promise.all([
-      run(`SELECT ${cols}, a.role AS note FROM appearances a
-           JOIN content c ON c.id = a.character_id
-           WHERE a.work_id = $1 ORDER BY a.importance DESC, c.name LIMIT ${LINK_LIMIT}`),
-      run(`SELECT ${cols}, string_agg(DISTINCT ch.name, ', ') AS note FROM appearances a
-           JOIN voice_credits v ON v.appearance_id = a.id
-           JOIN content c ON c.id = v.voice_id
-           JOIN content ch ON ch.id = a.character_id
-           WHERE a.work_id = $1 GROUP BY c.id ORDER BY c.name LIMIT ${LINK_LIMIT}`),
-      run(`SELECT ${cols} FROM studio_credits sc JOIN content c ON c.id = sc.studio_id
-           WHERE sc.work_id = $1 ORDER BY c.name`),
-      run(`SELECT DISTINCT ON (c.id) ${cols}, r.kind AS note FROM (
-             SELECT to_id AS other, kind FROM content_relations WHERE from_id = $1
-             UNION ALL
-             SELECT fm2.member_id, 'franchise' FROM franchise_members fm
-             JOIN franchise_members fm2 ON fm2.franchise_id = fm.franchise_id
-             WHERE fm.member_id = $1 AND fm2.member_id <> $1
-           ) r JOIN content c ON c.id = r.other
-           WHERE c.kind IN ('movie', 'series', 'special')
-           ORDER BY c.id LIMIT ${LINK_LIMIT}`),
-    ])
-    for (const row of characters) row.note = appearanceRoleToApi(row.note)
-    return [
-      { key: 'characters', label: 'Characters', items: characters },
-      { key: 'voices', label: 'Voice actors', items: voices },
-      { key: 'studios', label: 'Studios', items: studios },
-      { key: 'related', label: 'Related titles', items: related },
-    ]
-  }
-
-  if (kind === 'character') {
-    const [works, voices] = await Promise.all([
-      run(`SELECT ${cols}, a.role AS note FROM appearances a JOIN content c ON c.id = a.work_id
-           WHERE a.character_id = $1 ORDER BY c.name LIMIT ${LINK_LIMIT}`),
-      run(`SELECT DISTINCT ON (c.id) ${cols}, v.language AS note FROM appearances a
-           JOIN voice_credits v ON v.appearance_id = a.id JOIN content c ON c.id = v.voice_id
-           WHERE a.character_id = $1 ORDER BY c.id LIMIT ${LINK_LIMIT}`),
-    ])
-    for (const row of works) row.note = appearanceRoleToApi(row.note)
-    return [
-      { key: 'works', label: 'Appears in', items: works },
-      { key: 'voices', label: 'Voiced by', items: voices },
-    ]
-  }
-
-  if (kind === 'voice') {
-    const [characters, works] = await Promise.all([
-      run(`SELECT DISTINCT ON (c.id) ${cols}, w.name AS note FROM voice_credits v
-           JOIN appearances a ON a.id = v.appearance_id
-           JOIN content c ON c.id = a.character_id JOIN content w ON w.id = a.work_id
-           WHERE v.voice_id = $1 ORDER BY c.id LIMIT ${LINK_LIMIT}`),
-      run(`SELECT DISTINCT ON (c.id) ${cols} FROM voice_credits v
-           JOIN appearances a ON a.id = v.appearance_id JOIN content c ON c.id = a.work_id
-           WHERE v.voice_id = $1 ORDER BY c.id LIMIT ${LINK_LIMIT}`),
-    ])
-    return [
-      { key: 'characters', label: 'Characters voiced', items: characters },
-      { key: 'works', label: 'Titles', items: works },
-    ]
-  }
-
-  const works = await run(`SELECT ${cols} FROM studio_credits sc JOIN content c ON c.id = sc.work_id
-    WHERE sc.studio_id = $1 ORDER BY c.name LIMIT ${LINK_LIMIT}`)
-  return [{ key: 'works', label: 'Titles', items: works }]
-}
-
-/**
  * Load a catalog row for editing.
  * @param {string} id
  * @returns {Promise<{ id: string, kind: string, contentType: string | null, fields: string[],
@@ -290,7 +199,7 @@ export async function getEditableContent(id) {
 
   const [overrides, links] = await Promise.all([
     loadAdminOverrides(row.id),
-    loadLinks(row.id, kind),
+    loadManagedLinks(row.id, kind),
   ])
   const fields = fieldsForKind(kind)
   return {
@@ -348,14 +257,40 @@ async function writeEntityFields(id, kind, overrides, values) {
 }
 
 /**
+ * Log line for an edit: `Edited series "Frieren": title "A" → "B"; unlocked tagline`.
+ * @param {string} prefix
+ * @param {{ kind: string, values: Record<string, unknown> }} before
+ * @param {Record<string, unknown>} values
+ * @param {string[]} unlocked
+ * @returns {string}
+ */
+function describeEdit(prefix, before, values, unlocked) {
+  const name = before.values.title ?? before.values.name
+  const parts = Object.entries(values).map(
+    ([field, value]) => `${field} ${quoteValue(before.values[field])} → ${quoteValue(value)}`,
+  )
+  if (unlocked.length) parts.push(`unlocked ${unlocked.join(', ')}`)
+  return `${prefix} ${describeRow(before.kind, name)}: ${parts.join('; ')}`
+}
+
+/**
  * Apply an admin edit. Edited fields are locked against the sync; `unlock` hands
  * fields back to it (their current value stays until the next sync changes it).
  * @param {string} id
  * @param {{ changes?: Record<string, unknown>, unlock?: unknown }} body
+ * @param {object} [actor] - `req.user`, for the admin log.
+ * @param {{ logPrefix?: string }} [options]
  * @returns {Promise<ReturnType<typeof getEditableContent>>}
  */
-export async function updateContent(id, { changes = {}, unlock = [] } = {}) {
+export async function updateContent(
+  id,
+  { changes = {}, unlock = [] } = {},
+  actor = null,
+  { logPrefix = 'Edited' } = {},
+) {
   if (!isCatalogId(id)) throw new HttpError(400, 'Invalid content id.')
+  const before = await getEditableContent(id)
+  let logLine = ''
 
   await inTransaction(async () => {
     const { rows } = await query(
@@ -394,8 +329,10 @@ export async function updateContent(id, { changes = {}, unlock = [] } = {}) {
     }
     // A hand edit answers any sync notice for the same field.
     await clearSyncNotices(row.id, Object.keys(values))
+    logLine = describeEdit(logPrefix, before, values, unlockList)
   })
 
+  await logAction('admin', actor, logLine)
   return getEditableContent(id)
 }
 
@@ -520,30 +457,43 @@ export async function resolveSyncChanges(actor, ids, action) {
       list,
     ])
     done = result.rowCount || 0
-  } else {
-    const wanted = action === 'revert' ? 'changed' : 'blocked'
-    for (const id of list) {
-      const { rows } = await query(
-        `SELECT n.content_id, n.field, n.outcome, n.old_value, n.new_value, c.kind
-         FROM content_sync_changes n JOIN content c ON c.id = n.content_id
-         WHERE n.id = $1`,
-        [id],
-      )
-      const notice = rows[0]
-      if (!notice || notice.outcome !== wanted) continue
-      if (action === 'revert') {
-        // Same path as a hand edit: writes, locks, and clears the notice.
-        await updateContent(notice.content_id, { changes: { [notice.field]: notice.old_value } })
-      } else {
-        await inTransaction(() =>
-          applySyncValue(notice.content_id, notice.kind, notice.field, notice.new_value),
-        )
-        await query('DELETE FROM content_sync_changes WHERE id = $1', [id])
-      }
-      done += 1
-    }
+    if (done)
+      await logAction('admin', actor, `Dismissed ${done} sync notice${done === 1 ? '' : 's'}`)
+    return { done }
   }
-  console.log(`Admin ${actor._id} ${action} on ${done} sync notice(s)`)
+
+  const wanted = action === 'revert' ? 'changed' : 'blocked'
+  for (const id of list) {
+    const { rows } = await query(
+      `SELECT n.content_id, n.field, n.outcome, n.old_value, n.new_value, c.kind, c.name
+       FROM content_sync_changes n JOIN content c ON c.id = n.content_id
+       WHERE n.id = $1`,
+      [id],
+    )
+    const notice = rows[0]
+    if (!notice || notice.outcome !== wanted) continue
+    if (action === 'revert') {
+      // Same path as a hand edit: writes, locks, clears the notice, and logs.
+      await updateContent(
+        notice.content_id,
+        { changes: { [notice.field]: notice.old_value } },
+        actor,
+        { logPrefix: 'Reverted a sync change and locked' },
+      )
+    } else {
+      await inTransaction(() =>
+        applySyncValue(notice.content_id, notice.kind, notice.field, notice.new_value),
+      )
+      await query('DELETE FROM content_sync_changes WHERE id = $1', [id])
+      await logAction(
+        'admin',
+        actor,
+        `Took the sync's ${notice.field} for ${describeRow(notice.kind, notice.name)} and unlocked it: ` +
+          `${quoteValue(notice.old_value)} → ${quoteValue(notice.new_value)}`,
+      )
+    }
+    done += 1
+  }
   return { done }
 }
 
@@ -553,7 +503,7 @@ export async function resolveSyncChanges(actor, ids, action) {
 
 const USER_COLUMNS = `u.id, u.username, u.email, u.profile_picture, u.role, u.is_demo,
   u.email_verified_at, u.created_at, u.last_active_at, u.muted_until, u.mute_reason,
-  u.banned_at, u.ban_reason`
+  u.banned_at, u.ban_reason, u.cosmetic_roles`
 
 /**
  * @param {object} row - users row.
@@ -585,6 +535,7 @@ function adminUserView(row, owners) {
     muteReason: isMuted({ mutedUntil: row.muted_until }) ? row.mute_reason : null,
     bannedAt: row.banned_at || null,
     banReason: row.ban_reason || null,
+    cosmeticRoles: row.cosmetic_roles || [],
   }
 }
 
@@ -692,7 +643,13 @@ export async function setUserRole(actor, targetId, role) {
   }
 
   await query('UPDATE users SET role = $2 WHERE id = $1', [target.id, role])
-  console.log(`Creator ${actor._id} set role of user ${target.id} to ${role}`)
+  await logAction(
+    'moderation',
+    actor,
+    role === 'admin'
+      ? `Made ${quoteValue(target.username)} an admin`
+      : `Removed admin from ${quoteValue(target.username)}`,
+  )
   return reloadUser(target.id, owners)
 }
 
@@ -715,7 +672,7 @@ export async function muteUser(actor, targetId, { duration, reason } = {}) {
     await query('UPDATE users SET muted_until = NULL, mute_reason = NULL WHERE id = $1', [
       target.id,
     ])
-    console.log(`Admin ${actor._id} unmuted user ${target.id}`)
+    await logAction('moderation', actor, `Unmuted ${quoteValue(target.username)}`)
     return reloadUser(target.id, owners)
   }
 
@@ -731,7 +688,9 @@ export async function muteUser(actor, targetId, { duration, reason } = {}) {
     until,
     cleanReason(reason),
   ])
-  console.log(`Admin ${actor._id} muted user ${target.id} until ${until.toISOString()}`)
+  const length = duration === 'permanent' ? 'until unmuted' : `for ${duration}`
+  const why = cleanReason(reason) ? ` (reason: ${quoteValue(cleanReason(reason))})` : ''
+  await logAction('moderation', actor, `Muted ${quoteValue(target.username)} ${length}${why}`)
   return reloadUser(target.id, owners)
 }
 
@@ -763,31 +722,82 @@ export async function setBan(actor, targetId, { banned, reason } = {}) {
       )
       await revokeAllSessions(target.id)
     })
-    console.log(`Creator ${actor._id} banned user ${target.id}`)
+    const why = cleanReason(reason) ? ` (reason: ${quoteValue(cleanReason(reason))})` : ''
+    await logAction('moderation', actor, `Banned ${quoteValue(target.username)}${why}`)
   } else {
     await query('UPDATE users SET banned_at = NULL, ban_reason = NULL WHERE id = $1', [target.id])
-    console.log(`Creator ${actor._id} unbanned user ${target.id}`)
+    await logAction('moderation', actor, `Unbanned ${quoteValue(target.username)}`)
   }
   return reloadUser(target.id, owners)
 }
 
+/** Badge-only roles with no permissions; any mix per user. */
+export const COSMETIC_ROLES = ['developer', 'artist', 'influencer']
+const COSMETIC_LABELS = { developer: 'Developer', artist: 'Artist', influencer: 'Influencer' }
+
 /**
- * Public list of staff accounts for the creator/admin badges next to usernames.
- * Owners from ADMIN_EMAILS show as admins.
- * @returns {Promise<Array<{ id: string, username: string, role: 'creator' | 'admin' }>>}
+ * Set a user's cosmetic roles (admins and the creator; self included). Not for the
+ * demo account or banned users.
+ * @param {object} actor - The signed-in admin (`req.user`).
+ * @param {string} targetId
+ * @param {unknown} roles - Full list of cosmetic roles the user should have.
+ * @returns {Promise<object>} The updated user view.
+ */
+export async function setCosmeticRoles(actor, targetId, roles) {
+  if (!Array.isArray(roles) || !roles.every((role) => COSMETIC_ROLES.includes(role))) {
+    throw new HttpError(400, `Roles must be from ${COSMETIC_ROLES.join(', ')}.`)
+  }
+  if (!isUuid(String(targetId || ''))) throw new HttpError(400, 'Invalid user id.')
+  const { rows } = await query(
+    `SELECT ${USER_COLUMNS}, u.pending_signup FROM users u WHERE u.id = $1`,
+    [targetId],
+  )
+  const target = rows[0]
+  if (!target || target.pending_signup) throw new HttpError(404, 'User not found.')
+  if (target.is_demo) throw new HttpError(400, "The demo account can't have roles.")
+  if (target.banned_at) throw new HttpError(400, 'Unban this account first.')
+
+  const next = COSMETIC_ROLES.filter((role) => roles.includes(role))
+  const before = target.cosmetic_roles || []
+  await query('UPDATE users SET cosmetic_roles = $2 WHERE id = $1', [target.id, next])
+
+  const added = next.filter((role) => !before.includes(role)).map((role) => COSMETIC_LABELS[role])
+  const removed = before.filter((role) => !next.includes(role)).map((role) => COSMETIC_LABELS[role])
+  const parts = [
+    ...(added.length ? [`gave ${added.join(', ')}`] : []),
+    ...(removed.length ? [`removed ${removed.join(', ')}`] : []),
+  ]
+  if (parts.length) {
+    await logAction(
+      'moderation',
+      actor,
+      `Roles for ${quoteValue(target.username)}: ${parts.join('; ')}`,
+    )
+  }
+  return reloadUser(target.id, parseAdminEmails())
+}
+
+/**
+ * Public list of accounts with badges: creator/admin (owners from ADMIN_EMAILS show
+ * as admins) and cosmetic roles.
+ * @returns {Promise<Array<{ id: string, username: string, role: 'creator' | 'admin' | null, cosmetic: string[] }>>}
  */
 export async function listStaff() {
   const owners = [...parseAdminEmails()]
   const { rows } = await query(
-    `SELECT id, username, role FROM users
+    `SELECT id, username, role, cosmetic_roles,
+            (role IN ('admin', 'creator') OR lower(email) = ANY($1::text[])) AS staff
+     FROM users
      WHERE banned_at IS NULL AND NOT is_demo AND email_verified_at IS NOT NULL
-       AND (role IN ('admin', 'creator') OR lower(email) = ANY($1::text[]))`,
+       AND (role IN ('admin', 'creator') OR lower(email) = ANY($1::text[])
+            OR cardinality(cosmetic_roles) > 0)`,
     [owners],
   )
   return rows.map((row) => ({
     id: String(row.id),
     username: row.username,
-    role: row.role === 'creator' ? 'creator' : 'admin',
+    role: row.staff ? (row.role === 'creator' ? 'creator' : 'admin') : null,
+    cosmetic: row.cosmetic_roles || [],
   }))
 }
 
@@ -803,4 +813,5 @@ export default {
   muteUser,
   setBan,
   listStaff,
+  setCosmeticRoles,
 }
