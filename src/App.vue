@@ -147,6 +147,9 @@
                   <router-link to="/profile" class="dropdown-item" @click="closeDropdown">
                     <span class="item-text">Profile</span>
                   </router-link>
+                  <router-link to="/friends" class="dropdown-item" @click="closeDropdown">
+                    <span class="item-text">Friends</span>
+                  </router-link>
                   <router-link to="/settings" class="dropdown-item" @click="closeDropdown">
                     <span class="item-text">Settings</span>
                   </router-link>

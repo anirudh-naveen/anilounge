@@ -14,6 +14,8 @@ import User from '../models/User.js'
 import { serializeEntity } from '../utils/entities.js'
 import { computeProfileStats } from '../utils/profileStats.js'
 import { getAvatar } from '../services/avatarService.js'
+import { moderationMessage } from '../utils/moderation.js'
+import { relationshipBetween } from '../services/friendService.js'
 import {
   normalizePreferences,
   normalizeProfileSettings,
@@ -106,7 +108,8 @@ async function loadFavoriteEntities(user) {
 /**
  * Public profile for `params.username`.
  * Private profiles and hidden tabs are only returned to the owner; email and
- * watchlist notes are never included.
+ * watchlist notes are never included. Signed-in visitors also get their
+ * `relationship` to the owner (`friends`, `outgoing`, `incoming`, or `none`).
  *
  * @param {import('express').Request} req - Reads `params.username`; `req.user` when signed in.
  * @param {import('express').Response} res - 200 `{ data: profile }`, 404 unknown or private, or 500.
@@ -137,9 +140,13 @@ export const getPublicProfile = async (req, res) => {
       ? await Promise.all([loadFavoriteContent(user._id), loadFavoriteEntities(user)])
       : [[], null]
 
+    const relationship =
+      req.user && !isOwner ? await relationshipBetween(req.user._id, user._id) : null
+
     res.json({
       success: true,
       data: {
+        relationship,
         user: {
           id: user._id,
           username: user.username,
@@ -177,7 +184,7 @@ export const getPublicProfile = async (req, res) => {
  * Save profile customization (visibility, accent, headline, tabs) and bio.
  *
  * @param {import('express').Request} req - Optional `body.settings` (partial) and `body.bio`.
- * @param {import('express').Response} res - 200 `{ data: { settings, bio } }`, 400 bio too long, 404, or 500.
+ * @param {import('express').Response} res - 200 `{ data: { settings, bio } }`, 400 bio too long or blocked language, 404, or 500.
  * @returns {Promise<void>}
  */
 export const updateProfileSettings = async (req, res) => {
@@ -188,6 +195,14 @@ export const updateProfileSettings = async (req, res) => {
         success: false,
         message: `Bio must be ${PROFILE_BIO_MAX} characters or fewer.`,
       })
+    }
+
+    const blocked = moderationMessage({
+      Bio: bio,
+      Headline: settings && typeof settings === 'object' ? settings.headline : undefined,
+    })
+    if (blocked) {
+      return res.status(400).json({ success: false, message: blocked })
     }
 
     const user = await User.findById(req.user._id)

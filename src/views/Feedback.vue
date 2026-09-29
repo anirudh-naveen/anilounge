@@ -14,6 +14,12 @@
           Tell us about a bug, a missing feature, or anything else that would make AniLounge better.
         </p>
         <BetaFeedback />
+        <p class="discord-note">
+          Want to chat with the team and other users?
+          <a :href="DISCORD_INVITE_URL" target="_blank" rel="noopener noreferrer"
+            >Join our Discord server</a
+          >.
+        </p>
       </section>
     </div>
   </div>
@@ -21,6 +27,7 @@
 
 <script setup lang="ts">
 import BetaFeedback from '@/components/BetaFeedback.vue'
+import { DISCORD_INVITE_URL } from '@/utils/community'
 
 defineOptions({
   name: 'FeedbackPage',
@@ -70,5 +77,16 @@ defineOptions({
   margin: 0 0 1.75rem;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+.discord-note {
+  margin: 1.5rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.discord-note a {
+  color: var(--coral-primary);
+  font-weight: 600;
 }
 </style>

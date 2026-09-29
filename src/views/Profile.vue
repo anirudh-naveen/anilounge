@@ -68,6 +68,13 @@
               >
                 Share profile
               </button>
+              <FriendButton
+                v-if="profile.relationship"
+                :user-id="profile.user.id"
+                :username="profile.user.username"
+                :relationship="profile.relationship"
+                @update:relationship="(value) => profile && (profile.relationship = value)"
+              />
               <button
                 v-if="profile.isOwner"
                 type="button"
@@ -481,6 +488,7 @@ import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import PreferencesEditor from '@/components/PreferencesEditor.vue'
 import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
+import FriendButton from '@/components/FriendButton.vue'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type {
   ProfileAccent,

@@ -4,6 +4,7 @@
 
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type { WatchlistStatus } from '@/utils/watchlist'
+import type { Relationship } from '@/types/social'
 
 export type ProfileTab = 'favorites' | 'watchlist' | 'stats'
 export type ProfileAccent = 'coral' | 'teal' | 'violet' | 'gold' | 'rose' | 'sky'
@@ -58,6 +59,8 @@ export interface PublicProfile {
   }
   settings: ProfileSettings
   isOwner: boolean
+  /** Signed-in visitor's link to this user; null for the owner and guests. */
+  relationship?: Relationship | null
   /** Tabs in display order; hidden tabs are included only for the owner. */
   tabs: ProfileTab[]
   favorites: {

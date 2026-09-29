@@ -29,6 +29,7 @@ import {
   sortForCatalogTab,
 } from '../utils/catalogTabs.js'
 import { validationResult } from 'express-validator'
+import { censorText } from '../utils/moderation.js'
 import { startSession } from '../../config/postgres.js'
 
 const movieLikeTypes = ['movie', 'special']
@@ -556,14 +557,16 @@ function chatUserContext(user) {
  */
 export const aiSearch = async (req, res) => {
   try {
-    const { query } = req.body
-
-    if (!query) {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Search query is required',
+        message: errors.array()[0].msg,
+        errors: errors.array(),
       })
     }
+
+    const { query } = req.body
 
     const aiResults = await geminiService.searchContent(query, {
       excludeIds: chatUserContext(req.user)?.excludeIds,
@@ -599,7 +602,7 @@ export const aiChat = async (req, res) => {
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
+        message: errors.array()[0].msg,
         errors: errors.array(),
       })
     }
@@ -613,7 +616,7 @@ export const aiChat = async (req, res) => {
     res.json({
       success: true,
       data: {
-        response: chatResponse.response,
+        response: censorText(chatResponse.response),
         results: chatResponse.results || [],
         searchSuggestion: chatResponse.searchSuggestion,
         timestamp: new Date(),

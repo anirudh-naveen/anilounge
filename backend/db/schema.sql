@@ -263,6 +263,8 @@ CREATE INDEX IF NOT EXISTS users_pending_signup_idx ON users (created_at) WHERE 
 -- Opt-out for announcement emails (services/announcementService.js). Security and
 -- account emails ignore it.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS announcement_emails BOOLEAN NOT NULL DEFAULT true;
+-- Opt-out for friend request emails (services/emailPreferenceService.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_request_emails BOOLEAN NOT NULL DEFAULT true;
 
 -- Profile pictures live in the database (services/avatarService.js) so they survive
 -- redeploys and work from every environment that shares this database.
@@ -304,6 +306,26 @@ CREATE TABLE IF NOT EXISTS friendships (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (follower_id, followee_id),
   CHECK (follower_id <> followee_id)
+);
+
+-- Friend requests (services/friendService.js). `follower_id` sent the request; an
+-- accepted row is a friendship in both directions. The optional note is shown with the
+-- request and becomes the first direct message once accepted.
+ALTER TABLE friendships ADD COLUMN IF NOT EXISTS message TEXT CHECK (char_length(message) <= 300);
+ALTER TABLE friendships ADD COLUMN IF NOT EXISTS responded_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS friendships_followee_idx ON friendships (followee_id, status);
+
+-- Re-request cooldown (services/friendService.js). Each time a request from
+-- requester to recipient ends without a friendship (cancelled or declined), or the
+-- requester unfriends the recipient, `strikes` goes up and new requests are paused
+-- for 5 minutes, doubling with every strike. Strikes never reset.
+CREATE TABLE IF NOT EXISTS friend_request_cooldowns (
+  requester_id   UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  recipient_id   UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  strikes        INTEGER NOT NULL DEFAULT 0,
+  blocked_until  TIMESTAMPTZ,
+  PRIMARY KEY (requester_id, recipient_id),
+  CHECK (requester_id <> recipient_id)
 );
 
 CREATE TABLE IF NOT EXISTS watchlist (
@@ -422,6 +444,11 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at     TIMESTAMPTZ,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Inbox (services/notificationService.js): the comment a post_comment/comment_reply
+-- notification points at.
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS comment_id UUID REFERENCES comments (id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

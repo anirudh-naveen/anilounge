@@ -362,6 +362,7 @@
     "email:announce": "node src/scripts/sendAnnouncement.js",
     "db:migrate-mongo": "node src/scripts/migrateMongoToPostgres.js",
     "db:migrate-legacy": "node src/scripts/migrateLegacyPostgres.js",
+    "db:drop-legacy": "node src/scripts/dropLegacyTables.js",
     "db:ingest-relations": "node src/scripts/ingestMalRelations.js",
     "db:merge-characters": "node src/scripts/mergeFranchiseCharacters.js",
     "db:reload": "node src/scripts/reloadCatalog.js",
