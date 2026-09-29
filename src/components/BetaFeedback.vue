@@ -63,13 +63,14 @@ const submitFeedback = async () => {
   try {
     isSubmitting.value = true
 
-    await fetch(`${API_BASE_URL}/feedback`, {
+    const response = await fetch(`${API_BASE_URL}/feedback`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(form.value),
     })
+    if (!response.ok) throw new Error(`Feedback rejected (${response.status})`)
 
     toast.success('Thank you for your feedback!')
     form.value = {

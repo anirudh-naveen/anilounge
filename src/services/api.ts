@@ -224,6 +224,18 @@ export const securityAPI = {
   newBackupCodes: (code: string) => api.post('/account/2fa/backup-codes', { code }),
 }
 
+/** Optional email categories; account and security emails cannot be turned off. */
+export interface EmailPreferences {
+  announcements: boolean
+  friend_requests: boolean
+}
+
+export const emailPreferencesAPI = {
+  get: () => api.get('/account/email-preferences'),
+
+  update: (changes: Partial<EmailPreferences>) => api.put('/account/email-preferences', changes),
+}
+
 export const profileAPI = {
   getPublicProfile: (username: string) => api.get(`/users/${encodeURIComponent(username)}`),
 
@@ -283,6 +295,20 @@ export const homeAPI = {
   getUpdates: () => api.get('/home/updates'),
 
   getCharacterOfTheDay: () => api.get('/home/character-of-the-day'),
+}
+
+export const friendsAPI = {
+  list: () => api.get('/friends'),
+
+  search: (q: string) => api.get('/friends/search', { params: { q } }),
+
+  sendRequest: (userId: string, message?: string) =>
+    api.post('/friends/requests', { userId, message }),
+
+  accept: (userId: string) => api.post(`/friends/requests/${userId}/accept`, {}),
+
+  /** Decline an incoming request, cancel an outgoing one, or unfriend. */
+  remove: (userId: string) => api.delete(`/friends/${userId}`),
 }
 
 export const watchlistAPI = {

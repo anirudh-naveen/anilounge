@@ -119,6 +119,46 @@
           </div>
         </div>
 
+        <!-- Email -->
+        <div id="email" class="settings-section">
+          <h2>Email</h2>
+          <div class="settings-card">
+            <!-- Title: Optional Emails -->
+            <div v-for="option in EMAIL_OPTIONS" :key="option.key" class="setting-item">
+              <div class="setting-info">
+                <h3>{{ option.title }}</h3>
+                <p>{{ option.description }}</p>
+              </div>
+              <div class="setting-control">
+                <label class="email-toggle">
+                  <input
+                    type="checkbox"
+                    :checked="emailPreferences?.[option.key] ?? true"
+                    :disabled="!emailPreferences || emailSaving"
+                    :data-testid="`email-pref-${option.key}`"
+                    @change="saveEmailPreference(option.key, $event)"
+                  />
+                  <span>{{ emailPreferences?.[option.key] === false ? 'Off' : 'On' }}</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Title: Account Emails -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <h3>Account &amp; security emails</h3>
+                <p>Always on</p>
+              </div>
+              <div class="setting-control">
+                <p class="setting-hint">
+                  Sign-up and sign-in codes, unlock links, email-change notices, and account
+                  deletion warnings always send, since they protect your account.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Privacy -->
         <div class="settings-section">
           <h2>Privacy & Security</h2>
@@ -392,9 +432,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { securityAPI } from '@/services/api'
+import { ref, computed, nextTick, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { emailPreferencesAPI, securityAPI, type EmailPreferences } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
@@ -408,6 +448,7 @@ defineOptions({
 const authStore = useAuthStore()
 const toast = useToast()
 const router = useRouter()
+const route = useRoute()
 
 // Form data
 const username = ref('')
@@ -627,11 +668,55 @@ const deleteAccount = async () => {
   }
 }
 
+const EMAIL_OPTIONS: { key: keyof EmailPreferences; title: string; description: string }[] = [
+  {
+    key: 'friend_requests',
+    title: 'Friend requests',
+    description: 'An email when someone sends you a friend request',
+  },
+  {
+    key: 'announcements',
+    title: 'Announcements',
+    description: 'Occasional news about AniLounge features',
+  },
+]
+const emailPreferences = ref<EmailPreferences | null>(null)
+const emailSaving = ref(false)
+
+const loadEmailPreferences = async () => {
+  try {
+    const response = await emailPreferencesAPI.get()
+    emailPreferences.value = response.data.data as EmailPreferences
+  } catch (err) {
+    toast.error(apiMessage(err, 'Could not load email preferences.'))
+  }
+}
+
+const saveEmailPreference = async (key: keyof EmailPreferences, event: Event) => {
+  const enabled = (event.target as HTMLInputElement).checked
+  emailSaving.value = true
+  try {
+    const response = await emailPreferencesAPI.update({ [key]: enabled })
+    emailPreferences.value = response.data.data as EmailPreferences
+    toast.success(enabled ? 'Emails turned on.' : 'Emails turned off.')
+  } catch (err) {
+    ;(event.target as HTMLInputElement).checked = !enabled
+    toast.error(apiMessage(err, 'Could not save email preferences.'))
+  } finally {
+    emailSaving.value = false
+  }
+}
+
 // Initialize form data
 onMounted(() => {
   username.value = authStore.user?.username || ''
   email.value = authStore.user?.email || ''
   loadSecurityStatus()
+  loadEmailPreferences()
+  // Email footers link to /settings#email.
+  if (route.hash === '#email') {
+    nextTick(() => document.getElementById('email')?.scrollIntoView({ behavior: 'smooth' }))
+  }
 })
 </script>
 
@@ -714,6 +799,22 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.email-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.email-toggle input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--coral-primary);
+  cursor: pointer;
 }
 
 .form-input {

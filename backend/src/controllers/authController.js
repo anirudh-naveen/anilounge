@@ -587,6 +587,7 @@ export const updateProfile = async (req, res) => {
  */
 export const changePassword = async (req, res) => {
   try {
+    if (rejectInvalid(req, res)) return
     if (req.user.isDemo()) {
       return res.status(403).json({
         success: false,

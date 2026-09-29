@@ -146,6 +146,20 @@ export const bruteForceProtection = {
   },
 }
 
+/** Body/query keys holding user prose (posts, messages, bios, searches), always bound as SQL parameters. */
+const FREE_TEXT_FIELDS = new Set([
+  'body',
+  'title',
+  'message',
+  'bio',
+  'headline',
+  'notes',
+  'review',
+  'query',
+  'q',
+  'text',
+])
+
 /**
  * Recursively scan body/query/params strings for Mongo operator / eval patterns.
  * On a hit, bans the IP and returns 400 without throwing to Express.
@@ -156,7 +170,7 @@ export const bruteForceProtection = {
  * @returns {void}
  */
 export const databaseProtection = (req, res, next) => {
-  const dangerousPatterns = [
+  const operatorPatterns = [
     /\$where/i,
     /\$ne/i,
     /\$gt/i,
@@ -168,13 +182,13 @@ export const databaseProtection = (req, res, next) => {
     /\$or/i,
     /\$and/i,
     /javascript:/i,
-    /this\./i,
-    /function/i,
-    /eval/i,
   ]
+  const dangerousPatterns = [...operatorPatterns, /this\./i, /function/i, /eval/i]
 
   /**
    * Walk a JSON-like value and throw if a string matches a dangerous pattern.
+   * Prose fields skip the word patterns, so "I loved this." or "evaluate" in a post
+   * is not treated as an injection attempt.
    *
    * @param {unknown} obj - Current node (string, object, or other).
    * @param {string} [path=''] - Dotted path used in the thrown message.
@@ -182,7 +196,9 @@ export const databaseProtection = (req, res, next) => {
    */
   const checkForInjection = (obj, path = '') => {
     if (typeof obj === 'string') {
-      for (const pattern of dangerousPatterns) {
+      const field = path.slice(path.lastIndexOf('.') + 1)
+      const patterns = FREE_TEXT_FIELDS.has(field) ? operatorPatterns : dangerousPatterns
+      for (const pattern of patterns) {
         if (pattern.test(obj)) {
           throw new Error(`Potential NoSQL injection detected in ${path}`)
         }
