@@ -6,6 +6,7 @@ import type { PublicProfile } from '@/types/profile'
 
 const getPublicProfile = vi.fn()
 const updateSettings = vi.fn()
+const setFeaturedBadge = vi.fn()
 const updateProfile = vi.fn()
 const authState = { isDemoUser: false }
 
@@ -21,6 +22,7 @@ vi.mock('@/services/api', async (importOriginal) => {
       ...actual.profileAPI,
       getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
       updateSettings: (...args: unknown[]) => updateSettings(...args),
+      setFeaturedBadge: (...args: unknown[]) => setFeaturedBadge(...args),
     },
   }
 })
@@ -39,11 +41,18 @@ vi.mock('@/stores/auth', () => ({
   }),
 }))
 
-vi.mock('@/stores/staff', () => ({
-  useStaffStore: () => ({
+const badges = vi.hoisted(() => ({
+  held: [] as string[],
+  featured: null as string | null,
+  choice: null as string | null,
+}))
+
+vi.mock('@/stores/badges', () => ({
+  useBadgesStore: () => ({
     load: () => Promise.resolve(),
-    roleFor: () => null,
-    cosmeticFor: () => [],
+    badgesFor: () => badges.held,
+    featuredFor: () => badges.featured,
+    choiceFor: () => badges.choice,
   }),
 }))
 
@@ -240,5 +249,45 @@ describe('Profile', () => {
     await wrapper.get('[data-testid="customize-profile"]').trigger('click')
     expect(wrapper.find('[data-testid="picture-demo-note"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="picture-input"]').exists()).toBe(false)
+  })
+
+  it('lists badges under the name for visitors, without the emblem picker', async () => {
+    Object.assign(badges, { held: ['admin', 'artist'], featured: 'artist', choice: 'artist' })
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile() } })
+    const { wrapper } = await mountAt('/u/mika')
+
+    const section = wrapper.get('[data-testid="profile-badges"]')
+    expect(section.findAll('.badge-name').map((name) => name.text())).toEqual(['Admin', 'Artist'])
+    expect(section.find('.badge-card.featured').text()).toContain('Artist')
+    expect(section.find('[data-testid="emblem-picker"]').exists()).toBe(false)
+    Object.assign(badges, { held: [], featured: null, choice: null })
+  })
+
+  it('lets the owner pick which badge shows next to their name', async () => {
+    Object.assign(badges, { held: ['admin', 'artist'], featured: 'admin', choice: null })
+    setFeaturedBadge.mockResolvedValue({ data: { data: {} } })
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
+    const { wrapper } = await mountAt('/u/mika')
+
+    const picker = wrapper.get('[data-testid="emblem-picker"]')
+    expect(picker.findAll('option').map((option) => option.text())).toEqual([
+      'Automatic (Admin)',
+      'Admin',
+      'Artist',
+      'No emblem',
+    ])
+    await picker.setValue('artist')
+    await flushPromises()
+    expect(setFeaturedBadge).toHaveBeenCalledWith('artist')
+    await picker.setValue('')
+    await flushPromises()
+    expect(setFeaturedBadge).toHaveBeenLastCalledWith(null)
+    Object.assign(badges, { held: [], featured: null, choice: null })
+  })
+
+  it('has no Badges section for people without badges', async () => {
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile() } })
+    const { wrapper } = await mountAt('/u/mika')
+    expect(wrapper.find('[data-testid="profile-badges"]').exists()).toBe(false)
   })
 })

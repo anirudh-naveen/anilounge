@@ -35,6 +35,7 @@ import { isMuted, muteEndsAt, MUTE_DURATIONS } from '../utils/accountStatus.js'
 import { HttpError } from '../utils/httpError.js'
 import { escapeLike } from './friendService.js'
 import { revokeAllSessions } from './sessionService.js'
+import { GRANTABLE_BADGES } from '../utils/badges.js'
 import { loadManagedLinks } from './adminLinks.js'
 import { describeRow, logAction, quoteValue } from './adminLog.js'
 import {
@@ -731,21 +732,19 @@ export async function setBan(actor, targetId, { banned, reason } = {}) {
   return reloadUser(target.id, owners)
 }
 
-/** Badge-only roles with no permissions; any mix per user. */
-export const COSMETIC_ROLES = ['developer', 'artist', 'influencer']
-const COSMETIC_LABELS = { developer: 'Developer', artist: 'Artist', influencer: 'Influencer' }
+const BADGE_LABELS = { developer: 'Developer', artist: 'Artist', influencer: 'Influencer' }
 
 /**
- * Set a user's cosmetic roles (admins and the creator; self included). Not for the
- * demo account or banned users.
+ * Set the grantable badges a user holds (Developer, Artist, Influencer; admins and the
+ * creator, self included). Not for the demo account or banned users.
  * @param {object} actor - The signed-in admin (`req.user`).
  * @param {string} targetId
- * @param {unknown} roles - Full list of cosmetic roles the user should have.
+ * @param {unknown} roles - Full list of grantable badges the user should have.
  * @returns {Promise<object>} The updated user view.
  */
 export async function setCosmeticRoles(actor, targetId, roles) {
-  if (!Array.isArray(roles) || !roles.every((role) => COSMETIC_ROLES.includes(role))) {
-    throw new HttpError(400, `Roles must be from ${COSMETIC_ROLES.join(', ')}.`)
+  if (!Array.isArray(roles) || !roles.every((role) => GRANTABLE_BADGES.includes(role))) {
+    throw new HttpError(400, `Badges must be from ${GRANTABLE_BADGES.join(', ')}.`)
   }
   if (!isUuid(String(targetId || ''))) throw new HttpError(400, 'Invalid user id.')
   const { rows } = await query(
@@ -754,15 +753,15 @@ export async function setCosmeticRoles(actor, targetId, roles) {
   )
   const target = rows[0]
   if (!target || target.pending_signup) throw new HttpError(404, 'User not found.')
-  if (target.is_demo) throw new HttpError(400, "The demo account can't have roles.")
+  if (target.is_demo) throw new HttpError(400, "The demo account can't have badges.")
   if (target.banned_at) throw new HttpError(400, 'Unban this account first.')
 
-  const next = COSMETIC_ROLES.filter((role) => roles.includes(role))
+  const next = GRANTABLE_BADGES.filter((role) => roles.includes(role))
   const before = target.cosmetic_roles || []
   await query('UPDATE users SET cosmetic_roles = $2 WHERE id = $1', [target.id, next])
 
-  const added = next.filter((role) => !before.includes(role)).map((role) => COSMETIC_LABELS[role])
-  const removed = before.filter((role) => !next.includes(role)).map((role) => COSMETIC_LABELS[role])
+  const added = next.filter((role) => !before.includes(role)).map((role) => BADGE_LABELS[role])
+  const removed = before.filter((role) => !next.includes(role)).map((role) => BADGE_LABELS[role])
   const parts = [
     ...(added.length ? [`gave ${added.join(', ')}`] : []),
     ...(removed.length ? [`removed ${removed.join(', ')}`] : []),
@@ -771,34 +770,10 @@ export async function setCosmeticRoles(actor, targetId, roles) {
     await logAction(
       'moderation',
       actor,
-      `Roles for ${quoteValue(target.username)}: ${parts.join('; ')}`,
+      `Badges for ${quoteValue(target.username)}: ${parts.join('; ')}`,
     )
   }
   return reloadUser(target.id, parseAdminEmails())
-}
-
-/**
- * Public list of accounts with badges: creator/admin (owners from ADMIN_EMAILS show
- * as admins) and cosmetic roles.
- * @returns {Promise<Array<{ id: string, username: string, role: 'creator' | 'admin' | null, cosmetic: string[] }>>}
- */
-export async function listStaff() {
-  const owners = [...parseAdminEmails()]
-  const { rows } = await query(
-    `SELECT id, username, role, cosmetic_roles,
-            (role IN ('admin', 'creator') OR lower(email) = ANY($1::text[])) AS staff
-     FROM users
-     WHERE banned_at IS NULL AND NOT is_demo AND email_verified_at IS NOT NULL
-       AND (role IN ('admin', 'creator') OR lower(email) = ANY($1::text[])
-            OR cardinality(cosmetic_roles) > 0)`,
-    [owners],
-  )
-  return rows.map((row) => ({
-    id: String(row.id),
-    username: row.username,
-    role: row.staff ? (row.role === 'creator' ? 'creator' : 'admin') : null,
-    cosmetic: row.cosmetic_roles || [],
-  }))
 }
 
 export default {
@@ -812,6 +787,5 @@ export default {
   setUserRole,
   muteUser,
   setBan,
-  listStaff,
   setCosmeticRoles,
 }

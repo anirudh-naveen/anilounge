@@ -54,6 +54,51 @@
               </p>
               <p v-if="profile.user.bio" class="bio">{{ profile.user.bio }}</p>
               <p class="member-since">Member since {{ formatDate(profile.user.createdAt) }}</p>
+
+              <!-- Title: Badges -->
+              <section
+                v-if="profileBadges.length"
+                class="badges-section"
+                data-testid="profile-badges"
+              >
+                <h2 class="badges-title">Badges</h2>
+                <ul class="badge-list">
+                  <li
+                    v-for="badge in profileBadges"
+                    :key="badge.id"
+                    class="badge-card"
+                    :class="{ featured: badge.id === featuredBadge }"
+                    :title="badge.description"
+                  >
+                    <BadgeEmblem :badge="badge.id" size="xl" />
+                    <span class="badge-name">{{ badge.label }}</span>
+                    <span
+                      v-if="badge.id === featuredBadge"
+                      class="badge-featured"
+                      title="Shown next to the name"
+                      aria-label="Shown next to the name"
+                    >
+                      ★
+                    </span>
+                  </li>
+                </ul>
+                <label v-if="profile.isOwner && emblemBadges.length" class="emblem-picker">
+                  <span>Next to my name</span>
+                  <select
+                    class="input emblem-select"
+                    :value="emblemChoice"
+                    :disabled="savingEmblem"
+                    data-testid="emblem-picker"
+                    @change="saveEmblem(($event.target as HTMLSelectElement).value)"
+                  >
+                    <option value="">Automatic ({{ emblemBadges[0]!.label }})</option>
+                    <option v-for="badge in emblemBadges" :key="badge.id" :value="badge.id">
+                      {{ badge.label }}
+                    </option>
+                    <option :value="NO_EMBLEM">No emblem</option>
+                  </select>
+                </label>
+              </section>
               <div v-if="favoriteGenres.length" class="genre-tags">
                 <span v-for="genre in favoriteGenres" :key="genre" class="genre-tag">
                   {{ genre }}
@@ -473,7 +518,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineOptions, ref, watch } from 'vue'
+import { computed, defineOptions, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
@@ -492,6 +537,9 @@ import PreferencesEditor from '@/components/PreferencesEditor.vue'
 import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
+import BadgeEmblem from '@/components/BadgeEmblem.vue'
+import { useBadgesStore } from '@/stores/badges'
+import { NO_EMBLEM, badgeInfo } from '@/utils/badges'
 import FriendButton from '@/components/FriendButton.vue'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type {
@@ -578,6 +626,35 @@ const loadProfile = async () => {
 }
 
 watch(username, loadProfile, { immediate: true })
+
+// --- Badges ------------------------------------------------------------------
+
+const badgesStore = useBadgesStore()
+const savingEmblem = ref(false)
+const profileUsername = computed(() => profile.value?.user.username)
+const profileBadges = computed(() => badgesStore.badgesFor(profileUsername.value).map(badgeInfo))
+const emblemBadges = computed(() => profileBadges.value.filter((badge) => badge.emblem))
+const featuredBadge = computed(() => badgesStore.featuredFor(profileUsername.value))
+/** Select value: '' = automatic, a badge id, or 'none'. */
+const emblemChoice = computed(() => badgesStore.choiceFor(profileUsername.value) ?? '')
+
+onMounted(() => {
+  badgesStore.load()
+})
+
+const saveEmblem = async (value: string) => {
+  savingEmblem.value = true
+  try {
+    await profileAPI.setFeaturedBadge(value || null)
+    await badgesStore.load(true)
+    toast.success('Saved.')
+  } catch (error) {
+    const apiError = error as { response?: { data?: { message?: string } } }
+    toast.error(apiError.response?.data?.message || 'Could not save your badge.')
+  } finally {
+    savingEmblem.value = false
+  }
+}
 
 const selectTab = (tab: ProfileTab) => {
   activeTab.value = tab
@@ -936,6 +1013,76 @@ const handleImageError = (event: Event) => {
 .member-since {
   margin: 0.4rem 0 0;
   color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.badges-section {
+  margin-top: 0.9rem;
+}
+
+.badges-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.badge-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.badge-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 5.5rem;
+  padding: 0.7rem 0.6rem 0.55rem;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-parchment);
+}
+
+.badge-card.featured {
+  border-color: var(--border-hover);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.12);
+}
+
+.badge-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.badge-featured {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--coral-primary);
+}
+
+.emblem-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.emblem-select {
+  width: auto;
+  padding: 0.35rem 0.6rem;
   font-size: 0.85rem;
 }
 

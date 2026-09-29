@@ -69,6 +69,9 @@ function mapUserRow(row) {
     mutedUntil: row.muted_until || null,
     muteReason: row.mute_reason || null,
     bannedAt: row.banned_at || null,
+    // Granted badges and the emblem pick (see utils/badges.js).
+    cosmeticRoles: Array.isArray(row.cosmetic_roles) ? row.cosmetic_roles : [],
+    featuredBadge: row.featured_badge || null,
     failedLoginAttempts: Number(row.failed_login_attempts || 0),
     lockUntil: row.lock_until,
     lastLogin: row.last_login_at,

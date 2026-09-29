@@ -244,6 +244,9 @@ export const profileAPI = {
   updateSettings: (data: { settings?: Partial<ProfileSettings>; bio?: string }) =>
     api.put('/profile/settings', data),
 
+  /** Emblem next to your name: a badge id you hold, null (your highest), or 'none'. */
+  setFeaturedBadge: (badge: string | null) => api.put('/profile/featured-badge', { badge }),
+
   getFavoriteContentIds: () => api.get('/favorites/content'),
 
   favoriteContent: (id: string) => api.post(`/content/${id}/favorite`),
@@ -360,9 +363,9 @@ export const adminAPI = {
     api.post(`/admin/users/${id}/ban`, { banned, reason }),
 }
 
-/** Public list of staff accounts behind the creator/admin badges. */
-export const staffAPI = {
-  list: () => api.get('/staff'),
+/** Public list of accounts with badges and the emblem each shows by their name. */
+export const badgesAPI = {
+  list: () => api.get('/badges'),
 }
 
 export const watchlistAPI = {
