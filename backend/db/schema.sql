@@ -328,10 +328,14 @@ ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin', 'creator'));
 CREATE UNIQUE INDEX IF NOT EXISTS users_single_creator ON users ((true)) WHERE role = 'creator';
 
--- Cosmetic roles (services/adminService.js): badges next to the username with no
--- permissions. Any mix; the creator and admins assign them from the admin page.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS cosmetic_roles TEXT[] NOT NULL DEFAULT '{}'
-  CHECK (cosmetic_roles <@ ARRAY['developer', 'artist', 'influencer']::text[]);
+-- Badges (utils/badges.js). Creator/Admin badges come from the role; every other badge
+-- a user holds is granted here (Developer, Artist, Influencer today, more later; ids are
+-- checked against the registry in code, so new badges need no schema change).
+-- `featured_badge` is the one emblem shown next to the name: NULL = their highest,
+-- 'none' = no emblem.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cosmetic_roles TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_cosmetic_roles_check;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS featured_badge TEXT;
 
 -- Moderation (services/adminService.js). A muted user can't do anything other people see
 -- until `muted_until` (year 9999 = until unmuted). A banned user can't sign in.

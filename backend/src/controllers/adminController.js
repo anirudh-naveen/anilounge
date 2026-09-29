@@ -259,7 +259,7 @@ export const setBan = async (req, res) => {
 }
 
 /**
- * Set a user's cosmetic roles (Developer, Artist, Influencer); badges only.
+ * Set the badges an admin can grant (Developer, Artist, Influencer); badges only.
  *
  * @param {import('express').Request} req - `params.id`, `body.roles` (full list).
  * @param {import('express').Response} res - 200 `{ data: user }`, 400, 404, or 500.
@@ -268,25 +268,9 @@ export const setBan = async (req, res) => {
 export const setCosmeticRoles = async (req, res) => {
   try {
     const data = await adminService.setCosmeticRoles(req.user, req.params.id, req.body?.roles)
-    res.json({ success: true, message: `Roles updated for ${data.username}.`, data })
+    res.json({ success: true, message: `Badges updated for ${data.username}.`, data })
   } catch (error) {
     sendError(res, error, 'Error updating roles')
-  }
-}
-
-/**
- * Public: accounts with badges (creator/admin and cosmetic roles) for usernames.
- *
- * @param {import('express').Request} req
- * @param {import('express').Response} res - 200 `{ data: [{ id, username, role, cosmetic }] }` or 500.
- * @returns {Promise<void>}
- */
-export const listStaff = async (req, res) => {
-  try {
-    res.set('Cache-Control', 'public, max-age=60')
-    res.json({ success: true, data: await adminService.listStaff() })
-  } catch (error) {
-    sendError(res, error, 'Error loading staff')
   }
 }
 
@@ -305,6 +289,5 @@ export default {
   setUserRole,
   muteUser,
   setBan,
-  listStaff,
   setCosmeticRoles,
 }

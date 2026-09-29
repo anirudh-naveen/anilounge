@@ -24,11 +24,12 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => auth,
 }))
 
-vi.mock('@/stores/staff', () => ({
-  useStaffStore: () => ({
+vi.mock('@/stores/badges', () => ({
+  useBadgesStore: () => ({
     load: () => Promise.resolve(),
-    roleFor: () => null,
-    cosmeticFor: () => [],
+    badgesFor: () => [],
+    featuredFor: () => null,
+    choiceFor: () => null,
   }),
 }))
 

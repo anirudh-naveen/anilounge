@@ -631,8 +631,8 @@
           </div>
         </div>
         <p class="social-meta admin-rules">
-          Admins can mute users and give Developer, Artist, and Influencer badges (these grant
-          nothing).
+          Admins can mute users and give Developer, Artist, and Influencer badges (badges grant
+          nothing; people pick which one shows by their name).
           <template v-if="authStore.isCreator">
             As the creator, you can also add or remove admins and ban users.
           </template>
@@ -668,7 +668,7 @@
                 </div>
                 <div v-if="!user.isDemo && !user.bannedAt" class="cosmetic-toggles">
                   <button
-                    v-for="role in COSMETIC_ROLES"
+                    v-for="role in GRANTABLE_BADGES"
                     :key="role"
                     type="button"
                     class="cosmetic-toggle"
@@ -678,7 +678,8 @@
                     :data-testid="`cosmetic-${role}`"
                     @click="toggleCosmetic(user, role)"
                   >
-                    {{ COSMETIC_LABELS[role] }}
+                    <BadgeEmblem :badge="role" />
+                    {{ badgeInfo(role).label }}
                   </button>
                 </div>
                 <p v-if="user.bannedAt && user.banReason" class="social-note">
@@ -830,7 +831,9 @@ import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { adminAPI, getDetailsRouteName, getImageUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
-import { COSMETIC_ROLES, useStaffStore, type CosmeticRole } from '@/stores/staff'
+import BadgeEmblem from '@/components/BadgeEmblem.vue'
+import { useBadgesStore } from '@/stores/badges'
+import { GRANTABLE_BADGES, badgeInfo } from '@/utils/badges'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
 defineOptions({ name: 'AdminPage' })
@@ -902,7 +905,8 @@ type AdminUser = {
   muteReason: string | null
   bannedAt: string | null
   banReason: string | null
-  cosmeticRoles: CosmeticRole[]
+  /** Granted badges (Developer, Artist, Influencer). */
+  cosmeticRoles: string[]
 }
 
 const TABS = [
@@ -960,7 +964,7 @@ const SEARCH_DELAY_MS = 300
 
 const toast = useToast()
 const authStore = useAuthStore()
-const staffStore = useStaffStore()
+const badgesStore = useBadgesStore()
 const activeTab = ref<TabId>('content')
 
 const emptyPage = <T,>(): Page<T> => ({ items: [], page: 1, pageSize: 25, total: 0 })
@@ -1464,7 +1468,7 @@ const moderate = async (
     Object.assign(user, response.data.data)
     toast.success(response.data.message)
     action.value = null
-    staffStore.load(true)
+    badgesStore.load(true)
   } catch (error) {
     toast.error(apiErrorMessage(error, 'That did not work.'))
   } finally {
@@ -1492,14 +1496,8 @@ const submitAction = (user: AdminUser) => {
   }
 }
 
-const COSMETIC_LABELS: Record<CosmeticRole, string> = {
-  developer: 'Developer',
-  artist: 'Artist',
-  influencer: 'Influencer',
-}
-
-/** Give or take a badge-only role (any admin, any mix, self included). */
-const toggleCosmetic = (user: AdminUser, role: CosmeticRole) => {
+/** Give or take a grantable badge (any admin, any mix, self included). */
+const toggleCosmetic = (user: AdminUser, role: string) => {
   const next = user.cosmeticRoles.includes(role)
     ? user.cosmeticRoles.filter((held) => held !== role)
     : [...user.cosmeticRoles, role]
@@ -2160,7 +2158,10 @@ onUnmounted(() => {
 }
 
 .cosmetic-toggle {
-  padding: 0.15rem 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.6rem 0.15rem 0.4rem;
   border: 1px dashed var(--border-color);
   border-radius: 999px;
   background: none;

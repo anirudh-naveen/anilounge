@@ -3,13 +3,25 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/services/api', () => ({
-  staffAPI: {
+  badgesAPI: {
     list: vi.fn().mockResolvedValue({
       data: {
         data: [
-          { id: '1', username: 'Anirudh', role: 'creator' },
-          { id: '2', username: 'mod', role: 'admin', cosmetic: ['developer'] },
-          { id: '3', username: 'painter', role: null, cosmetic: ['artist', 'influencer'] },
+          {
+            id: '1',
+            username: 'Anirudh',
+            badges: ['creator', 'developer'],
+            featured: 'creator',
+            choice: null,
+          },
+          {
+            id: '2',
+            username: 'mod',
+            badges: ['admin', 'artist'],
+            featured: 'artist',
+            choice: 'artist',
+          },
+          { id: '3', username: 'quiet', badges: ['influencer'], featured: null, choice: 'none' },
         ],
       },
     }),
@@ -17,26 +29,33 @@ vi.mock('@/services/api', () => ({
 }))
 
 import RoleBadge from '@/components/RoleBadge.vue'
+import BadgeEmblem from '@/components/BadgeEmblem.vue'
 
 describe('RoleBadge', () => {
-  it('marks the creator and admins, and nobody else', async () => {
+  it('shows only the emblem each person picked, and nothing for none or no badges', async () => {
     setActivePinia(createPinia())
     const creator = mount(RoleBadge, { props: { username: 'anirudh' } })
     const admin = mount(RoleBadge, { props: { username: 'MOD' } })
+    const quiet = mount(RoleBadge, { props: { username: 'quiet' } })
     const regular = mount(RoleBadge, { props: { username: 'viewer' } })
     await flushPromises()
-    expect(creator.find('[data-testid="role-badge-creator"]').attributes('title')).toBe(
-      'AniLounge creator',
-    )
-    expect(admin.find('[data-testid="role-badge-admin"]').exists()).toBe(true)
-    expect(regular.html()).not.toContain('role-badge')
-    expect(admin.find('[data-testid="role-badge-developer"]').exists()).toBe(true)
-    const painter = mount(RoleBadge, { props: { username: 'painter' } })
-    await flushPromises()
-    expect(painter.find('[data-testid="role-badge-admin"]').exists()).toBe(false)
-    expect(painter.findAll('.cosmetic-badge').map((badge) => badge.attributes('title'))).toEqual([
-      'Artist',
-      'Influencer',
-    ])
+    expect(creator.find('[data-testid="emblem-creator"]').attributes('title')).toBe('Creator')
+    expect(creator.findAll('.emblem')).toHaveLength(1)
+    expect(admin.find('[data-testid="emblem-artist"]').exists()).toBe(true)
+    expect(admin.find('[data-testid="emblem-admin"]').exists()).toBe(false)
+    expect(quiet.html()).not.toContain('emblem')
+    expect(regular.html()).not.toContain('emblem')
+  })
+})
+
+describe('BadgeEmblem', () => {
+  it('draws the known emblems and a plain medal for future badges', () => {
+    for (const id of ['creator', 'admin', 'developer', 'artist', 'influencer']) {
+      const wrapper = mount(BadgeEmblem, { props: { badge: id } })
+      expect(wrapper.classes()).toContain(id)
+    }
+    const future = mount(BadgeEmblem, { props: { badge: 'early_supporter' } })
+    expect(future.classes()).toContain('medal')
+    expect(future.find('.sparkle').exists()).toBe(false)
   })
 })

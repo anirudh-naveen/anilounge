@@ -171,8 +171,8 @@ router.get('/avatars/:id', validateObjectId, profileController.getAvatarImage)
 /** Shareable user profile; optional auth lets owners see private profiles and hidden tabs. */
 router.get('/users/:username', optionalAuthenticate, profileController.getPublicProfile)
 
-/** Accounts with badges (creator/admin and cosmetic roles) next to usernames. */
-router.get('/staff', adminController.listStaff)
+/** Accounts with badges, and the emblem each shows next to their name. */
+router.get('/badges', profileController.listBadges)
 
 /** Anyone can submit beta feedback; only admins can list it (it holds submitter emails). */
 router.post('/feedback', feedbackController.submitFeedback)
@@ -309,6 +309,9 @@ router.put(
   [body('settings').optional().isObject(), body('bio').optional().isString()],
   profileController.updateProfileSettings,
 )
+
+/** Which badge shows as the emblem next to your name (null = your highest, 'none'). */
+router.put('/profile/featured-badge', profileController.updateFeaturedBadge)
 
 /** Title favorites (movies, series, and specials) behind the card heart. */
 router.get('/favorites/content', profileController.getFavoriteContentIds)

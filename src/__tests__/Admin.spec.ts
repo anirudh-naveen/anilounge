@@ -45,7 +45,7 @@ vi.mock('@/services/api', async (original) => ({
     getLog: api.getLog,
     setCosmeticRoles: api.setCosmeticRoles,
   },
-  staffAPI: { list: api.staff },
+  badgesAPI: { list: api.staff },
 }))
 
 import Admin from '@/views/Admin.vue'
