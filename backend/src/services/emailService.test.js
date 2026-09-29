@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, it } from 'node:test'
-import { sendAnnouncementEmail, sendFeedbackEmail } from './emailService.js'
+import { hasPublicAppUrl, sendAnnouncementEmail, sendFeedbackEmail } from './emailService.js'
 
 const env = { ...process.env }
 const realFetch = globalThis.fetch
@@ -73,5 +73,27 @@ describe('sendAnnouncementEmail', () => {
     assert.ok(
       sent[0].html.includes('href="https://anilounge.net/api/email/unsubscribe?u=1&#38;t=abc"'),
     )
+  })
+
+  it('uses the live logo even when the app URL is localhost', async () => {
+    process.env.PUBLIC_APP_URL = 'http://localhost:5174'
+    delete process.env.EMAIL_LOGO_URL
+    await sendAnnouncementEmail(
+      { email: 'fan@example.com', username: 'fan' },
+      { subject: 'Hi', bodyText: 'Body' },
+      'https://www.anilounge.net/api/email/unsubscribe',
+    )
+    assert.ok(sent[0].html.includes('src="https://www.anilounge.net/anilounge-logo.png"'))
+  })
+})
+
+describe('hasPublicAppUrl', () => {
+  it('rejects localhost and plain http', () => {
+    process.env.PUBLIC_APP_URL = 'http://localhost:5174'
+    assert.equal(hasPublicAppUrl(), false)
+    process.env.PUBLIC_APP_URL = 'http://anilounge.net'
+    assert.equal(hasPublicAppUrl(), false)
+    process.env.PUBLIC_APP_URL = 'https://www.anilounge.net'
+    assert.equal(hasPublicAppUrl(), true)
   })
 })
