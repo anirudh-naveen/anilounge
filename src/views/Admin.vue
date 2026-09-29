@@ -35,6 +35,7 @@
           @click="activeTab = tab.id"
         >
           {{ tab.label }}
+          <span v-if="tab.id === 'sync' && syncCount" class="tab-count">{{ syncCount }}</span>
         </button>
       </div>
 
@@ -257,6 +258,151 @@
           </section>
         </div>
       </template>
+
+      <!-- Title: Sync Changes -->
+      <section
+        v-else-if="activeTab === 'sync'"
+        class="social-panel"
+        data-testid="admin-sync-changes"
+      >
+        <header class="social-panel-header">
+          <div>
+            <h2 class="social-panel-title">What the catalog sync changed</h2>
+            <p class="social-panel-sub">
+              The hourly sync updates unlocked fields and never blanks one out. Locked fields
+              keep your value. Notices clear after 14 days.
+            </p>
+          </div>
+        </header>
+        <div class="admin-filters">
+          <div class="kind-tabs compact" role="tablist" aria-label="Notice filter">
+            <button
+              v-for="option in SYNC_FILTERS"
+              :key="option.id"
+              type="button"
+              role="tab"
+              class="kind-tab"
+              :class="{ active: syncFilter === option.id }"
+              :aria-selected="syncFilter === option.id"
+              @click="syncFilter = option.id"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <button
+            v-if="syncResults.items.length"
+            type="button"
+            class="btn btn-ghost btn-small sync-dismiss-all"
+            :disabled="syncBusy"
+            @click="resolveSync('dismiss', syncResults.items)"
+          >
+            Dismiss all on this page
+          </button>
+        </div>
+        <div v-if="syncLoading" class="social-loading"><div class="spinner"></div></div>
+        <p v-else-if="!syncResults.items.length" class="social-empty">
+          Nothing from the sync in the last 14 days.
+        </p>
+        <ul v-else class="sync-list">
+          <li v-for="notice in syncResults.items" :key="notice.id" class="sync-item">
+            <div class="sync-head">
+              <img
+                :src="imageFor(notice.imagePath)"
+                alt=""
+                class="chip-image"
+                :class="{ round: isPerson(notice.kind) }"
+              />
+              <div class="sync-title">
+                <button type="button" class="admin-link sync-name" @click="openFromSync(notice)">
+                  {{ notice.name }}
+                </button>
+                <span class="social-meta">
+                  {{ KIND_BY_ID[notice.kind]?.singular }} · {{ FIELD_LABELS[notice.field] || notice.field }}
+                  · expires {{ expiresLabel(notice.expiresAt) }}
+                </span>
+              </div>
+              <span class="admin-pill" :class="notice.outcome === 'blocked' ? 'owner' : 'warn'">
+                {{ notice.outcome === 'blocked' ? 'Blocked by lock' : 'Changed' }}
+              </span>
+            </div>
+            <div class="sync-diff">
+              <div class="sync-side">
+                <span class="sync-label">
+                  {{ notice.outcome === 'blocked' ? 'Your locked value' : 'Before' }}
+                </span>
+                <img
+                  v-if="IMAGE_FIELDS.includes(notice.field) && notice.oldValue"
+                  :src="getImageUrl(String(notice.oldValue), 'w185')"
+                  alt=""
+                  class="sync-image"
+                />
+                <p class="sync-value">{{ displayValue(notice.field, notice.oldValue) }}</p>
+              </div>
+              <div class="sync-side">
+                <span class="sync-label">
+                  {{ notice.outcome === 'blocked' ? 'Sync wanted' : 'Now' }}
+                </span>
+                <img
+                  v-if="IMAGE_FIELDS.includes(notice.field) && notice.newValue"
+                  :src="getImageUrl(String(notice.newValue), 'w185')"
+                  alt=""
+                  class="sync-image"
+                />
+                <p class="sync-value">{{ displayValue(notice.field, notice.newValue) }}</p>
+              </div>
+            </div>
+            <div class="note-actions">
+              <button
+                type="button"
+                class="btn btn-ghost btn-small"
+                :disabled="syncBusy"
+                @click="resolveSync('dismiss', [notice])"
+              >
+                Dismiss
+              </button>
+              <button
+                v-if="notice.outcome === 'changed'"
+                type="button"
+                class="btn btn-primary btn-small"
+                :disabled="syncBusy"
+                data-testid="sync-revert"
+                @click="resolveSync('revert', [notice])"
+              >
+                Revert &amp; lock
+              </button>
+              <button
+                v-else
+                type="button"
+                class="btn btn-primary btn-small"
+                :disabled="syncBusy"
+                data-testid="sync-apply"
+                @click="resolveSync('apply', [notice])"
+              >
+                Use new value
+              </button>
+            </div>
+          </li>
+        </ul>
+        <div v-if="pageCount(syncResults) > 1" class="admin-pager">
+          <button
+            type="button"
+            class="btn btn-ghost btn-small"
+            :disabled="syncResults.page <= 1"
+            @click="loadSync(syncResults.page - 1)"
+          >
+            Previous
+          </button>
+          <span class="social-meta">Page {{ syncResults.page }} of {{ pageCount(syncResults) }}</span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-small"
+            :disabled="syncResults.page >= pageCount(syncResults)"
+            @click="loadSync(syncResults.page + 1)"
+          >
+            Next
+          </button>
+        </div>
+      </section>
 
       <!-- Title: Users -->
       <section v-else class="social-panel" data-testid="admin-users">
@@ -503,8 +649,10 @@ type AdminUser = {
 
 const TABS = [
   { id: 'content', label: 'Content' },
+  { id: 'sync', label: 'Sync changes' },
   { id: 'users', label: 'Users & moderation' },
 ] as const
+type TabId = (typeof TABS)[number]['id']
 const KINDS: Array<{ id: Kind; singular: string; plural: string }> = [
   { id: 'movie', singular: 'Movie', plural: 'Movies' },
   { id: 'series', singular: 'Series', plural: 'Series' },
@@ -555,7 +703,7 @@ const SEARCH_DELAY_MS = 300
 const toast = useToast()
 const authStore = useAuthStore()
 const staffStore = useStaffStore()
-const activeTab = ref<'content' | 'users'>('content')
+const activeTab = ref<TabId>('content')
 
 const emptyPage = <T,>(): Page<T> => ({ items: [], page: 1, pageSize: 25, total: 0 })
 const pageCount = (page: Page<unknown>) => Math.max(1, Math.ceil(page.total / page.pageSize))
@@ -778,7 +926,111 @@ watch([userQuery, userFilter], () => {
 
 watch(activeTab, (tab) => {
   if (tab === 'users' && !usersLoaded.value && !usersLoading.value) loadUsers(1)
+  if (tab === 'sync') loadSync(1)
 })
+
+// --- Sync changes ----------------------------------------------------------
+
+type SyncNotice = {
+  id: string
+  contentId: string
+  kind: Kind
+  name: string
+  imagePath: string | null
+  field: string
+  outcome: 'changed' | 'blocked'
+  oldValue: string | number | null
+  newValue: string | number | null
+  expiresAt: string
+}
+
+const SYNC_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'changed', label: 'Changed' },
+  { id: 'blocked', label: 'Blocked by lock' },
+] as const
+const AIRING_LABELS: Record<string, string> = {
+  upcoming: 'Upcoming',
+  airing: 'Airing',
+  finished: 'Finished',
+}
+
+const syncFilter = ref<(typeof SYNC_FILTERS)[number]['id']>('all')
+const syncResults = ref<Page<SyncNotice>>(emptyPage())
+const syncLoading = ref(false)
+const syncBusy = ref(false)
+const syncCount = ref(0)
+let syncSeq = 0
+
+const loadSyncCount = async () => {
+  try {
+    const response = await adminAPI.countSyncChanges()
+    syncCount.value = response.data.data.count
+  } catch {
+    // The badge is optional.
+  }
+}
+
+const loadSync = async (page = 1) => {
+  const seq = ++syncSeq
+  syncLoading.value = true
+  try {
+    const response = await adminAPI.listSyncChanges({
+      outcome: syncFilter.value === 'all' ? undefined : syncFilter.value,
+      page,
+    })
+    if (seq === syncSeq) syncResults.value = response.data.data
+  } catch (error) {
+    if (seq === syncSeq) toast.error(apiErrorMessage(error, 'Could not load sync changes.'))
+  } finally {
+    if (seq === syncSeq) syncLoading.value = false
+  }
+}
+
+watch(syncFilter, () => loadSync(1))
+
+const displayValue = (field: string, value: unknown) => {
+  if (value === null || value === undefined || value === '') return '(empty)'
+  if (field === 'airingStatus') return AIRING_LABELS[String(value)] || String(value)
+  return String(value)
+}
+
+const expiresLabel = (value: string) => {
+  const days = Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000))
+  return days <= 1 ? 'within a day' : `in ${days} days`
+}
+
+const resolveSync = async (action: 'revert' | 'apply' | 'dismiss', notices: SyncNotice[]) => {
+  if (!notices.length) return
+  if (notices.length > 1 && !window.confirm(`Dismiss ${notices.length} notices?`)) return
+  syncBusy.value = true
+  try {
+    const response = await adminAPI.resolveSyncChanges(
+      action,
+      notices.map((notice) => notice.id),
+    )
+    toast.success(response.data.message)
+    const page = syncResults.value.items.length === notices.length ? 1 : syncResults.value.page
+    await Promise.all([loadSync(page), loadSyncCount()])
+    // Keep an open editor in step with what just changed.
+    if (editor.value && notices.some((notice) => notice.contentId === editor.value?.id)) {
+      const id = editor.value.id
+      editor.value = null
+      await openContent(id, { fresh: true })
+    }
+  } catch (error) {
+    toast.error(apiErrorMessage(error, 'That did not work.'))
+  } finally {
+    syncBusy.value = false
+  }
+}
+
+/** Jump to the Content tab with this row open in the editor. */
+const openFromSync = async (notice: SyncNotice) => {
+  activeTab.value = 'content'
+  contentKind.value = notice.kind
+  await openContent(notice.contentId, { fresh: true })
+}
 
 const isSelf = (user: AdminUser) => user.id === authStore.user?.id
 
@@ -857,7 +1109,10 @@ const unban = (user: AdminUser) => {
   moderate(user, () => adminAPI.setBan(user.id, false))
 }
 
-onMounted(() => loadContent(1))
+onMounted(() => {
+  loadContent(1)
+  loadSyncCount()
+})
 onUnmounted(() => {
   clearTimeout(contentTimer)
   clearTimeout(userTimer)
@@ -1245,7 +1500,109 @@ onUnmounted(() => {
   margin-top: 0.75rem;
 }
 
+.tab-count {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-left: 0.35rem;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  line-height: 1.4em;
+  text-align: center;
+  background: var(--coral-deep);
+  color: var(--text-on-accent);
+}
+
+.sync-dismiss-all {
+  margin-left: auto;
+}
+
+.sync-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.sync-item {
+  padding: 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+}
+
+.sync-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.7rem;
+}
+
+.sync-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.sync-name {
+  margin: 0;
+  text-align: left;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sync-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+}
+
+.sync-side {
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+
+.sync-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sync-value {
+  margin: 0;
+  max-height: 9rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.sync-image {
+  display: block;
+  width: 70px;
+  margin-bottom: 0.4rem;
+  border-radius: 6px;
+}
+
+.sync-item .note-actions {
+  justify-content: flex-end;
+}
+
 @media (max-width: 860px) {
+  .sync-diff {
+    grid-template-columns: 1fr;
+  }
+
   .admin-layout {
     grid-template-columns: 1fr;
   }

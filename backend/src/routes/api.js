@@ -338,6 +338,14 @@ router.patch(
   [body('changes').optional().isObject(), body('unlock').optional().isArray({ max: 20 })],
   adminController.updateContent,
 )
+router.get('/admin/sync-changes', adminOnly, adminController.listSyncChanges)
+router.get('/admin/sync-changes/count', adminOnly, adminController.countSyncChanges)
+router.post(
+  '/admin/sync-changes/:action(revert|apply|dismiss)',
+  adminOnly,
+  [body('ids').isArray({ min: 1, max: 100 })],
+  adminController.resolveSyncChanges,
+)
 router.get('/admin/users', adminOnly, adminController.listUsers)
 router.put(
   '/admin/users/:id/role',

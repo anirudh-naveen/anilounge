@@ -322,6 +322,15 @@ export const adminAPI = {
   updateContent: (id: string, body: { changes?: Record<string, unknown>; unlock?: string[] }) =>
     api.patch(`/admin/content/${id}`, body),
 
+  listSyncChanges: (params: { outcome?: string; page?: number }) =>
+    api.get('/admin/sync-changes', { params }),
+
+  countSyncChanges: () => api.get('/admin/sync-changes/count'),
+
+  /** revert: restore the old value and lock it; apply: unlock and take the sync's value. */
+  resolveSyncChanges: (action: 'revert' | 'apply' | 'dismiss', ids: string[]) =>
+    api.post(`/admin/sync-changes/${action}`, { ids }),
+
   listUsers: (params: { q?: string; filter?: string; page?: number }) =>
     api.get('/admin/users', { params }),
 

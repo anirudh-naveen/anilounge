@@ -15,9 +15,15 @@ import { query, startSession } from '../../config/postgres.js'
 import { isCatalogId, isUuid } from '../db/ids.js'
 import { appearanceRoleToApi, contentTypeFromKind } from '../db/kinds.js'
 import Content, { loadAdminOverrides } from '../models/Content.js'
-import { isAdminUser, isCreatorUser, isOwnerEmail, parseAdminEmails } from '../middleware/adminOnly.js'
+import {
+  isAdminUser,
+  isCreatorUser,
+  isOwnerEmail,
+  parseAdminEmails,
+} from '../middleware/adminOnly.js'
 import {
   EDITABLE_KINDS,
+  applyAdminOverrides,
   ENTITY_KINDS,
   WATCHABLE_KINDS,
   fieldsForKind,
@@ -29,6 +35,13 @@ import { isMuted, muteEndsAt, MUTE_DURATIONS } from '../utils/accountStatus.js'
 import { HttpError } from '../utils/httpError.js'
 import { escapeLike } from './friendService.js'
 import { revokeAllSessions } from './sessionService.js'
+import {
+  LIVE_NOTICE_SQL,
+  NOTICE_TTL_DAYS,
+  clearSyncNotices,
+  noticesTableReady,
+  pruneExpiredNotices,
+} from './syncGuard.js'
 
 const PAGE_SIZE = 25
 /** Most linked rows returned per group in the editor. */
@@ -301,7 +314,12 @@ export async function getEditableContent(id) {
  * @returns {Promise<void>}
  */
 async function writeEntityFields(id, kind, overrides, values) {
-  const columns = { name: 'name', nativeName: 'native_name', about: 'about', imagePath: 'image_path' }
+  const columns = {
+    name: 'name',
+    nativeName: 'native_name',
+    about: 'about',
+    imagePath: 'image_path',
+  }
   const sets = []
   const params = [id]
   for (const [field, column] of Object.entries(columns)) {
@@ -374,9 +392,159 @@ export async function updateContent(id, { changes = {}, unlock = [] } = {}) {
       // save() re-reads admin_overrides and applies them, including the new values.
       await doc.save()
     }
+    // A hand edit answers any sync notice for the same field.
+    await clearSyncNotices(row.id, Object.keys(values))
   })
 
   return getEditableContent(id)
+}
+
+// ---------------------------------------------------------------------------
+// Sync notices
+// ---------------------------------------------------------------------------
+
+export const NOTICE_OUTCOMES = ['changed', 'blocked']
+const MAX_BATCH = 100
+
+/**
+ * Sync notices from the last 14 days, newest first.
+ * @param {{ outcome?: string, page?: unknown }} params - `outcome` filters to changed|blocked.
+ * @returns {Promise<{ items: object[], page: number, pageSize: number, total: number }>}
+ */
+export async function listSyncChanges({ outcome, page } = {}) {
+  const current = pageNumber(page)
+  if (!(await noticesTableReady())) return { items: [], page: 1, pageSize: PAGE_SIZE, total: 0 }
+  await pruneExpiredNotices()
+  const params = []
+  let where = LIVE_NOTICE_SQL.replace('created_at', 'n.created_at')
+  if (NOTICE_OUTCOMES.includes(outcome)) {
+    params.push(outcome)
+    where += ` AND n.outcome = $1`
+  }
+  const [{ rows }, count] = await Promise.all([
+    query(
+      `SELECT n.id, n.content_id, n.field, n.outcome, n.old_value, n.new_value, n.created_at,
+              c.kind, c.name, c.image_path
+       FROM content_sync_changes n
+       JOIN content c ON c.id = n.content_id
+       WHERE ${where}
+       ORDER BY n.created_at DESC, c.name, n.field
+       LIMIT ${PAGE_SIZE} OFFSET ${(current - 1) * PAGE_SIZE}`,
+      params,
+    ),
+    query(`SELECT count(*)::int AS n FROM content_sync_changes n WHERE ${where}`, params),
+  ])
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      contentId: row.content_id,
+      kind: row.kind,
+      name: row.name,
+      imagePath: row.image_path,
+      field: row.field,
+      outcome: row.outcome,
+      oldValue: row.old_value,
+      newValue: row.new_value,
+      createdAt: row.created_at,
+      expiresAt: new Date(new Date(row.created_at).getTime() + NOTICE_TTL_DAYS * 86400000),
+    })),
+    page: current,
+    pageSize: PAGE_SIZE,
+    total: count.rows[0].n,
+  }
+}
+
+/** @returns {Promise<number>} Live notices (0 before the schema is applied). */
+export async function countSyncChanges() {
+  if (!(await noticesTableReady())) return 0
+  const { rows } = await query(
+    `SELECT count(*)::int AS n FROM content_sync_changes WHERE ${LIVE_NOTICE_SQL}`,
+  )
+  return rows[0].n
+}
+
+/**
+ * @param {unknown} ids
+ * @returns {string[]} Valid notice ids (at most MAX_BATCH).
+ */
+function noticeIds(ids) {
+  const list = (Array.isArray(ids) ? ids : [ids]).map(String).filter((id) => isUuid(id))
+  if (!list.length) throw new HttpError(400, 'No notices given.')
+  if (list.length > MAX_BATCH) throw new HttpError(400, `At most ${MAX_BATCH} at a time.`)
+  return [...new Set(list)]
+}
+
+/**
+ * Take the sync's value for a field an admin had locked: unlock it and write the value.
+ * @param {string} contentId
+ * @param {string} kind
+ * @param {string} field
+ * @param {unknown} value
+ * @returns {Promise<void>}
+ */
+async function applySyncValue(contentId, kind, field, value) {
+  const { values, errors } = parseContentEdits({ [field]: value }, kind)
+  if (errors.length) throw new HttpError(400, `Can't apply ${field}: ${errors.join('. ')}`)
+  const overrides = await loadAdminOverrides(contentId)
+  delete overrides[field]
+  await query('UPDATE content SET admin_overrides = $2 WHERE id = $1', [
+    contentId,
+    JSON.stringify(overrides),
+  ])
+  if (ENTITY_KINDS.includes(kind)) {
+    await writeEntityFields(contentId, kind, overrides, values)
+  } else {
+    const doc = await Content.findById(contentId)
+    if (!doc) throw new HttpError(404, 'Content not found.')
+    applyAdminOverrides(doc, values, kind)
+    doc.$acceptFields = [field]
+    await doc.save()
+  }
+}
+
+/**
+ * Act on sync notices:
+ * - 'revert' a 'changed' notice: put the old value back and lock the field;
+ * - 'apply' a 'blocked' notice: unlock the field and take the sync's value;
+ * - 'dismiss': just remove the notice.
+ * @param {object} actor - The signed-in admin (`req.user`), for the log.
+ * @param {unknown} ids
+ * @param {'revert' | 'apply' | 'dismiss'} action
+ * @returns {Promise<{ done: number }>}
+ */
+export async function resolveSyncChanges(actor, ids, action) {
+  const list = noticeIds(ids)
+  let done = 0
+  if (action === 'dismiss') {
+    const result = await query('DELETE FROM content_sync_changes WHERE id = ANY($1::uuid[])', [
+      list,
+    ])
+    done = result.rowCount || 0
+  } else {
+    const wanted = action === 'revert' ? 'changed' : 'blocked'
+    for (const id of list) {
+      const { rows } = await query(
+        `SELECT n.content_id, n.field, n.outcome, n.old_value, n.new_value, c.kind
+         FROM content_sync_changes n JOIN content c ON c.id = n.content_id
+         WHERE n.id = $1`,
+        [id],
+      )
+      const notice = rows[0]
+      if (!notice || notice.outcome !== wanted) continue
+      if (action === 'revert') {
+        // Same path as a hand edit: writes, locks, and clears the notice.
+        await updateContent(notice.content_id, { changes: { [notice.field]: notice.old_value } })
+      } else {
+        await inTransaction(() =>
+          applySyncValue(notice.content_id, notice.kind, notice.field, notice.new_value),
+        )
+        await query('DELETE FROM content_sync_changes WHERE id = $1', [id])
+      }
+      done += 1
+    }
+  }
+  console.log(`Admin ${actor._id} ${action} on ${done} sync notice(s)`)
+  return { done }
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +605,9 @@ export async function listUsers({ q, filter, page } = {}) {
   }
   if (filter === 'staff') {
     params.push([...owners])
-    clauses.push(`(u.role IN ('admin', 'creator') OR lower(u.email) = ANY($${params.length}::text[]))`)
+    clauses.push(
+      `(u.role IN ('admin', 'creator') OR lower(u.email) = ANY($${params.length}::text[]))`,
+    )
   } else if (filter === 'muted') {
     clauses.push('u.muted_until > now()')
   } else if (filter === 'banned') {
@@ -476,9 +646,10 @@ async function loadTarget(actor, targetId) {
   if (String(actor._id) === String(targetId)) {
     throw new HttpError(400, "You can't do that to your own account.")
   }
-  const { rows } = await query(`SELECT ${USER_COLUMNS}, u.pending_signup FROM users u WHERE u.id = $1`, [
-    targetId,
-  ])
+  const { rows } = await query(
+    `SELECT ${USER_COLUMNS}, u.pending_signup FROM users u WHERE u.id = $1`,
+    [targetId],
+  )
   const target = rows[0]
   if (!target || target.pending_signup) throw new HttpError(404, 'User not found.')
   if (target.role === 'creator') throw new HttpError(403, "The creator's account can't be changed.")
@@ -541,14 +712,19 @@ export async function muteUser(actor, targetId, { duration, reason } = {}) {
   }
 
   if (duration === 'off') {
-    await query('UPDATE users SET muted_until = NULL, mute_reason = NULL WHERE id = $1', [target.id])
+    await query('UPDATE users SET muted_until = NULL, mute_reason = NULL WHERE id = $1', [
+      target.id,
+    ])
     console.log(`Admin ${actor._id} unmuted user ${target.id}`)
     return reloadUser(target.id, owners)
   }
 
   const until = muteEndsAt(String(duration))
   if (!until) {
-    throw new HttpError(400, `Duration must be one of ${[...Object.keys(MUTE_DURATIONS), 'off'].join(', ')}.`)
+    throw new HttpError(
+      400,
+      `Duration must be one of ${[...Object.keys(MUTE_DURATIONS), 'off'].join(', ')}.`,
+    )
   }
   await query('UPDATE users SET muted_until = $2, mute_reason = $3 WHERE id = $1', [
     target.id,
@@ -619,6 +795,9 @@ export default {
   searchContent,
   getEditableContent,
   updateContent,
+  listSyncChanges,
+  countSyncChanges,
+  resolveSyncChanges,
   listUsers,
   setUserRole,
   muteUser,
