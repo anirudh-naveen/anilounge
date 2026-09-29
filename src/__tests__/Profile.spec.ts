@@ -263,25 +263,45 @@ describe('Profile', () => {
     Object.assign(badges, { held: [], featured: null, choice: null })
   })
 
-  it('lets the owner pick which badge shows next to their name', async () => {
+  it('lets the owner pick the badge next to their name from Customize', async () => {
     Object.assign(badges, { held: ['admin', 'artist'], featured: 'admin', choice: null })
     setFeaturedBadge.mockResolvedValue({ data: { data: {} } })
+    updateSettings.mockResolvedValue({
+      data: { data: { settings: buildProfile().settings, bio: '' } },
+    })
     getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
     const { wrapper } = await mountAt('/u/mika')
 
+    // Not in the Badges section any more.
+    expect(wrapper.get('[data-testid="profile-badges"]').find('select').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="customize-profile"]').trigger('click')
     const picker = wrapper.get('[data-testid="emblem-picker"]')
     expect(picker.findAll('option').map((option) => option.text())).toEqual([
       'Automatic (Admin)',
       'Admin',
       'Artist',
-      'No emblem',
+      'No badge',
     ])
     await picker.setValue('artist')
+    await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
     await flushPromises()
     expect(setFeaturedBadge).toHaveBeenCalledWith('artist')
-    await picker.setValue('')
+    Object.assign(badges, { held: [], featured: null, choice: null })
+  })
+
+  it('does not touch the badge when Customize saves without changing it', async () => {
+    Object.assign(badges, { held: ['admin'], featured: 'admin', choice: null })
+    setFeaturedBadge.mockReset()
+    updateSettings.mockResolvedValue({
+      data: { data: { settings: buildProfile().settings, bio: '' } },
+    })
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
+    const { wrapper } = await mountAt('/u/mika')
+    await wrapper.get('[data-testid="customize-profile"]').trigger('click')
+    await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
     await flushPromises()
-    expect(setFeaturedBadge).toHaveBeenLastCalledWith(null)
+    expect(setFeaturedBadge).not.toHaveBeenCalled()
     Object.assign(badges, { held: [], featured: null, choice: null })
   })
 
@@ -289,5 +309,24 @@ describe('Profile', () => {
     getPublicProfile.mockResolvedValue({ data: { data: buildProfile() } })
     const { wrapper } = await mountAt('/u/mika')
     expect(wrapper.find('[data-testid="profile-badges"]').exists()).toBe(false)
+  })
+
+  it('saves a custom accent from the color wheel', async () => {
+    updateSettings.mockResolvedValue({
+      data: { data: { settings: { ...buildProfile().settings, accent: '#3a7bff' }, bio: '' } },
+    })
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
+    const { wrapper } = await mountAt('/u/mika')
+    await wrapper.get('[data-testid="customize-profile"]').trigger('click')
+    await wrapper.get('[data-testid="accent-wheel"]').setValue('#3A7BFF')
+    expect(wrapper.text()).toContain('#3a7bff')
+    await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
+    await flushPromises()
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ settings: expect.objectContaining({ accent: '#3a7bff' }) }),
+    )
+    const style = wrapper.get('.profile-page').attributes('style')
+    expect(style).toContain('--profile-accent: #3a7bff')
+    expect(style).toContain('--profile-on-accent: #ffffff')
   })
 })

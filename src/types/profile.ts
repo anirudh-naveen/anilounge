@@ -7,7 +7,9 @@ import type { WatchlistStatus } from '@/utils/watchlist'
 import type { Relationship } from '@/types/social'
 
 export type ProfileTab = 'favorites' | 'watchlist' | 'stats'
-export type ProfileAccent = 'coral' | 'teal' | 'violet' | 'gold' | 'rose' | 'sky'
+export type ProfilePresetAccent = 'coral' | 'teal' | 'violet' | 'gold' | 'rose' | 'sky'
+/** A preset name, or a custom `#rrggbb` color from the color wheel. */
+export type ProfileAccent = ProfilePresetAccent | `#${string}`
 
 export interface ProfileSettings {
   isPublic: boolean

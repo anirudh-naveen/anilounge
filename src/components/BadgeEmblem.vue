@@ -10,7 +10,7 @@
   <span
     class="emblem"
     :class="[kind, `size-${size}`]"
-    :title="info.label"
+    :title="tooltip ? info.label : undefined"
     role="img"
     :aria-label="info.label"
     :data-testid="`emblem-${badge}`"
@@ -103,8 +103,10 @@ const props = withDefaults(
   defineProps<{
     badge: string
     size?: 'sm' | 'md' | 'lg' | 'xl'
+    /** Native hover title; off where the caller shows its own tooltip. */
+    tooltip?: boolean
   }>(),
-  { size: 'sm' },
+  { size: 'sm', tooltip: true },
 )
 
 const EMBLEMS = ['creator', 'admin', 'developer', 'artist', 'influencer']

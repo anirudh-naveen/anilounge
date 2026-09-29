@@ -7,7 +7,7 @@ import { appearanceRole, appearanceRoleToApi, entityTypeFromKind, kindFromEntity
 import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId } from '../db/ids.js'
-import Content, { attachContentRelations, loadAdminOverrides, mapContentRow } from './Content.js'
+import { attachContentRelations, loadAdminOverrides, mapContentRow } from './Content.js'
 import { applyAdminOverrides, readEditableFields } from '../utils/adminContent.js'
 import { planSyncChanges } from '../utils/syncReview.js'
 import { recordSyncNotices } from '../services/syncGuard.js'
