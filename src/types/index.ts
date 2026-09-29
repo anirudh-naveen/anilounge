@@ -65,6 +65,7 @@ export interface User {
   email: string
   isDemoAccount?: boolean
   isAdmin?: boolean
+  role?: 'user' | 'admin' | 'creator'
   profilePicture?: string
   createdAt?: string
   preferences?: {

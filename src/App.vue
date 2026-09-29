@@ -140,6 +140,7 @@
                     data-testid="nav-avatar"
                   />
                   <span class="user-name">{{ authStore.user?.username }}</span>
+                  <RoleBadge :username="authStore.user?.username" />
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
                 </button>
 
@@ -150,9 +151,6 @@
                   <router-link to="/friends" class="dropdown-item" @click="closeDropdown">
                     <span class="item-text">Friends</span>
                   </router-link>
-                  <router-link to="/settings" class="dropdown-item" @click="closeDropdown">
-                    <span class="item-text">Settings</span>
-                  </router-link>
                   <router-link
                     v-if="authStore.isAdmin"
                     to="/admin"
@@ -160,6 +158,9 @@
                     @click="closeDropdown"
                   >
                     <span class="item-text">Admin</span>
+                  </router-link>
+                  <router-link to="/settings" class="dropdown-item" @click="closeDropdown">
+                    <span class="item-text">Settings</span>
                   </router-link>
                   <div class="dropdown-divider"></div>
                   <button @click="handleLogout" class="dropdown-item logout-item">
@@ -202,6 +203,7 @@ import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
+import RoleBadge from '@/components/RoleBadge.vue'
 
 const router = useRouter()
 const route = useRoute()

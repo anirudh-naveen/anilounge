@@ -65,7 +65,10 @@ function mapUserRow(row) {
     bio: row.bio,
     isDemoAccount: Boolean(row.is_demo),
     // Missing column (schema not applied yet) reads as a regular user.
-    role: row.role === 'admin' ? 'admin' : 'user',
+    role: ['admin', 'creator'].includes(row.role) ? row.role : 'user',
+    mutedUntil: row.muted_until || null,
+    muteReason: row.mute_reason || null,
+    bannedAt: row.banned_at || null,
     failedLoginAttempts: Number(row.failed_login_attempts || 0),
     lockUntil: row.lock_until,
     lastLogin: row.last_login_at,

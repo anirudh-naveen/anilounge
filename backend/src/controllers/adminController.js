@@ -1,17 +1,18 @@
 /**
- * HTTP handlers for the admin page: content editing and user roles.
+ * HTTP handlers for the admin page: catalog editing, roles, mutes, and bans, plus the
+ * public staff list behind username badges.
  *
- * Layer: controller. Every route is behind `authMiddleware` and `adminOnly`.
- * Business rules live in `services/adminService.js`.
+ * Layer: controller. Admin routes are behind `authMiddleware` and `adminOnly` (role and
+ * ban changes also `creatorOnly`). Business rules live in `services/adminService.js`.
  */
 
 import adminService from '../services/adminService.js'
 import { sendError } from '../utils/httpError.js'
 
 /**
- * Search watchable content by title.
+ * Search one kind of catalog row by name.
  *
- * @param {import('express').Request} req - `query.q`, `query.type` (movie|series|special), `query.page`.
+ * @param {import('express').Request} req - `query.q`, `query.type` (movie|series|special|character|voice|studio), `query.page`.
  * @param {import('express').Response} res - 200 `{ data: { items, page, pageSize, total } }` or 500.
  * @returns {Promise<void>}
  */
@@ -25,10 +26,10 @@ export const searchContent = async (req, res) => {
 }
 
 /**
- * Editable values for one title.
+ * Editable values and linked rows for one catalog row.
  *
  * @param {import('express').Request} req - `params.id`.
- * @param {import('express').Response} res - 200 `{ data: { id, kind, fields, values, locked } }`, 400, 404, or 500.
+ * @param {import('express').Response} res - 200 `{ data: { id, kind, fields, values, locked, links } }`, 400, 404, or 500.
  * @returns {Promise<void>}
  */
 export const getContent = async (req, res) => {
@@ -41,7 +42,7 @@ export const getContent = async (req, res) => {
 }
 
 /**
- * Save edits to one title and lock/unlock fields against the catalog sync.
+ * Save edits to one catalog row and lock/unlock fields against the catalog sync.
  *
  * @param {import('express').Request} req - `params.id`, `body.changes` `{ field: value }`, `body.unlock` field names.
  * @param {import('express').Response} res - 200 `{ data }` (same shape as getContent), 400, 404, or 500.
@@ -58,9 +59,9 @@ export const updateContent = async (req, res) => {
 }
 
 /**
- * List users with their roles.
+ * List users with their roles and moderation state.
  *
- * @param {import('express').Request} req - `query.q`, `query.admins` ('true' for admins only), `query.page`.
+ * @param {import('express').Request} req - `query.q`, `query.filter` (all|staff|muted|banned), `query.page`.
  * @param {import('express').Response} res - 200 `{ data: { items, page, pageSize, total } }` or 500.
  * @returns {Promise<void>}
  */
@@ -74,10 +75,10 @@ export const listUsers = async (req, res) => {
 }
 
 /**
- * Make a user an admin or a regular user.
+ * Creator only: make a user an admin or a regular user.
  *
  * @param {import('express').Request} req - `params.id`, `body.role` ('user' | 'admin').
- * @param {import('express').Response} res - 200 `{ data: user }`, 400, 404, or 500.
+ * @param {import('express').Response} res - 200 `{ data: user }`, 400, 403, 404, or 500.
  * @returns {Promise<void>}
  */
 export const setUserRole = async (req, res) => {
@@ -91,4 +92,63 @@ export const setUserRole = async (req, res) => {
   }
 }
 
-export default { searchContent, getContent, updateContent, listUsers, setUserRole }
+/**
+ * Mute a user for a while, or lift the mute.
+ *
+ * @param {import('express').Request} req - `params.id`, `body.duration` (1h|24h|7d|30d|permanent|off), optional `body.reason`.
+ * @param {import('express').Response} res - 200 `{ data: user }`, 400, 403, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const muteUser = async (req, res) => {
+  try {
+    const data = await adminService.muteUser(req.user, req.params.id, req.body || {})
+    const message = data.mutedUntil ? `${data.username} is muted.` : `${data.username} is unmuted.`
+    res.json({ success: true, message, data })
+  } catch (error) {
+    sendError(res, error, 'Error updating mute')
+  }
+}
+
+/**
+ * Creator only: ban or unban a user.
+ *
+ * @param {import('express').Request} req - `params.id`, `body.banned` (boolean), optional `body.reason`.
+ * @param {import('express').Response} res - 200 `{ data: user }`, 400, 403, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const setBan = async (req, res) => {
+  try {
+    const data = await adminService.setBan(req.user, req.params.id, req.body || {})
+    const message = data.bannedAt ? `${data.username} is banned.` : `${data.username} is unbanned.`
+    res.json({ success: true, message, data })
+  } catch (error) {
+    sendError(res, error, 'Error updating ban')
+  }
+}
+
+/**
+ * Public: staff accounts, for the creator/admin badges shown next to usernames.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res - 200 `{ data: [{ id, username, role }] }` or 500.
+ * @returns {Promise<void>}
+ */
+export const listStaff = async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=60')
+    res.json({ success: true, data: await adminService.listStaff() })
+  } catch (error) {
+    sendError(res, error, 'Error loading staff')
+  }
+}
+
+export default {
+  searchContent,
+  getContent,
+  updateContent,
+  listUsers,
+  setUserRole,
+  muteUser,
+  setBan,
+  listStaff,
+}

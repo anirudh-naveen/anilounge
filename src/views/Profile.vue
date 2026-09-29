@@ -43,7 +43,10 @@
             <!-- Title: Name and Bio -->
             <div class="hero-info">
               <div class="hero-name-row">
-                <h1 data-testid="profile-username">{{ profile.user.username }}</h1>
+                <h1 data-testid="profile-username">
+                  {{ profile.user.username
+                  }}<RoleBadge :username="profile.user.username" size="lg" />
+                </h1>
                 <span v-if="!profile.settings.isPublic" class="private-badge"> Private </span>
               </div>
               <p v-if="profile.settings.headline" class="headline">
@@ -488,6 +491,7 @@ import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import PreferencesEditor from '@/components/PreferencesEditor.vue'
 import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
+import RoleBadge from '@/components/RoleBadge.vue'
 import FriendButton from '@/components/FriendButton.vue'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type {
@@ -888,6 +892,11 @@ const handleImageError = (event: Event) => {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+/* Sit the creator/admin badge on the name's cap height rather than its baseline. */
+.hero-info h1 .role-badge {
+  vertical-align: 0em;
 }
 
 .hero-info h1 {

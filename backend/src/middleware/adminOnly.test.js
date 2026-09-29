@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import adminOnly, { isAdminUser, parseAdminEmails } from './adminOnly.js'
+import adminOnly, { isAdminUser, isCreatorUser, parseAdminEmails } from './adminOnly.js'
 
 const admins = parseAdminEmails(' Owner@AniLounge.net , ops@anilounge.net,, ')
 const user = (overrides = {}) => ({
@@ -31,6 +31,22 @@ describe('isAdminUser', () => {
     assert.equal(isAdminUser(user({ email: 'mod@example.com', role: 'user' }), none), false)
     assert.equal(isAdminUser(user({ role: 'admin', emailVerified: false }), none), false)
     assert.equal(isAdminUser(user({ role: 'admin', isDemo: () => true }), none), false)
+  })
+
+  it('treats the creator as an admin and bans as no access', () => {
+    const none = parseAdminEmails('')
+    assert.equal(isAdminUser(user({ role: 'creator' }), none), true)
+    assert.equal(isAdminUser(user({ role: 'admin', bannedAt: new Date() }), none), false)
+    assert.equal(isAdminUser(user({ bannedAt: new Date() }), admins), false)
+  })
+})
+
+describe('isCreatorUser', () => {
+  it('is only the creator role', () => {
+    assert.equal(isCreatorUser(user({ role: 'creator' })), true)
+    assert.equal(isCreatorUser(user({ role: 'admin' })), false)
+    assert.equal(isCreatorUser(user()), false)
+    assert.equal(isCreatorUser(user({ role: 'creator', emailVerified: false })), false)
   })
 })
 

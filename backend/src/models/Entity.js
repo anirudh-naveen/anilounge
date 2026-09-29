@@ -7,7 +7,8 @@ import { appearanceRole, appearanceRoleToApi, entityTypeFromKind, kindFromEntity
 import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId } from '../db/ids.js'
-import Content, { attachContentRelations, mapContentRow } from './Content.js'
+import Content, { attachContentRelations, loadAdminOverrides, mapContentRow } from './Content.js'
+import { applyAdminOverrides } from '../utils/adminContent.js'
 import { knownVoiceLanguage } from '../utils/entities.js'
 
 function mapEntityRow(row) {
@@ -310,6 +311,8 @@ const SUBTYPE_SQL = {
 
 Entity.prototype.save = async function save() {
   const kind = kindFromEntityType(this.entityType)
+  // Admin edits win over whatever the catalog sync put on this document.
+  applyAdminOverrides(this, await loadAdminOverrides(this._id), kind)
   // An id collision must never turn a title (or another person kind) into this entity.
   const { rowCount } = await query(
     `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, anilist_id, created_at, updated_at)

@@ -124,7 +124,7 @@ export const getPublicProfile = async (req, res) => {
     const isOwner = Boolean(user && req.user && String(req.user._id) === String(user._id))
     const settings = user ? normalizeProfileSettings(user.profileSettings) : null
 
-    if (!user || (!settings.isPublic && !isOwner)) {
+    if (!user || user.bannedAt || (!settings.isPublic && !isOwner)) {
       return res.status(404).json({ success: false, message: 'Profile not found.' })
     }
 
