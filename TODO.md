@@ -74,6 +74,6 @@
 ## Infrastructure
 
 1. Migrate from MongoDB to a Relational Database. ✅
-2. Switch the recipient email of the site for bug/fixes to support@anilounge.net. Confirm recipient email is setup for bug reports and emails.
-3. Add a way so that I can send announcements to all users using the email notify@anilounge.net.
+2. Switch the recipient email of the site for bug/fixes to support@anilounge.net. Confirm recipient email is setup for bug reports and emails. ✅
+3. Add a way so that I can send announcements to all users using the email notify@anilounge.net. ✅
 4. Create more CI/CD test blockers before PRs.

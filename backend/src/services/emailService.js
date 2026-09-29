@@ -139,6 +139,28 @@ export async function sendEmail({ to, subject, text, html, replyTo, headers }) {
   return { delivered: false }
 }
 
+export const DEFAULT_LOGO_URL = 'https://www.anilounge.net/anilounge-logo.png'
+
+/**
+ * Whether emailed links can be opened by recipients (not localhost or plain http).
+ * @returns {boolean}
+ */
+export function hasPublicAppUrl() {
+  const { protocol, hostname } = new URL(appUrl())
+  return protocol === 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(hostname)
+}
+
+/**
+ * Absolute URL of the logo shown in email footers. Mail clients fetch images through
+ * their own proxies and need a hosted PNG (no SVG or data URIs), so this always points
+ * at the live site's copy of public/anilounge-logo.png, even when sending from a dev
+ * machine. Override with EMAIL_LOGO_URL.
+ * @returns {string}
+ */
+export function logoUrl() {
+  return process.env.EMAIL_LOGO_URL || DEFAULT_LOGO_URL
+}
+
 /**
  * Minimal branded HTML wrapper; content is trusted template markup, not user input.
  * @param {string} heading
@@ -153,7 +175,10 @@ function layout(
   return `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:Arial,sans-serif;color:#152238">
 <div style="max-width:480px;margin:32px auto;background:#fff;border-radius:12px;padding:32px">
 <h1 style="font-size:22px;margin:0 0 16px">${heading}</h1>${bodyHtml}
-<p style="font-size:12px;color:#8b93a6;margin-top:32px">${footerHtml}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e6e8ee;padding-top:16px;width:100%">
+<tr><td style="width:40px;vertical-align:middle;padding-right:12px"><a href="${appUrl()}"><img src="${logoUrl()}" width="40" height="40" alt="AniLounge" style="display:block;border:0;border-radius:8px"></a></td>
+<td style="vertical-align:middle;font-size:12px;color:#8b93a6">${footerHtml}</td></tr>
+</table>
 </div></body></html>`
 }
 

@@ -15,7 +15,12 @@
 import fs from 'fs'
 import { parseArgs } from 'util'
 import dotenv from 'dotenv'
-import { appUrl, emailProvider, sendAnnouncementEmail } from '../services/emailService.js'
+import {
+  appUrl,
+  emailProvider,
+  hasPublicAppUrl,
+  sendAnnouncementEmail,
+} from '../services/emailService.js'
 import { listAnnouncementRecipients, sendAnnouncement } from '../services/announcementService.js'
 
 dotenv.config()
@@ -78,7 +83,7 @@ try {
 
   const recipients = await listAnnouncementRecipients()
   console.log(`Subject: ${subject}\n\n${bodyText}\n`)
-  console.log(`${recipients.length} recipient(s); provider: ${provider}`)
+  console.log(`${recipients.length} recipient(s); provider: ${provider}; links: ${appUrl()}`)
 
   if (!options.send) {
     console.log(
@@ -88,6 +93,13 @@ try {
   }
   if (provider === 'console') {
     console.error('No email provider configured (RESEND_API_KEY or SMTP_HOST); refusing to send.')
+    process.exit(1)
+  }
+  if (!hasPublicAppUrl()) {
+    console.error(
+      `Links would point at ${appUrl()}, so unsubscribe links would not work; refusing to send.\n` +
+        'Rerun with PUBLIC_APP_URL=https://www.anilounge.net in front of the command.',
+    )
     process.exit(1)
   }
 
