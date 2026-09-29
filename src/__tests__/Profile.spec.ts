@@ -39,6 +39,10 @@ vi.mock('@/stores/auth', () => ({
   }),
 }))
 
+vi.mock('@/stores/staff', () => ({
+  useStaffStore: () => ({ load: () => Promise.resolve(), roleFor: () => null }),
+}))
+
 vi.mock('@/stores/favorites', () => ({
   useFavoritesStore: () => ({
     isLoaded: false,

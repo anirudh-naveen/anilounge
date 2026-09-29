@@ -264,10 +264,20 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_signup BOOLEAN NOT NULL DEFAU
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_reminder_sent_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS users_pending_signup_idx ON users (created_at) WHERE pending_signup;
 
--- Account role (middleware/adminOnly.js). Admins manage content and other users' roles
--- from the admin page. ADMIN_EMAILS accounts are admins regardless of this column.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'
-  CHECK (role IN ('user', 'admin'));
+-- Account role (middleware/adminOnly.js). Admins edit content and mute users from the
+-- admin page; the single creator (set with `npm run role:creator`) also adds/removes
+-- admins and bans users. ADMIN_EMAILS accounts are admins regardless of this column.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin', 'creator'));
+CREATE UNIQUE INDEX IF NOT EXISTS users_single_creator ON users ((true)) WHERE role = 'creator';
+
+-- Moderation (services/adminService.js). A muted user can't do anything other people see
+-- until `muted_until` (year 9999 = until unmuted). A banned user can't sign in.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mute_reason TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_reason TEXT;
 
 -- Opt-out for announcement emails (services/announcementService.js). Security and
 -- account emails ignore it.

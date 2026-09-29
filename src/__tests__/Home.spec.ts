@@ -24,6 +24,10 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => auth,
 }))
 
+vi.mock('@/stores/staff', () => ({
+  useStaffStore: () => ({ load: () => Promise.resolve(), roleFor: () => null }),
+}))
+
 const entry = (id: string, isSelf: boolean, at: string, overrides = {}) => ({
   id,
   user: {

@@ -15,7 +15,7 @@ import friendController from '../controllers/friendController.js'
 import emailPreferenceController from '../controllers/emailPreferenceController.js'
 import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
-import adminOnly from '../middleware/adminOnly.js'
+import adminOnly, { creatorOnly } from '../middleware/adminOnly.js'
 import adminController from '../controllers/adminController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
@@ -28,6 +28,7 @@ import { bruteForceProtection } from '../middleware/antiBot.js'
 import { validateObjectId } from '../middleware/security.js'
 import { isCatalogId } from '../db/ids.js'
 import { assertCleanLanguage } from '../utils/moderation.js'
+import blockWhenMuted, { changesProfileText, changesUsername } from '../middleware/muteGuard.js'
 
 const router = express.Router()
 
@@ -170,6 +171,9 @@ router.get('/avatars/:id', validateObjectId, profileController.getAvatarImage)
 /** Shareable user profile; optional auth lets owners see private profiles and hidden tabs. */
 router.get('/users/:username', optionalAuthenticate, profileController.getPublicProfile)
 
+/** Staff accounts for the creator/admin badges next to usernames. */
+router.get('/staff', adminController.listStaff)
+
 /** Anyone can submit beta feedback; only admins can list it (it holds submitter emails). */
 router.post('/feedback', feedbackController.submitFeedback)
 router.get('/feedback', authMiddleware, adminOnly, feedbackController.getFeedback)
@@ -181,6 +185,7 @@ router.use(authMiddleware)
 router.get('/auth/profile', authController.getProfile)
 router.put(
   '/auth/profile',
+  blockWhenMuted(changesUsername),
   [
     body('preferences').optional().isObject(),
     body('username')
@@ -209,6 +214,7 @@ router.put(
 )
 router.post(
   '/auth/upload-profile-picture',
+  blockWhenMuted(),
   upload.single('profilePicture'),
   handleUploadError,
   authController.uploadProfilePicture,
@@ -299,6 +305,7 @@ router.put(
 /** Profile customization; kept off `/auth` so it is not throttled by the login limiter. */
 router.put(
   '/profile/settings',
+  blockWhenMuted(changesProfileText),
   [body('settings').optional().isObject(), body('bio').optional().isString()],
   profileController.updateProfileSettings,
 )
@@ -314,11 +321,14 @@ router.get('/home/activity', homeController.getActivity)
 /** Friends and friend requests. `:id` is the other user's id. */
 router.get('/friends', friendController.getFriends)
 router.get('/friends/search', friendController.searchUsers)
-router.post('/friends/requests', friendController.sendRequest)
+router.post('/friends/requests', blockWhenMuted(), friendController.sendRequest)
 router.post('/friends/requests/:id/accept', validateObjectId, friendController.acceptRequest)
 router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
 
-/** Admin page: edit watchable content and manage user roles (role 'admin' or ADMIN_EMAILS). */
+/**
+ * Admin page: edit catalog rows and mute users (admins); add/remove admins and ban users
+ * (creator only).
+ */
 router.get('/admin/content', adminOnly, adminController.searchContent)
 router.get('/admin/content/:id', adminOnly, validateObjectId, adminController.getContent)
 router.patch(
@@ -331,10 +341,24 @@ router.patch(
 router.get('/admin/users', adminOnly, adminController.listUsers)
 router.put(
   '/admin/users/:id/role',
-  adminOnly,
+  creatorOnly,
   validateObjectId,
   [body('role').isIn(['user', 'admin'])],
   adminController.setUserRole,
+)
+router.post(
+  '/admin/users/:id/mute',
+  adminOnly,
+  validateObjectId,
+  [body('duration').isString(), body('reason').optional().isString()],
+  adminController.muteUser,
+)
+router.post(
+  '/admin/users/:id/ban',
+  creatorOnly,
+  validateObjectId,
+  [body('banned').isBoolean(), body('reason').optional().isString()],
+  adminController.setBan,
 )
 
 export default router

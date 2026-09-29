@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import {
   applyAdminOverrides,
   fieldsForKind,
+  mergeOverrides,
   parseContentEdits,
   readEditableFields,
 } from './adminContent.js'
@@ -13,6 +14,18 @@ describe('fieldsForKind', () => {
     assert.ok(!fieldsForKind('movie').includes('episodeCount'))
     assert.ok(fieldsForKind('series').includes('seasonCount'))
     assert.ok(!fieldsForKind('series').includes('runtime'))
+  })
+
+  it('gives people and studios their own fields', () => {
+    assert.deepEqual(fieldsForKind('character'), [
+      'name',
+      'englishName',
+      'nativeName',
+      'about',
+      'imagePath',
+    ])
+    assert.deepEqual(fieldsForKind('studio'), ['name', 'nativeName', 'about', 'imagePath'])
+    assert.ok(!fieldsForKind('movie').includes('name'))
   })
 })
 
@@ -76,5 +89,33 @@ describe('applyAdminOverrides', () => {
     assert.equal(values.title, 'Your Name')
     assert.equal(values.airingStatus, 'finished')
     assert.equal(values.releaseDate, '2016-08-26')
+  })
+})
+
+describe('mergeOverrides', () => {
+  it('keeps the old name as an alias when renaming, and unlocks fields', () => {
+    const next = mergeOverrides(
+      { about: 'old', name: 'Mappa' },
+      { values: { name: 'MAPPA' }, unlock: ['about'], kind: 'studio', oldName: 'Mappa' },
+    )
+    assert.deepEqual(next, { name: 'MAPPA', _aliases: ['Mappa'] })
+  })
+
+  it('drops an alias that becomes the name again', () => {
+    const next = mergeOverrides(
+      { title: 'B', _aliases: ['A'] },
+      { values: { title: 'A' }, unlock: [], kind: 'movie', oldName: 'B' },
+    )
+    assert.deepEqual(next._aliases, ['B'])
+  })
+
+  it('re-applies aliases to the sync document', () => {
+    const doc = applyAdminOverrides(
+      { name: 'Mappa', alternativeNames: ['M'] },
+      { name: 'MAPPA', _aliases: ['Mappa'] },
+      'studio',
+    )
+    assert.equal(doc.name, 'MAPPA')
+    assert.deepEqual(doc.alternativeNames, ['M', 'Mappa'])
   })
 })

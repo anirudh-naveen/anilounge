@@ -63,6 +63,7 @@ export interface SessionUser {
   email: string
   isDemoAccount?: boolean
   isAdmin?: boolean
+  role?: 'user' | 'admin' | 'creator'
   profilePicture?: string | null
   createdAt?: string
   preferences?: { favoriteGenres: string[] }
@@ -321,10 +322,22 @@ export const adminAPI = {
   updateContent: (id: string, body: { changes?: Record<string, unknown>; unlock?: string[] }) =>
     api.patch(`/admin/content/${id}`, body),
 
-  listUsers: (params: { q?: string; admins?: boolean; page?: number }) =>
+  listUsers: (params: { q?: string; filter?: string; page?: number }) =>
     api.get('/admin/users', { params }),
 
   setUserRole: (id: string, role: 'user' | 'admin') => api.put(`/admin/users/${id}/role`, { role }),
+
+  /** `duration`: 1h | 24h | 7d | 30d | permanent, or 'off' to unmute. */
+  muteUser: (id: string, duration: string, reason?: string) =>
+    api.post(`/admin/users/${id}/mute`, { duration, reason }),
+
+  setBan: (id: string, banned: boolean, reason?: string) =>
+    api.post(`/admin/users/${id}/ban`, { banned, reason }),
+}
+
+/** Public list of staff accounts behind the creator/admin badges. */
+export const staffAPI = {
+  list: () => api.get('/staff'),
 }
 
 export const watchlistAPI = {
