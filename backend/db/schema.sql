@@ -49,6 +49,22 @@ CREATE INDEX IF NOT EXISTS content_search_idx ON content USING GIN (search_vecto
 -- set by hand. Content.save re-applies them so the hourly catalog sync cannot undo them.
 ALTER TABLE content ADD COLUMN IF NOT EXISTS admin_overrides JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- Sync notices (services/syncGuard.js): what the catalog sync changed on existing rows
+-- ('changed', an admin can revert and lock it) or wanted to change on a locked field
+-- ('blocked', an admin can take the new value). One row per (content, field); rows
+-- expire 14 days after they are created.
+CREATE TABLE IF NOT EXISTS content_sync_changes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_id  UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  field       TEXT NOT NULL,
+  outcome     TEXT NOT NULL CHECK (outcome IN ('changed', 'blocked')),
+  old_value   JSONB,
+  new_value   JSONB NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (content_id, field)
+);
+CREATE INDEX IF NOT EXISTS content_sync_changes_created_idx ON content_sync_changes (created_at DESC);
+
 CREATE TABLE IF NOT EXISTS movies (
   content_id       UUID PRIMARY KEY REFERENCES content (id) ON DELETE CASCADE,
   original_title   TEXT,

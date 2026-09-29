@@ -16,6 +16,9 @@ const api = vi.hoisted(() => ({
   muteUser: vi.fn(),
   setBan: vi.fn(),
   staff: vi.fn(),
+  listSyncChanges: vi.fn(),
+  countSyncChanges: vi.fn(),
+  resolveSyncChanges: vi.fn(),
 }))
 
 vi.mock('@/services/api', async (original) => ({
@@ -28,6 +31,9 @@ vi.mock('@/services/api', async (original) => ({
     setUserRole: api.setUserRole,
     muteUser: api.muteUser,
     setBan: api.setBan,
+    listSyncChanges: api.listSyncChanges,
+    countSyncChanges: api.countSyncChanges,
+    resolveSyncChanges: api.resolveSyncChanges,
   },
   staffAPI: { list: api.staff },
 }))
@@ -103,6 +109,36 @@ describe('Admin page', () => {
     vi.clearAllMocks()
     Element.prototype.scrollIntoView = vi.fn()
     api.staff.mockResolvedValue({ data: { data: [] } })
+    api.countSyncChanges.mockResolvedValue({ data: { data: { count: 2 } } })
+    api.resolveSyncChanges.mockResolvedValue({ data: { message: 'Done.', data: { done: 1 } } })
+    api.listSyncChanges.mockResolvedValue(
+      page([
+        {
+          id: 'n1',
+          contentId: 'show-1',
+          kind: 'series',
+          name: 'Frieren',
+          imagePath: null,
+          field: 'overview',
+          outcome: 'changed',
+          oldValue: 'Old synopsis',
+          newValue: 'New synopsis',
+          expiresAt: new Date(Date.now() + 5 * 86400000).toISOString(),
+        },
+        {
+          id: 'n2',
+          contentId: 'show-1',
+          kind: 'series',
+          name: 'Frieren',
+          imagePath: null,
+          field: 'title',
+          outcome: 'blocked',
+          oldValue: 'Frieren',
+          newValue: 'Sousou no Frieren',
+          expiresAt: new Date(Date.now() + 5 * 86400000).toISOString(),
+        },
+      ]),
+    )
     api.searchContent.mockResolvedValue(
       page([{ id: 'show-1', kind: 'series', title: 'Frieren', subtitle: null, imagePath: null, releaseDate: null, edited: false }]),
     )
@@ -144,7 +180,7 @@ describe('Admin page', () => {
   it('lets admins mute regular users but not manage roles or ban', async () => {
     const wrapper = mountAdmin('admin')
     await flushPromises()
-    await wrapper.findAll('.admin-tab')[1]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
     await flushPromises()
     const text = wrapper.find('[data-testid="admin-users"]').text()
     expect(text).toContain('Mute…')
@@ -157,11 +193,29 @@ describe('Admin page', () => {
   it('gives the creator role and ban controls', async () => {
     const wrapper = mountAdmin('creator')
     await flushPromises()
-    await wrapper.findAll('.admin-tab')[1]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
     await flushPromises()
     const text = wrapper.find('[data-testid="admin-users"]').text()
     expect(text).toContain('Make admin')
     expect(text).toContain('Remove admin')
     expect(text).toContain('Ban…')
+  })
+
+  it('shows sync changes and reverts or applies them', async () => {
+    const wrapper = mountAdmin('admin')
+    await flushPromises()
+    expect(wrapper.find('.tab-count').text()).toBe('2')
+    await wrapper.findAll('.admin-tab')[1]!.trigger('click')
+    await flushPromises()
+    const panel = wrapper.find('[data-testid="admin-sync-changes"]')
+    expect(panel.text()).toContain('Old synopsis')
+    expect(panel.text()).toContain('Blocked by lock')
+
+    await wrapper.find('[data-testid="sync-revert"]').trigger('click')
+    await flushPromises()
+    expect(api.resolveSyncChanges).toHaveBeenCalledWith('revert', ['n1'])
+    await wrapper.find('[data-testid="sync-apply"]').trigger('click')
+    await flushPromises()
+    expect(api.resolveSyncChanges).toHaveBeenCalledWith('apply', ['n2'])
   })
 })

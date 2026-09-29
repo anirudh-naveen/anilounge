@@ -59,6 +59,60 @@ export const updateContent = async (req, res) => {
 }
 
 /**
+ * Sync notices from the last 14 days: what the catalog sync changed, or was blocked from
+ * changing by an admin lock.
+ *
+ * @param {import('express').Request} req - `query.outcome` (changed|blocked), `query.page`.
+ * @param {import('express').Response} res - 200 `{ data: { items, page, pageSize, total } }` or 500.
+ * @returns {Promise<void>}
+ */
+export const listSyncChanges = async (req, res) => {
+  try {
+    const data = await adminService.listSyncChanges(req.query)
+    res.json({ success: true, data })
+  } catch (error) {
+    sendError(res, error, 'Error loading sync changes')
+  }
+}
+
+/**
+ * Live notice count for the admin tab badge.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res - 200 `{ data: { count } }` or 500.
+ * @returns {Promise<void>}
+ */
+export const countSyncChanges = async (req, res) => {
+  try {
+    res.json({ success: true, data: { count: await adminService.countSyncChanges() } })
+  } catch (error) {
+    sendError(res, error, 'Error counting sync changes')
+  }
+}
+
+/**
+ * Revert (and lock), apply, or dismiss sync notices.
+ *
+ * @param {import('express').Request} req - `params.action` (revert|apply|dismiss), `body.ids` (max 100).
+ * @param {import('express').Response} res - 200 `{ data: { done } }`, 400, or 500.
+ * @returns {Promise<void>}
+ */
+export const resolveSyncChanges = async (req, res) => {
+  try {
+    const { action } = req.params
+    const data = await adminService.resolveSyncChanges(req.user, req.body?.ids, action)
+    const verb = { revert: 'Reverted and locked', apply: 'Applied', dismiss: 'Dismissed' }[action]
+    res.json({
+      success: true,
+      message: `${verb} ${data.done} change${data.done === 1 ? '' : 's'}.`,
+      data,
+    })
+  } catch (error) {
+    sendError(res, error, 'Error updating sync changes')
+  }
+}
+
+/**
  * List users with their roles and moderation state.
  *
  * @param {import('express').Request} req - `query.q`, `query.filter` (all|staff|muted|banned), `query.page`.
@@ -85,7 +139,9 @@ export const setUserRole = async (req, res) => {
   try {
     const data = await adminService.setUserRole(req.user, req.params.id, req.body?.role)
     const message =
-      data.role === 'admin' ? `${data.username} is now an admin.` : `${data.username} is no longer an admin.`
+      data.role === 'admin'
+        ? `${data.username} is now an admin.`
+        : `${data.username} is no longer an admin.`
     res.json({ success: true, message, data })
   } catch (error) {
     sendError(res, error, 'Error updating role')
@@ -146,6 +202,9 @@ export default {
   searchContent,
   getContent,
   updateContent,
+  listSyncChanges,
+  countSyncChanges,
+  resolveSyncChanges,
   listUsers,
   setUserRole,
   muteUser,
