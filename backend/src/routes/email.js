@@ -1,5 +1,6 @@
 /**
- * Email link routes: announcement unsubscribe.
+ * Email link routes: one-click unsubscribe for optional emails (announcements,
+ * friend requests), per category or from all of them.
  *
  * Layer: router. Mounted in server.js ahead of the anti-bot and referer checks, since
  * these links are opened from mail clients and mail providers POST the one-click
@@ -8,9 +9,10 @@
 
 import express from 'express'
 import {
-  unsubscribeFromAnnouncements,
+  EMAIL_CATEGORIES,
+  unsubscribe,
   verifyUnsubscribeToken,
-} from '../services/announcementService.js'
+} from '../services/emailPreferenceService.js'
 
 const router = express.Router()
 
@@ -30,41 +32,62 @@ function page(heading, bodyHtml) {
 
 const invalidLink = page(
   'Link not valid',
-  '<p>This unsubscribe link is incomplete or has been changed. Use the link from the most recent announcement email.</p>',
+  '<p>This unsubscribe link is incomplete or has been changed. Use the link from the most recent email, or manage emails in your AniLounge settings.</p>',
 )
+
+/**
+ * Validated link parameters. Links without `c` are announcement links sent before
+ * categories existed.
+ * @param {import('express').Request} req
+ * @returns {{ userId: string, token: string, category: string } | null}
+ */
+function readLink(req) {
+  const userId = String(req.query.u || '')
+  const token = String(req.query.t || '')
+  const category = String(req.query.c || 'announcements')
+  return verifyUnsubscribeToken(userId, token, category) ? { userId, token, category } : null
+}
+
+const button = (label, primary) =>
+  `<button type="submit" style="background:${primary ? '#e07a5f' : '#fff'};color:${primary ? '#fff' : '#152238'};border:${primary ? '0' : '1px solid #d6dae2'};padding:12px 20px;border-radius:8px;font-size:15px;cursor:pointer">${label}</button>`
+
+const ACCOUNT_NOTE =
+  'Account and security emails (sign-in codes, unlock links, email-change and deletion notices) still arrive, since they protect your account.'
 
 /** Confirmation page. GET never unsubscribes, so link scanners cannot opt people out. */
 router.get('/unsubscribe', (req, res) => {
-  const userId = String(req.query.u || '')
-  const token = String(req.query.t || '')
-  if (!verifyUnsubscribeToken(userId, token)) return res.status(400).send(invalidLink)
-  const params = new URLSearchParams({ u: userId, t: token })
+  const link = readLink(req)
+  if (!link) return res.status(400).send(invalidLink)
+  const { label } = EMAIL_CATEGORIES[link.category]
+  const params = new URLSearchParams({ u: link.userId, t: link.token, c: link.category })
   res.send(
     page(
-      'Unsubscribe from announcements?',
-      `<p>You'll stop getting AniLounge announcement emails. Account and security emails still arrive.</p>
-<form method="post" action="?${params}">
-<button type="submit" style="background:#e07a5f;color:#fff;border:0;padding:12px 20px;border-radius:8px;font-size:15px;cursor:pointer">Unsubscribe</button>
-</form>`,
+      `Unsubscribe from ${label}?`,
+      `<p>You'll stop getting AniLounge ${label}. ${ACCOUNT_NOTE}</p>
+<form method="post" action="?${params}" style="margin:0 0 12px">${button(`Unsubscribe from ${label}`, true)}</form>
+<form method="post" action="?${params}&amp;scope=all">${button('Unsubscribe from all optional emails', false)}</form>
+<p style="color:#5b6578;font-size:14px;margin-top:24px">You can turn these back on anytime in Settings → Email.</p>`,
     ),
   )
 })
 
-/** Unsubscribe; used by the confirm button and by mail providers' one-click POST. */
+/** Unsubscribe; used by the confirm buttons and by mail providers' one-click POST. */
 router.post('/unsubscribe', async (req, res) => {
-  const userId = String(req.query.u || '')
-  const token = String(req.query.t || '')
-  if (!verifyUnsubscribeToken(userId, token)) return res.status(400).send(invalidLink)
+  const link = readLink(req)
+  if (!link) return res.status(400).send(invalidLink)
+  const scope = req.query.scope === 'all' ? 'all' : link.category
   try {
-    await unsubscribeFromAnnouncements(userId)
+    await unsubscribe(link.userId, scope)
+    const what = scope === 'all' ? 'optional emails' : EMAIL_CATEGORIES[scope].label
     res.send(
       page(
         'You are unsubscribed',
-        '<p>You will no longer receive AniLounge announcement emails. Account and security emails still arrive.</p>',
+        `<p>You will no longer receive AniLounge ${what}. ${ACCOUNT_NOTE}</p>
+<p style="color:#5b6578;font-size:14px">Changed your mind? Turn them back on in Settings → Email.</p>`,
       ),
     )
   } catch (error) {
-    console.error('Announcement unsubscribe failed:', error)
+    console.error('Email unsubscribe failed:', error)
     res.status(500).send(page('Something went wrong', '<p>Please try the link again later.</p>'))
   }
 })

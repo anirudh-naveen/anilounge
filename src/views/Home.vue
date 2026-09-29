@@ -299,7 +299,7 @@ const emptyActivityCopy = computed(() => {
     return "Nothing here yet. Add a title to your watchlist and it'll show up here."
   }
   if (!activity.value.friendCount) {
-    return 'No friends yet. Friend activity will appear here once friending opens.'
+    return 'No friends yet. Add friends from the Friends page in your profile menu.'
   }
   return "Your friends haven't updated their watchlists yet."
 })

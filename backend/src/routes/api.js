@@ -11,6 +11,8 @@ import contentController from '../controllers/contentController.js'
 import entityController from '../controllers/entityController.js'
 import homeController from '../controllers/homeController.js'
 import profileController from '../controllers/profileController.js'
+import friendController from '../controllers/friendController.js'
+import emailPreferenceController from '../controllers/emailPreferenceController.js'
 import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
 import adminOnly from '../middleware/adminOnly.js'
@@ -24,6 +26,7 @@ import upload, { handleUploadError } from '../middleware/upload.js'
 import { bruteForceProtection } from '../middleware/antiBot.js'
 import { validateObjectId } from '../middleware/security.js'
 import { isCatalogId } from '../db/ids.js'
+import { assertCleanLanguage } from '../utils/moderation.js'
 
 const router = express.Router()
 
@@ -36,7 +39,10 @@ router.post(
   [
     body('username')
       .matches(USERNAME_PATTERN)
-      .withMessage('Username must be 3-20 letters, numbers, dots, dashes, or underscores'),
+      .withMessage('Username must be 3-20 letters, numbers, dots, dashes, or underscores')
+      .bail()
+      .custom(assertCleanLanguage)
+      .withMessage("Username contains language that isn't allowed on AniLounge."),
     body('email').isEmail().withMessage('Valid email is required'),
     body('password')
       .isLength({ min: 8, max: 128 })
@@ -44,7 +50,10 @@ router.post(
       .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
       .withMessage(
         'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
-      ),
+      )
+      .bail()
+      .custom(assertCleanLanguage)
+      .withMessage("Password contains language that isn't allowed on AniLounge."),
     body('confirmPassword').custom(
       /**
        * Reject registration when confirmPassword does not equal password.
@@ -122,7 +131,14 @@ router.get('/home/character-of-the-day', homeController.getCharacterOfTheDay)
 router.post(
   '/ai-search',
   optionalAuthenticate,
-  [body('query').notEmpty().withMessage('Search query is required')],
+  [
+    body('query')
+      .notEmpty()
+      .withMessage('Search query is required')
+      .bail()
+      .custom(assertCleanLanguage)
+      .withMessage("Search contains language that isn't allowed on AniLounge."),
+  ],
   contentController.aiSearch,
 )
 
@@ -136,7 +152,10 @@ router.post(
       .notEmpty()
       .withMessage('Message is required')
       .isLength({ max: 2000 })
-      .withMessage('Message must be 2000 characters or fewer'),
+      .withMessage('Message must be 2000 characters or fewer')
+      .bail()
+      .custom(assertCleanLanguage)
+      .withMessage("Message contains language that isn't allowed on AniLounge."),
     body('history').optional().isArray({ max: 20 }),
     body('history.*.role').optional().isIn(['user', 'model', 'bot']),
     body('history.*.text').optional().isString().isLength({ max: 2000 }),
@@ -166,7 +185,10 @@ router.put(
     body('username')
       .optional()
       .matches(USERNAME_PATTERN)
-      .withMessage('Username must be 3-20 letters, numbers, dots, dashes, or underscores'),
+      .withMessage('Username must be 3-20 letters, numbers, dots, dashes, or underscores')
+      .bail()
+      .custom(assertCleanLanguage)
+      .withMessage("Username contains language that isn't allowed on AniLounge."),
     body('email').optional().isEmail().withMessage('Valid email is required'),
   ],
   authController.updateProfile,
@@ -177,7 +199,10 @@ router.put(
     body('currentPassword').notEmpty().withMessage('Current password is required'),
     body('newPassword')
       .isLength({ min: 8, max: 128 })
-      .withMessage('New password must be 8-128 characters'),
+      .withMessage('New password must be 8-128 characters')
+      .bail()
+      .custom(assertCleanLanguage)
+      .withMessage("Password contains language that isn't allowed on AniLounge."),
   ],
   authController.changePassword,
 )
@@ -262,6 +287,14 @@ router.post(
 )
 router.post('/account/2fa/backup-codes', [body('code').isString()], securityController.newBackupCodes)
 
+/** Optional email categories (announcements, friend requests); account emails always send. */
+router.get('/account/email-preferences', emailPreferenceController.getPreferences)
+router.put(
+  '/account/email-preferences',
+  [body('announcements').optional().isBoolean(), body('friend_requests').optional().isBoolean()],
+  emailPreferenceController.updatePreferences,
+)
+
 /** Profile customization; kept off `/auth` so it is not throttled by the login limiter. */
 router.put(
   '/profile/settings',
@@ -276,5 +309,12 @@ router.delete('/content/:id/favorite', validateObjectId, profileController.toggl
 
 /** Homepage status feed: the viewer's and accepted friends' watchlist changes. */
 router.get('/home/activity', homeController.getActivity)
+
+/** Friends and friend requests. `:id` is the other user's id. */
+router.get('/friends', friendController.getFriends)
+router.get('/friends/search', friendController.searchUsers)
+router.post('/friends/requests', friendController.sendRequest)
+router.post('/friends/requests/:id/accept', validateObjectId, friendController.acceptRequest)
+router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
 
 export default router

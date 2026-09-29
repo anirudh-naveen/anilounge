@@ -192,10 +192,15 @@ const sendMessage = async () => {
     }
   } catch (error) {
     console.error('Chatbot error:', error)
+    // 400s carry a user-facing reason (for example blocked language); show it as-is.
+    const apiError = error as { response?: { status?: number; data?: { message?: string } } }
+    const rejection =
+      apiError.response?.status === 400 ? apiError.response.data?.message : undefined
     const errorMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'bot',
-      text: "Sorry, I'm having trouble connecting right now. Please try again later.",
+      text:
+        rejection || "Sorry, I'm having trouble connecting right now. Please try again later.",
       timestamp: new Date(),
     }
     messages.value.push(errorMessage)

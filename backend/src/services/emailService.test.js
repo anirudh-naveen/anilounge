@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, it } from 'node:test'
-import { hasPublicAppUrl, sendAnnouncementEmail, sendFeedbackEmail } from './emailService.js'
+import {
+  hasPublicAppUrl,
+  sendAnnouncementEmail,
+  sendEmailChangedNotice,
+  sendFeedbackEmail,
+  sendFriendRequestEmail,
+} from './emailService.js'
 
 const env = { ...process.env }
 const realFetch = globalThis.fetch
@@ -95,5 +101,34 @@ describe('hasPublicAppUrl', () => {
     assert.equal(hasPublicAppUrl(), false)
     process.env.PUBLIC_APP_URL = 'https://www.anilounge.net'
     assert.equal(hasPublicAppUrl(), true)
+  })
+})
+
+describe('sendFriendRequestEmail', () => {
+  it('escapes the note and names the requester and expiry', async () => {
+    await sendFriendRequestEmail(
+      { email: 'bob@example.com', username: 'bob' },
+      { username: 'alice' },
+      'Loved your <b>list</b>',
+      new Date('2026-10-06T12:00:00Z'),
+      'https://anilounge.net/api/email/unsubscribe?u=1&t=abc&c=friend_requests',
+    )
+    assert.equal(sent[0].to, 'bob@example.com')
+    assert.equal(sent[0].subject, 'alice sent you a friend request on AniLounge')
+    assert.ok(sent[0].text.includes('Their note: "Loved your <b>list</b>"'))
+    assert.ok(sent[0].html.includes('Loved your &#60;b&#62;list&#60;/b&#62;'))
+    assert.ok(sent[0].text.includes('October 6, 2026'))
+    assert.equal(
+      sent[0].headers['List-Unsubscribe'],
+      '<https://anilounge.net/api/email/unsubscribe?u=1&t=abc&c=friend_requests>',
+    )
+    assert.ok(sent[0].html.includes('Stop friend request emails'))
+  })
+
+  it('gives account emails a settings link instead of an unsubscribe', async () => {
+    process.env.PUBLIC_APP_URL = 'https://anilounge.net'
+    await sendEmailChangedNotice({ email: 'old@example.com', username: 'fan' }, 'new@example.com')
+    assert.ok(sent[0].text.includes("can't be turned off"))
+    assert.ok(sent[0].html.includes('href="https://anilounge.net/settings#email"'))
   })
 })

@@ -2,67 +2,19 @@
 
 ## Content
 
-1. Fix characters as content ✅
-   - Character should have images attached.
-   - Character should be merged with all of the same name in their home "franchise".
-   - Some character's might have their first and last name switched from english to japanesse/other languages. Merge those characters to one, and collapse the franchise/series/movies thei appear in as well.
-2. Add voice actors as a type of content. ✅
-   - They will not have their own tab but will have their own screen and can be clicked and will be searchable and favoritable for the profile.
-   - Additionally if the API has pictures for them, include them.
-   - Make sure they appear under every content theyre in with a role, whether they were introduced then or not.
-   - Update the chatbot to be able to answer questions about these (but should not contribute to recommending series if asked)
-3. Add animation studios as a type of content. ✅
-   - They will not have their own tab but will have their own screen and can be clicked and will be searchable and favoritable for the profile.
-   - On their screen, they should show all the movies/shows they have worked on. (not episodes)
-   - Additionally if the API has pictures for them, include them.
-   - Update content and episodes to use this new feature on click.
-   - Update the chatbot to use this as a low tier help for recommending series.
-4. Fix related content ✅
-   - Content have incorrect relationships. For example, re:Zero has been connected with Real Girl, when it should only be connected to other re:Zero media.
-
 ## Home
 
-1. Rework the entire homepage ✅
-   a. Display a "status" chunk in the majority of the middle (leaning left, leaving space in the right for b.) displaying the latest watchlist changes personally and with friends. If the user isn't logged in, replace the section with a prompt to register to access the watchlist and see personal and friend's activity.
-   b. Have a right side bar displaying updates to content in the watchlist (new episode releases or upcoming titles released). If none are available and/or the user is not logged in, show trending episode/title releases.
-   c. Under the status rectangle show a bar for the character of the day.
-   d. Below them all, display popular forum posts. (This will be a placeholder for now until the forum is completed.)
-
 ## Search
-
-1. Have the AI bubble only appear in the Search section
-2. Characters are returning in the Series/Movies sections. Do not return them there.
 
 ## Watchlist
 
 ## Profile
 
-1. Make the profile a more customizable screen with tabs that display the user's Favorites, Watchlist, and Stats as tabs. ✅
-   - This must be a customizable place for the user.
-   - This user profile must be sharable to the public.
-   - Content should have a heart icon to add/remove it to favorites on hover.
-   - Stats should show elements like watchtime, wathctime split throughout the year, most watched genres, etc.
-2. Add option to delete account. ✅
-   - Deny this option for the demo account.
-3. Add email verification for sign up and password lockouts. ✅
-   - Additionally give option to set up 2FA.
-   - The email will be from notify@anilounge.net. This email will be used for all notifications, like announcements as well.
-4. Make sure accounts are safe from basic cyber attacks. ✅
-5. Have the accounts be auto-logged in on the browser if the cookie/ip location is the same. ✅
-   - Should only be necessary cookies.
-   - Dont skirt legality.
-6. Add a toggle for a new dark mode. ✅
-7. Remove the preferences/profile image section in settings and update the profile customization stage to include those, if applicable. ✅
-
-- Additionally disable changing the demo account profile picture changing.
-
-8. Auto delete accounts after a year of no use, with alerts coming in 3 months, 1 month, 2 weeks, 1 week, and a day before deletion, as well as after deletion. ✅
-
 ## Forum
 
-1. Make sure any public text inboxes have a strict censorship.
+1. Make sure any public text inboxes have a strict censorship. ✅
    - This includes to the chatbot, usernames and passwords, and the future additions of forums and dms.
-2. Add ability for friending others, and add a friends tab to the profile dropdown.
+2. Add ability for friending others, and add a friends tab to the profile dropdown. ✅
 3. Add a Messaging tab to the profile dropdown.
    - This place will allow you to message your friends directly, like as is a normal messagin service. Allow people to see initial message friend requests here as well.
 4. Add review system and discussion features for users in a new tab called Forum.
@@ -73,7 +25,4 @@
 
 ## Infrastructure
 
-1. Migrate from MongoDB to a Relational Database. ✅
-2. Switch the recipient email of the site for bug/fixes to support@anilounge.net. Confirm recipient email is setup for bug reports and emails. ✅
-3. Add a way so that I can send announcements to all users using the email notify@anilounge.net. ✅
-4. Create more CI/CD test blockers before PRs.
+1. Create more CI/CD test blockers before PRs.

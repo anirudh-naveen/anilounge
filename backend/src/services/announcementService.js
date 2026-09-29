@@ -3,68 +3,33 @@
  *
  * Layer: service. Announcements go out as notify@anilounge.net (via emailService) to
  * every verified, non-demo account that has not opted out. Each email carries a signed
- * one-click unsubscribe link, so opting out needs no sign-in. Security and account
- * emails are unaffected by the opt-out.
+ * one-click unsubscribe link (services/emailPreferenceService.js), so opting out needs
+ * no sign-in. Security and account emails are unaffected by the opt-out.
  *
  * Env: JWT_SECRET (signs unsubscribe links), ANNOUNCEMENT_DELAY_MS (pause between
  * sends, default 600 to stay under Resend's 2 requests/second limit).
  */
 
-import crypto from 'crypto'
 import { query } from '../../config/postgres.js'
-import { isUuid } from '../db/ids.js'
-import { appUrl, sendAnnouncementEmail } from './emailService.js'
+import { sendAnnouncementEmail } from './emailService.js'
+import {
+  unsubscribe,
+  unsubscribeToken,
+  unsubscribeUrl,
+  verifyUnsubscribeToken,
+} from './emailPreferenceService.js'
+
+// Link helpers moved to emailPreferenceService; re-exported for existing callers.
+export { unsubscribeToken, unsubscribeUrl, verifyUnsubscribeToken }
 
 const DEFAULT_DELAY_MS = 600
-
-function unsubscribeSecret() {
-  const secret = process.env.JWT_SECRET
-  if (!secret) throw new Error('JWT_SECRET is required to sign unsubscribe links')
-  return secret
-}
-
-/**
- * HMAC over the user id, so a link only unsubscribes the account it was sent to.
- * @param {string} userId
- * @returns {string} base64url token
- */
-export function unsubscribeToken(userId) {
-  return crypto
-    .createHmac('sha256', unsubscribeSecret())
-    .update(`announcements:unsubscribe:${userId}`)
-    .digest('base64url')
-}
-
-/**
- * @param {string} userId
- * @param {string} token
- * @returns {boolean}
- */
-export function verifyUnsubscribeToken(userId, token) {
-  if (!isUuid(userId) || typeof token !== 'string') return false
-  const expected = Buffer.from(unsubscribeToken(userId))
-  const given = Buffer.from(token)
-  return expected.length === given.length && crypto.timingSafeEqual(expected, given)
-}
-
-/**
- * One-click link (GET shows a confirm page; POST unsubscribes). Served through the
- * frontend's `/api` rewrite so it lives on the site's own domain.
- * @param {string} userId
- * @returns {string}
- */
-export function unsubscribeUrl(userId) {
-  const params = new URLSearchParams({ u: userId, t: unsubscribeToken(userId) })
-  return `${appUrl()}/api/email/unsubscribe?${params}`
-}
 
 /**
  * @param {string} userId
  * @returns {Promise<boolean>} Whether an account was updated.
  */
-export async function unsubscribeFromAnnouncements(userId) {
-  const result = await query('UPDATE users SET announcement_emails = false WHERE id = $1', [userId])
-  return result.rowCount > 0
+export function unsubscribeFromAnnouncements(userId) {
+  return unsubscribe(userId, 'announcements')
 }
 
 /**

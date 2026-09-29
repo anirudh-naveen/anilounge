@@ -1,0 +1,230 @@
+/*
+ * social.css — shared layout for the Friends, Messages, Inbox, and Forum views.
+ * Mirrors the Home panels so community pages read as part of the same lounge.
+ */
+
+.social-page {
+  min-height: 100vh;
+  padding: 1rem 0 4rem;
+}
+
+.social-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.social-intro {
+  margin-bottom: 1.5rem;
+}
+
+.social-kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--coral-primary);
+  margin: 0 0 0.4rem;
+}
+
+.social-title {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.social-subtitle {
+  margin: 0.4rem 0 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.social-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: var(--shadow-md);
+  padding: 1.5rem;
+}
+
+.social-panel + .social-panel {
+  margin-top: 1.25rem;
+}
+
+.social-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.social-panel-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.social-panel-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.social-empty {
+  text-align: center;
+  padding: 1.75rem 1rem;
+  color: var(--text-secondary);
+}
+
+.social-loading {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.social-loading .spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+.social-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--coral-primary);
+  color: var(--text-on-accent);
+}
+
+.social-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.social-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.social-row:first-child {
+  border-top: 0;
+  padding-top: 0.25rem;
+}
+
+.social-row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.social-name {
+  font-weight: 700;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+a.social-name:hover {
+  color: var(--coral-deep);
+}
+
+.social-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.social-note {
+  margin: 0.35rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.social-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.btn-small {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  border-radius: 999px;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-ghost:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.social-textarea {
+  width: 100%;
+  min-height: 5rem;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.social-char-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.social-char-count.over {
+  color: var(--error-color);
+}
+
+@media (max-width: 640px) {
+  .social-title {
+    font-size: 2rem;
+  }
+
+  .social-panel {
+    padding: 1.1rem;
+  }
+
+  .social-row {
+    flex-wrap: wrap;
+  }
+
+  .social-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
