@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import { endSession, rotateSession } from '../services/sessionService.js'
 import { touchUserActivity } from '../services/inactiveAccountService.js'
+import { isAdminUser } from './adminOnly.js'
 
 /**
  * Verify the Bearer JWT and attach the matching user to the request.
@@ -151,6 +152,7 @@ export const refreshAccessToken = async (req, res) => {
           username: user.username,
           email: user.email,
           isDemoAccount: user.isDemo(),
+          isAdmin: isAdminUser(user),
           profilePicture: user.profilePicture,
           createdAt: user.createdAt,
           preferences: user.preferences,

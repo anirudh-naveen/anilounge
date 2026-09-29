@@ -24,6 +24,14 @@ describe('isAdminUser', () => {
     assert.equal(isAdminUser(undefined, admins), false)
     assert.equal(isAdminUser(user(), parseAdminEmails('')), false)
   })
+
+  it('accepts the admin role without an allowlist entry', () => {
+    const none = parseAdminEmails('')
+    assert.equal(isAdminUser(user({ email: 'mod@example.com', role: 'admin' }), none), true)
+    assert.equal(isAdminUser(user({ email: 'mod@example.com', role: 'user' }), none), false)
+    assert.equal(isAdminUser(user({ role: 'admin', emailVerified: false }), none), false)
+    assert.equal(isAdminUser(user({ role: 'admin', isDemo: () => true }), none), false)
+  })
 })
 
 describe('adminOnly', () => {
