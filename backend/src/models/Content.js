@@ -12,6 +12,7 @@ import {
 } from '../db/kinds.js'
 import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
+import { applyAdminOverrides } from '../utils/adminContent.js'
 
 /**
  * @param {object} row
@@ -206,9 +207,27 @@ Content.prototype.toObject = function toObject() {
   return this.toJSON()
 }
 
+/**
+ * Admin-set field values for a content row (`content.admin_overrides`), or `{}`.
+ * A database without the column yet (schema not applied) has no overrides.
+ * @param {string} id
+ * @returns {Promise<Record<string, unknown>>}
+ */
+export async function loadAdminOverrides(id) {
+  try {
+    const { rows } = await query('SELECT admin_overrides FROM content WHERE id = $1', [id])
+    return rows[0]?.admin_overrides || {}
+  } catch (error) {
+    if (error.code === '42703') return {}
+    throw error
+  }
+}
+
 Content.prototype.save = async function save() {
   const id = this._id
   const kind = kindFromContentType(this.contentType)
+  // Admin edits win over whatever the catalog sync put on this document.
+  applyAdminOverrides(this, await loadAdminOverrides(id), kind)
   const name = this.englishTitle || this.title || 'Untitled'
   const { rowCount } = await query(
     `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, anilist_id, created_at, updated_at)

@@ -153,6 +153,14 @@
                   <router-link to="/settings" class="dropdown-item" @click="closeDropdown">
                     <span class="item-text">Settings</span>
                   </router-link>
+                  <router-link
+                    v-if="authStore.isAdmin"
+                    to="/admin"
+                    class="dropdown-item"
+                    @click="closeDropdown"
+                  >
+                    <span class="item-text">Admin</span>
+                  </router-link>
                   <div class="dropdown-divider"></div>
                   <button @click="handleLogout" class="dropdown-item logout-item">
                     <span class="item-text">Logout</span>

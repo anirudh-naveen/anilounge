@@ -16,6 +16,7 @@ import emailPreferenceController from '../controllers/emailPreferenceController.
 import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
 import adminOnly from '../middleware/adminOnly.js'
+import adminController from '../controllers/adminController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
   optionalAuthenticate,
@@ -316,5 +317,24 @@ router.get('/friends/search', friendController.searchUsers)
 router.post('/friends/requests', friendController.sendRequest)
 router.post('/friends/requests/:id/accept', validateObjectId, friendController.acceptRequest)
 router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
+
+/** Admin page: edit watchable content and manage user roles (role 'admin' or ADMIN_EMAILS). */
+router.get('/admin/content', adminOnly, adminController.searchContent)
+router.get('/admin/content/:id', adminOnly, validateObjectId, adminController.getContent)
+router.patch(
+  '/admin/content/:id',
+  adminOnly,
+  validateObjectId,
+  [body('changes').optional().isObject(), body('unlock').optional().isArray({ max: 20 })],
+  adminController.updateContent,
+)
+router.get('/admin/users', adminOnly, adminController.listUsers)
+router.put(
+  '/admin/users/:id/role',
+  adminOnly,
+  validateObjectId,
+  [body('role').isIn(['user', 'admin'])],
+  adminController.setUserRole,
+)
 
 export default router

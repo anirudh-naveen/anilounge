@@ -45,6 +45,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS content_kind_anilist_id_unique
 CREATE INDEX IF NOT EXISTS content_kind_name_idx ON content (kind, name);
 CREATE INDEX IF NOT EXISTS content_search_idx ON content USING GIN (search_vector);
 
+-- Admin edits (services/adminService.js): `{ field: value }` for watchable fields an admin
+-- set by hand. Content.save re-applies them so the hourly catalog sync cannot undo them.
+ALTER TABLE content ADD COLUMN IF NOT EXISTS admin_overrides JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 CREATE TABLE IF NOT EXISTS movies (
   content_id       UUID PRIMARY KEY REFERENCES content (id) ON DELETE CASCADE,
   original_title   TEXT,
@@ -259,6 +263,11 @@ CREATE INDEX IF NOT EXISTS users_last_active_idx ON users (last_active_at) WHERE
 ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_signup BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_reminder_sent_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS users_pending_signup_idx ON users (created_at) WHERE pending_signup;
+
+-- Account role (middleware/adminOnly.js). Admins manage content and other users' roles
+-- from the admin page. ADMIN_EMAILS accounts are admins regardless of this column.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'
+  CHECK (role IN ('user', 'admin'));
 
 -- Opt-out for announcement emails (services/announcementService.js). Security and
 -- account emails ignore it.

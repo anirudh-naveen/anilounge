@@ -64,6 +64,8 @@ function mapUserRow(row) {
     profilePicture: row.profile_picture,
     bio: row.bio,
     isDemoAccount: Boolean(row.is_demo),
+    // Missing column (schema not applied yet) reads as a regular user.
+    role: row.role === 'admin' ? 'admin' : 'user',
     failedLoginAttempts: Number(row.failed_login_attempts || 0),
     lockUntil: row.lock_until,
     lastLogin: row.last_login_at,

@@ -62,6 +62,7 @@ export interface SessionUser {
   username: string
   email: string
   isDemoAccount?: boolean
+  isAdmin?: boolean
   profilePicture?: string | null
   createdAt?: string
   preferences?: { favoriteGenres: string[] }
@@ -309,6 +310,21 @@ export const friendsAPI = {
 
   /** Decline an incoming request, cancel an outgoing one, or unfriend. */
   remove: (userId: string) => api.delete(`/friends/${userId}`),
+}
+
+export const adminAPI = {
+  searchContent: (params: { q?: string; type?: string; page?: number }) =>
+    api.get('/admin/content', { params }),
+
+  getContent: (id: string) => api.get(`/admin/content/${id}`),
+
+  updateContent: (id: string, body: { changes?: Record<string, unknown>; unlock?: string[] }) =>
+    api.patch(`/admin/content/${id}`, body),
+
+  listUsers: (params: { q?: string; admins?: boolean; page?: number }) =>
+    api.get('/admin/users', { params }),
+
+  setUserRole: (id: string, role: 'user' | 'admin') => api.put(`/admin/users/${id}/role`, { role }),
 }
 
 export const watchlistAPI = {

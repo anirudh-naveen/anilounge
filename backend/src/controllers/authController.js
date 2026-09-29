@@ -26,6 +26,7 @@ import {
 import { query } from '../../config/postgres.js'
 import { banIPForBruteForce, liftBruteForceBan } from '../middleware/ipBan.js'
 import { resetAuthRateLimits } from '../middleware/authRateLimit.js'
+import { isAdminUser } from '../middleware/adminOnly.js'
 import {
   consumeEmailCode,
   issueEmailCode,
@@ -129,6 +130,7 @@ async function completeLogin(user, req, res, message) {
         username: user.username,
         email: user.email,
         isDemoAccount: user.isDemo(),
+        isAdmin: isAdminUser(user),
         profilePicture: user.profilePicture,
         createdAt: user.createdAt,
         watchlist: user.watchlist,
@@ -462,6 +464,7 @@ export const getProfile = async (req, res) => {
           username: user.username,
           email: user.email,
           isDemoAccount: user.isDemo(),
+          isAdmin: isAdminUser(user),
           profilePicture: user.profilePicture,
           createdAt: user.createdAt,
           bio: user.bio || '',

@@ -1,9 +1,10 @@
 /**
- * Admin gate for operator-only routes (IP bans, feedback listing).
+ * Admin gate for operator-only routes (IP bans, feedback, the admin page).
  *
  * Layer: middleware. Runs after `authenticateToken`. A user is an admin when their
- * email is in the ADMIN_EMAILS allowlist and verified; the demo account never is.
- * With ADMIN_EMAILS unset, nobody is an admin and these routes return 403.
+ * `role` is 'admin' or their email is in the ADMIN_EMAILS allowlist, and their email
+ * is verified; the demo account never is. ADMIN_EMAILS accounts are "owners": the
+ * admin page cannot demote them, so the site always has a way back in.
  *
  * Env: ADMIN_EMAILS (comma-separated, case-insensitive).
  */
@@ -22,14 +23,24 @@ export function parseAdminEmails(value = process.env.ADMIN_EMAILS) {
 }
 
 /**
- * @param {{ email?: string, emailVerified?: boolean, isDemo?: () => boolean } | null | undefined} user
+ * Whether the user's email is on the ADMIN_EMAILS allowlist (ignores verification).
+ * @param {{ email?: string } | null | undefined} user
+ * @param {Set<string>} [admins]
+ * @returns {boolean}
+ */
+export function isOwnerEmail(user, admins = parseAdminEmails()) {
+  return Boolean(user?.email) && admins.has(String(user.email).trim().toLowerCase())
+}
+
+/**
+ * @param {{ email?: string, role?: string, emailVerified?: boolean, isDemo?: () => boolean } | null | undefined} user
  * @param {Set<string>} [admins]
  * @returns {boolean}
  */
 export function isAdminUser(user, admins = parseAdminEmails()) {
   if (!user?.email || user.emailVerified === false) return false
   if (typeof user.isDemo === 'function' && user.isDemo()) return false
-  return admins.has(String(user.email).trim().toLowerCase())
+  return user.role === 'admin' || isOwnerEmail(user, admins)
 }
 
 /**
