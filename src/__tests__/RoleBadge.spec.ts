@@ -8,7 +8,8 @@ vi.mock('@/services/api', () => ({
       data: {
         data: [
           { id: '1', username: 'Anirudh', role: 'creator' },
-          { id: '2', username: 'mod', role: 'admin' },
+          { id: '2', username: 'mod', role: 'admin', cosmetic: ['developer'] },
+          { id: '3', username: 'painter', role: null, cosmetic: ['artist', 'influencer'] },
         ],
       },
     }),
@@ -29,5 +30,13 @@ describe('RoleBadge', () => {
     )
     expect(admin.find('[data-testid="role-badge-admin"]').exists()).toBe(true)
     expect(regular.html()).not.toContain('role-badge')
+    expect(admin.find('[data-testid="role-badge-developer"]').exists()).toBe(true)
+    const painter = mount(RoleBadge, { props: { username: 'painter' } })
+    await flushPromises()
+    expect(painter.find('[data-testid="role-badge-admin"]').exists()).toBe(false)
+    expect(painter.findAll('.cosmetic-badge').map((badge) => badge.attributes('title'))).toEqual([
+      'Artist',
+      'Influencer',
+    ])
   })
 })

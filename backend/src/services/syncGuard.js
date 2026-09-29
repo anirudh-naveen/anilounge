@@ -8,6 +8,7 @@
  */
 
 import { query } from '../../config/postgres.js'
+import { describeRow, logAction, quoteValue } from './adminLog.js'
 
 /** Notices older than this are hidden and deleted. */
 export const NOTICE_TTL_DAYS = 14
@@ -58,8 +59,9 @@ export async function pruneExpiredNotices() {
  */
 export async function recordSyncNotices(contentId, notices) {
   if (!notices.length || !(await noticesTableReady())) return
+  const logged = []
   for (const { field, outcome, oldValue, newValue } of notices) {
-    await query(
+    const { rowCount } = await query(
       `INSERT INTO content_sync_changes (content_id, field, outcome, old_value, new_value)
        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)
        ON CONFLICT (content_id, field) DO UPDATE SET
@@ -75,13 +77,35 @@ export async function recordSyncNotices(contentId, notices) {
           OR content_sync_changes.new_value <> EXCLUDED.new_value`,
       [contentId, field, outcome, JSON.stringify(oldValue), JSON.stringify(newValue)],
     )
+    // rowCount is 0 when this exact notice already exists (the hourly repeat).
+    if (rowCount) logged.push({ field, outcome, oldValue, newValue })
   }
+  if (logged.length) await logSyncNotices(contentId, logged)
   await query(
     `DELETE FROM content_sync_changes
      WHERE content_id = $1 AND field = ANY($2::text[]) AND old_value = new_value`,
     [contentId, notices.map((notice) => notice.field)],
   )
   await pruneExpiredNotices()
+}
+
+/**
+ * Write new sync notices to the admin log ('sync' category).
+ * @param {string} contentId
+ * @param {Array<{ field: string, outcome: string, oldValue: unknown, newValue: unknown }>} notices
+ * @returns {Promise<void>}
+ */
+async function logSyncNotices(contentId, notices) {
+  const { rows } = await query('SELECT kind, name FROM content WHERE id = $1', [contentId])
+  if (!rows[0]) return
+  const row = describeRow(rows[0].kind, rows[0].name)
+  for (const { field, outcome, oldValue, newValue } of notices) {
+    const message =
+      outcome === 'blocked'
+        ? `Sync was blocked by a lock on ${row} ${field}: kept ${quoteValue(oldValue)}, wanted ${quoteValue(newValue)}`
+        : `Sync changed ${row} ${field}: ${quoteValue(oldValue)} → ${quoteValue(newValue)}`
+    await logAction('sync', null, message)
+  }
 }
 
 /**

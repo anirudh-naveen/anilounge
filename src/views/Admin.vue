@@ -18,9 +18,7 @@
           <RoleBadge :username="authStore.user?.username" />
         </p>
         <h1 class="social-title">Manage AniLounge</h1>
-        <p class="social-subtitle">
-          Edit the catalog and keep the community in check.
-        </p>
+        <p class="social-subtitle">Edit the catalog and keep the community in check.</p>
       </header>
 
       <div class="admin-tabs" role="tablist" aria-label="Admin sections">
@@ -35,7 +33,12 @@
           @click="activeTab = tab.id"
         >
           {{ tab.label }}
-          <span v-if="tab.id === 'sync' && syncCount" class="tab-count">{{ syncCount }}</span>
+          <span
+            v-if="tab.id === 'log' && syncCount"
+            class="tab-count"
+            title="Sync changes to look at"
+            >{{ syncCount }}</span
+          >
         </button>
       </div>
 
@@ -88,7 +91,9 @@
                     <span class="social-name">{{ item.title }}</span>
                     <span class="social-meta">
                       <template v-if="item.subtitle">{{ item.subtitle }}</template>
-                      <template v-else-if="item.releaseDate">{{ yearOf(item.releaseDate) }}</template>
+                      <template v-else-if="item.releaseDate">{{
+                        yearOf(item.releaseDate)
+                      }}</template>
                       <span v-if="item.edited" class="admin-pill">Edited</span>
                     </span>
                   </span>
@@ -126,9 +131,7 @@
           >
             <div v-if="editorLoading" class="social-loading"><div class="spinner"></div></div>
             <p v-else-if="editorError" class="social-empty admin-error">{{ editorError }}</p>
-            <p v-else-if="!editor" class="social-empty">
-              Pick something on the left to edit it.
-            </p>
+            <p v-else-if="!editor" class="social-empty">Pick something on the left to edit it.</p>
             <template v-else>
               <button v-if="backTarget" type="button" class="admin-link admin-back" @click="goBack">
                 ← Back to {{ backTarget.name }}
@@ -224,184 +227,382 @@
 
               <!-- Title: Linked Rows -->
               <div class="admin-links">
-                <section v-for="group in visibleLinks" :key="group.key" class="link-group">
+                <section
+                  v-for="group in visibleLinks"
+                  :key="group.key"
+                  class="link-group"
+                  :data-testid="`link-group-${group.key}`"
+                >
                   <h3 class="link-title">
                     {{ group.label }} <span class="social-count">{{ group.items.length }}</span>
                   </h3>
-                  <div class="link-chips">
-                    <button
-                      v-for="link in group.items"
-                      :key="link.id"
-                      type="button"
-                      class="link-chip"
-                      :title="`Edit ${link.name}`"
-                      data-testid="admin-link"
-                      @click="openContent(link.id)"
-                    >
+                  <p v-if="group.hint" class="social-meta link-hint">{{ group.hint }}</p>
+
+                  <!-- Ordered cast: move, change role, remove -->
+                  <ol v-if="group.orderable && group.items.length" class="cast-list">
+                    <li v-for="(link, index) in group.items" :key="link.id" class="cast-row">
+                      <span class="cast-move">
+                        <button
+                          type="button"
+                          class="icon-button"
+                          :disabled="linkBusy || index === 0"
+                          :aria-label="`Move ${link.name} up`"
+                          data-testid="cast-up"
+                          @click="moveCast(group, index, -1)"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          class="icon-button"
+                          :disabled="linkBusy || index === group.items.length - 1"
+                          :aria-label="`Move ${link.name} down`"
+                          @click="moveCast(group, index, 1)"
+                        >
+                          ▼
+                        </button>
+                      </span>
+                      <span class="cast-index">{{ index + 1 }}</span>
                       <img
                         :src="imageFor(link.imagePath)"
                         alt=""
-                        class="chip-image"
-                        :class="{ round: isPerson(link.kind) }"
+                        class="chip-image round"
                         loading="lazy"
                       />
-                      <span class="chip-text">
-                        <span class="chip-name">{{ link.name }}</span>
-                        <span class="chip-note">{{ link.note || KIND_BY_ID[link.kind]?.singular }}</span>
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        class="admin-link cast-name"
+                        @click="openContent(link.id)"
+                      >
+                        {{ link.name }}
+                      </button>
+                      <select
+                        v-if="group.roleEditable"
+                        class="input cast-role"
+                        :value="link.role"
+                        :disabled="linkBusy"
+                        :aria-label="`Role of ${link.name}`"
+                        @change="setCastRole(link, ($event.target as HTMLSelectElement).value)"
+                      >
+                        <option value="main">Main</option>
+                        <option value="supporting">Supporting</option>
+                        <option value="cameo">Cameo</option>
+                      </select>
+                      <button
+                        v-if="link.link"
+                        type="button"
+                        class="icon-button remove"
+                        :disabled="linkBusy"
+                        :aria-label="`Remove ${link.name}`"
+                        data-testid="link-remove"
+                        @click="removeLink(link)"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  </ol>
+
+                  <!-- Everything else: chips that open the row, with remove -->
+                  <div v-else-if="group.items.length" class="link-chips">
+                    <span
+                      v-for="link in group.items"
+                      :key="`${link.id}:${link.note}`"
+                      class="link-chip"
+                    >
+                      <button
+                        type="button"
+                        class="chip-open"
+                        :title="`Edit ${link.name}`"
+                        data-testid="admin-link"
+                        @click="openContent(link.id)"
+                      >
+                        <img
+                          :src="imageFor(link.imagePath)"
+                          alt=""
+                          class="chip-image"
+                          :class="{ round: isPerson(link.kind) }"
+                          loading="lazy"
+                        />
+                        <span class="chip-text">
+                          <span class="chip-name">{{ link.name }}</span>
+                          <span class="chip-note">{{
+                            link.note || KIND_BY_ID[link.kind]?.singular
+                          }}</span>
+                        </span>
+                      </button>
+                      <button
+                        v-if="link.link"
+                        type="button"
+                        class="icon-button remove"
+                        :disabled="linkBusy"
+                        :aria-label="`Remove ${link.name}`"
+                        data-testid="link-remove"
+                        @click="removeLink(link)"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  </div>
+                  <p v-else class="social-meta">None yet.</p>
+
+                  <!-- Adder -->
+                  <div v-if="group.add" class="link-adder">
+                    <select
+                      v-if="group.add.pick"
+                      v-model="adders[group.key]!.pick"
+                      class="input adder-pick"
+                      :aria-label="`${group.label}: ${group.add.pick.label}`"
+                    >
+                      <option value="" disabled>{{ group.add.pick.label }} …</option>
+                      <option
+                        v-for="option in group.add.pick.options"
+                        :key="option.id"
+                        :value="option.id"
+                      >
+                        {{ group.add.pick.label }} {{ option.name }}
+                      </option>
+                    </select>
+                    <input
+                      v-model="adders[group.key]!.query"
+                      type="search"
+                      class="input"
+                      :placeholder="`Add ${SEARCH_LABELS[group.add.search]}…`"
+                      :aria-label="`Add to ${group.label}`"
+                      :disabled="Boolean(group.add.pick) && !adders[group.key]!.pick"
+                      :data-testid="`link-add-${group.key}`"
+                      @input="searchAdder(group)"
+                    />
+                    <ul v-if="adders[group.key]!.results.length" class="adder-results">
+                      <li v-for="hit in adders[group.key]!.results" :key="hit.id">
+                        <button
+                          type="button"
+                          class="adder-hit"
+                          :disabled="linkBusy"
+                          data-testid="link-add-hit"
+                          @click="addLink(group, hit)"
+                        >
+                          <img
+                            :src="imageFor(hit.imagePath)"
+                            alt=""
+                            class="chip-image"
+                            :class="{ round: isPerson(hit.kind) }"
+                          />
+                          <span class="chip-text">
+                            <span class="chip-name">{{ hit.title }}</span>
+                            <span class="chip-note">
+                              {{ KIND_BY_ID[hit.kind]?.singular }}
+                              <template v-if="hit.releaseDate">
+                                · {{ yearOf(hit.releaseDate) }}</template
+                              >
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    </ul>
+                    <p v-if="group.add.pick && !group.add.pick.options.length" class="social-meta">
+                      Add a {{ group.add.pick.key === 'workId' ? 'title' : 'character' }} first.
+                    </p>
                   </div>
                 </section>
-                <p v-if="!visibleLinks.length" class="social-meta">Nothing linked to this yet.</p>
               </div>
             </template>
           </section>
         </div>
       </template>
 
-      <!-- Title: Sync Changes -->
-      <section
-        v-else-if="activeTab === 'sync'"
-        class="social-panel"
-        data-testid="admin-sync-changes"
-      >
+      <!-- Title: Log -->
+      <section v-else-if="activeTab === 'log'" class="social-panel" data-testid="admin-log">
         <header class="social-panel-header">
           <div>
-            <h2 class="social-panel-title">What the catalog sync changed</h2>
+            <h2 class="social-panel-title">Admin log</h2>
             <p class="social-panel-sub">
-              The hourly sync updates unlocked fields and never blanks one out. Locked fields
-              keep your value. Notices clear after 14 days.
+              Every admin action, moderation decision, and sync change, by month (UTC). The log
+              can't be edited or deleted, by anyone.
             </p>
           </div>
         </header>
         <div class="admin-filters">
-          <div class="kind-tabs compact" role="tablist" aria-label="Notice filter">
+          <select
+            v-model="logMonth"
+            class="input admin-select"
+            aria-label="Month"
+            :disabled="!logMonths.length"
+          >
+            <option v-if="!logMonths.length" value="">No entries yet</option>
+            <option v-for="entry in logMonths" :key="entry.month" :value="entry.month">
+              {{ monthLabel(entry.month) }} ({{ entry.count }})
+            </option>
+          </select>
+          <div class="kind-tabs compact" role="tablist" aria-label="Log section">
             <button
-              v-for="option in SYNC_FILTERS"
+              v-for="option in LOG_FILTERS"
               :key="option.id"
               type="button"
               role="tab"
               class="kind-tab"
-              :class="{ active: syncFilter === option.id }"
-              :aria-selected="syncFilter === option.id"
-              @click="syncFilter = option.id"
+              :class="{ active: logCategory === option.id }"
+              :aria-selected="logCategory === option.id"
+              @click="logCategory = option.id"
             >
               {{ option.label }}
             </button>
           </div>
           <button
-            v-if="syncResults.items.length"
             type="button"
-            class="btn btn-ghost btn-small sync-dismiss-all"
-            :disabled="syncBusy"
-            @click="resolveSync('dismiss', syncResults.items)"
+            class="btn btn-ghost btn-small log-download"
+            :disabled="!logEntries.length"
+            @click="downloadLog"
           >
-            Dismiss all on this page
+            Download .txt
           </button>
         </div>
-        <div v-if="syncLoading" class="social-loading"><div class="spinner"></div></div>
-        <p v-else-if="!syncResults.items.length" class="social-empty">
-          Nothing from the sync in the last 14 days.
-        </p>
-        <ul v-else class="sync-list">
-          <li v-for="notice in syncResults.items" :key="notice.id" class="sync-item">
-            <div class="sync-head">
-              <img
-                :src="imageFor(notice.imagePath)"
-                alt=""
-                class="chip-image"
-                :class="{ round: isPerson(notice.kind) }"
-              />
-              <div class="sync-title">
-                <button type="button" class="admin-link sync-name" @click="openFromSync(notice)">
-                  {{ notice.name }}
+        <!-- Title: Sync Changes (actionable, last 14 days) -->
+        <div v-if="logCategory === 'sync'" class="sync-review" data-testid="admin-sync-changes">
+          <h3 class="link-title">
+            Needs a look <span class="social-count">{{ syncCount }}</span>
+          </h3>
+          <p class="social-meta sync-intro">
+            The hourly sync updates unlocked fields and never blanks one out; locked fields keep
+            your value. Revert, apply, or dismiss here. These notices clear after 14 days, and the
+            log below keeps them for good.
+          </p>
+          <div class="admin-filters">
+            <div class="kind-tabs compact" role="tablist" aria-label="Notice filter">
+              <button
+                v-for="option in SYNC_FILTERS"
+                :key="option.id"
+                type="button"
+                role="tab"
+                class="kind-tab"
+                :class="{ active: syncFilter === option.id }"
+                :aria-selected="syncFilter === option.id"
+                @click="syncFilter = option.id"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+            <button
+              v-if="syncResults.items.length"
+              type="button"
+              class="btn btn-ghost btn-small sync-dismiss-all"
+              :disabled="syncBusy"
+              @click="resolveSync('dismiss', syncResults.items)"
+            >
+              Dismiss all on this page
+            </button>
+          </div>
+          <div v-if="syncLoading" class="social-loading"><div class="spinner"></div></div>
+          <p v-else-if="!syncResults.items.length" class="social-empty">
+            Nothing from the sync in the last 14 days.
+          </p>
+          <ul v-else class="sync-list">
+            <li v-for="notice in syncResults.items" :key="notice.id" class="sync-item">
+              <div class="sync-head">
+                <img
+                  :src="imageFor(notice.imagePath)"
+                  alt=""
+                  class="chip-image"
+                  :class="{ round: isPerson(notice.kind) }"
+                />
+                <div class="sync-title">
+                  <button type="button" class="admin-link sync-name" @click="openFromSync(notice)">
+                    {{ notice.name }}
+                  </button>
+                  <span class="social-meta">
+                    {{ KIND_BY_ID[notice.kind]?.singular }} ·
+                    {{ FIELD_LABELS[notice.field] || notice.field }} · expires
+                    {{ expiresLabel(notice.expiresAt) }}
+                  </span>
+                </div>
+                <span class="admin-pill" :class="notice.outcome === 'blocked' ? 'owner' : 'warn'">
+                  {{ notice.outcome === 'blocked' ? 'Blocked by lock' : 'Changed' }}
+                </span>
+              </div>
+              <div class="sync-diff">
+                <div class="sync-side">
+                  <span class="sync-label">
+                    {{ notice.outcome === 'blocked' ? 'Your locked value' : 'Before' }}
+                  </span>
+                  <img
+                    v-if="IMAGE_FIELDS.includes(notice.field) && notice.oldValue"
+                    :src="getImageUrl(String(notice.oldValue), 'w185')"
+                    alt=""
+                    class="sync-image"
+                  />
+                  <p class="sync-value">{{ displayValue(notice.field, notice.oldValue) }}</p>
+                </div>
+                <div class="sync-side">
+                  <span class="sync-label">
+                    {{ notice.outcome === 'blocked' ? 'Sync wanted' : 'Now' }}
+                  </span>
+                  <img
+                    v-if="IMAGE_FIELDS.includes(notice.field) && notice.newValue"
+                    :src="getImageUrl(String(notice.newValue), 'w185')"
+                    alt=""
+                    class="sync-image"
+                  />
+                  <p class="sync-value">{{ displayValue(notice.field, notice.newValue) }}</p>
+                </div>
+              </div>
+              <div class="note-actions">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-small"
+                  :disabled="syncBusy"
+                  @click="resolveSync('dismiss', [notice])"
+                >
+                  Dismiss
                 </button>
-                <span class="social-meta">
-                  {{ KIND_BY_ID[notice.kind]?.singular }} · {{ FIELD_LABELS[notice.field] || notice.field }}
-                  · expires {{ expiresLabel(notice.expiresAt) }}
-                </span>
+                <button
+                  v-if="notice.outcome === 'changed'"
+                  type="button"
+                  class="btn btn-primary btn-small"
+                  :disabled="syncBusy"
+                  data-testid="sync-revert"
+                  @click="resolveSync('revert', [notice])"
+                >
+                  Revert &amp; lock
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="btn btn-primary btn-small"
+                  :disabled="syncBusy"
+                  data-testid="sync-apply"
+                  @click="resolveSync('apply', [notice])"
+                >
+                  Use new value
+                </button>
               </div>
-              <span class="admin-pill" :class="notice.outcome === 'blocked' ? 'owner' : 'warn'">
-                {{ notice.outcome === 'blocked' ? 'Blocked by lock' : 'Changed' }}
-              </span>
-            </div>
-            <div class="sync-diff">
-              <div class="sync-side">
-                <span class="sync-label">
-                  {{ notice.outcome === 'blocked' ? 'Your locked value' : 'Before' }}
-                </span>
-                <img
-                  v-if="IMAGE_FIELDS.includes(notice.field) && notice.oldValue"
-                  :src="getImageUrl(String(notice.oldValue), 'w185')"
-                  alt=""
-                  class="sync-image"
-                />
-                <p class="sync-value">{{ displayValue(notice.field, notice.oldValue) }}</p>
-              </div>
-              <div class="sync-side">
-                <span class="sync-label">
-                  {{ notice.outcome === 'blocked' ? 'Sync wanted' : 'Now' }}
-                </span>
-                <img
-                  v-if="IMAGE_FIELDS.includes(notice.field) && notice.newValue"
-                  :src="getImageUrl(String(notice.newValue), 'w185')"
-                  alt=""
-                  class="sync-image"
-                />
-                <p class="sync-value">{{ displayValue(notice.field, notice.newValue) }}</p>
-              </div>
-            </div>
-            <div class="note-actions">
-              <button
-                type="button"
-                class="btn btn-ghost btn-small"
-                :disabled="syncBusy"
-                @click="resolveSync('dismiss', [notice])"
-              >
-                Dismiss
-              </button>
-              <button
-                v-if="notice.outcome === 'changed'"
-                type="button"
-                class="btn btn-primary btn-small"
-                :disabled="syncBusy"
-                data-testid="sync-revert"
-                @click="resolveSync('revert', [notice])"
-              >
-                Revert &amp; lock
-              </button>
-              <button
-                v-else
-                type="button"
-                class="btn btn-primary btn-small"
-                :disabled="syncBusy"
-                data-testid="sync-apply"
-                @click="resolveSync('apply', [notice])"
-              >
-                Use new value
-              </button>
-            </div>
-          </li>
-        </ul>
-        <div v-if="pageCount(syncResults) > 1" class="admin-pager">
-          <button
-            type="button"
-            class="btn btn-ghost btn-small"
-            :disabled="syncResults.page <= 1"
-            @click="loadSync(syncResults.page - 1)"
-          >
-            Previous
-          </button>
-          <span class="social-meta">Page {{ syncResults.page }} of {{ pageCount(syncResults) }}</span>
-          <button
-            type="button"
-            class="btn btn-ghost btn-small"
-            :disabled="syncResults.page >= pageCount(syncResults)"
-            @click="loadSync(syncResults.page + 1)"
-          >
-            Next
-          </button>
+            </li>
+          </ul>
+          <div v-if="pageCount(syncResults) > 1" class="admin-pager">
+            <button
+              type="button"
+              class="btn btn-ghost btn-small"
+              :disabled="syncResults.page <= 1"
+              @click="loadSync(syncResults.page - 1)"
+            >
+              Previous
+            </button>
+            <span class="social-meta"
+              >Page {{ syncResults.page }} of {{ pageCount(syncResults) }}</span
+            >
+            <button
+              type="button"
+              class="btn btn-ghost btn-small"
+              :disabled="syncResults.page >= pageCount(syncResults)"
+              @click="loadSync(syncResults.page + 1)"
+            >
+              Next
+            </button>
+          </div>
         </div>
+
+        <h3 v-if="logCategory === 'sync'" class="link-title log-heading">This month's sync log</h3>
+        <div v-if="logLoading" class="social-loading"><div class="spinner"></div></div>
+        <p v-else-if="!logEntries.length" class="social-empty">Nothing logged here.</p>
+        <pre v-else class="log-text" data-testid="admin-log-text">{{ logText }}</pre>
       </section>
 
       <!-- Title: Users -->
@@ -430,13 +631,15 @@
           </div>
         </div>
         <p class="social-meta admin-rules">
-          Admins can mute users.
+          Admins can mute users and give Developer, Artist, and Influencer badges (these grant
+          nothing).
           <template v-if="authStore.isCreator">
             As the creator, you can also add or remove admins and ban users.
           </template>
           <template v-else>Only the creator can add admins or ban users.</template>
         </p>
         <div v-if="usersLoading" class="social-loading"><div class="spinner"></div></div>
+        <p v-else-if="usersError" class="social-empty admin-error">{{ usersError }}</p>
         <p v-else-if="!userResults.items.length" class="social-empty">No users found.</p>
         <ul v-else class="social-list">
           <li
@@ -462,6 +665,21 @@
                   </span>
                   <span v-if="!user.emailVerified" class="admin-pill muted">Unverified</span>
                   <span v-if="user.isDemo" class="admin-pill muted">Demo</span>
+                </div>
+                <div v-if="!user.isDemo && !user.bannedAt" class="cosmetic-toggles">
+                  <button
+                    v-for="role in COSMETIC_ROLES"
+                    :key="role"
+                    type="button"
+                    class="cosmetic-toggle"
+                    :class="[role, { on: user.cosmeticRoles.includes(role) }]"
+                    :aria-pressed="user.cosmeticRoles.includes(role)"
+                    :disabled="busy === user.id"
+                    :data-testid="`cosmetic-${role}`"
+                    @click="toggleCosmetic(user, role)"
+                  >
+                    {{ COSMETIC_LABELS[role] }}
+                  </button>
                 </div>
                 <p v-if="user.bannedAt && user.banReason" class="social-note">
                   Ban reason: {{ user.banReason }}
@@ -543,7 +761,11 @@
             >
               <template v-if="action.kind === 'mute'">
                 <label class="social-meta" :for="`mute-${user.id}`">Mute for</label>
-                <select :id="`mute-${user.id}`" v-model="action.duration" class="input admin-select">
+                <select
+                  :id="`mute-${user.id}`"
+                  v-model="action.duration"
+                  class="input admin-select"
+                >
                   <option v-for="option in MUTE_OPTIONS" :key="option.id" :value="option.id">
                     {{ option.label }}
                   </option>
@@ -584,7 +806,9 @@
           >
             Previous
           </button>
-          <span class="social-meta">Page {{ userResults.page }} of {{ pageCount(userResults) }}</span>
+          <span class="social-meta"
+            >Page {{ userResults.page }} of {{ pageCount(userResults) }}</span
+          >
           <button
             type="button"
             class="btn btn-ghost btn-small"
@@ -606,7 +830,7 @@ import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { adminAPI, getDetailsRouteName, getImageUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
-import { useStaffStore } from '@/stores/staff'
+import { COSMETIC_ROLES, useStaffStore, type CosmeticRole } from '@/stores/staff'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
 defineOptions({ name: 'AdminPage' })
@@ -622,14 +846,47 @@ type ContentHit = {
   releaseDate: string | null
   edited: boolean
 }
-type LinkItem = { id: string; kind: Kind; name: string; imagePath: string | null; note: string | null }
+type LinkRef = {
+  type: 'appearance' | 'voice_credit' | 'studio_credit'
+  workId?: string
+  characterId?: string
+  voiceId?: string
+  studioId?: string
+}
+type LinkItem = {
+  id: string
+  kind: Kind
+  name: string
+  imagePath: string | null
+  note: string | null
+  role?: string
+  link?: LinkRef
+}
+type LinkGroup = {
+  key: string
+  label: string
+  items: LinkItem[]
+  hint?: string
+  orderable?: boolean
+  roleEditable?: boolean
+  add?: {
+    search: 'character' | 'voice' | 'studio' | 'work'
+    link: LinkRef
+    targetKey: 'characterId' | 'voiceId' | 'studioId' | 'workId'
+    pick?: {
+      key: 'characterId' | 'workId'
+      label: string
+      options: Array<{ id: string; name: string }>
+    }
+  }
+}
 type EditableContent = {
   id: string
   kind: Kind
   fields: string[]
   values: Record<string, string | number | null>
   locked: string[]
-  links: Array<{ key: string; label: string; items: LinkItem[] }>
+  links: LinkGroup[]
 }
 type AdminUser = {
   id: string
@@ -645,12 +902,13 @@ type AdminUser = {
   muteReason: string | null
   bannedAt: string | null
   banReason: string | null
+  cosmeticRoles: CosmeticRole[]
 }
 
 const TABS = [
   { id: 'content', label: 'Content' },
-  { id: 'sync', label: 'Sync changes' },
-  { id: 'users', label: 'Users & moderation' },
+  { id: 'users', label: 'Users' },
+  { id: 'log', label: 'Log' },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 const KINDS: Array<{ id: Kind; singular: string; plural: string }> = [
@@ -746,7 +1004,9 @@ const currentImage = computed(() => {
   return String(values.posterPath || values.imagePath || '')
 })
 const backTarget = computed(() => history.value[history.value.length - 1] ?? null)
-const visibleLinks = computed(() => (editor.value?.links || []).filter((group) => group.items.length))
+const visibleLinks = computed(() =>
+  (editor.value?.links || []).filter((group) => group.items.length || group.add),
+)
 
 const loadContent = async (page = 1) => {
   const seq = ++contentSeq
@@ -843,6 +1103,119 @@ const openContent = async (id: string, { fresh = false, fromBack = false } = {})
   }
 }
 
+// --- Links (cast, voice actors, studios) ------------------------------------
+
+const SEARCH_LABELS: Record<string, string> = {
+  character: 'a character',
+  voice: 'a voice actor',
+  studio: 'a studio',
+  work: 'a title',
+}
+type Adder = { query: string; pick: string; results: ContentHit[]; seq: number }
+const adders = ref<Record<string, Adder>>({})
+const linkBusy = ref(false)
+let adderTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Fresh adder state for every group of the row now in the editor. */
+watch(
+  () => editor.value?.id,
+  () => {
+    adders.value = Object.fromEntries(
+      (editor.value?.links || []).map((group) => [
+        group.key,
+        { query: '', pick: '', results: [], seq: 0 },
+      ]),
+    )
+  },
+)
+
+/** Swap in fresh links from a link call without touching unsaved field edits. */
+const applyLinks = (data: EditableContent) => {
+  if (editor.value && editor.value.id === data.id) editor.value.links = data.links
+}
+
+const searchAdder = (group: LinkGroup) => {
+  const adder = adders.value[group.key]
+  if (!adder || !group.add) return
+  clearTimeout(adderTimer)
+  const term = adder.query.trim()
+  if (term.length < 2) {
+    adder.results = []
+    return
+  }
+  adderTimer = setTimeout(async () => {
+    const seq = ++adder.seq
+    try {
+      const response = await adminAPI.searchContent({ q: term, type: group.add!.search })
+      const taken = new Set(group.items.map((item) => item.id))
+      if (seq === adder.seq) {
+        adder.results = (response.data.data.items as ContentHit[])
+          .filter((hit) => group.key === 'voices' || !taken.has(hit.id))
+          .slice(0, 8)
+      }
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Search failed.'))
+    }
+  }, SEARCH_DELAY_MS)
+}
+
+const runLinkCall = async (
+  call: () => Promise<{ data: { data: EditableContent; message: string } }>,
+) => {
+  linkBusy.value = true
+  try {
+    const response = await call()
+    applyLinks(response.data.data)
+    toast.success(response.data.message)
+    return true
+  } catch (error) {
+    toast.error(apiErrorMessage(error, 'That did not work.'))
+    return false
+  } finally {
+    linkBusy.value = false
+  }
+}
+
+const addLink = async (group: LinkGroup, hit: ContentHit) => {
+  const add = group.add
+  const adder = adders.value[group.key]
+  if (!add || !adder || !editor.value) return
+  const link: LinkRef = { ...add.link, [add.targetKey]: hit.id }
+  if (add.pick) link[add.pick.key] = adder.pick
+  const ok = await runLinkCall(() => adminAPI.changeLink('add', link, editor.value!.id))
+  if (ok) {
+    adder.query = ''
+    adder.results = []
+  }
+}
+
+const removeLink = async (item: LinkItem) => {
+  if (!item.link || !editor.value) return
+  const what = item.note ? `${item.name} (${item.note})` : item.name
+  if (!window.confirm(`Remove ${what}? The sync won't add it back.`)) return
+  await runLinkCall(() => adminAPI.changeLink('remove', item.link!, editor.value!.id))
+}
+
+const moveCast = async (group: LinkGroup, index: number, step: -1 | 1) => {
+  if (!editor.value) return
+  const order = group.items.map((item) => item.id)
+  const [moved] = order.splice(index, 1)
+  order.splice(index + step, 0, moved!)
+  await runLinkCall(() => adminAPI.reorderCast(editor.value!.id, order))
+}
+
+const setCastRole = async (item: LinkItem, role: string) => {
+  if (!item.link || !editor.value) return
+  await runLinkCall(() =>
+    adminAPI.setAppearanceRole({
+      workId: item.link!.workId!,
+      characterId: item.link!.characterId!,
+      role,
+      editorId: editor.value!.id,
+    }),
+  )
+}
+
 const goBack = () => {
   const previous = history.value.pop()
   if (previous) openContent(previous.id, { fromBack: true })
@@ -892,10 +1265,14 @@ const userFilter = ref<(typeof USER_FILTERS)[number]['id']>('all')
 const userResults = ref<Page<AdminUser>>(emptyPage())
 const usersLoading = ref(false)
 const usersLoaded = ref(false)
+const usersError = ref('')
 const busy = ref<string | null>(null)
-const action = ref<{ userId: string; kind: 'mute' | 'ban'; duration: string; reason: string } | null>(
-  null,
-)
+const action = ref<{
+  userId: string
+  kind: 'mute' | 'ban'
+  duration: string
+  reason: string
+} | null>(null)
 let userTimer: ReturnType<typeof setTimeout> | undefined
 let userSeq = 0
 
@@ -911,9 +1288,13 @@ const loadUsers = async (page = 1) => {
     if (seq === userSeq) {
       userResults.value = response.data.data
       usersLoaded.value = true
+      usersError.value = ''
     }
   } catch (error) {
-    if (seq === userSeq) toast.error(apiErrorMessage(error, 'Could not load users.'))
+    if (seq === userSeq) {
+      usersError.value = apiErrorMessage(error, 'Could not load users.')
+      toast.error(usersError.value)
+    }
   } finally {
     if (seq === userSeq) usersLoading.value = false
   }
@@ -926,7 +1307,10 @@ watch([userQuery, userFilter], () => {
 
 watch(activeTab, (tab) => {
   if (tab === 'users' && !usersLoaded.value && !usersLoading.value) loadUsers(1)
-  if (tab === 'sync') loadSync(1)
+  if (tab === 'log') {
+    loadLog()
+    if (logCategory.value === 'sync') loadSync(1)
+  }
 })
 
 // --- Sync changes ----------------------------------------------------------
@@ -1011,7 +1395,7 @@ const resolveSync = async (action: 'revert' | 'apply' | 'dismiss', notices: Sync
     )
     toast.success(response.data.message)
     const page = syncResults.value.items.length === notices.length ? 1 : syncResults.value.page
-    await Promise.all([loadSync(page), loadSyncCount()])
+    await Promise.all([loadSync(page), loadSyncCount(), loadLog()])
     // Keep an open editor in step with what just changed.
     if (editor.value && notices.some((notice) => notice.contentId === editor.value?.id)) {
       const id = editor.value.id
@@ -1046,7 +1430,10 @@ const canManageRole = (user: AdminUser) =>
 
 /** Mirrors adminService.muteUser: admins mute regular users; the creator can mute admins. */
 const canMute = (user: AdminUser) =>
-  !isSelf(user) && user.role !== 'creator' && !user.bannedAt && (!user.isAdmin || authStore.isCreator)
+  !isSelf(user) &&
+  user.role !== 'creator' &&
+  !user.bannedAt &&
+  (!user.isAdmin || authStore.isCreator)
 
 /** Mirrors adminService.setBan: creator only; owners must leave ADMIN_EMAILS first. */
 const canBan = (user: AdminUser) =>
@@ -1067,7 +1454,10 @@ const openAction = (userId: string, kind: 'mute' | 'ban') => {
 }
 
 /** Run a moderation call and merge the returned user into the list. */
-const moderate = async (user: AdminUser, call: () => Promise<{ data: { data: AdminUser; message: string } }>) => {
+const moderate = async (
+  user: AdminUser,
+  call: () => Promise<{ data: { data: AdminUser; message: string } }>,
+) => {
   busy.value = user.id
   try {
     const response = await call()
@@ -1102,11 +1492,115 @@ const submitAction = (user: AdminUser) => {
   }
 }
 
+const COSMETIC_LABELS: Record<CosmeticRole, string> = {
+  developer: 'Developer',
+  artist: 'Artist',
+  influencer: 'Influencer',
+}
+
+/** Give or take a badge-only role (any admin, any mix, self included). */
+const toggleCosmetic = (user: AdminUser, role: CosmeticRole) => {
+  const next = user.cosmeticRoles.includes(role)
+    ? user.cosmeticRoles.filter((held) => held !== role)
+    : [...user.cosmeticRoles, role]
+  moderate(user, () => adminAPI.setCosmeticRoles(user.id, next))
+}
+
 const unmute = (user: AdminUser) => moderate(user, () => adminAPI.muteUser(user.id, 'off'))
 
 const unban = (user: AdminUser) => {
   if (!window.confirm(`Unban ${user.username}? They'll be able to sign in again.`)) return
   moderate(user, () => adminAPI.setBan(user.id, false))
+}
+
+// --- Log -------------------------------------------------------------------
+
+type LogEntry = {
+  category: 'admin' | 'moderation' | 'sync'
+  actor: string | null
+  message: string
+  createdAt: string
+}
+
+const LOG_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'admin', label: 'Admin actions' },
+  { id: 'moderation', label: 'Moderation' },
+  { id: 'sync', label: 'Sync changes' },
+] as const
+const LOG_SECTION: Record<LogEntry['category'], string> = {
+  admin: 'ADMIN',
+  moderation: 'MODERATION',
+  sync: 'SYNC',
+}
+
+const logMonths = ref<Array<{ month: string; count: number }>>([])
+const logMonth = ref('')
+const logCategory = ref<(typeof LOG_FILTERS)[number]['id']>('all')
+const logEntries = ref<LogEntry[]>([])
+const logLoading = ref(false)
+let logSeq = 0
+
+const loadLog = async () => {
+  const seq = ++logSeq
+  logLoading.value = true
+  try {
+    const response = await adminAPI.getLog({
+      month: logMonth.value || undefined,
+      category: logCategory.value === 'all' ? undefined : logCategory.value,
+    })
+    if (seq !== logSeq) return
+    const data = response.data.data
+    logMonths.value = data.months
+    logEntries.value = data.entries
+    if (data.month && data.month !== logMonth.value) logMonth.value = data.month
+  } catch (error) {
+    if (seq === logSeq) toast.error(apiErrorMessage(error, 'Could not load the log.'))
+  } finally {
+    if (seq === logSeq) logLoading.value = false
+  }
+}
+
+watch([logMonth, logCategory], (next, previous) => {
+  if (next[1] === 'sync' && previous[1] !== 'sync') loadSync(1)
+  // The first load fills logMonth itself; don't fetch twice for that.
+  if (previous[0] === '' && next[1] === previous[1]) return
+  loadLog()
+})
+
+const monthLabel = (month: string) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+
+const pad = (n: number) => String(n).padStart(2, '0')
+const utcStamp = (value: string) => {
+  const d = new Date(value)
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+}
+
+/** One line per entry: time, section, who, what. */
+const logText = computed(() =>
+  logEntries.value
+    .map(
+      (entry) =>
+        `${utcStamp(entry.createdAt)}  ${LOG_SECTION[entry.category].padEnd(10)}  ${(entry.actor || 'sync').padEnd(16)}  ${entry.message}`,
+    )
+    .join('\n'),
+)
+
+const downloadLog = () => {
+  const section = logCategory.value === 'all' ? '' : `-${logCategory.value}`
+  const header = `AniLounge admin log, ${monthLabel(logMonth.value)} (UTC)${section ? `, ${section.slice(1)}` : ''}\n\n`
+  const blob = new Blob([header + logText.value + '\n'], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `anilounge-admin-log-${logMonth.value}${section}.txt`
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
 
 onMounted(() => {
@@ -1116,6 +1610,7 @@ onMounted(() => {
 onUnmounted(() => {
   clearTimeout(contentTimer)
   clearTimeout(userTimer)
+  clearTimeout(adderTimer)
 })
 </script>
 
@@ -1403,7 +1898,9 @@ onUnmounted(() => {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .link-chip:hover {
@@ -1498,6 +1995,221 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   margin-top: 0.75rem;
+}
+
+.link-hint {
+  margin: -0.3rem 0 0.5rem;
+}
+
+.cast-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cast-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-parchment);
+}
+
+.cast-move {
+  display: flex;
+  flex-direction: column;
+}
+
+.cast-index {
+  width: 1.5rem;
+  text-align: right;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.cast-name {
+  margin: 0 auto 0 0;
+  text-decoration: none;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.cast-role {
+  width: auto;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.icon-button {
+  border: none;
+  background: none;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.7rem;
+  line-height: 1.1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--coral-deep);
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.icon-button.remove {
+  font-size: 0.85rem;
+}
+
+.icon-button.remove:hover:not(:disabled) {
+  color: var(--error-color);
+}
+
+.chip-open {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-adder {
+  position: relative;
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.link-adder .input {
+  flex: 1 1 200px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.link-adder .adder-pick {
+  flex: 0 1 220px;
+}
+
+.adder-results {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem;
+  flex-basis: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+
+.adder-hit {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.adder-hit:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.sync-review {
+  margin: 0.75rem 0 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border-hover);
+  border-radius: 14px;
+  background: var(--bg-parchment);
+}
+
+.sync-intro {
+  margin: -0.2rem 0 0.6rem;
+}
+
+.log-heading {
+  margin-top: 0.5rem;
+}
+
+.cosmetic-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.cosmetic-toggle {
+  padding: 0.15rem 0.6rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.cosmetic-toggle:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.cosmetic-toggle.on {
+  border-style: solid;
+  border-color: transparent;
+  color: #fff;
+}
+
+.cosmetic-toggle.on.developer {
+  background: linear-gradient(135deg, #34d399, #0ea5e9);
+}
+
+.cosmetic-toggle.on.artist {
+  background: linear-gradient(135deg, #f472b6, #a855f7);
+}
+
+.cosmetic-toggle.on.influencer {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+}
+
+.log-download {
+  margin-left: auto;
+}
+
+.log-text {
+  margin: 0.75rem 0 0;
+  padding: 1rem;
+  max-height: 65vh;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  white-space: pre;
 }
 
 .tab-count {

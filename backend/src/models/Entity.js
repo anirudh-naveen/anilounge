@@ -91,6 +91,8 @@ async function loadEntityChildren(docs) {
       character: row.character_id,
       role: appearanceRoleToApi(row.role),
       importance: row.importance,
+      // Admin cast order on this title (null = none set).
+      position: row.position ?? null,
       voiceActors: row.voice_actors || [],
     }))
   }
@@ -222,9 +224,16 @@ async function upsertAppearances(rows) {
        AS t(work_id, character_id, role, importance)
      JOIN content w ON w.id = t.work_id AND w.kind IN ('movie', 'series', 'special')
      JOIN characters ch ON ch.content_id = t.character_id
+     WHERE NOT EXISTS (
+       SELECT 1 FROM admin_link_removals r
+       WHERE r.link_kind = 'appearance' AND r.work_id = t.work_id AND r.other_id = t.character_id
+     )
      ON CONFLICT (work_id, character_id) DO UPDATE SET
-       role = EXCLUDED.role,
-       importance = GREATEST(appearances.importance, EXCLUDED.importance)
+       role = CASE WHEN appearances.admin_locked THEN appearances.role ELSE EXCLUDED.role END,
+       importance = CASE
+         WHEN appearances.admin_locked THEN appearances.importance
+         ELSE GREATEST(appearances.importance, EXCLUDED.importance)
+       END
      RETURNING id, work_id::text, character_id::text`,
     [
       list.map((row) => row.workId),
@@ -273,7 +282,7 @@ async function insertVoiceCredits(credits) {
     await query(
       `DELETE FROM voice_credits vc
        USING unnest($1::uuid[], $2::uuid[], $3::text[]) AS t(appearance_id, voice_id, language)
-       WHERE t.language IS NOT NULL
+       WHERE t.language IS NOT NULL AND NOT vc.admin_added
          AND vc.appearance_id = t.appearance_id AND vc.voice_id = t.voice_id
          AND (vc.language IS NULL OR lower(vc.language) = 'unknown')`,
       params,
@@ -283,10 +292,16 @@ async function insertVoiceCredits(credits) {
        SELECT t.appearance_id, t.voice_id, t.language
        FROM unnest($1::uuid[], $2::uuid[], $3::text[]) AS t(appearance_id, voice_id, language)
        JOIN voices v ON v.content_id = t.voice_id
+       JOIN appearances a ON a.id = t.appearance_id
        WHERE NOT EXISTS (
          SELECT 1 FROM voice_credits x
          WHERE x.appearance_id = t.appearance_id AND x.voice_id = t.voice_id
            AND (t.language IS NULL OR x.language = t.language)
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM admin_link_removals r
+         WHERE r.link_kind = 'voice_credit' AND r.work_id = a.work_id
+           AND r.other_id = a.character_id AND r.voice_id = t.voice_id
        )
        ON CONFLICT DO NOTHING`,
       params,
@@ -436,7 +451,7 @@ Entity.prototype.save = async function save() {
       if (keptWorks.length) {
         await query(
           `DELETE FROM appearances
-           WHERE character_id = $1
+           WHERE character_id = $1 AND NOT admin_locked
              AND NOT (work_id::text = ANY($2::text[]))`,
           [this._id, keptWorks],
         )
@@ -476,15 +491,20 @@ Entity.prototype.save = async function save() {
   }
 
   if (kind === 'studio') {
-    await query('DELETE FROM studio_credits WHERE studio_id = $1', [this._id])
     const workIds = [
       ...new Set((this.appearances || []).map((row) => asId(row.content)).filter(isUuid)),
     ]
+    // An empty list means "unknown": keep the credits. Admin-added credits always stay.
     if (workIds.length) {
+      await query('DELETE FROM studio_credits WHERE studio_id = $1 AND NOT admin_added', [this._id])
       await query(
         `INSERT INTO studio_credits (work_id, studio_id)
          SELECT w.id, $2 FROM content w
          WHERE w.id = ANY($1::uuid[]) AND w.kind IN ('movie', 'series', 'special')
+           AND NOT EXISTS (
+             SELECT 1 FROM admin_link_removals r
+             WHERE r.link_kind = 'studio_credit' AND r.work_id = w.id AND r.other_id = $2
+           )
          ON CONFLICT DO NOTHING`,
         [workIds, this._id],
       )
@@ -556,7 +576,7 @@ Entity.updateMany = async function updateMany(filter = {}, update = {}) {
     `DELETE FROM appearances a
      USING content e
      WHERE a.character_id = e.id
-       AND e.kind = 'character'
+       AND e.kind = 'character' AND NOT a.admin_locked
        AND ${compiled.sql}
        AND a.work_id::text = $${params.length}`,
     params,

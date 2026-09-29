@@ -895,7 +895,7 @@ const handleImageError = (event: Event) => {
 }
 
 /* Sit the creator/admin badge on the name's cap height rather than its baseline. */
-.hero-info h1 .role-badge {
+.hero-info h1 .badge-group {
   vertical-align: 0em;
 }
 

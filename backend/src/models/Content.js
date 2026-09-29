@@ -511,13 +511,17 @@ async function upsertFranchise(name) {
 async function replaceChildren(doc) {
   const id = doc._id
   // An empty list from the sync means "unknown", not "none": keep what the row has.
-  const hasGenres = (doc.genres || []).some((genre) => (typeof genre === 'string' ? genre : genre?.name))
+  const hasGenres = (doc.genres || []).some((genre) =>
+    typeof genre === 'string' ? genre : genre?.name,
+  )
   const hasAkas = (doc.alternativeTitles || []).some(Boolean)
   const hasStudios = [...(doc.studios || []), ...(doc.productionCompanies || [])].some(Boolean)
   const franchiseName = doc.franchise || doc.relationships?.franchise
   if (hasGenres) await query('DELETE FROM content_genres WHERE content_id = $1', [id])
   if (hasAkas) await query('DELETE FROM content_akas WHERE content_id = $1', [id])
-  if (hasStudios) await query('DELETE FROM studio_credits WHERE work_id = $1', [id])
+  if (hasStudios) {
+    await query('DELETE FROM studio_credits WHERE work_id = $1 AND NOT admin_added', [id])
+  }
   if (franchiseName) await query('DELETE FROM franchise_members WHERE member_id = $1', [id])
 
   for (const genre of doc.genres || []) {
@@ -551,7 +555,12 @@ async function replaceChildren(doc) {
   for (const name of studioNames) {
     const studioId = await upsertStudio(name, refsByName.get(name.toLowerCase()))
     await query(
-      'INSERT INTO studio_credits (work_id, studio_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      `INSERT INTO studio_credits (work_id, studio_id)
+       SELECT $1, $2 WHERE NOT EXISTS (
+         SELECT 1 FROM admin_link_removals r
+         WHERE r.link_kind = 'studio_credit' AND r.work_id = $1 AND r.other_id = $2
+       )
+       ON CONFLICT DO NOTHING`,
       [id, studioId],
     )
   }

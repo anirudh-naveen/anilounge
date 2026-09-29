@@ -19,6 +19,11 @@ const api = vi.hoisted(() => ({
   listSyncChanges: vi.fn(),
   countSyncChanges: vi.fn(),
   resolveSyncChanges: vi.fn(),
+  changeLink: vi.fn(),
+  reorderCast: vi.fn(),
+  setAppearanceRole: vi.fn(),
+  getLog: vi.fn(),
+  setCosmeticRoles: vi.fn(),
 }))
 
 vi.mock('@/services/api', async (original) => ({
@@ -34,6 +39,11 @@ vi.mock('@/services/api', async (original) => ({
     listSyncChanges: api.listSyncChanges,
     countSyncChanges: api.countSyncChanges,
     resolveSyncChanges: api.resolveSyncChanges,
+    changeLink: api.changeLink,
+    reorderCast: api.reorderCast,
+    setAppearanceRole: api.setAppearanceRole,
+    getLog: api.getLog,
+    setCosmeticRoles: api.setCosmeticRoles,
   },
   staffAPI: { list: api.staff },
 }))
@@ -41,7 +51,9 @@ vi.mock('@/services/api', async (original) => ({
 import Admin from '@/views/Admin.vue'
 import { useAuthStore } from '@/stores/auth'
 
-const page = <T>(items: T[]) => ({ data: { data: { items, page: 1, pageSize: 25, total: items.length } } })
+const page = <T>(items: T[]) => ({
+  data: { data: { items, page: 1, pageSize: 25, total: items.length } },
+})
 
 const show = {
   id: 'show-1',
@@ -80,6 +92,7 @@ const user = (overrides = {}) => ({
   muteReason: null,
   bannedAt: null,
   banReason: null,
+  cosmeticRoles: [],
   ...overrides,
 })
 
@@ -140,12 +153,24 @@ describe('Admin page', () => {
       ]),
     )
     api.searchContent.mockResolvedValue(
-      page([{ id: 'show-1', kind: 'series', title: 'Frieren', subtitle: null, imagePath: null, releaseDate: null, edited: false }]),
+      page([
+        {
+          id: 'show-1',
+          kind: 'series',
+          title: 'Frieren',
+          subtitle: null,
+          imagePath: null,
+          releaseDate: null,
+          edited: false,
+        },
+      ]),
     )
     api.getContent.mockImplementation(async (id: string) => ({
       data: { data: id === 'show-1' ? show : fern },
     }))
-    api.listUsers.mockResolvedValue(page([user(), user({ id: 'u3', username: 'mod', role: 'admin', isAdmin: true })]))
+    api.listUsers.mockResolvedValue(
+      page([user(), user({ id: 'u3', username: 'mod', role: 'admin', isAdmin: true })]),
+    )
   })
 
   it('searches the selected kind', async () => {
@@ -154,7 +179,9 @@ describe('Admin page', () => {
     expect(api.searchContent).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'movie' }))
     await wrapper.find('[data-testid="admin-kind-character"]').trigger('click')
     await flushPromises()
-    expect(api.searchContent).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'character' }))
+    expect(api.searchContent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'character' }),
+    )
   })
 
   it('opens a row, follows a linked row, and goes back', async () => {
@@ -180,7 +207,7 @@ describe('Admin page', () => {
   it('lets admins mute regular users but not manage roles or ban', async () => {
     const wrapper = mountAdmin('admin')
     await flushPromises()
-    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[1]!.trigger('click')
     await flushPromises()
     const text = wrapper.find('[data-testid="admin-users"]').text()
     expect(text).toContain('Mute…')
@@ -193,7 +220,7 @@ describe('Admin page', () => {
   it('gives the creator role and ban controls', async () => {
     const wrapper = mountAdmin('creator')
     await flushPromises()
-    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[1]!.trigger('click')
     await flushPromises()
     const text = wrapper.find('[data-testid="admin-users"]').text()
     expect(text).toContain('Make admin')
@@ -201,11 +228,17 @@ describe('Admin page', () => {
     expect(text).toContain('Ban…')
   })
 
-  it('shows sync changes and reverts or applies them', async () => {
+  it('shows sync changes under the log and reverts or applies them', async () => {
+    api.getLog.mockResolvedValue({ data: { data: { months: [], month: null, entries: [] } } })
     const wrapper = mountAdmin('admin')
     await flushPromises()
     expect(wrapper.find('.tab-count').text()).toBe('2')
-    await wrapper.findAll('.admin-tab')[1]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await flushPromises()
+    const syncSection = wrapper
+      .findAll('[data-testid="admin-log"] .kind-tab')
+      .find((button) => button.text() === 'Sync changes')
+    await syncSection!.trigger('click')
     await flushPromises()
     const panel = wrapper.find('[data-testid="admin-sync-changes"]')
     expect(panel.text()).toContain('Old synopsis')
@@ -217,5 +250,131 @@ describe('Admin page', () => {
     await wrapper.find('[data-testid="sync-apply"]').trigger('click')
     await flushPromises()
     expect(api.resolveSyncChanges).toHaveBeenCalledWith('apply', ['n2'])
+  })
+
+  it('reorders, removes, and adds cast members', async () => {
+    const cast = {
+      ...show,
+      links: [
+        {
+          key: 'characters',
+          label: 'Characters',
+          orderable: true,
+          roleEditable: true,
+          items: ['Fern', 'Stark'].map((name, index) => ({
+            id: `char-${index + 1}`,
+            kind: 'character',
+            name,
+            imagePath: null,
+            note: 'Main',
+            role: 'main',
+            link: { type: 'appearance', workId: 'show-1', characterId: `char-${index + 1}` },
+          })),
+          add: {
+            search: 'character',
+            link: { type: 'appearance', workId: 'show-1' },
+            targetKey: 'characterId',
+          },
+        },
+      ],
+    }
+    api.getContent.mockResolvedValue({ data: { data: cast } })
+    const ok = { data: { data: cast, message: 'Done.' } }
+    api.reorderCast.mockResolvedValue(ok)
+    api.changeLink.mockResolvedValue(ok)
+    api.searchContent.mockImplementation(async (params: { type?: string }) =>
+      params.type === 'character'
+        ? page([
+            {
+              id: 'char-9',
+              kind: 'character',
+              title: 'Himmel',
+              subtitle: null,
+              imagePath: null,
+              releaseDate: null,
+              edited: false,
+            },
+          ])
+        : page([
+            {
+              id: 'show-1',
+              kind: 'series',
+              title: 'Frieren',
+              subtitle: null,
+              imagePath: null,
+              releaseDate: null,
+              edited: false,
+            },
+          ]),
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.useFakeTimers()
+
+    const wrapper = mountAdmin('admin')
+    await flushPromises()
+    await wrapper.find('[data-testid="admin-pick"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="cast-up"]')[1]!.trigger('click')
+    await flushPromises()
+    expect(api.reorderCast).toHaveBeenCalledWith('show-1', ['char-2', 'char-1'])
+
+    await wrapper.findAll('[data-testid="link-remove"]')[0]!.trigger('click')
+    await flushPromises()
+    expect(api.changeLink).toHaveBeenCalledWith('remove', cast.links[0]!.items[0]!.link, 'show-1')
+
+    await wrapper.find('[data-testid="link-add-characters"]').setValue('Him')
+    vi.advanceTimersByTime(400)
+    await flushPromises()
+    await wrapper.find('[data-testid="link-add-hit"]').trigger('click')
+    await flushPromises()
+    expect(api.changeLink).toHaveBeenLastCalledWith(
+      'add',
+      { type: 'appearance', workId: 'show-1', characterId: 'char-9' },
+      'show-1',
+    )
+    vi.useRealTimers()
+  })
+
+  it('shows the monthly log read-only', async () => {
+    api.getLog.mockResolvedValue({
+      data: {
+        data: {
+          months: [{ month: '2026-09', count: 1 }],
+          month: '2026-09',
+          entries: [
+            {
+              category: 'moderation',
+              actor: 'me',
+              message: 'Muted "viewer" for 24h',
+              createdAt: '2026-09-29T17:32:00Z',
+            },
+          ],
+        },
+      },
+    })
+    const wrapper = mountAdmin('creator')
+    await flushPromises()
+    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await flushPromises()
+    const text = wrapper.find('[data-testid="admin-log-text"]').text()
+    expect(text).toContain('2026-09-29 17:32')
+    expect(text).toContain('MODERATION')
+    expect(text).toContain('Muted "viewer" for 24h')
+    expect(wrapper.find('[data-testid="admin-log"] textarea').exists()).toBe(false)
+  })
+
+  it('lets admins toggle badge-only roles', async () => {
+    api.setCosmeticRoles.mockResolvedValue({
+      data: { message: 'Roles updated.', data: user({ cosmeticRoles: ['artist'] }) },
+    })
+    const wrapper = mountAdmin('admin')
+    await flushPromises()
+    await wrapper.findAll('.admin-tab')[1]!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="cosmetic-artist"]').trigger('click')
+    await flushPromises()
+    expect(api.setCosmeticRoles).toHaveBeenCalledWith('u2', ['artist'])
+    expect(wrapper.find('[data-testid="cosmetic-artist"]').classes()).toContain('on')
   })
 })

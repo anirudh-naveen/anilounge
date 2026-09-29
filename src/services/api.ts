@@ -322,6 +322,18 @@ export const adminAPI = {
   updateContent: (id: string, body: { changes?: Record<string, unknown>; unlock?: string[] }) =>
     api.patch(`/admin/content/${id}`, body),
 
+  /** Add or remove a cast/voice/studio link; returns the editor row `editorId`. */
+  changeLink: (op: 'add' | 'remove', link: Record<string, unknown>, editorId: string) =>
+    api.post(`/admin/links/${op}`, { link, editorId }),
+
+  reorderCast: (workId: string, characterIds: string[]) =>
+    api.put(`/admin/content/${workId}/cast-order`, { characterIds }),
+
+  setAppearanceRole: (body: { workId: string; characterId: string; role: string; editorId: string }) =>
+    api.put('/admin/links/role', body),
+
+  getLog: (params: { month?: string; category?: string }) => api.get('/admin/log', { params }),
+
   listSyncChanges: (params: { outcome?: string; page?: number }) =>
     api.get('/admin/sync-changes', { params }),
 
@@ -335,6 +347,10 @@ export const adminAPI = {
     api.get('/admin/users', { params }),
 
   setUserRole: (id: string, role: 'user' | 'admin') => api.put(`/admin/users/${id}/role`, { role }),
+
+  /** Badge-only roles; `roles` is the full list the user should have. */
+  setCosmeticRoles: (id: string, roles: string[]) =>
+    api.put(`/admin/users/${id}/cosmetic-roles`, { roles }),
 
   /** `duration`: 1h | 24h | 7d | 30d | permanent, or 'off' to unmute. */
   muteUser: (id: string, duration: string, reason?: string) =>
