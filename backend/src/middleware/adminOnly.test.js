@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import adminOnly, { isAdminUser, isCreatorUser, parseAdminEmails } from './adminOnly.js'
+import adminOnly, {
+  canEditContent,
+  isAdminUser,
+  isCreatorUser,
+  parseAdminEmails,
+} from './adminOnly.js'
 
 const admins = parseAdminEmails(' Owner@AniLounge.net , ops@anilounge.net,, ')
 const user = (overrides = {}) => ({
@@ -84,5 +89,24 @@ describe('adminOnly', () => {
       if (saved === undefined) delete process.env.ADMIN_EMAILS
       else process.env.ADMIN_EMAILS = saved
     }
+  })
+})
+
+describe('canEditContent', () => {
+  const none = parseAdminEmails('')
+  const dev = (overrides = {}) =>
+    user({ email: 'dev@example.com', role: 'user', cosmeticRoles: ['developer'], ...overrides })
+
+  it('lets admins and developers edit content, but developers are not admins', () => {
+    assert.equal(canEditContent(user({ role: 'admin' }), none), true)
+    assert.equal(canEditContent(dev(), none), true)
+    assert.equal(isAdminUser(dev(), none), false)
+  })
+
+  it('refuses other badges, muted, banned, and unverified developers', () => {
+    assert.equal(canEditContent(dev({ cosmeticRoles: ['artist'] }), none), false)
+    assert.equal(canEditContent(dev({ mutedUntil: new Date(Date.now() + 60000) }), none), false)
+    assert.equal(canEditContent(dev({ bannedAt: new Date() }), none), false)
+    assert.equal(canEditContent(dev({ emailVerified: false }), none), false)
   })
 })

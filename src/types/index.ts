@@ -65,6 +65,8 @@ export interface User {
   email: string
   isDemoAccount?: boolean
   isAdmin?: boolean
+  /** Admins and Developer-badge holders can edit catalog content. */
+  canEditContent?: boolean
   role?: 'user' | 'admin' | 'creator'
   profilePicture?: string
   createdAt?: string

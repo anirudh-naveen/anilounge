@@ -63,6 +63,7 @@ export interface SessionUser {
   email: string
   isDemoAccount?: boolean
   isAdmin?: boolean
+  canEditContent?: boolean
   role?: 'user' | 'admin' | 'creator'
   profilePicture?: string | null
   createdAt?: string
@@ -332,10 +333,17 @@ export const adminAPI = {
   reorderCast: (workId: string, characterIds: string[]) =>
     api.put(`/admin/content/${workId}/cast-order`, { characterIds }),
 
-  setAppearanceRole: (body: { workId: string; characterId: string; role: string; editorId: string }) =>
-    api.put('/admin/links/role', body),
+  setAppearanceRole: (body: {
+    workId: string
+    characterId: string
+    role: string
+    editorId: string
+  }) => api.put('/admin/links/role', body),
 
   getLog: (params: { month?: string; category?: string }) => api.get('/admin/log', { params }),
+
+  /** Feedback page submissions (bugs, feature requests); admins only. */
+  listFeedback: (params: { type?: string; page?: number }) => api.get('/feedback', { params }),
 
   listSyncChanges: (params: { outcome?: string; page?: number }) =>
     api.get('/admin/sync-changes', { params }),
