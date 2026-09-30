@@ -78,6 +78,20 @@ CREATE TABLE IF NOT EXISTS admin_log (
 );
 CREATE INDEX IF NOT EXISTS admin_log_created_idx ON admin_log (created_at DESC);
 
+-- Bug reports and suggestions from the Feedback page (controllers/feedbackController.js).
+-- Each one is also emailed to SUPPORT_EMAIL; admins read them in the admin Log tab.
+CREATE TABLE IF NOT EXISTS feedback (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        TEXT NOT NULL CHECK (type IN ('bug', 'feature', 'improvement', 'other')),
+  message     TEXT NOT NULL CHECK (char_length(message) BETWEEN 1 AND 5000),
+  email       TEXT,
+  user_id     UUID,
+  page_url    TEXT,
+  user_agent  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS feedback_created_idx ON feedback (created_at DESC);
+
 CREATE OR REPLACE FUNCTION admin_log_append_only() RETURNS trigger LANGUAGE plpgsql AS
   'BEGIN RAISE EXCEPTION ''admin_log is append-only''; END';
 DROP TRIGGER IF EXISTS admin_log_no_change ON admin_log;

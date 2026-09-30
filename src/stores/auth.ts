@@ -33,6 +33,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => Boolean(user.value?.isAdmin))
   /** The site creator: the only one who can add/remove admins and ban users. */
   const isCreator = computed(() => isAdmin.value && user.value?.role === 'creator')
+  /** Admins, plus Developer-badge holders (who only get the admin page's Content tab). */
+  const canEditContent = computed(() => isAdmin.value || Boolean(user.value?.canEditContent))
 
   /** Machine-readable code from the last failed call (e.g. `EMAIL_NOT_VERIFIED`, `ACCOUNT_LOCKED`). */
   const errorCode = ref<string | null>(null)
@@ -323,6 +325,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isDemoUser,
     isAdmin,
+    canEditContent,
     isCreator,
     login,
     verifyTwoFactor,

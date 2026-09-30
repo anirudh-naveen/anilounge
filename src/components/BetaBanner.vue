@@ -79,7 +79,6 @@ onMounted(() => {
   text-decoration: underline;
   cursor: pointer;
   font-size: inherit;
-  margin-left: 4px;
 }
 
 .feedback-link:hover {

@@ -152,12 +152,14 @@
                     <span class="item-text">Friends</span>
                   </router-link>
                   <router-link
-                    v-if="authStore.isAdmin"
+                    v-if="authStore.canEditContent"
                     to="/admin"
                     class="dropdown-item"
                     @click="closeDropdown"
                   >
-                    <span class="item-text">Admin</span>
+                    <span class="item-text">{{
+                      authStore.isAdmin ? 'Admin' : 'Edit content'
+                    }}</span>
                   </router-link>
                   <router-link to="/settings" class="dropdown-item" @click="closeDropdown">
                     <span class="item-text">Settings</span>

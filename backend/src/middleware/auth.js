@@ -9,7 +9,7 @@ import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import { endSession, revokeAllSessions, rotateSession } from '../services/sessionService.js'
 import { touchUserActivity } from '../services/inactiveAccountService.js'
-import { isAdminUser } from './adminOnly.js'
+import { canEditContent, isAdminUser } from './adminOnly.js'
 import { BANNED_MESSAGE, isBanned } from '../utils/accountStatus.js'
 
 /**
@@ -164,6 +164,7 @@ export const refreshAccessToken = async (req, res) => {
           email: user.email,
           isDemoAccount: user.isDemo(),
           isAdmin: isAdminUser(user),
+          canEditContent: canEditContent(user),
           role: user.role,
           profilePicture: user.profilePicture,
           createdAt: user.createdAt,

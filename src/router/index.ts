@@ -76,7 +76,8 @@ const router = createRouter({
       path: '/admin',
       name: 'admin',
       component: () => import('@/views/Admin.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true },
+      // Admins get every tab; developers only Content (the server enforces both).
+      meta: { requiresAuth: true, requiresContentEditor: true },
     },
     {
       path: '/login',
@@ -142,10 +143,10 @@ router.beforeEach(async (to) => {
     return '/login'
   }
 
-  if (to.meta.requiresAdmin && !authStore.isAdmin) {
-    // Re-check with the server in case the role changed since sign-in.
+  if (to.meta.requiresContentEditor && !authStore.canEditContent) {
+    // Re-check with the server in case the role or badges changed since sign-in.
     await authStore.loadUser().catch(() => {})
-    if (!authStore.isAdmin) return '/'
+    if (!authStore.canEditContent) return '/'
   }
 })
 
