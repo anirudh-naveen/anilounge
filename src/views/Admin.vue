@@ -421,257 +421,279 @@
           <div>
             <h2 class="social-panel-title">Admin log</h2>
             <p class="social-panel-sub">
-              Every admin action, moderation decision, and sync change, by month (UTC), plus bug
-              reports and suggestions from the Feedback page. None of it can be edited or deleted.
+              Content changes, moderation, and sync changes by month (UTC), plus bug reports and
+              suggestions from the Feedback page. None of it can be edited or deleted.
             </p>
           </div>
         </header>
-        <div class="admin-filters">
-          <select
-            v-if="logCategory !== 'feedback'"
-            v-model="logMonth"
-            class="input admin-select"
-            aria-label="Month"
-            :disabled="!logMonths.length"
-          >
-            <option v-if="!logMonths.length" value="">No entries yet</option>
-            <option v-for="entry in logMonths" :key="entry.month" :value="entry.month">
-              {{ monthLabel(entry.month) }} ({{ entry.count }})
-            </option>
-          </select>
-          <div class="kind-tabs compact" role="tablist" aria-label="Log section">
+
+        <!-- Sections: a lighter inset area, so section headings read as a level below. -->
+        <div class="log-sections">
+          <nav class="log-section-nav" role="tablist" aria-label="Log section">
             <button
               v-for="option in LOG_FILTERS"
               :key="option.id"
               type="button"
               role="tab"
-              class="kind-tab"
+              class="log-section-tab"
               :class="{ active: logCategory === option.id }"
               :aria-selected="logCategory === option.id"
               @click="logCategory = option.id"
             >
               {{ option.label }}
+              <span v-if="option.id === 'sync' && syncCount" class="tab-count">{{
+                syncCount
+              }}</span>
             </button>
-          </div>
-          <button
-            v-if="logCategory !== 'feedback'"
-            type="button"
-            class="btn btn-ghost btn-small log-download"
-            :disabled="!logEntries.length"
-            @click="downloadLog"
-          >
-            Download .txt
-          </button>
-        </div>
-        <!-- Title: Sync Changes (actionable, last 14 days) -->
-        <div v-if="logCategory === 'sync'" class="sync-review" data-testid="admin-sync-changes">
-          <h3 class="link-title">
-            Needs a look <span class="social-count">{{ syncCount }}</span>
-          </h3>
-          <p class="social-meta sync-intro">
-            The hourly sync updates unlocked fields and never blanks one out; locked fields keep
-            your value. Revert, apply, or dismiss here. These notices clear after 14 days, and the
-            log below keeps them for good.
-          </p>
-          <div class="admin-filters">
-            <div class="kind-tabs compact" role="tablist" aria-label="Notice filter">
+          </nav>
+
+          <header class="log-section-head">
+            <div>
+              <h3 class="log-section-title" data-testid="log-section-title">
+                {{ currentLogSection.label }}
+              </h3>
+              <p class="log-section-sub">{{ currentLogSection.description }}</p>
+            </div>
+            <div v-if="logCategory !== 'feedback'" class="log-section-tools">
+              <select
+                v-model="logMonth"
+                class="input admin-select"
+                aria-label="Month"
+                :disabled="!logMonths.length"
+              >
+                <option v-if="!logMonths.length" value="">No entries yet</option>
+                <option v-for="entry in logMonths" :key="entry.month" :value="entry.month">
+                  {{ monthLabel(entry.month) }} ({{ entry.count }})
+                </option>
+              </select>
               <button
-                v-for="option in SYNC_FILTERS"
+                type="button"
+                class="btn btn-ghost btn-small"
+                :disabled="!logEntries.length"
+                @click="downloadLog"
+              >
+                Download .txt
+              </button>
+            </div>
+          </header>
+          <!-- Title: Sync Changes (actionable, last 14 days) -->
+          <div v-if="logCategory === 'sync'" class="sync-review" data-testid="admin-sync-changes">
+            <h3 class="link-title">
+              Needs a look <span class="social-count">{{ syncCount }}</span>
+            </h3>
+            <p class="social-meta sync-intro">
+              The hourly sync updates unlocked fields and never blanks one out; locked fields keep
+              your value. Revert, apply, or dismiss here. These notices clear after 14 days, and the
+              log below keeps them for good.
+            </p>
+            <div class="admin-filters">
+              <div class="kind-tabs compact" role="tablist" aria-label="Notice filter">
+                <button
+                  v-for="option in SYNC_FILTERS"
+                  :key="option.id"
+                  type="button"
+                  role="tab"
+                  class="kind-tab"
+                  :class="{ active: syncFilter === option.id }"
+                  :aria-selected="syncFilter === option.id"
+                  @click="syncFilter = option.id"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+              <button
+                v-if="syncResults.items.length"
+                type="button"
+                class="btn btn-ghost btn-small sync-dismiss-all"
+                :disabled="syncBusy"
+                @click="resolveSync('dismiss', syncResults.items)"
+              >
+                Dismiss all on this page
+              </button>
+            </div>
+            <div v-if="syncLoading" class="social-loading"><div class="spinner"></div></div>
+            <p v-else-if="!syncResults.items.length" class="social-empty">
+              Nothing from the sync in the last 14 days.
+            </p>
+            <ul v-else class="sync-list">
+              <li v-for="notice in syncResults.items" :key="notice.id" class="sync-item">
+                <div class="sync-head">
+                  <img
+                    :src="imageFor(notice.imagePath)"
+                    alt=""
+                    class="chip-image"
+                    :class="{ round: isPerson(notice.kind) }"
+                  />
+                  <div class="sync-title">
+                    <button
+                      type="button"
+                      class="admin-link sync-name"
+                      @click="openFromSync(notice)"
+                    >
+                      {{ notice.name }}
+                    </button>
+                    <span class="social-meta">
+                      {{ KIND_BY_ID[notice.kind]?.singular }} ·
+                      {{ FIELD_LABELS[notice.field] || notice.field }} · expires
+                      {{ expiresLabel(notice.expiresAt) }}
+                    </span>
+                  </div>
+                  <span class="admin-pill" :class="notice.outcome === 'blocked' ? 'owner' : 'warn'">
+                    {{ notice.outcome === 'blocked' ? 'Blocked by lock' : 'Changed' }}
+                  </span>
+                </div>
+                <div class="sync-diff">
+                  <div class="sync-side">
+                    <span class="sync-label">
+                      {{ notice.outcome === 'blocked' ? 'Your locked value' : 'Before' }}
+                    </span>
+                    <img
+                      v-if="IMAGE_FIELDS.includes(notice.field) && notice.oldValue"
+                      :src="getImageUrl(String(notice.oldValue), 'w185')"
+                      alt=""
+                      class="sync-image"
+                    />
+                    <p class="sync-value">{{ displayValue(notice.field, notice.oldValue) }}</p>
+                  </div>
+                  <div class="sync-side">
+                    <span class="sync-label">
+                      {{ notice.outcome === 'blocked' ? 'Sync wanted' : 'Now' }}
+                    </span>
+                    <img
+                      v-if="IMAGE_FIELDS.includes(notice.field) && notice.newValue"
+                      :src="getImageUrl(String(notice.newValue), 'w185')"
+                      alt=""
+                      class="sync-image"
+                    />
+                    <p class="sync-value">{{ displayValue(notice.field, notice.newValue) }}</p>
+                  </div>
+                </div>
+                <div class="note-actions">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-small"
+                    :disabled="syncBusy"
+                    @click="resolveSync('dismiss', [notice])"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    v-if="notice.outcome === 'changed'"
+                    type="button"
+                    class="btn btn-primary btn-small"
+                    :disabled="syncBusy"
+                    data-testid="sync-revert"
+                    @click="resolveSync('revert', [notice])"
+                  >
+                    Revert &amp; lock
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="btn btn-primary btn-small"
+                    :disabled="syncBusy"
+                    data-testid="sync-apply"
+                    @click="resolveSync('apply', [notice])"
+                  >
+                    Use new value
+                  </button>
+                </div>
+              </li>
+            </ul>
+            <div v-if="pageCount(syncResults) > 1" class="admin-pager">
+              <button
+                type="button"
+                class="btn btn-ghost btn-small"
+                :disabled="syncResults.page <= 1"
+                @click="loadSync(syncResults.page - 1)"
+              >
+                Previous
+              </button>
+              <span class="social-meta"
+                >Page {{ syncResults.page }} of {{ pageCount(syncResults) }}</span
+              >
+              <button
+                type="button"
+                class="btn btn-ghost btn-small"
+                :disabled="syncResults.page >= pageCount(syncResults)"
+                @click="loadSync(syncResults.page + 1)"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
+          <!-- Title: Bugs & Suggestions -->
+          <div v-if="logCategory === 'feedback'" data-testid="admin-feedback">
+            <div
+              class="kind-tabs compact feedback-filters"
+              role="tablist"
+              aria-label="Feedback type"
+            >
+              <button
+                v-for="option in FEEDBACK_FILTERS"
                 :key="option.id"
                 type="button"
                 role="tab"
                 class="kind-tab"
-                :class="{ active: syncFilter === option.id }"
-                :aria-selected="syncFilter === option.id"
-                @click="syncFilter = option.id"
+                :class="{ active: feedbackType === option.id }"
+                :aria-selected="feedbackType === option.id"
+                @click="feedbackType = option.id"
               >
                 {{ option.label }}
               </button>
             </div>
-            <button
-              v-if="syncResults.items.length"
-              type="button"
-              class="btn btn-ghost btn-small sync-dismiss-all"
-              :disabled="syncBusy"
-              @click="resolveSync('dismiss', syncResults.items)"
-            >
-              Dismiss all on this page
-            </button>
+            <div v-if="feedbackLoading" class="social-loading"><div class="spinner"></div></div>
+            <p v-else-if="feedbackError" class="social-empty admin-error">{{ feedbackError }}</p>
+            <p v-else-if="!feedbackResults.items.length" class="social-empty">No feedback yet.</p>
+            <ul v-else class="sync-list">
+              <li v-for="item in feedbackResults.items" :key="item.id" class="sync-item">
+                <div class="sync-head">
+                  <span class="admin-pill" :class="FEEDBACK_PILL[item.type]">
+                    {{ FEEDBACK_LABELS[item.type] || item.type }}
+                  </span>
+                  <span class="social-meta feedback-from">
+                    {{ item.username || item.email || 'Anonymous' }}
+                    <template v-if="item.username && item.email"> · {{ item.email }}</template>
+                  </span>
+                  <span class="social-meta">{{ utcStamp(item.createdAt) }} UTC</span>
+                </div>
+                <p class="sync-value feedback-message">{{ item.message }}</p>
+                <p v-if="item.pageUrl" class="social-meta feedback-page">From {{ item.pageUrl }}</p>
+              </li>
+            </ul>
+            <div v-if="pageCount(feedbackResults) > 1" class="admin-pager">
+              <button
+                type="button"
+                class="btn btn-ghost btn-small"
+                :disabled="feedbackResults.page <= 1"
+                @click="loadFeedback(feedbackResults.page - 1)"
+              >
+                Previous
+              </button>
+              <span class="social-meta">
+                Page {{ feedbackResults.page }} of {{ pageCount(feedbackResults) }}
+              </span>
+              <button
+                type="button"
+                class="btn btn-ghost btn-small"
+                :disabled="feedbackResults.page >= pageCount(feedbackResults)"
+                @click="loadFeedback(feedbackResults.page + 1)"
+              >
+                Next
+              </button>
+            </div>
           </div>
-          <div v-if="syncLoading" class="social-loading"><div class="spinner"></div></div>
-          <p v-else-if="!syncResults.items.length" class="social-empty">
-            Nothing from the sync in the last 14 days.
-          </p>
-          <ul v-else class="sync-list">
-            <li v-for="notice in syncResults.items" :key="notice.id" class="sync-item">
-              <div class="sync-head">
-                <img
-                  :src="imageFor(notice.imagePath)"
-                  alt=""
-                  class="chip-image"
-                  :class="{ round: isPerson(notice.kind) }"
-                />
-                <div class="sync-title">
-                  <button type="button" class="admin-link sync-name" @click="openFromSync(notice)">
-                    {{ notice.name }}
-                  </button>
-                  <span class="social-meta">
-                    {{ KIND_BY_ID[notice.kind]?.singular }} ·
-                    {{ FIELD_LABELS[notice.field] || notice.field }} · expires
-                    {{ expiresLabel(notice.expiresAt) }}
-                  </span>
-                </div>
-                <span class="admin-pill" :class="notice.outcome === 'blocked' ? 'owner' : 'warn'">
-                  {{ notice.outcome === 'blocked' ? 'Blocked by lock' : 'Changed' }}
-                </span>
-              </div>
-              <div class="sync-diff">
-                <div class="sync-side">
-                  <span class="sync-label">
-                    {{ notice.outcome === 'blocked' ? 'Your locked value' : 'Before' }}
-                  </span>
-                  <img
-                    v-if="IMAGE_FIELDS.includes(notice.field) && notice.oldValue"
-                    :src="getImageUrl(String(notice.oldValue), 'w185')"
-                    alt=""
-                    class="sync-image"
-                  />
-                  <p class="sync-value">{{ displayValue(notice.field, notice.oldValue) }}</p>
-                </div>
-                <div class="sync-side">
-                  <span class="sync-label">
-                    {{ notice.outcome === 'blocked' ? 'Sync wanted' : 'Now' }}
-                  </span>
-                  <img
-                    v-if="IMAGE_FIELDS.includes(notice.field) && notice.newValue"
-                    :src="getImageUrl(String(notice.newValue), 'w185')"
-                    alt=""
-                    class="sync-image"
-                  />
-                  <p class="sync-value">{{ displayValue(notice.field, notice.newValue) }}</p>
-                </div>
-              </div>
-              <div class="note-actions">
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-small"
-                  :disabled="syncBusy"
-                  @click="resolveSync('dismiss', [notice])"
-                >
-                  Dismiss
-                </button>
-                <button
-                  v-if="notice.outcome === 'changed'"
-                  type="button"
-                  class="btn btn-primary btn-small"
-                  :disabled="syncBusy"
-                  data-testid="sync-revert"
-                  @click="resolveSync('revert', [notice])"
-                >
-                  Revert &amp; lock
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="btn btn-primary btn-small"
-                  :disabled="syncBusy"
-                  data-testid="sync-apply"
-                  @click="resolveSync('apply', [notice])"
-                >
-                  Use new value
-                </button>
-              </div>
-            </li>
-          </ul>
-          <div v-if="pageCount(syncResults) > 1" class="admin-pager">
-            <button
-              type="button"
-              class="btn btn-ghost btn-small"
-              :disabled="syncResults.page <= 1"
-              @click="loadSync(syncResults.page - 1)"
-            >
-              Previous
-            </button>
-            <span class="social-meta"
-              >Page {{ syncResults.page }} of {{ pageCount(syncResults) }}</span
-            >
-            <button
-              type="button"
-              class="btn btn-ghost btn-small"
-              :disabled="syncResults.page >= pageCount(syncResults)"
-              @click="loadSync(syncResults.page + 1)"
-            >
-              Next
-            </button>
-          </div>
-        </div>
 
-        <!-- Title: Bugs & Suggestions -->
-        <div v-if="logCategory === 'feedback'" data-testid="admin-feedback">
-          <div class="kind-tabs compact feedback-filters" role="tablist" aria-label="Feedback type">
-            <button
-              v-for="option in FEEDBACK_FILTERS"
-              :key="option.id"
-              type="button"
-              role="tab"
-              class="kind-tab"
-              :class="{ active: feedbackType === option.id }"
-              :aria-selected="feedbackType === option.id"
-              @click="feedbackType = option.id"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-          <div v-if="feedbackLoading" class="social-loading"><div class="spinner"></div></div>
-          <p v-else-if="feedbackError" class="social-empty admin-error">{{ feedbackError }}</p>
-          <p v-else-if="!feedbackResults.items.length" class="social-empty">No feedback yet.</p>
-          <ul v-else class="sync-list">
-            <li v-for="item in feedbackResults.items" :key="item.id" class="sync-item">
-              <div class="sync-head">
-                <span class="admin-pill" :class="FEEDBACK_PILL[item.type]">
-                  {{ FEEDBACK_LABELS[item.type] || item.type }}
-                </span>
-                <span class="social-meta feedback-from">
-                  {{ item.username || item.email || 'Anonymous' }}
-                  <template v-if="item.username && item.email"> · {{ item.email }}</template>
-                </span>
-                <span class="social-meta">{{ utcStamp(item.createdAt) }} UTC</span>
-              </div>
-              <p class="sync-value feedback-message">{{ item.message }}</p>
-              <p v-if="item.pageUrl" class="social-meta feedback-page">From {{ item.pageUrl }}</p>
-            </li>
-          </ul>
-          <div v-if="pageCount(feedbackResults) > 1" class="admin-pager">
-            <button
-              type="button"
-              class="btn btn-ghost btn-small"
-              :disabled="feedbackResults.page <= 1"
-              @click="loadFeedback(feedbackResults.page - 1)"
-            >
-              Previous
-            </button>
-            <span class="social-meta">
-              Page {{ feedbackResults.page }} of {{ pageCount(feedbackResults) }}
-            </span>
-            <button
-              type="button"
-              class="btn btn-ghost btn-small"
-              :disabled="feedbackResults.page >= pageCount(feedbackResults)"
-              @click="loadFeedback(feedbackResults.page + 1)"
-            >
-              Next
-            </button>
-          </div>
+          <template v-else>
+            <h3 v-if="logCategory === 'sync'" class="link-title log-heading">
+              This month's sync log
+            </h3>
+            <div v-if="logLoading" class="social-loading"><div class="spinner"></div></div>
+            <p v-else-if="!logEntries.length" class="social-empty">Nothing logged here.</p>
+            <pre v-else class="log-text" data-testid="admin-log-text">{{ logText }}</pre>
+          </template>
         </div>
-
-        <template v-else>
-          <h3 v-if="logCategory === 'sync'" class="link-title log-heading">
-            This month's sync log
-          </h3>
-          <div v-if="logLoading" class="social-loading"><div class="spinner"></div></div>
-          <p v-else-if="!logEntries.length" class="social-empty">Nothing logged here.</p>
-          <pre v-else class="log-text" data-testid="admin-log-text">{{ logText }}</pre>
-        </template>
       </section>
 
       <!-- Title: Users -->
@@ -1589,21 +1611,39 @@ const unban = (user: AdminUser) => {
 // --- Log -------------------------------------------------------------------
 
 type LogEntry = {
-  category: 'admin' | 'moderation' | 'sync'
+  category: 'content' | 'moderation' | 'sync'
   actor: string | null
   message: string
   createdAt: string
 }
 
 const LOG_FILTERS = [
-  { id: 'all', label: 'All' },
-  { id: 'admin', label: 'Admin actions' },
-  { id: 'moderation', label: 'Moderation' },
-  { id: 'sync', label: 'Sync changes' },
-  { id: 'feedback', label: 'Bugs & suggestions' },
+  { id: 'all', label: 'All', description: 'Everything in the log for the month.' },
+  {
+    id: 'content',
+    label: 'Content changes',
+    description:
+      'Catalog edits by admins and developers: fields, cast, voice actors, studios, and sync changes taken or reverted.',
+  },
+  {
+    id: 'moderation',
+    label: 'Moderation',
+    description:
+      'Every other admin action: roles, badges, mutes, bans, and dismissed sync notices.',
+  },
+  {
+    id: 'sync',
+    label: 'Sync changes',
+    description: 'What the hourly catalog sync changed, or was blocked from changing by a lock.',
+  },
+  {
+    id: 'feedback',
+    label: 'Bugs & suggestions',
+    description: 'Sent from the Feedback page. Each one is also emailed to the support inbox.',
+  },
 ] as const
 const LOG_SECTION: Record<LogEntry['category'], string> = {
-  admin: 'ADMIN',
+  content: 'CONTENT',
   moderation: 'MODERATION',
   sync: 'SYNC',
 }
@@ -1611,6 +1651,9 @@ const LOG_SECTION: Record<LogEntry['category'], string> = {
 const logMonths = ref<Array<{ month: string; count: number }>>([])
 const logMonth = ref('')
 const logCategory = ref<(typeof LOG_FILTERS)[number]['id']>('all')
+const currentLogSection = computed(
+  () => LOG_FILTERS.find((option) => option.id === logCategory.value) ?? LOG_FILTERS[0],
+)
 const logEntries = ref<LogEntry[]>([])
 const logLoading = ref(false)
 let logSeq = 0
@@ -2350,6 +2393,87 @@ onUnmounted(() => {
 .feedback-page {
   margin: 0.4rem 0 0;
   overflow-wrap: anywhere;
+}
+
+.log-sections {
+  margin-top: 1rem;
+  padding: 0.9rem 1.1rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-secondary);
+}
+
+.log-section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.log-section-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.85rem;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.log-section-tab:hover {
+  color: var(--text-primary);
+}
+
+.log-section-tab.active {
+  background: var(--bg-hover);
+  color: var(--coral-deep);
+}
+
+.log-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0 0.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.log-section-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.log-section-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.log-section-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.log-sections .sync-review,
+.log-sections .sync-item {
+  background: var(--bg-card);
+}
+
+.log-sections .log-text {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
 }
 
 .log-download {

@@ -333,7 +333,7 @@ export async function updateContent(
     logLine = describeEdit(logPrefix, before, values, unlockList)
   })
 
-  await logAction('admin', actor, logLine)
+  await logAction('content', actor, logLine)
   return getEditableContent(id)
 }
 
@@ -459,7 +459,7 @@ export async function resolveSyncChanges(actor, ids, action) {
     ])
     done = result.rowCount || 0
     if (done)
-      await logAction('admin', actor, `Dismissed ${done} sync notice${done === 1 ? '' : 's'}`)
+      await logAction('moderation', actor, `Dismissed ${done} sync notice${done === 1 ? '' : 's'}`)
     return { done }
   }
 
@@ -487,7 +487,7 @@ export async function resolveSyncChanges(actor, ids, action) {
       )
       await query('DELETE FROM content_sync_changes WHERE id = $1', [id])
       await logAction(
-        'admin',
+        'content',
         actor,
         `Took the sync's ${notice.field} for ${describeRow(notice.kind, notice.name)} and unlocked it: ` +
           `${quoteValue(notice.old_value)} → ${quoteValue(notice.new_value)}`,

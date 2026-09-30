@@ -248,8 +248,8 @@ describe('Admin page', () => {
     await wrapper.findAll('.admin-tab')[2]!.trigger('click')
     await flushPromises()
     const syncSection = wrapper
-      .findAll('[data-testid="admin-log"] .kind-tab')
-      .find((button) => button.text() === 'Sync changes')
+      .findAll('[data-testid="admin-log"] .log-section-tab')
+      .find((button) => button.text().startsWith('Sync changes'))
     await syncSection!.trigger('click')
     await flushPromises()
     const panel = wrapper.find('[data-testid="admin-sync-changes"]')
@@ -421,7 +421,7 @@ describe('Admin page', () => {
     await wrapper.findAll('.admin-tab')[2]!.trigger('click')
     await flushPromises()
     const section = wrapper
-      .findAll('[data-testid="admin-log"] .kind-tab')
+      .findAll('[data-testid="admin-log"] .log-section-tab')
       .find((button) => button.text() === 'Bugs & suggestions')
     await section!.trigger('click')
     await flushPromises()
@@ -433,5 +433,25 @@ describe('Admin page', () => {
     await bugs!.trigger('click')
     await flushPromises()
     expect(api.listFeedback).toHaveBeenLastCalledWith({ type: 'bug', page: 1 })
+  })
+
+  it('shows each log section under its own heading, with content edits apart from moderation', async () => {
+    api.getLog.mockResolvedValue({ data: { data: { months: [], month: null, entries: [] } } })
+    const wrapper = mountAdmin('admin')
+    await flushPromises()
+    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await flushPromises()
+    const tabs = wrapper.findAll('[data-testid="admin-log"] .log-section-tab')
+    expect(tabs.map((tab) => tab.text().replace(/\d+$/, '').trim())).toEqual([
+      'All',
+      'Content changes',
+      'Moderation',
+      'Sync changes',
+      'Bugs & suggestions',
+    ])
+    await tabs[1]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="log-section-title"]').text()).toBe('Content changes')
+    expect(api.getLog).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'content' }))
   })
 })
