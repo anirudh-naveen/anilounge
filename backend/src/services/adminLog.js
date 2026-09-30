@@ -1,15 +1,17 @@
 /**
  * Append-only admin log: who changed what, read month by month on the admin page.
  *
- * Layer: domain service. Categories: 'admin' (content and link edits, sync notice
- * decisions), 'moderation' (roles, mutes, bans), 'sync' (changes the catalog sync
- * made or was blocked from making). The table refuses UPDATE/DELETE (see schema.sql)
+ * Layer: domain service. Categories: 'content' (catalog edits: fields, links, cast
+ * order, taking or reverting sync changes), 'moderation' (every other admin action:
+ * roles, badges, mutes, bans, dismissing sync notices), 'sync' (changes the catalog
+ * sync made or was blocked from making). Older rows use 'admin' for content edits;
+ * they are read as 'content'. The table refuses UPDATE/DELETE (see schema.sql)
  * and nothing in the app edits it. Messages are plain text lines.
  */
 
 import { query } from '../../config/postgres.js'
 
-export const LOG_CATEGORIES = ['admin', 'moderation', 'sync']
+export const LOG_CATEGORIES = ['content', 'moderation', 'sync']
 const MAX_VALUE_LENGTH = 120
 const RECHECK_MS = 60 * 1000
 let tableReady = false
@@ -53,7 +55,7 @@ export function describeRow(kind, name) {
 
 /**
  * Append one line. Never throws: a logging failure must not undo the action it describes.
- * @param {'admin' | 'moderation' | 'sync'} category
+ * @param {'content' | 'moderation' | 'sync'} category
  * @param {{ _id?: string, username?: string } | null} actor - null for the sync.
  * @param {string} message
  * @returns {Promise<void>}
@@ -96,8 +98,9 @@ export async function readLogMonth(month, category) {
   let where = `created_at >= ($1::timestamp AT TIME ZONE 'UTC')
     AND created_at < (($1::timestamp + interval '1 month') AT TIME ZONE 'UTC')`
   if (LOG_CATEGORIES.includes(category)) {
-    params.push(category)
-    where += ' AND category = $2'
+    // Legacy 'admin' rows are content edits.
+    params.push(category === 'content' ? ['content', 'admin'] : [category])
+    where += ' AND category = ANY($2::text[])'
   }
   const { rows } = await query(
     `SELECT category, actor_username, message, created_at FROM admin_log
@@ -105,7 +108,7 @@ export async function readLogMonth(month, category) {
     params,
   )
   return rows.map((row) => ({
-    category: row.category,
+    category: row.category === 'admin' ? 'content' : row.category,
     actor: row.actor_username,
     message: row.message,
     createdAt: row.created_at,
