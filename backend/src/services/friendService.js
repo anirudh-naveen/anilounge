@@ -441,7 +441,7 @@ export async function searchUsers(viewerId, term, { limit = 10 } = {}) {
                  OR (f.follower_id = u.id AND f.followee_id = $1))
                AND ${liveLinkSql('f')}) AS links
      FROM users u
-     WHERE u.id <> $1 AND NOT u.pending_signup AND u.username ILIKE $2
+     WHERE u.id <> $1 AND NOT u.pending_signup AND u.banned_at IS NULL AND u.username ILIKE $2
      ORDER BY (lower(u.username) = lower($4)) DESC, (u.username ILIKE $3) DESC, lower(u.username)
      LIMIT $5`,
     [viewerId, `%${escaped}%`, `${escaped}%`, q, capped],

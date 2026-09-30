@@ -26,6 +26,8 @@ import {
 import { query } from '../../config/postgres.js'
 import { banIPForBruteForce, liftBruteForceBan } from '../middleware/ipBan.js'
 import { resetAuthRateLimits } from '../middleware/authRateLimit.js'
+import { isAdminUser } from '../middleware/adminOnly.js'
+import { BANNED_MESSAGE, isBanned } from '../utils/accountStatus.js'
 import {
   consumeEmailCode,
   issueEmailCode,
@@ -129,6 +131,8 @@ async function completeLogin(user, req, res, message) {
         username: user.username,
         email: user.email,
         isDemoAccount: user.isDemo(),
+        isAdmin: isAdminUser(user),
+        role: user.role,
         profilePicture: user.profilePicture,
         createdAt: user.createdAt,
         watchlist: user.watchlist,
@@ -145,6 +149,17 @@ async function completeLogin(user, req, res, message) {
  * @param {import('express').Response} res
  * @returns {import('express').Response | null}
  */
+/**
+ * Send 403 `ACCOUNT_BANNED` for a banned account.
+ * @param {object} user
+ * @param {import('express').Response} res
+ * @returns {import('express').Response | null} The response when rejected, else null.
+ */
+function rejectBanned(user, res) {
+  if (!isBanned(user)) return null
+  return res.status(403).json({ success: false, code: 'ACCOUNT_BANNED', message: BANNED_MESSAGE })
+}
+
 function rejectLocked(user, res) {
   if (user.isDemo() || !user.lockUntil || user.lockUntil <= Date.now()) return null
   const minutes = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60))
@@ -253,6 +268,8 @@ export const login = async (req, res) => {
       })
     }
 
+    if (rejectBanned(user, res)) return
+
     const isDemo = user.isDemo()
     if (!isDemo && !user.emailVerified) {
       return res.status(403).json({
@@ -319,6 +336,7 @@ export const verifyTwoFactorLogin = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials.' })
     }
     if (rejectLocked(user, res)) return
+    if (rejectBanned(user, res)) return
 
     if (!(await verifyTwoFactorCode(user._id, code))) {
       await recordFailedLogin(user, req)
@@ -462,6 +480,8 @@ export const getProfile = async (req, res) => {
           username: user.username,
           email: user.email,
           isDemoAccount: user.isDemo(),
+          isAdmin: isAdminUser(user),
+          role: user.role,
           profilePicture: user.profilePicture,
           createdAt: user.createdAt,
           bio: user.bio || '',

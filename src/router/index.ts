@@ -73,6 +73,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('@/views/Admin.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/Login.vue'),
@@ -134,6 +140,12 @@ router.beforeEach(async (to) => {
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return '/login'
+  }
+
+  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    // Re-check with the server in case the role changed since sign-in.
+    await authStore.loadUser().catch(() => {})
+    if (!authStore.isAdmin) return '/'
   }
 })
 

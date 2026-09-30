@@ -38,12 +38,53 @@
                 :size="112"
                 class="profile-picture"
               />
+
+              <!-- Title: Badges -->
+              <section
+                v-if="profileBadges.length"
+                class="badges-section"
+                data-testid="profile-badges"
+              >
+                <h2 class="badges-title">Badges</h2>
+                <ul class="badge-list">
+                  <li
+                    v-for="badge in profileBadges"
+                    :key="badge.id"
+                    class="badge-card"
+                    :class="{ featured: badge.id === featuredBadge }"
+                    tabindex="0"
+                    :aria-label="badge.label"
+                  >
+                    <BadgeEmblem :badge="badge.id" size="md" :tooltip="false" />
+                    <span
+                      v-if="badge.id === featuredBadge"
+                      class="badge-featured"
+                      aria-hidden="true"
+                    >
+                      ★
+                    </span>
+                    <!-- Shown on hover / keyboard focus. -->
+                    <span class="badge-tooltip" role="tooltip">
+                      <span class="badge-name">{{ badge.label }}</span>
+                      <span v-if="badge.description" class="badge-desc">{{
+                        badge.description
+                      }}</span>
+                      <span v-if="badge.id === featuredBadge" class="badge-desc">
+                        ★ Shown next to the name
+                      </span>
+                    </span>
+                  </li>
+                </ul>
+              </section>
             </div>
 
             <!-- Title: Name and Bio -->
             <div class="hero-info">
               <div class="hero-name-row">
-                <h1 data-testid="profile-username">{{ profile.user.username }}</h1>
+                <h1 data-testid="profile-username">
+                  {{ profile.user.username
+                  }}<RoleBadge :username="profile.user.username" size="lg" />
+                </h1>
                 <span v-if="!profile.settings.isPublic" class="private-badge"> Private </span>
               </div>
               <p v-if="profile.settings.headline" class="headline">
@@ -51,6 +92,7 @@
               </p>
               <p v-if="profile.user.bio" class="bio">{{ profile.user.bio }}</p>
               <p class="member-since">Member since {{ formatDate(profile.user.createdAt) }}</p>
+
               <div v-if="favoriteGenres.length" class="genre-tags">
                 <span v-for="genre in favoriteGenres" :key="genre" class="genre-tag">
                   {{ genre }}
@@ -62,7 +104,7 @@
             <div class="hero-actions">
               <button
                 type="button"
-                class="btn btn-secondary"
+                class="btn btn-secondary share-btn"
                 data-testid="share-profile"
                 @click="shareProfile"
               >
@@ -368,11 +410,22 @@
           </span>
         </label>
 
+        <label v-if="emblemBadges.length" class="field">
+          <span class="field-label">Badge next to my name</span>
+          <select v-model="draftEmblem" class="form-control" data-testid="emblem-picker">
+            <option value="">Automatic ({{ emblemBadges[0]!.label }})</option>
+            <option v-for="badge in emblemBadges" :key="badge.id" :value="badge.id">
+              {{ badge.label }}
+            </option>
+            <option :value="NO_EMBLEM">No badge</option>
+          </select>
+        </label>
+
         <div class="field">
           <span class="field-label">Accent color</span>
           <div class="swatches">
             <button
-              v-for="(color, name) in ACCENT_COLORS"
+              v-for="(color, name) in ACCENT_PRESETS"
               :key="name"
               type="button"
               class="swatch"
@@ -381,6 +434,27 @@
               :aria-label="name"
               @click="draft.accent = name"
             ></button>
+            <!-- Color wheel: any custom color. -->
+            <label
+              class="swatch swatch-wheel"
+              :class="{ selected: isCustomAccent(draft.accent) }"
+              title="Pick any color"
+            >
+              <span
+                v-if="isCustomAccent(draft.accent)"
+                class="wheel-dot"
+                :style="{ background: draft.accent }"
+              ></span>
+              <input
+                type="color"
+                class="wheel-input"
+                :value="customAccent"
+                aria-label="Custom accent color"
+                data-testid="accent-wheel"
+                @input="pickCustomAccent"
+              />
+            </label>
+            <span v-if="isCustomAccent(draft.accent)" class="custom-hex">{{ draft.accent }}</span>
           </div>
         </div>
 
@@ -470,7 +544,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineOptions, ref, watch } from 'vue'
+import { computed, defineOptions, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
@@ -488,6 +562,11 @@ import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import PreferencesEditor from '@/components/PreferencesEditor.vue'
 import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
+import RoleBadge from '@/components/RoleBadge.vue'
+import BadgeEmblem from '@/components/BadgeEmblem.vue'
+import { useBadgesStore } from '@/stores/badges'
+import { NO_EMBLEM, badgeInfo } from '@/utils/badges'
+import { ACCENT_PRESETS, accentColor, isCustomAccent, readableOn } from '@/utils/accent'
 import FriendButton from '@/components/FriendButton.vue'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type {
@@ -504,14 +583,6 @@ const TAB_LABELS: Record<ProfileTab, string> = {
   favorites: 'Favorites',
   watchlist: 'Watchlist',
   stats: 'Stats',
-}
-const ACCENT_COLORS: Record<ProfileAccent, string> = {
-  coral: '#e07a5f',
-  teal: '#2bbbad',
-  violet: '#7b6bb0',
-  gold: '#e8a317',
-  rose: '#d9577a',
-  sky: '#3d8bd9',
 }
 
 const route = useRoute()
@@ -535,9 +606,18 @@ const username = computed(() =>
   typeof route.params.username === 'string' ? route.params.username : authStore.user?.username,
 )
 
-const accentStyle = computed(() => ({
-  '--profile-accent': ACCENT_COLORS[profile.value?.settings.accent || 'coral'],
-}))
+const accentStyle = computed(() => {
+  const accent = profile.value?.settings.accent
+  return { '--profile-accent': accentColor(accent), '--profile-on-accent': readableOn(accent) }
+})
+
+/** Color wheel value: the custom accent, or the current preset's color to start from. */
+const customAccent = computed(() => (draft.value ? accentColor(draft.value.accent) : '#e07a5f'))
+
+const pickCustomAccent = (event: Event) => {
+  if (draft.value)
+    draft.value.accent = (event.target as HTMLInputElement).value.toLowerCase() as ProfileAccent
+}
 
 const favoriteGenres = computed(() => profile.value?.user.preferences.favoriteGenres || [])
 
@@ -574,6 +654,23 @@ const loadProfile = async () => {
 }
 
 watch(username, loadProfile, { immediate: true })
+
+// --- Badges ------------------------------------------------------------------
+
+const badgesStore = useBadgesStore()
+const profileUsername = computed(() => profile.value?.user.username)
+const profileBadges = computed(() => badgesStore.badgesFor(profileUsername.value).map(badgeInfo))
+const emblemBadges = computed(() => profileBadges.value.filter((badge) => badge.emblem))
+const featuredBadge = computed(() => badgesStore.featuredFor(profileUsername.value))
+/** Select value: '' = automatic, a badge id, or 'none'. */
+const emblemChoice = computed(() => badgesStore.choiceFor(profileUsername.value) ?? '')
+
+/** Customize panel's pick for the badge next to the name ('' = automatic). */
+const draftEmblem = ref('')
+
+onMounted(() => {
+  badgesStore.load()
+})
 
 const selectTab = (tab: ProfileTab) => {
   activeTab.value = tab
@@ -732,6 +829,7 @@ const openCustomize = () => {
   }
   draftBio.value = profile.value.user.bio || ''
   draftGenres.value = [...profile.value.user.preferences.favoriteGenres]
+  draftEmblem.value = emblemChoice.value
   showCustomize.value = true
 }
 
@@ -768,10 +866,13 @@ const saveCustomize = async () => {
   isSaving.value = true
   try {
     const preferences = { favoriteGenres: draftGenres.value }
+    const emblemChanged = draftEmblem.value !== emblemChoice.value
     const [response] = await Promise.all([
       profileAPI.updateSettings({ settings: draft.value, bio: draftBio.value }),
       authStore.updateProfile({ preferences }),
+      emblemChanged ? profileAPI.setFeaturedBadge(draftEmblem.value || null) : null,
     ])
+    if (emblemChanged) await badgesStore.load(true)
     const { settings, bio } = response.data.data as { settings: ProfileSettings; bio: string }
     profile.value.settings = settings
     profile.value.user.bio = bio
@@ -869,6 +970,10 @@ const handleImageError = (event: Event) => {
 
 .avatar {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 128px;
   margin-top: -56px;
 }
 
@@ -888,6 +993,11 @@ const handleImageError = (event: Event) => {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+/* Sit the creator/admin badge on the name's cap height rather than its baseline. */
+.hero-info h1 .badge-group {
+  vertical-align: 0em;
 }
 
 .hero-info h1 {
@@ -930,6 +1040,129 @@ const handleImageError = (event: Event) => {
   font-size: 0.85rem;
 }
 
+.badges-section {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.badges-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.badge-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.badge-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-parchment);
+  font-size: 1.1rem;
+  cursor: default;
+  outline: none;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.badge-card:hover,
+.badge-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+}
+
+.badge-card.featured {
+  border-color: var(--border-hover);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.12);
+}
+
+.badge-featured {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.3rem;
+  font-size: 0.65rem;
+  line-height: 1;
+  color: var(--coral-primary);
+}
+
+.badge-tooltip {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: max-content;
+  max-width: 14rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--navbar-primary);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    visibility 0.15s;
+  pointer-events: none;
+}
+
+.badge-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top-color: var(--navbar-primary);
+}
+
+.badge-card:hover .badge-tooltip,
+.badge-card:focus-visible .badge-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.badge-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.badge-desc {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.share-btn,
+.share-btn:hover {
+  color: #2f7fd6;
+}
+
 .genre-tags {
   display: flex;
   flex-wrap: wrap;
@@ -960,6 +1193,7 @@ const handleImageError = (event: Event) => {
 .btn-primary {
   background: var(--profile-accent);
   border-color: var(--profile-accent);
+  color: var(--profile-on-accent, #fff);
 }
 
 /* Tabs */
@@ -1147,7 +1381,7 @@ const handleImageError = (event: Event) => {
 .status-chip.active {
   background: var(--profile-accent);
   border-color: var(--profile-accent);
-  color: #fff;
+  color: var(--profile-on-accent, #fff);
 }
 
 .chip-count {
@@ -1513,6 +1747,53 @@ textarea.form-control {
   border-color: var(--text-primary);
 }
 
+.swatches {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.swatch-wheel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: conic-gradient(
+    #ff4d4d,
+    #ffb84d,
+    #f5f54d,
+    #4dff88,
+    #4dd8ff,
+    #6d6dff,
+    #d64dff,
+    #ff4d4d
+  );
+  overflow: hidden;
+}
+
+.wheel-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  pointer-events: none;
+}
+
+/* The native picker covers the swatch invisibly so a click opens it. */
+.wheel-input {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.custom-hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
 .tab-order {
   display: grid;
   gap: 0.4rem;
@@ -1575,6 +1856,10 @@ textarea.form-control {
   .hero-name-row,
   .genre-tags {
     justify-content: center;
+  }
+
+  .avatar {
+    width: auto;
   }
 
   .bio {

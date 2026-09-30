@@ -110,10 +110,6 @@
                     {{ option.label }}
                   </button>
                 </div>
-                <p class="setting-hint">
-                  Profile picture and favorite genres/studios now live in your profile's
-                  <router-link to="/profile">Customize</router-link> panel.
-                </p>
               </div>
             </div>
           </div>

@@ -24,6 +24,15 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => auth,
 }))
 
+vi.mock('@/stores/badges', () => ({
+  useBadgesStore: () => ({
+    load: () => Promise.resolve(),
+    badgesFor: () => [],
+    featuredFor: () => null,
+    choiceFor: () => null,
+  }),
+}))
+
 const entry = (id: string, isSelf: boolean, at: string, overrides = {}) => ({
   id,
   user: {

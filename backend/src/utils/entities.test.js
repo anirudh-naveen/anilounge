@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  compareCharactersForContent,
   appearanceRoleRank,
   canonicalCharacterName,
   canonicalCharacterNameKey,
@@ -409,5 +410,21 @@ describe('franchise character name merge keys', () => {
       { _id: 'b', name: 'Andrew Stanton' },
     ])
     assert.equal(mixed.length, 2)
+  })
+})
+
+describe('compareCharactersForContent admin order', () => {
+  const character = (name, appearance) => ({ name, appearances: [{ content: 'w1', ...appearance }] })
+
+  it('puts admin-ordered characters first, in their order, ahead of role', () => {
+    const list = [
+      character('Main A', { role: 'Main', importance: 9 }),
+      character('Second', { role: 'Supporting', position: 2 }),
+      character('First', { role: 'Supporting', position: 1 }),
+    ].sort((left, right) => compareCharactersForContent(left, right, 'w1'))
+    assert.deepEqual(
+      list.map((entry) => entry.name),
+      ['First', 'Second', 'Main A'],
+    )
   })
 })

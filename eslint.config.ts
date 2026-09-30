@@ -22,6 +22,13 @@ export default defineConfigWithVueTs(
 
   pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,
+
+  {
+    rules: {
+      // `const { password, ...rest } = user` drops fields on purpose; don't flag them.
+      '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
+    },
+  },
   
   {
     ...pluginVitest.configs.recommended,
