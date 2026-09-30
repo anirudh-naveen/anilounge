@@ -7,6 +7,19 @@
 
 export const PROFILE_TABS = ['favorites', 'watchlist', 'stats']
 export const PROFILE_ACCENTS = ['coral', 'teal', 'violet', 'gold', 'rose', 'sky']
+/** A custom accent from the color wheel: `#rrggbb`. */
+const HEX_ACCENT = /^#[0-9a-f]{6}$/i
+
+/**
+ * A preset accent name or a custom `#rrggbb` color (stored lowercase), else null.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function normalizeAccent(value) {
+  if (PROFILE_ACCENTS.includes(value)) return value
+  if (typeof value === 'string' && HEX_ACCENT.test(value.trim())) return value.trim().toLowerCase()
+  return null
+}
 export const PROFILE_HEADLINE_MAX = 80
 export const PROFILE_BIO_MAX = 300
 const PREFERENCE_LIST_MAX = 30
@@ -34,7 +47,7 @@ export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS)
   const pick = (key) => (raw[key] !== undefined ? raw[key] : base[key])
 
   const isPublic = typeof pick('isPublic') === 'boolean' ? pick('isPublic') : true
-  const accent = PROFILE_ACCENTS.includes(pick('accent')) ? pick('accent') : 'coral'
+  const accent = normalizeAccent(pick('accent')) || 'coral'
   const headline =
     typeof pick('headline') === 'string'
       ? pick('headline').trim().slice(0, PROFILE_HEADLINE_MAX)

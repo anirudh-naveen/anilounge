@@ -14,7 +14,8 @@
           <p class="kicker">Your lounge</p>
           <h1 class="home-title">
             Welcome back<span v-if="authStore.user?.username"
-              >, <span class="gradient-text">{{ authStore.user.username }}</span></span
+              >, <span class="gradient-text">{{ authStore.user.username }}</span
+              ><RoleBadge :username="authStore.user.username" size="lg" /></span
             >.
           </h1>
         </template>
@@ -100,7 +101,8 @@
               <div class="activity-body">
                 <p class="activity-text">
                   <span class="activity-user">
-                    {{ entry.user.isSelf ? 'You' : entry.user.username }}
+                    {{ entry.user.isSelf ? 'You' : entry.user.username
+                    }}<RoleBadge :username="entry.user.username" />
                   </span>
                   {{ describeActivity(entry) }}
                   <router-link :to="titleRoute(entry.content)" class="activity-title">
@@ -251,6 +253,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import RoleBadge from '@/components/RoleBadge.vue'
 import { getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
 import type { CatalogEntity, EntityAppearance } from '@/types/content'
 import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'

@@ -7,8 +7,10 @@
 
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
-import { endSession, rotateSession } from '../services/sessionService.js'
+import { endSession, revokeAllSessions, rotateSession } from '../services/sessionService.js'
 import { touchUserActivity } from '../services/inactiveAccountService.js'
+import { isAdminUser } from './adminOnly.js'
+import { BANNED_MESSAGE, isBanned } from '../utils/accountStatus.js'
 
 /**
  * Verify the Bearer JWT and attach the matching user to the request.
@@ -45,6 +47,10 @@ export const authenticateToken = async (req, res, next) => {
         success: false,
         message: 'Invalid token - user not found',
       })
+    }
+
+    if (isBanned(user)) {
+      return res.status(403).json({ success: false, code: 'ACCOUNT_BANNED', message: BANNED_MESSAGE })
     }
 
     req.user = user
@@ -93,7 +99,7 @@ export const optionalAuthenticate = async (req, res, next) => {
     const user = await User.findById(decoded.userId)
       .select('-password')
       .populate({ path: 'watchlist.content', select: 'title englishTitle contentType' })
-    if (user) req.user = user
+    if (user && !isBanned(user)) req.user = user
   } catch {
     // Public chat: ignore bad tokens instead of 401.
   }
@@ -134,7 +140,13 @@ export const refreshAccessToken = async (req, res) => {
         message: 'Session was refreshed in another tab; retry.',
       })
     }
-    const user = session ? await User.findById(session.userId) : null
+    let user = session ? await User.findById(session.userId) : null
+    if (isBanned(user)) {
+      // The rotation above issued a fresh token; revoke it with the rest and drop the cookie.
+      await revokeAllSessions(user._id)
+      await endSession(req, res)
+      user = null
+    }
     if (user) {
       touchUserActivity(user._id).catch((error) => console.error('Activity update failed:', error))
     }
@@ -151,6 +163,8 @@ export const refreshAccessToken = async (req, res) => {
           username: user.username,
           email: user.email,
           isDemoAccount: user.isDemo(),
+          isAdmin: isAdminUser(user),
+          role: user.role,
           profilePicture: user.profilePicture,
           createdAt: user.createdAt,
           preferences: user.preferences,

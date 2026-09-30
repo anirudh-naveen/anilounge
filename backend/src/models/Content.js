@@ -12,6 +12,9 @@ import {
 } from '../db/kinds.js'
 import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
+import { applyAdminOverrides, readEditableFields } from '../utils/adminContent.js'
+import { planSyncChanges } from '../utils/syncReview.js'
+import { recordSyncNotices } from '../services/syncGuard.js'
 
 /**
  * @param {object} row
@@ -206,9 +209,56 @@ Content.prototype.toObject = function toObject() {
   return this.toJSON()
 }
 
+/**
+ * Admin-set field values for a content row (`content.admin_overrides`), or `{}`.
+ * A database without the column yet (schema not applied) has no overrides.
+ * @param {string} id
+ * @returns {Promise<Record<string, unknown>>}
+ */
+export async function loadAdminOverrides(id) {
+  try {
+    const { rows } = await query('SELECT admin_overrides FROM content WHERE id = $1', [id])
+    return rows[0]?.admin_overrides || {}
+  } catch (error) {
+    if (error.code === '42703') return {}
+    throw error
+  }
+}
+
+/**
+ * Never blank an existing row's editorial values, and log sync changes (and changes
+ * blocked by admin locks) for the admin page; see utils/syncReview.js. New rows and
+ * fields in `doc.$acceptFields` (an admin taking a blocked value) pass through.
+ * @param {object} doc - Content document (mutated).
+ * @param {string} kind
+ * @param {Record<string, unknown>} overrides - Admin-locked fields.
+ * @param {Record<string, unknown>} incoming - The caller's values before locks were applied.
+ * @returns {Promise<void>}
+ */
+async function protectExistingValues(doc, kind, overrides, incoming) {
+  const { rows } = await query('SELECT * FROM works WHERE id = $1', [doc._id])
+  const row = rows[0]
+  if (!row || row.kind !== kind) return
+  const plan = planSyncChanges({
+    kind,
+    current: readEditableFields(mapContentRow(row), kind),
+    incoming,
+    locked: Object.keys(overrides),
+    accepted: doc.$acceptFields || [],
+  })
+  applyAdminOverrides(doc, plan.keep, kind)
+  await recordSyncNotices(doc._id, plan.notices)
+}
+
 Content.prototype.save = async function save() {
   const id = this._id
   const kind = kindFromContentType(this.contentType)
+  // Admin edits win over whatever the catalog sync put on this document.
+  // What the caller (usually the sync) wants, before admin locks replace it.
+  const incoming = readEditableFields(this, kind)
+  const overrides = await loadAdminOverrides(id)
+  applyAdminOverrides(this, overrides, kind)
+  await protectExistingValues(this, kind, overrides, incoming)
   const name = this.englishTitle || this.title || 'Untitled'
   const { rowCount } = await query(
     `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, anilist_id, created_at, updated_at)
@@ -460,10 +510,19 @@ async function upsertFranchise(name) {
 
 async function replaceChildren(doc) {
   const id = doc._id
-  await query('DELETE FROM content_genres WHERE content_id = $1', [id])
-  await query('DELETE FROM content_akas WHERE content_id = $1', [id])
-  await query('DELETE FROM studio_credits WHERE work_id = $1', [id])
-  await query('DELETE FROM franchise_members WHERE member_id = $1', [id])
+  // An empty list from the sync means "unknown", not "none": keep what the row has.
+  const hasGenres = (doc.genres || []).some((genre) =>
+    typeof genre === 'string' ? genre : genre?.name,
+  )
+  const hasAkas = (doc.alternativeTitles || []).some(Boolean)
+  const hasStudios = [...(doc.studios || []), ...(doc.productionCompanies || [])].some(Boolean)
+  const franchiseName = doc.franchise || doc.relationships?.franchise
+  if (hasGenres) await query('DELETE FROM content_genres WHERE content_id = $1', [id])
+  if (hasAkas) await query('DELETE FROM content_akas WHERE content_id = $1', [id])
+  if (hasStudios) {
+    await query('DELETE FROM studio_credits WHERE work_id = $1 AND NOT admin_added', [id])
+  }
+  if (franchiseName) await query('DELETE FROM franchise_members WHERE member_id = $1', [id])
 
   for (const genre of doc.genres || []) {
     const name = typeof genre === 'string' ? genre : genre?.name
@@ -496,12 +555,16 @@ async function replaceChildren(doc) {
   for (const name of studioNames) {
     const studioId = await upsertStudio(name, refsByName.get(name.toLowerCase()))
     await query(
-      'INSERT INTO studio_credits (work_id, studio_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      `INSERT INTO studio_credits (work_id, studio_id)
+       SELECT $1, $2 WHERE NOT EXISTS (
+         SELECT 1 FROM admin_link_removals r
+         WHERE r.link_kind = 'studio_credit' AND r.work_id = $1 AND r.other_id = $2
+       )
+       ON CONFLICT DO NOTHING`,
       [id, studioId],
     )
   }
 
-  const franchiseName = doc.franchise || doc.relationships?.franchise
   if (franchiseName) {
     const franchiseId = await upsertFranchise(franchiseName)
     await query(
@@ -510,8 +573,9 @@ async function replaceChildren(doc) {
     )
   }
 
-  if (doc.$replaceRelations) {
-    const rel = doc.relationships || {}
+  const rel = doc.relationships || {}
+  const hasRelations = [rel.sequels, rel.prequels, rel.related].some((list) => list?.length)
+  if (doc.$replaceRelations && hasRelations) {
     await query('DELETE FROM content_relations WHERE from_id = $1', [id])
     const groups = [
       [rel.sequels, 'sequel'],

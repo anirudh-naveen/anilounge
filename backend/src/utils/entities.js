@@ -173,7 +173,7 @@ export function appearanceForContentId(entity, contentId) {
 }
 
 /**
- * Main / higher-importance first, then name.
+ * Admin cast order first (when set), then Main / higher-importance, then name.
  * @param {object} left
  * @param {object} right
  * @param {unknown} contentId
@@ -182,6 +182,13 @@ export function appearanceForContentId(entity, contentId) {
 export function compareCharactersForContent(left, right, contentId) {
   const leftApp = appearanceForContentId(left, contentId)
   const rightApp = appearanceForContentId(right, contentId)
+  const leftPos = leftApp?.position ?? null
+  const rightPos = rightApp?.position ?? null
+  if (leftPos !== null || rightPos !== null) {
+    if (leftPos === null) return 1
+    if (rightPos === null) return -1
+    if (leftPos !== rightPos) return leftPos - rightPos
+  }
   const roleDiff = appearanceRoleRank(leftApp?.role) - appearanceRoleRank(rightApp?.role)
   if (roleDiff) return roleDiff
   const importanceDiff = (Number(rightApp?.importance) || 0) - (Number(leftApp?.importance) || 0)

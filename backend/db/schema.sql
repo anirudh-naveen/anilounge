@@ -45,6 +45,45 @@ CREATE UNIQUE INDEX IF NOT EXISTS content_kind_anilist_id_unique
 CREATE INDEX IF NOT EXISTS content_kind_name_idx ON content (kind, name);
 CREATE INDEX IF NOT EXISTS content_search_idx ON content USING GIN (search_vector);
 
+-- Admin edits (services/adminService.js): `{ field: value }` for watchable fields an admin
+-- set by hand. Content.save re-applies them so the hourly catalog sync cannot undo them.
+ALTER TABLE content ADD COLUMN IF NOT EXISTS admin_overrides JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- Sync notices (services/syncGuard.js): what the catalog sync changed on existing rows
+-- ('changed', an admin can revert and lock it) or wanted to change on a locked field
+-- ('blocked', an admin can take the new value). One row per (content, field); rows
+-- expire 14 days after they are created.
+CREATE TABLE IF NOT EXISTS content_sync_changes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_id  UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  field       TEXT NOT NULL,
+  outcome     TEXT NOT NULL CHECK (outcome IN ('changed', 'blocked')),
+  old_value   JSONB,
+  new_value   JSONB NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (content_id, field)
+);
+CREATE INDEX IF NOT EXISTS content_sync_changes_created_idx ON content_sync_changes (created_at DESC);
+
+-- Admin log (services/adminLog.js): append-only record of admin actions, moderation, and
+-- sync changes, read by month on the admin page. No foreign keys, so deleting a user or
+-- title never touches it; the trigger refuses UPDATE and DELETE.
+CREATE TABLE IF NOT EXISTS admin_log (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  category        TEXT NOT NULL CHECK (category IN ('admin', 'moderation', 'sync')),
+  actor_id        UUID,
+  actor_username  TEXT,
+  message         TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS admin_log_created_idx ON admin_log (created_at DESC);
+
+CREATE OR REPLACE FUNCTION admin_log_append_only() RETURNS trigger LANGUAGE plpgsql AS
+  'BEGIN RAISE EXCEPTION ''admin_log is append-only''; END';
+DROP TRIGGER IF EXISTS admin_log_no_change ON admin_log;
+CREATE TRIGGER admin_log_no_change BEFORE UPDATE OR DELETE ON admin_log
+  FOR EACH ROW EXECUTE FUNCTION admin_log_append_only();
+
 CREATE TABLE IF NOT EXISTS movies (
   content_id       UUID PRIMARY KEY REFERENCES content (id) ON DELETE CASCADE,
   original_title   TEXT,
@@ -210,6 +249,27 @@ CREATE TABLE IF NOT EXISTS studio_credits (
   PRIMARY KEY (work_id, studio_id)
 );
 
+-- Admin link editing (services/adminLinks.js). Links an admin adds or reorders are
+-- marked so the catalog sync never deletes or reshuffles them; links an admin removes
+-- are remembered in admin_link_removals so the sync does not add them back.
+-- `appearances.position` is the admin's cast order (NULL = the sync's order).
+ALTER TABLE appearances ADD COLUMN IF NOT EXISTS position INTEGER;
+ALTER TABLE appearances ADD COLUMN IF NOT EXISTS admin_locked BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE voice_credits ADD COLUMN IF NOT EXISTS admin_added BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE studio_credits ADD COLUMN IF NOT EXISTS admin_added BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS admin_link_removals (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  link_kind   TEXT NOT NULL CHECK (link_kind IN ('appearance', 'voice_credit', 'studio_credit')),
+  work_id     UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  -- The character (appearance, voice_credit) or studio (studio_credit).
+  other_id    UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  voice_id    UUID REFERENCES content (id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS admin_link_removals_unique ON admin_link_removals
+  (link_kind, work_id, other_id, COALESCE(voice_id, '00000000-0000-0000-0000-000000000000'::uuid));
+
 -- ---------------------------------------------------------------------------
 -- Accounts
 -- ---------------------------------------------------------------------------
@@ -259,6 +319,30 @@ CREATE INDEX IF NOT EXISTS users_last_active_idx ON users (last_active_at) WHERE
 ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_signup BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_reminder_sent_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS users_pending_signup_idx ON users (created_at) WHERE pending_signup;
+
+-- Account role (middleware/adminOnly.js). Admins edit content and mute users from the
+-- admin page; the single creator (set with `npm run role:creator`) also adds/removes
+-- admins and bans users. ADMIN_EMAILS accounts are admins regardless of this column.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin', 'creator'));
+CREATE UNIQUE INDEX IF NOT EXISTS users_single_creator ON users ((true)) WHERE role = 'creator';
+
+-- Badges (utils/badges.js). Creator/Admin badges come from the role; every other badge
+-- a user holds is granted here (Developer, Artist, Influencer today, more later; ids are
+-- checked against the registry in code, so new badges need no schema change).
+-- `featured_badge` is the one emblem shown next to the name: NULL = their highest,
+-- 'none' = no emblem.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cosmetic_roles TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_cosmetic_roles_check;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS featured_badge TEXT;
+
+-- Moderation (services/adminService.js). A muted user can't do anything other people see
+-- until `muted_until` (year 9999 = until unmuted). A banned user can't sign in.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mute_reason TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_reason TEXT;
 
 -- Opt-out for announcement emails (services/announcementService.js). Security and
 -- account emails ignore it.

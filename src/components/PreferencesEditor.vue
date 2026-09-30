@@ -126,7 +126,7 @@ const toggleGenre = (genre: string) => {
 .genre-option.selected {
   background: var(--profile-accent, var(--coral-primary));
   border-color: var(--profile-accent, var(--coral-primary));
-  color: #fff;
+  color: var(--profile-on-accent, #fff);
 }
 
 .studio-hint {

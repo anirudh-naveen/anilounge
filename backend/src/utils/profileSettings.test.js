@@ -57,3 +57,12 @@ describe('normalizePreferences', () => {
     )
   })
 })
+
+describe('custom accent colors', () => {
+  it('keeps presets and #rrggbb colors, and falls back to coral otherwise', () => {
+    assert.equal(normalizeProfileSettings({ accent: 'sky' }).accent, 'sky')
+    assert.equal(normalizeProfileSettings({ accent: ' #3A7BFF ' }).accent, '#3a7bff')
+    assert.equal(normalizeProfileSettings({ accent: '#fff' }).accent, 'coral')
+    assert.equal(normalizeProfileSettings({ accent: 'url(evil)' }).accent, 'coral')
+  })
+})

@@ -16,6 +16,8 @@ import { computeProfileStats } from '../utils/profileStats.js'
 import { getAvatar } from '../services/avatarService.js'
 import { moderationMessage } from '../utils/moderation.js'
 import { relationshipBetween } from '../services/friendService.js'
+import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
+import { sendError } from '../utils/httpError.js'
 import {
   normalizePreferences,
   normalizeProfileSettings,
@@ -124,7 +126,7 @@ export const getPublicProfile = async (req, res) => {
     const isOwner = Boolean(user && req.user && String(req.user._id) === String(user._id))
     const settings = user ? normalizeProfileSettings(user.profileSettings) : null
 
-    if (!user || (!settings.isPublic && !isOwner)) {
+    if (!user || user.bannedAt || (!settings.isPublic && !isOwner)) {
       return res.status(404).json({ success: false, message: 'Profile not found.' })
     }
 
@@ -319,7 +321,42 @@ export const getAvatarImage = async (req, res) => {
   }
 }
 
+/**
+ * Public: accounts with badges and the emblem each shows next to their name, for
+ * usernames site-wide and the profile Badges section.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res - 200 `{ data: [{ id, username, badges, featured }] }` or 500.
+ * @returns {Promise<void>}
+ */
+export const listBadges = async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=60')
+    res.json({ success: true, data: await listBadgeHolders() })
+  } catch (error) {
+    sendError(res, error, 'Error loading badges')
+  }
+}
+
+/**
+ * Pick which of your badges shows as the emblem next to your name.
+ *
+ * @param {import('express').Request} req - `body.badge`: a badge id you hold, null (your highest), or 'none'.
+ * @param {import('express').Response} res - 200 `{ data: { badges, featured, choice } }`, 400, or 500.
+ * @returns {Promise<void>}
+ */
+export const updateFeaturedBadge = async (req, res) => {
+  try {
+    const data = await setFeaturedBadge(req.user, req.body?.badge ?? null)
+    res.json({ success: true, message: 'Saved.', data })
+  } catch (error) {
+    sendError(res, error, 'Error saving your badge')
+  }
+}
+
 export default {
+  listBadges,
+  updateFeaturedBadge,
   getAvatarImage,
   getPublicProfile,
   updateProfileSettings,
