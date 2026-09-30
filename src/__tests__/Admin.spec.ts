@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
   setAppearanceRole: vi.fn(),
   getLog: vi.fn(),
   setCosmeticRoles: vi.fn(),
+  listFeedback: vi.fn(),
 }))
 
 vi.mock('@/services/api', async (original) => ({
@@ -44,6 +45,7 @@ vi.mock('@/services/api', async (original) => ({
     setAppearanceRole: api.setAppearanceRole,
     getLog: api.getLog,
     setCosmeticRoles: api.setCosmeticRoles,
+    listFeedback: api.listFeedback,
   },
   badgesAPI: { list: api.staff },
 }))
@@ -96,11 +98,21 @@ const user = (overrides = {}) => ({
   ...overrides,
 })
 
-const mountAdmin = (role: 'admin' | 'creator') => {
+const mountAdmin = (role: 'admin' | 'creator' | 'developer') => {
   const pinia = createPinia()
   setActivePinia(pinia)
   const auth = useAuthStore()
-  auth.user = { id: 'me', username: 'me', email: 'me@example.com', isAdmin: true, role }
+  auth.user =
+    role === 'developer'
+      ? {
+          id: 'me',
+          username: 'me',
+          email: 'me@example.com',
+          isAdmin: false,
+          canEditContent: true,
+          role: 'user',
+        }
+      : { id: 'me', username: 'me', email: 'me@example.com', isAdmin: true, role }
   const stub = { template: '<div />' }
   const router = createRouter({
     history: createMemoryHistory(),
@@ -376,5 +388,50 @@ describe('Admin page', () => {
     await flushPromises()
     expect(api.setCosmeticRoles).toHaveBeenCalledWith('u2', ['artist'])
     expect(wrapper.find('[data-testid="cosmetic-artist"]').classes()).toContain('on')
+  })
+
+  it('gives developers the Content tab only', async () => {
+    const wrapper = mountAdmin('developer')
+    await flushPromises()
+    expect(wrapper.findAll('.admin-tab').map((tab) => tab.text())).toEqual(['Content'])
+    expect(api.countSyncChanges).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('As a developer you can edit the catalog')
+    await wrapper.find('[data-testid="admin-pick"]').trigger('click')
+    await flushPromises()
+    expect(api.getContent).toHaveBeenCalledWith('show-1')
+  })
+
+  it('shows bug reports and suggestions under the log', async () => {
+    api.getLog.mockResolvedValue({ data: { data: { months: [], month: null, entries: [] } } })
+    api.listFeedback.mockResolvedValue(
+      page([
+        {
+          id: 'f1',
+          type: 'bug',
+          message: 'Search crashes on emoji',
+          email: 'fan@example.com',
+          username: null,
+          pageUrl: 'https://anilounge.net/search',
+          createdAt: '2026-09-29T12:00:00Z',
+        },
+      ]),
+    )
+    const wrapper = mountAdmin('admin')
+    await flushPromises()
+    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await flushPromises()
+    const section = wrapper
+      .findAll('[data-testid="admin-log"] .kind-tab')
+      .find((button) => button.text() === 'Bugs & suggestions')
+    await section!.trigger('click')
+    await flushPromises()
+    const panel = wrapper.get('[data-testid="admin-feedback"]')
+    expect(panel.text()).toContain('Search crashes on emoji')
+    expect(panel.text()).toContain('fan@example.com')
+    expect(panel.text()).toContain('Bug')
+    const bugs = panel.findAll('.kind-tab').find((button) => button.text() === 'Bugs')
+    await bugs!.trigger('click')
+    await flushPromises()
+    expect(api.listFeedback).toHaveBeenLastCalledWith({ type: 'bug', page: 1 })
   })
 })

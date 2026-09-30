@@ -15,7 +15,7 @@ import friendController from '../controllers/friendController.js'
 import emailPreferenceController from '../controllers/emailPreferenceController.js'
 import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
-import adminOnly, { creatorOnly } from '../middleware/adminOnly.js'
+import adminOnly, { contentEditorOnly, creatorOnly } from '../middleware/adminOnly.js'
 import adminController from '../controllers/adminController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import authMiddleware, {
@@ -174,8 +174,8 @@ router.get('/users/:username', optionalAuthenticate, profileController.getPublic
 /** Accounts with badges, and the emblem each shows next to their name. */
 router.get('/badges', profileController.listBadges)
 
-/** Anyone can submit beta feedback; only admins can list it (it holds submitter emails). */
-router.post('/feedback', feedbackController.submitFeedback)
+/** Anyone can submit beta feedback (stored and emailed); only admins can list it (it holds emails). */
+router.post('/feedback', optionalAuthenticate, feedbackController.submitFeedback)
 router.get('/feedback', authMiddleware, adminOnly, feedbackController.getFeedback)
 
 /** All routes below require a valid Bearer access token. */
@@ -329,28 +329,28 @@ router.post('/friends/requests/:id/accept', validateObjectId, friendController.a
 router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
 
 /**
- * Admin page: edit catalog rows and mute users (admins); add/remove admins and ban users
- * (creator only).
+ * Admin page. Catalog content (edit rows, links, cast order): admins and developers.
+ * Everything else: admins (mute, badges, log); creator only for admins and bans.
  */
-router.get('/admin/content', adminOnly, adminController.searchContent)
-router.get('/admin/content/:id', adminOnly, validateObjectId, adminController.getContent)
+router.get('/admin/content', contentEditorOnly, adminController.searchContent)
+router.get('/admin/content/:id', contentEditorOnly, validateObjectId, adminController.getContent)
 router.patch(
   '/admin/content/:id',
-  adminOnly,
+  contentEditorOnly,
   validateObjectId,
   [body('changes').optional().isObject(), body('unlock').optional().isArray({ max: 20 })],
   adminController.updateContent,
 )
 router.post(
   '/admin/links/:op(add|remove)',
-  adminOnly,
+  contentEditorOnly,
   [body('link').isObject(), body('editorId').isString()],
   adminController.changeLink,
 )
-router.put('/admin/links/role', adminOnly, adminController.setAppearanceRole)
+router.put('/admin/links/role', contentEditorOnly, adminController.setAppearanceRole)
 router.put(
   '/admin/content/:id/cast-order',
-  adminOnly,
+  contentEditorOnly,
   validateObjectId,
   [body('characterIds').isArray({ max: 500 })],
   adminController.reorderCast,

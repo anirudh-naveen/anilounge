@@ -5,10 +5,13 @@
  * `role` is 'admin' or 'creator', or their email is in the ADMIN_EMAILS allowlist, and
  * their email is verified; the demo account and banned accounts never are. The single
  * creator (role 'creator') is the only one who can add/remove admins and ban users.
- * ADMIN_EMAILS accounts are "owners": the admin page cannot demote them.
+ * ADMIN_EMAILS accounts are "owners": the admin page cannot demote them. Holders of the
+ * Developer badge may edit catalog content (`contentEditorOnly`) and nothing else.
  *
  * Env: ADMIN_EMAILS (comma-separated, case-insensitive).
  */
+
+import { isMuted } from '../utils/accountStatus.js'
 
 /**
  * @param {string} [value]
@@ -63,6 +66,19 @@ function isEligible(user) {
 }
 
 /**
+ * Admins, plus unmuted holders of the Developer badge (content editing only).
+ * @param {{ email?: string, role?: string, emailVerified?: boolean, bannedAt?: unknown,
+ *   cosmeticRoles?: string[], mutedUntil?: unknown, isDemo?: () => boolean } | null | undefined} user
+ * @param {Set<string>} [admins]
+ * @returns {boolean}
+ */
+export function canEditContent(user, admins = parseAdminEmails()) {
+  if (isAdminUser(user, admins)) return true
+  if (!isEligible(user) || !(user.cosmeticRoles || []).includes('developer')) return false
+  return !isMuted(user)
+}
+
+/**
  * 403 unless `req.user` is an admin.
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -84,4 +100,16 @@ export default function adminOnly(req, res, next) {
 export function creatorOnly(req, res, next) {
   if (isCreatorUser(req.user)) return next()
   res.status(403).json({ success: false, message: 'Only the creator can do that.' })
+}
+
+/**
+ * 403 unless `req.user` can edit catalog content (admins and developers).
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ * @returns {void}
+ */
+export function contentEditorOnly(req, res, next) {
+  if (canEditContent(req.user)) return next()
+  res.status(403).json({ success: false, message: 'Content editing access required.' })
 }
