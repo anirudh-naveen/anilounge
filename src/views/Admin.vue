@@ -14,16 +14,21 @@
       <!-- Header -->
       <header class="social-intro">
         <p class="social-kicker">
-          {{ authStore.isCreator ? 'Creator' : 'Admin' }}
+          {{ authStore.isCreator ? 'Creator' : authStore.isAdmin ? 'Admin' : 'Developer' }}
           <RoleBadge :username="authStore.user?.username" />
         </p>
         <h1 class="social-title">Manage AniLounge</h1>
-        <p class="social-subtitle">Edit the catalog and keep the community in check.</p>
+        <p v-if="authStore.isAdmin" class="social-subtitle">
+          Edit the catalog and keep the community in check.
+        </p>
+        <p v-else class="social-subtitle">
+          As a developer you can edit the catalog. Users and the log are for admins.
+        </p>
       </header>
 
       <div class="admin-tabs" role="tablist" aria-label="Admin sections">
         <button
-          v-for="tab in TABS"
+          v-for="tab in visibleTabs"
           :key="tab.id"
           type="button"
           role="tab"
@@ -416,13 +421,14 @@
           <div>
             <h2 class="social-panel-title">Admin log</h2>
             <p class="social-panel-sub">
-              Every admin action, moderation decision, and sync change, by month (UTC). The log
-              can't be edited or deleted, by anyone.
+              Every admin action, moderation decision, and sync change, by month (UTC), plus bug
+              reports and suggestions from the Feedback page. None of it can be edited or deleted.
             </p>
           </div>
         </header>
         <div class="admin-filters">
           <select
+            v-if="logCategory !== 'feedback'"
             v-model="logMonth"
             class="input admin-select"
             aria-label="Month"
@@ -448,6 +454,7 @@
             </button>
           </div>
           <button
+            v-if="logCategory !== 'feedback'"
             type="button"
             class="btn btn-ghost btn-small log-download"
             :disabled="!logEntries.length"
@@ -599,10 +606,72 @@
           </div>
         </div>
 
-        <h3 v-if="logCategory === 'sync'" class="link-title log-heading">This month's sync log</h3>
-        <div v-if="logLoading" class="social-loading"><div class="spinner"></div></div>
-        <p v-else-if="!logEntries.length" class="social-empty">Nothing logged here.</p>
-        <pre v-else class="log-text" data-testid="admin-log-text">{{ logText }}</pre>
+        <!-- Title: Bugs & Suggestions -->
+        <div v-if="logCategory === 'feedback'" data-testid="admin-feedback">
+          <div class="kind-tabs compact feedback-filters" role="tablist" aria-label="Feedback type">
+            <button
+              v-for="option in FEEDBACK_FILTERS"
+              :key="option.id"
+              type="button"
+              role="tab"
+              class="kind-tab"
+              :class="{ active: feedbackType === option.id }"
+              :aria-selected="feedbackType === option.id"
+              @click="feedbackType = option.id"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <div v-if="feedbackLoading" class="social-loading"><div class="spinner"></div></div>
+          <p v-else-if="feedbackError" class="social-empty admin-error">{{ feedbackError }}</p>
+          <p v-else-if="!feedbackResults.items.length" class="social-empty">No feedback yet.</p>
+          <ul v-else class="sync-list">
+            <li v-for="item in feedbackResults.items" :key="item.id" class="sync-item">
+              <div class="sync-head">
+                <span class="admin-pill" :class="FEEDBACK_PILL[item.type]">
+                  {{ FEEDBACK_LABELS[item.type] || item.type }}
+                </span>
+                <span class="social-meta feedback-from">
+                  {{ item.username || item.email || 'Anonymous' }}
+                  <template v-if="item.username && item.email"> · {{ item.email }}</template>
+                </span>
+                <span class="social-meta">{{ utcStamp(item.createdAt) }} UTC</span>
+              </div>
+              <p class="sync-value feedback-message">{{ item.message }}</p>
+              <p v-if="item.pageUrl" class="social-meta feedback-page">From {{ item.pageUrl }}</p>
+            </li>
+          </ul>
+          <div v-if="pageCount(feedbackResults) > 1" class="admin-pager">
+            <button
+              type="button"
+              class="btn btn-ghost btn-small"
+              :disabled="feedbackResults.page <= 1"
+              @click="loadFeedback(feedbackResults.page - 1)"
+            >
+              Previous
+            </button>
+            <span class="social-meta">
+              Page {{ feedbackResults.page }} of {{ pageCount(feedbackResults) }}
+            </span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-small"
+              :disabled="feedbackResults.page >= pageCount(feedbackResults)"
+              @click="loadFeedback(feedbackResults.page + 1)"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        <template v-else>
+          <h3 v-if="logCategory === 'sync'" class="link-title log-heading">
+            This month's sync log
+          </h3>
+          <div v-if="logLoading" class="social-loading"><div class="spinner"></div></div>
+          <p v-else-if="!logEntries.length" class="social-empty">Nothing logged here.</p>
+          <pre v-else class="log-text" data-testid="admin-log-text">{{ logText }}</pre>
+        </template>
       </section>
 
       <!-- Title: Users -->
@@ -915,6 +984,8 @@ const TABS = [
   { id: 'log', label: 'Log' },
 ] as const
 type TabId = (typeof TABS)[number]['id']
+/** Developers (not admins) only get the Content tab. */
+const ADMIN_ONLY_TABS: TabId[] = ['users', 'log']
 const KINDS: Array<{ id: Kind; singular: string; plural: string }> = [
   { id: 'movie', singular: 'Movie', plural: 'Movies' },
   { id: 'series', singular: 'Series', plural: 'Series' },
@@ -966,6 +1037,9 @@ const toast = useToast()
 const authStore = useAuthStore()
 const badgesStore = useBadgesStore()
 const activeTab = ref<TabId>('content')
+const visibleTabs = computed(() =>
+  authStore.isAdmin ? TABS : TABS.filter((tab) => !ADMIN_ONLY_TABS.includes(tab.id)),
+)
 
 const emptyPage = <T,>(): Page<T> => ({ items: [], page: 1, pageSize: 25, total: 0 })
 const pageCount = (page: Page<unknown>) => Math.max(1, Math.ceil(page.total / page.pageSize))
@@ -1312,7 +1386,8 @@ watch([userQuery, userFilter], () => {
 watch(activeTab, (tab) => {
   if (tab === 'users' && !usersLoaded.value && !usersLoading.value) loadUsers(1)
   if (tab === 'log') {
-    loadLog()
+    if (logCategory.value === 'feedback') loadFeedback(1)
+    else loadLog()
     if (logCategory.value === 'sync') loadSync(1)
   }
 })
@@ -1525,6 +1600,7 @@ const LOG_FILTERS = [
   { id: 'admin', label: 'Admin actions' },
   { id: 'moderation', label: 'Moderation' },
   { id: 'sync', label: 'Sync changes' },
+  { id: 'feedback', label: 'Bugs & suggestions' },
 ] as const
 const LOG_SECTION: Record<LogEntry['category'], string> = {
   admin: 'ADMIN',
@@ -1560,11 +1636,74 @@ const loadLog = async () => {
 }
 
 watch([logMonth, logCategory], (next, previous) => {
+  if (next[1] === 'feedback') {
+    if (previous[1] !== 'feedback') loadFeedback(1)
+    return
+  }
   if (next[1] === 'sync' && previous[1] !== 'sync') loadSync(1)
   // The first load fills logMonth itself; don't fetch twice for that.
   if (previous[0] === '' && next[1] === previous[1]) return
   loadLog()
 })
+
+// --- Bugs & suggestions (Feedback page submissions) --------------------------
+
+type FeedbackItem = {
+  id: string
+  type: 'bug' | 'feature' | 'improvement' | 'other'
+  message: string
+  email: string | null
+  username: string | null
+  pageUrl: string | null
+  createdAt: string
+}
+
+const FEEDBACK_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'bug', label: 'Bugs' },
+  { id: 'feature', label: 'Feature requests' },
+  { id: 'improvement', label: 'Improvements' },
+  { id: 'other', label: 'Other' },
+] as const
+const FEEDBACK_LABELS: Record<string, string> = {
+  bug: 'Bug',
+  feature: 'Feature request',
+  improvement: 'Improvement',
+  other: 'Other',
+}
+const FEEDBACK_PILL: Record<string, string> = {
+  bug: 'danger',
+  feature: 'owner',
+  improvement: 'warn',
+  other: 'muted',
+}
+
+const feedbackType = ref<(typeof FEEDBACK_FILTERS)[number]['id']>('all')
+const feedbackResults = ref<Page<FeedbackItem>>(emptyPage())
+const feedbackLoading = ref(false)
+const feedbackError = ref('')
+let feedbackSeq = 0
+
+const loadFeedback = async (page = 1) => {
+  const seq = ++feedbackSeq
+  feedbackLoading.value = true
+  try {
+    const response = await adminAPI.listFeedback({
+      type: feedbackType.value === 'all' ? undefined : feedbackType.value,
+      page,
+    })
+    if (seq !== feedbackSeq) return
+    feedbackResults.value = response.data.data
+    feedbackError.value = ''
+  } catch (error) {
+    if (seq === feedbackSeq)
+      feedbackError.value = apiErrorMessage(error, 'Could not load feedback.')
+  } finally {
+    if (seq === feedbackSeq) feedbackLoading.value = false
+  }
+}
+
+watch(feedbackType, () => loadFeedback(1))
 
 const monthLabel = (month: string) =>
   new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, {
@@ -1603,7 +1742,7 @@ const downloadLog = () => {
 
 onMounted(() => {
   loadContent(1)
-  loadSyncCount()
+  if (authStore.isAdmin) loadSyncCount()
 })
 onUnmounted(() => {
   clearTimeout(contentTimer)
@@ -2193,6 +2332,24 @@ onUnmounted(() => {
 
 .cosmetic-toggle.on.influencer {
   background: linear-gradient(135deg, #38bdf8, #6366f1);
+}
+
+.feedback-filters {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.feedback-from {
+  margin-right: auto;
+  overflow-wrap: anywhere;
+}
+
+.feedback-message {
+  max-height: 14rem;
+}
+
+.feedback-page {
+  margin: 0.4rem 0 0;
+  overflow-wrap: anywhere;
 }
 
 .log-download {
