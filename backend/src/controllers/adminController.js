@@ -116,7 +116,7 @@ export const setAppearanceRole = async (req, res) => {
 /**
  * Admin log: months with entries, and one month's lines (read-only).
  *
- * @param {import('express').Request} req - `query.month` (YYYY-MM, default newest), `query.category` (admin|moderation|sync).
+ * @param {import('express').Request} req - `query.month` (YYYY-MM, default newest), `query.category` (content|moderation|sync).
  * @param {import('express').Response} res - 200 `{ data: { months, month, entries } }` or 500.
  * @returns {Promise<void>}
  */

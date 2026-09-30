@@ -65,18 +65,23 @@ CREATE TABLE IF NOT EXISTS content_sync_changes (
 );
 CREATE INDEX IF NOT EXISTS content_sync_changes_created_idx ON content_sync_changes (created_at DESC);
 
--- Admin log (services/adminLog.js): append-only record of admin actions, moderation, and
--- sync changes, read by month on the admin page. No foreign keys, so deleting a user or
+-- Admin log (services/adminLog.js): append-only record of content changes, moderation,
+-- and sync changes, read by month on the admin page. No foreign keys, so deleting a user or
 -- title never touches it; the trigger refuses UPDATE and DELETE.
 CREATE TABLE IF NOT EXISTS admin_log (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  category        TEXT NOT NULL CHECK (category IN ('admin', 'moderation', 'sync')),
+  category        TEXT NOT NULL,
   actor_id        UUID,
   actor_username  TEXT,
   message         TEXT NOT NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS admin_log_created_idx ON admin_log (created_at DESC);
+-- 'content' = catalog edits; 'moderation' = everything else admins do; 'sync' = the
+-- catalog sync. 'admin' is the older name for content edits (rows can't be rewritten).
+ALTER TABLE admin_log DROP CONSTRAINT IF EXISTS admin_log_category_check;
+ALTER TABLE admin_log ADD CONSTRAINT admin_log_category_check
+  CHECK (category IN ('content', 'moderation', 'sync', 'admin'));
 
 -- Bug reports and suggestions from the Feedback page (controllers/feedbackController.js).
 -- Each one is also emailed to SUPPORT_EMAIL; admins read them in the admin Log tab.

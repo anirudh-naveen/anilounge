@@ -343,7 +343,7 @@ export async function addLink(actor, link) {
     )
     await forgetRemoval('studio_credit', work.id, other.id)
   }
-  await logAction('admin', actor, `Added ${describeLink(resolved, 'to')}`)
+  await logAction('content', actor, `Added ${describeLink(resolved, 'to')}`)
 }
 
 /**
@@ -379,7 +379,7 @@ export async function removeLink(actor, link) {
      VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
     [type, work.id, other.id, voice?.id || null],
   )
-  await logAction('admin', actor, `Removed ${describeLink(resolved, 'from')}`)
+  await logAction('content', actor, `Removed ${describeLink(resolved, 'from')}`)
 }
 
 /**
@@ -412,7 +412,7 @@ export async function reorderCast(actor, workId, characterIds) {
     [workId, order],
   )
   await logAction(
-    'admin',
+    'content',
     actor,
     `Reordered the cast of ${describeRow(rows[0].kind, rows[0].name)}`,
   )
@@ -433,7 +433,7 @@ export async function setAppearanceRole(actor, { workId, characterId, role } = {
     [workId, characterId, role],
   )
   if (!result.rowCount) throw new HttpError(404, 'That character is not in this title.')
-  await logAction('admin', actor, `Set ${describeLink(resolved)} to ${appearanceRoleToApi(role)}`)
+  await logAction('content', actor, `Set ${describeLink(resolved)} to ${appearanceRoleToApi(role)}`)
 }
 
 export default { loadManagedLinks, addLink, removeLink, reorderCast, setAppearanceRole }
