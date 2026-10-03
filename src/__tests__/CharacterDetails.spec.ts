@@ -135,10 +135,10 @@ describe('CharacterDetails', () => {
     const { wrapper } = await mountPage()
     const groups = wrapper.findAll('[data-testid="appearance-group"]')
     expect(groups).toHaveLength(2)
-    expect(groups[0].get('.group-title').text()).toBe('One Piece')
-    expect(groups[0].findAll('h5').map((h) => h.text())).toEqual(['One Piece', 'Film Red'])
-    expect(groups[1].get('.group-title').text()).toBe('Other titles')
-    expect(groups[1].findAll('h5').map((h) => h.text())).toEqual(['Standalone'])
+    expect(groups[0]!.get('.group-title').text()).toBe('One Piece')
+    expect(groups[0]!.findAll('h5').map((h) => h.text())).toEqual(['One Piece', 'Film Red'])
+    expect(groups[1]!.get('.group-title').text()).toBe('Other titles')
+    expect(groups[1]!.findAll('h5').map((h) => h.text())).toEqual(['Standalone'])
   })
 
   it('shows titles without a group heading when none has a franchise', async () => {
