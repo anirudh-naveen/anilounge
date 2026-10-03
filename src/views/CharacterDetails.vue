@@ -46,6 +46,12 @@
           <p v-if="character.nativeName" class="original-title">
             Native Name: {{ character.nativeName }}
           </p>
+          <div v-if="franchises.length" class="franchise-list" data-testid="character-franchises">
+            <span class="franchise-label">
+              {{ franchises.length === 1 ? 'Franchise' : 'Franchises' }}
+            </span>
+            <span v-for="name in franchises" :key="name" class="franchise-chip">{{ name }}</span>
+          </div>
 
           <div class="character-actions">
             <button
@@ -100,30 +106,41 @@
 
       <div v-if="appearanceTitles.length" class="appearances">
         <h2>Appears in</h2>
-        <div class="content-grid">
-          <div
-            v-for="row in appearanceTitles"
-            :key="row.id"
-            class="content-card"
-            :data-testid="`appearance-${row.id}`"
-            @click="openTitle(row)"
-          >
-            <FavoriteHeart :content-id="row.id" />
-            <img
-              v-if="row.posterPath"
-              :src="getPosterUrl(row.posterPath)"
-              :alt="row.title"
-              @error="handleImageError"
-            />
-            <div v-else class="no-poster small">
-              <i class="fas fa-film"></i>
-            </div>
-            <div class="content-info">
-              <h5>{{ row.title }}</h5>
-              <p v-if="row.role" class="content-type">{{ row.role }}</p>
+        <section
+          v-for="group in appearanceGroups"
+          :key="group.franchise || 'other'"
+          class="appearance-group"
+          data-testid="appearance-group"
+        >
+          <h3 v-if="appearanceGroups.length > 1 || group.franchise" class="group-title">
+            <span v-if="group.franchise" class="franchise-chip">{{ group.franchise }}</span>
+            <template v-else>Other titles</template>
+          </h3>
+          <div class="content-grid">
+            <div
+              v-for="row in group.titles"
+              :key="row.id"
+              class="content-card"
+              :data-testid="`appearance-${row.id}`"
+              @click="openTitle(row)"
+            >
+              <FavoriteHeart :content-id="row.id" />
+              <img
+                v-if="row.posterPath"
+                :src="getPosterUrl(row.posterPath)"
+                :alt="row.title"
+                @error="handleImageError"
+              />
+              <div v-else class="no-poster small">
+                <i class="fas fa-film"></i>
+              </div>
+              <div class="content-info">
+                <h5>{{ row.title }}</h5>
+                <p v-if="row.role" class="content-type">{{ row.role }}</p>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   </div>
@@ -136,7 +153,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useEntityStore } from '@/stores/entities'
 import { getDetailsRouteName, getPosterUrl } from '@/services/api'
 import { getDisplayTitle } from '@/utils/titles'
-import { canonicalCharacterName, collectVoiceActors, displayPersonName } from '@/utils/entities'
+import {
+  canonicalCharacterName,
+  characterFranchises,
+  collectVoiceActors,
+  displayPersonName,
+} from '@/utils/entities'
 import type { CatalogEntity, EntityVoiceCredit } from '@/types/content'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
@@ -160,9 +182,23 @@ const appearanceTitles = computed(() => {
         posterPath: content.posterPath || '',
         contentType: content.contentType,
         role: row.role || '',
+        franchise: content.franchise || '',
       }
     })
     .filter((row): row is NonNullable<typeof row> => Boolean(row))
+})
+
+const franchises = computed(() => characterFranchises(character.value))
+
+// Franchises first (in the header's order), then titles outside any franchise.
+const appearanceGroups = computed(() => {
+  const groups = franchises.value.map((franchise) => ({
+    franchise,
+    titles: appearanceTitles.value.filter((row) => row.franchise === franchise),
+  }))
+  const loose = appearanceTitles.value.filter((row) => !row.franchise)
+  if (loose.length) groups.push({ franchise: '', titles: loose })
+  return groups
 })
 
 const voiceActors = computed(() => collectVoiceActors(character.value))
@@ -321,6 +357,28 @@ watch(
   margin-bottom: 1.25rem;
 }
 
+.franchise-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.franchise-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.franchise-chip {
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(90deg, var(--coral-light), var(--tan-primary));
+}
+
 .character-actions {
   display: flex;
   gap: 0.75rem;
@@ -402,6 +460,16 @@ watch(
 .about-text {
   white-space: pre-wrap;
   line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.appearance-group + .appearance-group {
+  margin-top: 1.5rem;
+}
+
+.group-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
   color: var(--text-secondary);
 }
 

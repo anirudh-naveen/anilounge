@@ -325,6 +325,13 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
   const canonical =
     canonicalCharacterName(primary.name) || canonicalCharacterName(secondary.name) || primary.name
   const canonicalKey = canonicalCharacterNameKey(canonical)
+  // Keep an English name someone set by hand. Syncs copy the source name into
+  // englishName, so only one that differs from its row's name counts as set.
+  const englishName =
+    [primary, secondary]
+      .filter((row) => row.englishName && row.englishName !== row.name)
+      .map((row) => canonicalCharacterName(row.englishName))
+      .find((name) => name && canonicalCharacterNameKey(name) === canonicalKey) || canonical
   const keptNames = uniqueEntityNames(
     canonical,
     primary.name,
@@ -439,14 +446,14 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
   await query(
     `INSERT INTO characters (content_id, english_name) VALUES ($1, $2)
      ON CONFLICT (content_id) DO UPDATE SET english_name = EXCLUDED.english_name`,
-    [toId, canonical],
+    [toId, englishName],
   )
   if (!leftover[0]) {
     await query(`DELETE FROM content WHERE id = $1 AND kind = 'character'`, [fromId])
   }
 
   primary.name = canonical
-  primary.englishName = canonical
+  primary.englishName = englishName
   primary.alternativeNames = keptNames
   primary.appearanceCount = appearanceCount(primary) + appearanceCount(secondary)
   if (imagePath) primary.imagePath = imagePath
@@ -495,16 +502,18 @@ export async function mergeFranchiseCharactersForWork(workId) {
 
 /**
  * One-pass cleanup across titles that already have character appearances.
+ * @param {{ onProgress?: (done: number, total: number, merged: number) => void }} [options]
  * @returns {Promise<number>}
  */
-export async function mergeAllFranchiseCharacters() {
+export async function mergeAllFranchiseCharacters({ onProgress } = {}) {
   homeCharacterCache.clear()
   const { rows: workRows } = await query(
     `SELECT DISTINCT work_id::text AS id FROM appearances`,
   )
   const seen = new Set()
   let merged = 0
-  for (const row of workRows) {
+  for (const [index, row] of workRows.entries()) {
+    onProgress?.(index, workRows.length, merged)
     if (!row.id) continue
     const homeIds = await homeWorkIds(row.id)
     const homeKey = [...homeIds].sort().join(',')

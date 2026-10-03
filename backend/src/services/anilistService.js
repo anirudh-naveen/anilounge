@@ -61,7 +61,7 @@ const CHARACTER_FIELDS = `
   characters(sort: [ROLE, RELEVANCE, ID], perPage: ${ANILIST_CHARACTERS_PER_TITLE}) {
     edges {
       role
-      node { id name { full native alternative } image { large } favourites }
+      node { id name { first middle last full native alternative } image { large } favourites }
       voiceActorRoles(sort: [RELEVANCE, ID]) {
         voiceActor { id name { full native } image { large } languageV2 }
       }
@@ -359,7 +359,7 @@ export async function getAnilistCharacter(id, options = {}) {
   if (!positiveInt(id)) return null
   const data = await anilistRequest(
     `query ($id: Int) { Character(id: $id) {
-      id name { full native alternative } image { large } description(asHtml: false)
+      id name { first middle last full native alternative } image { large } description(asHtml: false)
     } }`,
     { id: positiveInt(id) },
     options,
@@ -380,13 +380,13 @@ export async function getAnilistStaff(id, { withCharacters = false, fetchImpl } 
         edges {
           characterRole
           node { id idMal type }
-          characters { id name { full native alternative } image { large } }
+          characters { id name { first middle last full native alternative } image { large } }
         }
       }`
     : ''
   const data = await anilistRequest(
     `query ($id: Int) { Staff(id: $id) {
-      id name { full native alternative } image { large } description(asHtml: false)
+      id name { first middle last full native alternative } image { large } description(asHtml: false)
       languageV2 ${credits}
     } }`,
     { id: positiveInt(id) },
@@ -482,10 +482,24 @@ export function anilistStudioRefs(media, { animationOnly = false } = {}) {
  * @param {unknown} contentId
  * @returns {object | null}
  */
+/**
+ * AniList's `full` drops the middle name ("Luffy Monkey" for first "Luffy",
+ * middle "D.", last "Monkey"). Rebuild it from the parts when that happens.
+ * @param {{ first?: string, middle?: string, last?: string, full?: string } | null | undefined} name
+ * @returns {string}
+ */
+export function anilistFullName(name) {
+  const full = normalizeEntityName(name?.full)
+  const middle = normalizeEntityName(name?.middle)
+  if (!middle || full.includes(middle)) return full
+  return [name?.first, middle, name?.last].map(normalizeEntityName).filter(Boolean).join(' ')
+}
+
 export function mapAnilistCharacterEdge(edge, contentId) {
   const node = edge?.node
   const anilistId = positiveInt(node?.id)
-  const name = cleanCharacterName(node?.name?.full) || cleanCharacterName(node?.name?.native)
+  const name =
+    cleanCharacterName(anilistFullName(node?.name)) || cleanCharacterName(node?.name?.native)
   if (!anilistId || !isUsableCharacterName(name)) return null
   const role = ROLE_LABELS[edge?.role] || 'Supporting'
 

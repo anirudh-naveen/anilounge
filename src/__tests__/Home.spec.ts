@@ -209,5 +209,34 @@ describe('Home', () => {
     expect(bar.text()).not.toContain('Height')
     expect(bar.findAll('.title-chip')).toHaveLength(1)
     expect(wrapper.get('[data-testid="forum-placeholder"]').text()).toContain('Coming soon')
+    expect(wrapper.find('[data-testid="character-of-the-day-franchises"]').exists()).toBe(false)
+  })
+
+  it('shows the character of the day franchise before their titles', async () => {
+    getCharacterOfTheDay.mockResolvedValue({
+      data: {
+        data: {
+          ...characterPayload,
+          character: {
+            ...characterPayload.character,
+            appearances: [
+              {
+                role: 'Main',
+                content: { _id: 'op', title: 'One Piece', contentType: 'tv', franchise: 'One Piece' },
+              },
+              {
+                role: 'Main',
+                content: { _id: 'red', title: 'One Piece Film Red', contentType: 'movie', franchise: 'One Piece' },
+              },
+            ],
+          },
+        },
+      },
+    })
+    const wrapper = await mountHome()
+    const bar = wrapper.get('[data-testid="character-of-the-day"]')
+    const franchises = bar.get('[data-testid="character-of-the-day-franchises"]')
+    expect(franchises.findAll('.franchise-chip').map((chip) => chip.text())).toEqual(['One Piece'])
+    expect(bar.text().indexOf('Franchise')).toBeLessThan(bar.text().indexOf('Appears in'))
   })
 })

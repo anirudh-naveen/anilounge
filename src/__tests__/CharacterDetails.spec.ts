@@ -107,6 +107,51 @@ describe('CharacterDetails', () => {
     expect(wrapper.get('[data-testid="voice-actor-row"]').text()).toContain('Japanese')
   })
 
+  it('lists each franchise the character appears in once', async () => {
+    getEntityDetails.mockResolvedValue({
+      ...character,
+      appearances: [
+        { role: 'Main', content: { _id: 'show-1', title: 'One Piece', franchise: 'One Piece' } },
+        { role: 'Main', content: { _id: 'movie-1', title: 'One Piece Film: Red', franchise: 'One Piece' } },
+        { role: 'Cameo', content: { _id: 'special-1', title: 'Crossover', franchise: 'Jump Heroes' } },
+        { role: 'Cameo', content: { _id: 'special-2', title: 'Standalone', franchise: null } },
+      ],
+    })
+    const { wrapper } = await mountPage()
+    const chips = wrapper.findAll('[data-testid="character-franchises"] .franchise-chip')
+    expect(chips.map((chip) => chip.text())).toEqual(['One Piece', 'Jump Heroes'])
+    expect(wrapper.get('[data-testid="character-franchises"]').text()).toContain('Franchises')
+  })
+
+  it('groups titles under their franchise, franchises first', async () => {
+    getEntityDetails.mockResolvedValue({
+      ...character,
+      appearances: [
+        { role: 'Cameo', content: { _id: 'solo', title: 'Standalone', franchise: null } },
+        { role: 'Main', content: { _id: 'show-1', title: 'One Piece', franchise: 'One Piece' } },
+        { role: 'Main', content: { _id: 'movie-1', title: 'Film Red', franchise: 'One Piece' } },
+      ],
+    })
+    const { wrapper } = await mountPage()
+    const groups = wrapper.findAll('[data-testid="appearance-group"]')
+    expect(groups).toHaveLength(2)
+    expect(groups[0].get('.group-title').text()).toBe('One Piece')
+    expect(groups[0].findAll('h5').map((h) => h.text())).toEqual(['One Piece', 'Film Red'])
+    expect(groups[1].get('.group-title').text()).toBe('Other titles')
+    expect(groups[1].findAll('h5').map((h) => h.text())).toEqual(['Standalone'])
+  })
+
+  it('shows titles without a group heading when none has a franchise', async () => {
+    const { wrapper } = await mountPage()
+    expect(wrapper.findAll('[data-testid="appearance-group"]')).toHaveLength(1)
+    expect(wrapper.find('.group-title').exists()).toBe(false)
+  })
+
+  it('hides the franchise row when no title has a franchise', async () => {
+    const { wrapper } = await mountPage()
+    expect(wrapper.find('[data-testid="character-franchises"]').exists()).toBe(false)
+  })
+
   it('opens a voice actor from the character screen', async () => {
     const { wrapper, router } = await mountPage()
     const push = vi.spyOn(router, 'push')

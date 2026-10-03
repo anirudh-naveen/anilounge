@@ -61,7 +61,7 @@ async function tableExists(name) {
  * @param {() => Promise<T>} fn
  * @returns {Promise<T>}
  */
-async function inTransaction(fn) {
+export async function inTransaction(fn) {
   const session = await startSession()
   try {
     await session.startTransaction()

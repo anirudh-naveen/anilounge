@@ -28,6 +28,10 @@ import {
   getContentSyncStatus,
 } from './services/contentSyncScheduler.js'
 import {
+  getCatalogMaintenanceStatus,
+  startCatalogMaintenance,
+} from './services/catalogMaintenance.js'
+import {
   extraFrontendOriginsFromEnv,
   isAllowedCorsOrigin,
 } from './utils/allowedFrontends.js'
@@ -71,7 +75,7 @@ if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
 const app = express()
 const PORT = process.env.PORT || 5001
 
-/** Liveness probe: process health plus content-sync scheduler status. */
+/** Liveness probe: process health plus content-sync and catalog-maintenance status. */
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -80,6 +84,7 @@ app.get('/health', (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     version: '1.0.0-beta',
     contentSync: getContentSyncStatus(),
+    catalogMaintenance: getCatalogMaintenanceStatus(),
   })
 })
 
@@ -351,7 +356,8 @@ app.use((err, req, res, next) => {
   }
 })
 
-// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync scheduler
+// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync and
+// catalog-maintenance schedulers
 // and makes sure the README demo login exists and is unlocked.
 app
   .listen(PORT, () => {
@@ -359,6 +365,7 @@ app
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`)
     console.log(`Health check: http://localhost:${PORT}/health`)
     startContentSyncScheduler()
+    startCatalogMaintenance()
     startInactiveAccountScheduler()
     startUnverifiedAccountScheduler()
     startFriendRequestCleanupScheduler()

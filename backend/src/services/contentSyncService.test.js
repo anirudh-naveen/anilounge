@@ -55,7 +55,7 @@ describe('studio merge policy', () => {
     const populator = new DatabasePopulator()
     const existing = { title: 'Chainsaw Man', malId: 44511, studios: ['MAPPA'], genres: [] }
     const tmdbData = unifiedContentService.convertTmdbToContent(tmdbPayload, 'tv')
-    await populator.mergeTmdbIntoExisting(existing, tmdbData, tmdbPayload, { save: false })
+    await populator.mergeTmdbIntoExisting(existing, tmdbData, { save: false })
     assert.deepEqual(existing.studios, ['MAPPA'])
   })
 
@@ -63,7 +63,7 @@ describe('studio merge policy', () => {
     const populator = new DatabasePopulator()
     const existing = { title: 'Chainsaw Man', studios: [], genres: [] }
     const tmdbData = unifiedContentService.convertTmdbToContent(tmdbPayload, 'tv')
-    await populator.mergeTmdbIntoExisting(existing, tmdbData, tmdbPayload, { save: false })
+    await populator.mergeTmdbIntoExisting(existing, tmdbData, { save: false })
     assert.deepEqual(existing.studios, ['MAPPA', 'Shueisha'])
     assert.equal(existing.studioRefs[0].tmdbId, 3464)
   })
@@ -111,7 +111,7 @@ describe('AniList merge policy', () => {
     const populator = new DatabasePopulator()
     const existing = { title: 'Chainsaw Man', studios: [], genres: [] }
     const tmdbData = unifiedContentService.convertTmdbToContent(tmdbPayload, 'tv')
-    await populator.mergeTmdbIntoExisting(existing, tmdbData, tmdbPayload, { save: false })
+    await populator.mergeTmdbIntoExisting(existing, tmdbData, { save: false })
     await populator.mergeAnilistIntoExisting(existing, convertAnilistToContent(anilistMedia), {
       save: false,
     })
