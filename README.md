@@ -1,23 +1,24 @@
-# Find-Animation - Beta Release
+# AniLounge - Beta Release
 A full-stack web application for discovering, filtering, rating, and tracking animated television shows and films.
 
-Beta Release: https://find-animation.vercel.app
+Beta Release: https://anilounge.net
 
 For recruiters who want to explore the application:
  - Email: demo@findanimation.com
  - Password: DemoPassword123!
    
-Please do not change this password!
-
 Features --
  - Search & Filter: Browse through an extensive collection of animated content
- - Watchlist Management: Track shows and movies you want to watch, or import your list from AniList, MyAnimeList, or TMDB
+ - AI Recommendations: Gemini integration helps you find information about the vast catalogue available
+ - Watchlist Management: Track shows and movies you want to watch
  - Rating System: Rate and review your favorite animations
+ - Forum Boards: Bond with people across the world on your favorite movies and series
  - User Profiles: Personalized profiles with viewing history and preferences
-Customizable Settings: Tailor your experience to your preferences
+ - Customizable Settings: Tailor your experience to your preferences
 
-MEVN Stack Architecture --
- - MongoDB - NoSQL database for flexible data storage
+MEVN --> PEVN Stack Architecture --
+ - MongoDB - NoSQL database for flexible data storage (old)
+ - PostgresSQL - SQL relational database for recording complex relationships of data
  - Express.js - Backend web application framework
  - Vue.js - Progressive frontend JavaScript framework
  - Node.js - JavaScript runtime environment
@@ -33,27 +34,25 @@ Deployment --
 
 
 
-Homepage
+## Homepage
 
-<img width="845" height="962" alt="Screenshot 2025-10-20 at 12 17 44 AM" src="https://github.com/user-attachments/assets/0c5b5e19-b728-471a-be9a-d61b98deeb00" />
+<img width="1710" height="676" alt="image" src="https://github.com/user-attachments/assets/ee9e5bc0-9f44-421f-92cd-e315e0abd51c" />
+<img width="856" height="745" alt="image" src="https://github.com/user-attachments/assets/282fbfdc-de62-492d-9f24-cc37226f6deb" />
 
-Search
 
-<img width="842" height="960" alt="image" src="https://github.com/user-attachments/assets/d5b8edb5-e53a-46da-a873-f98e5622e818" />
+## Search
 
-Watchlist
+<img width="1710" height="912" alt="image" src="https://github.com/user-attachments/assets/f2952b26-f817-4115-9530-d2a9f51a15d8" />
+<img width="1710" height="774" alt="image" src="https://github.com/user-attachments/assets/807b3808-469d-4246-9869-c6f0b27e12b6" />
 
-<img width="847" height="963" alt="image" src="https://github.com/user-attachments/assets/f1ff6a78-fffb-47b3-9bc6-491111b9cd36" />
 
-Profile
+## Watchlist
 
-<img width="848" height="960" alt="image" src="https://github.com/user-attachments/assets/a2a17b4e-5624-454d-9cf1-d1d50616a574" />
+<img width="1710" height="911" alt="image" src="https://github.com/user-attachments/assets/1a14425f-0bc1-469f-8789-7738d138fd1f" />
 
-Settings
+## Profile
 
-<img width="848" height="631" alt="image" src="https://github.com/user-attachments/assets/18b5db5f-5e45-4ca2-ad8f-d7cb3bc1e2b0" />
-
-<img width="847" height="896" alt="image" src="https://github.com/user-attachments/assets/b48b428e-8070-4a8e-9b46-2a63f5198748" />
+<img width="1710" height="914" alt="image" src="https://github.com/user-attachments/assets/111f97fa-8aba-417e-9a99-1026cb1ae20e" />
 
 
 
