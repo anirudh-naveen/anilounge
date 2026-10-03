@@ -13,6 +13,7 @@ import homeController from '../controllers/homeController.js'
 import profileController from '../controllers/profileController.js'
 import friendController from '../controllers/friendController.js'
 import emailPreferenceController from '../controllers/emailPreferenceController.js'
+import watchlistImportController from '../controllers/watchlistImportController.js'
 import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
 import adminOnly, { contentEditorOnly, creatorOnly } from '../middleware/adminOnly.js'
@@ -31,6 +32,8 @@ import { assertCleanLanguage } from '../utils/moderation.js'
 import blockWhenMuted, { changesProfileText, changesUsername } from '../middleware/muteGuard.js'
 
 const router = express.Router()
+
+const WATCHLIST_STATUSES = ['plan_to_watch', 'watching', 'completed', 'on_hold', 'dropped']
 
 /** 3-20 characters; letters, numbers, dot, dash, underscore (matches the DB length check). */
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,20}$/
@@ -227,13 +230,16 @@ router.post(
     body('contentId')
       .custom((value) => isCatalogId(value))
       .withMessage('Valid content ID is required'),
-    body('status').optional().isIn(['plan_to_watch', 'watching', 'completed', 'dropped']),
+    body('status').optional().isIn(WATCHLIST_STATUSES),
     body('rating').optional().isFloat({ min: 0, max: 10 }),
     body('currentEpisode').optional().isInt({ min: 0 }),
     body('currentSeason').optional().isInt({ min: 1 }),
     body('totalEpisodes').optional().isInt({ min: 0 }),
     body('totalSeasons').optional().isInt({ min: 1 }),
     body('notes').optional().isString(),
+    body('startedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
+    body('completedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
+    body('rewatchCount').optional().isInt({ min: 0, max: 999 }),
   ],
   contentController.addToWatchlist,
 )
@@ -244,15 +250,38 @@ router.put(
   '/watchlist/:contentId',
   [
     validateObjectId,
-    body('status').optional().isIn(['plan_to_watch', 'watching', 'completed', 'dropped']),
+    body('status').optional().isIn(WATCHLIST_STATUSES),
     body('rating').optional().isFloat({ min: 0, max: 10 }),
     body('currentEpisode').optional().isInt({ min: 0 }),
     body('currentSeason').optional().isInt({ min: 1 }),
     body('totalEpisodes').optional().isInt({ min: 0 }),
     body('totalSeasons').optional().isInt({ min: 1 }),
     body('notes').optional().isString(),
+    body('startedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
+    body('completedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
+    body('rewatchCount').optional().isInt({ min: 0, max: 999 }),
   ],
   contentController.updateWatchlistItem,
+)
+
+/** Import from AniList, MyAnimeList (username or export file), or TMDB; runs as a polled job. */
+router.get('/watchlist/import', watchlistImportController.getImport)
+router.post(
+  '/watchlist/import',
+  [
+    body('source').isIn(['anilist', 'mal', 'mal_file', 'tmdb']).withMessage('Choose a list to import'),
+    body('username').optional().isString().isLength({ max: 30 }),
+    body('requestToken').optional().isString().isLength({ max: 80 }),
+    body('file').optional().isObject(),
+    body('overwrite').optional().isBoolean(),
+    body('addMissing').optional().isBoolean(),
+  ],
+  watchlistImportController.startImport,
+)
+router.post(
+  '/watchlist/import/tmdb/token',
+  [body('redirectTo').isString().isLength({ max: 500 })],
+  watchlistImportController.startTmdbAuthorization,
 )
 
 /** User rating writes (1–10) and the current user's stored rating. */

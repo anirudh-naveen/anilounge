@@ -44,10 +44,10 @@ The languages, frameworks, services, and tools AniLounge is built with.
 
 | Service | Used for |
 | --- | --- |
-| [TMDB API](https://developer.themoviedb.org) | Movie and series metadata, posters, episodes |
-| [MyAnimeList API](https://myanimelist.net/apiconfig/references/api/v2) | Anime metadata and scores |
+| [TMDB API](https://developer.themoviedb.org) | Movie and series metadata, posters, episodes; watchlist/ratings import (user-approved session) |
+| [MyAnimeList API](https://myanimelist.net/apiconfig/references/api/v2) | Anime metadata and scores; public anime list import |
 | [Jikan](https://jikan.moe) | Unofficial MyAnimeList API (characters, voice actors, studios) |
-| [AniList GraphQL API](https://docs.anilist.co) | Additional anime metadata and linking |
+| [AniList GraphQL API](https://docs.anilist.co) | Additional anime metadata and linking; public anime list import |
 | [Google Gemini](https://ai.google.dev) (`gemini-2.5-flash`) | AI search and the chatbot |
 
 ## Email

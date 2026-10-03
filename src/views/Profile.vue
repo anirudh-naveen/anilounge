@@ -792,6 +792,7 @@ const statusSegments = computed(() => {
     { key: 'watching', label: 'Watching', count: totals.watching },
     { key: 'completed', label: 'Completed', count: totals.completed },
     { key: 'plan_to_watch', label: 'Planned', count: totals.planToWatch },
+    { key: 'on_hold', label: 'On Hold', count: totals.onHold ?? 0 },
     { key: 'dropped', label: 'Dropped', count: totals.dropped },
   ]
 })
@@ -1410,6 +1411,10 @@ const handleImageError = (event: Event) => {
 
 .status-plan_to_watch {
   background: var(--text-muted);
+}
+
+.status-on_hold {
+  background: var(--warning-color);
 }
 
 .status-dropped {

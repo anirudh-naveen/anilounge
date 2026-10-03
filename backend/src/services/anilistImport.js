@@ -143,6 +143,26 @@ async function importOne(media, populator) {
 }
 
 /**
+ * Put one AniList anime in the catalog (or find the title already holding it) and
+ * try to link it to TMDB when it is new. Used by the watchlist import.
+ * @param {object} media - AniList media with MEDIA_FIELDS
+ * @param {import('./contentSyncService.js').default} populator
+ * @returns {Promise<{ outcome: 'existing' | 'added' | 'merged' | 'skipped' | 'failed', contentId?: string }>}
+ */
+export async function addAnilistTitle(media, populator) {
+  if (!anilistContentType(media?.format)) return { outcome: 'skipped' }
+  const owner = await catalogOwner(media)
+  if (owner) {
+    if (owner.anilist_id == null) await claimExternalId(owner.id, 'anilist_id', media.id)
+    return { outcome: 'existing', contentId: owner.id }
+  }
+  const { outcome, content } = await importOne(media, populator)
+  if (outcome === 'failed' || !content) return { outcome: 'failed' }
+  await linkTmdb(content)
+  return { outcome, contentId: String(content._id) }
+}
+
+/**
  * Walk AniList's popularity ranking and add every anime the catalog lacks.
  * @param {{ limit?: number, populator: import('./contentSyncService.js').default, log?: (message: string) => void }} options
  * @returns {Promise<{ stats: Record<string, number>, touched: string[] }>}

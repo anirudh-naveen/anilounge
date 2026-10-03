@@ -14,6 +14,7 @@ import type {
   UpdateProfileData,
   WatchlistData,
   UpdateWatchlistData,
+  WatchlistImportRequest,
   ContentParams,
 } from '@/types'
 import type { ProfileSettings } from '@/types/profile'
@@ -385,6 +386,16 @@ export const watchlistAPI = {
     api.put(`/watchlist/${contentId}`, data),
 
   removeFromWatchlist: (contentId: string) => api.delete(`/watchlist/${contentId}`),
+}
+
+/** Watchlist import from AniList, MyAnimeList, or TMDB (a background job the page polls). */
+export const watchlistImportAPI = {
+  start: (data: WatchlistImportRequest) => api.post('/watchlist/import', data),
+
+  status: () => api.get('/watchlist/import'),
+
+  /** TMDB step 1: a token to approve on themoviedb.org, which then returns to `redirectTo`. */
+  tmdbToken: (redirectTo: string) => api.post('/watchlist/import/tmdb/token', { redirectTo }),
 }
 
 /**

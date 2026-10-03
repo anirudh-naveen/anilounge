@@ -708,6 +708,11 @@ onUnmounted(() => {
   color: var(--movie-badge);
 }
 
+.status-chip.status-on_hold {
+  background: rgba(140, 120, 200, 0.14);
+  color: #6e5bb5;
+}
+
 .status-chip.status-plan_to_watch {
   background: rgba(232, 163, 23, 0.14);
   color: #a8750f;

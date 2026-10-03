@@ -12,7 +12,17 @@
       <div class="page-header">
         <h1 class="page-title">My Watchlist</h1>
         <p class="page-subtitle">Track your animated content progress</p>
+        <button
+          type="button"
+          class="btn btn-secondary import-open-btn"
+          data-testid="watchlist-import-open"
+          @click="showImport = true"
+        >
+          Import from AniList, MAL, or TMDB
+        </button>
       </div>
+
+      <WatchlistImport v-if="showImport" @close="showImport = false" @imported="onImported" />
 
       <!-- Toolbar -->
       <div class="watchlist-toolbar">
@@ -187,10 +197,13 @@
                       "
                       class="status-select"
                     >
-                      <option value="plan_to_watch">Planned</option>
-                      <option value="watching">Watching</option>
-                      <option value="completed">Completed</option>
-                      <option value="dropped">Dropped</option>
+                      <option
+                        v-for="option in WATCHLIST_STATUS_OPTIONS"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
                     </select>
                   </div>
 
@@ -248,6 +261,56 @@
                       class="rating-input"
                       placeholder="No rating"
                     />
+                  </div>
+
+                  <div class="dates-control">
+                    <label>
+                      Started
+                      <input
+                        :value="getLocalFormData(item).startedOn"
+                        @change="
+                          updateLocalFormData(
+                            item,
+                            'startedOn',
+                            ($event.target as HTMLInputElement).value,
+                          )
+                        "
+                        type="date"
+                        class="date-input"
+                      />
+                    </label>
+                    <label>
+                      Finished
+                      <input
+                        :value="getLocalFormData(item).completedOn"
+                        @change="
+                          updateLocalFormData(
+                            item,
+                            'completedOn',
+                            ($event.target as HTMLInputElement).value,
+                          )
+                        "
+                        type="date"
+                        class="date-input"
+                      />
+                    </label>
+                    <label>
+                      Rewatches
+                      <input
+                        :value="getLocalFormData(item).rewatchCount"
+                        @change="
+                          updateLocalFormData(
+                            item,
+                            'rewatchCount',
+                            Math.max(0, parseInt(($event.target as HTMLInputElement).value) || 0),
+                          )
+                        "
+                        type="number"
+                        min="0"
+                        max="999"
+                        class="rewatch-input"
+                      />
+                    </label>
                   </div>
 
                   <div class="notes-control">
@@ -322,7 +385,13 @@ import AiringBadge from '@/components/AiringBadge.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
 import { getDisplayTitle } from '@/utils/titles'
 import { getSearchCategoryDate } from '@/utils/searchFilters'
-import { getWatchlistStatusLabel, WATCHLIST_STATUS_FILTER_OPTIONS } from '@/utils/watchlist'
+import {
+  getWatchlistStatusLabel,
+  WATCHLIST_STATUS_FILTER_OPTIONS,
+  WATCHLIST_STATUS_OPTIONS,
+  type WatchlistStatus,
+} from '@/utils/watchlist'
+import WatchlistImport from '@/components/WatchlistImport.vue'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -336,6 +405,13 @@ const sortBy = ref<SortByOption>('relevance')
 const sortDirection = ref<SortDirection>('desc')
 
 const statusOptions = WATCHLIST_STATUS_FILTER_OPTIONS
+// Opened by the header button, or by TMDB sending the user back with an approved token.
+const { request_token: tmdbToken, denied: tmdbDenied } = router.currentRoute.value.query
+const showImport = ref(Boolean(tmdbToken || tmdbDenied))
+
+const onImported = async () => {
+  await contentStore.loadWatchlist(true)
+}
 const selectedStatusLabel = computed(() => getWatchlistStatusLabel(selectedStatus.value))
 
 const getStatusCount = (status: string) => {
@@ -537,6 +613,9 @@ const localFormData = ref<
       currentEpisode: number
       rating: number | undefined
       notes: string
+      startedOn?: string
+      completedOn?: string
+      rewatchCount?: number
     }
   >
 >(new Map())
@@ -550,6 +629,9 @@ const initializeFormData = (item: WatchlistItem) => {
       currentEpisode: item.currentEpisode || 0,
       rating: item.rating,
       notes: item.notes || '',
+      startedOn: item.startedOn || '',
+      completedOn: item.completedOn || '',
+      rewatchCount: item.rewatchCount || 0,
     })
   }
 }
@@ -570,6 +652,9 @@ const getLocalFormData = (item: WatchlistItem): LocalFormData => {
         1,
       rating: existingData.rating || item.rating,
       notes: existingData.notes || item.notes || '',
+      startedOn: existingData.startedOn ?? item.startedOn ?? '',
+      completedOn: existingData.completedOn ?? item.completedOn ?? '',
+      rewatchCount: existingData.rewatchCount ?? item.rewatchCount ?? 0,
     }
   }
 
@@ -579,6 +664,9 @@ const getLocalFormData = (item: WatchlistItem): LocalFormData => {
     currentSeason: item.currentSeason || 1,
     rating: item.rating,
     notes: item.notes || '',
+    startedOn: item.startedOn || '',
+    completedOn: item.completedOn || '',
+    rewatchCount: item.rewatchCount || 0,
   }
 }
 
@@ -589,6 +677,9 @@ interface LocalFormData {
   currentSeason: number
   rating: number | undefined
   notes: string
+  startedOn: string
+  completedOn: string
+  rewatchCount: number
 }
 
 // Update local form data
@@ -611,6 +702,10 @@ const updateLocalFormData = (
     currentData.rating = value as number | undefined
   } else if (field === 'notes') {
     currentData.notes = value as string
+  } else if (field === 'startedOn' || field === 'completedOn') {
+    currentData[field] = (value as string) || ''
+  } else if (field === 'rewatchCount') {
+    currentData.rewatchCount = value as number
   }
 
   localFormData.value.set(itemId, currentData)
@@ -628,10 +723,13 @@ const saveWatchlistItem = async (item: WatchlistItem) => {
 
   try {
     await contentStore.updateWatchlistItem(itemId, {
-      status: formData.status as 'plan_to_watch' | 'watching' | 'completed' | 'dropped',
+      status: formData.status as WatchlistStatus,
       currentEpisode: formData.currentEpisode,
       rating: formData.rating,
       notes: formData.notes,
+      startedOn: formData.startedOn || null,
+      completedOn: formData.completedOn || null,
+      rewatchCount: formData.rewatchCount || 0,
     })
     toast.success('Watchlist item saved successfully')
   } catch (error) {
@@ -975,6 +1073,11 @@ onUnmounted(() => {
   color: white;
 }
 
+.status-on-hold {
+  background: var(--warning-color);
+  color: white;
+}
+
 .status-dropped {
   background: var(--error-color);
   color: white;
@@ -1088,6 +1191,10 @@ onUnmounted(() => {
   background: var(--success-color);
 }
 
+.item-progress-bar.status-on-hold {
+  background: var(--warning-color);
+}
+
 .item-progress-bar.status-dropped {
   background: var(--error-color);
 }
@@ -1190,6 +1297,8 @@ onUnmounted(() => {
 .status-select,
 .episode-input,
 .rating-input,
+.date-input,
+.rewatch-input,
 .notes-textarea {
   padding: 0.75rem;
   border: 1px solid var(--border-color);
@@ -1203,9 +1312,30 @@ onUnmounted(() => {
 .status-select:focus,
 .episode-input:focus,
 .rating-input:focus,
+.date-input:focus,
+.rewatch-input:focus,
 .notes-textarea:focus {
   outline: none;
   border-color: var(--highlight-color);
+}
+
+.dates-control {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.dates-control label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.import-open-btn {
+  margin-top: 1rem;
 }
 
 .notes-textarea {

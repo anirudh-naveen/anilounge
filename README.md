@@ -11,7 +11,7 @@ Please do not change this password!
 
 Features --
  - Search & Filter: Browse through an extensive collection of animated content
- - Watchlist Management: Track shows and movies you want to watch
+ - Watchlist Management: Track shows and movies you want to watch, or import your list from AniList, MyAnimeList, or TMDB
  - Rating System: Rate and review your favorite animations
  - User Profiles: Personalized profiles with viewing history and preferences
 Customizable Settings: Tailor your experience to your preferences

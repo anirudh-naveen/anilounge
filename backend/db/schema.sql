@@ -450,6 +450,20 @@ CREATE INDEX IF NOT EXISTS watchlist_content_idx ON watchlist (content_id);
 -- Episode the user had reached before their latest progress change.
 ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS previous_episode INTEGER NOT NULL DEFAULT 0;
 
+-- List fields AniList and MyAnimeList keep (services/watchlistImportService.js): a paused
+-- status ('on_hold'), when the user started and finished the title, and how many times
+-- they rewatched it.
+ALTER TABLE watchlist DROP CONSTRAINT IF EXISTS watchlist_status_check;
+ALTER TABLE watchlist ADD CONSTRAINT watchlist_status_check
+  CHECK (status IN ('plan_to_watch', 'watching', 'completed', 'on_hold', 'dropped'));
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS started_on DATE;
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS completed_on DATE;
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS rewatch_count INTEGER NOT NULL DEFAULT 0
+  CHECK (rewatch_count >= 0);
+-- When an import last wrote the row. The homepage feed skips rows not changed since,
+-- so importing a list doesn't flood friends' feeds.
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS ratings (
   user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   content_id UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,

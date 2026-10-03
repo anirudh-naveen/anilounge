@@ -26,6 +26,7 @@ export interface ProfileStats {
     completed: number
     watching: number
     planToWatch: number
+    onHold?: number
     dropped: number
     completedSeries: number
     completedMovies: number

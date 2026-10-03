@@ -6,6 +6,7 @@
  */
 
 import type { UnifiedContent } from './content'
+import type { WatchlistStatus } from '@/utils/watchlist'
 
 export interface Network {
   id: number
@@ -48,13 +49,17 @@ export interface Genre {
 
 export interface WatchlistItem {
   content: UnifiedContent
-  status: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
+  status: WatchlistStatus
   rating?: number
   currentEpisode: number
   currentSeason?: number
   totalEpisodes?: number
   totalSeasons?: number
   notes?: string
+  /** `YYYY-MM-DD` the user started / finished the title (imported lists carry these). */
+  startedOn?: string | null
+  completedOn?: string | null
+  rewatchCount?: number
   addedAt: string
   updatedAt: string
 }
@@ -176,19 +181,61 @@ export interface UpdateProfileData {
 
 export interface WatchlistData {
   contentId: string
-  status?: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
+  status?: WatchlistStatus
   rating?: number
   currentEpisode?: number
   currentSeason?: number
   notes?: string
+  startedOn?: string | null
+  completedOn?: string | null
+  rewatchCount?: number
+}
+
+export type WatchlistImportSource = 'anilist' | 'mal' | 'mal_file' | 'tmdb'
+
+export interface WatchlistImportRequest {
+  source: WatchlistImportSource
+  username?: string
+  /** MAL export: the XML text, or the `.xml.gz` as base64. */
+  file?: { xml?: string; gzipBase64?: string }
+  requestToken?: string
+  overwrite?: boolean
+  addMissing?: boolean
+}
+
+export interface WatchlistImportResult {
+  total: number
+  matched: number
+  added: number
+  updated: number
+  unchanged: number
+  rated: number
+  catalogAdded: number
+  notFound: number
+  notFoundTitles: string[]
+}
+
+export interface WatchlistImportJob {
+  source: WatchlistImportSource
+  state: 'running' | 'done' | 'failed'
+  phase: 'reading' | 'matching' | 'adding' | 'saving' | null
+  done: number
+  total: number
+  result: WatchlistImportResult | null
+  error: string | null
+  startedAt: string
+  finishedAt: string | null
 }
 
 export interface UpdateWatchlistData {
-  status?: 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
+  status?: WatchlistStatus
   rating?: number
   currentEpisode?: number
   currentSeason?: number
   notes?: string
+  startedOn?: string | null
+  completedOn?: string | null
+  rewatchCount?: number
 }
 
 export interface RateContentData {
