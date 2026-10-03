@@ -16,6 +16,7 @@ import {
   matchesContentTypeFilter,
 } from '@/services/api'
 import type { WatchlistItem } from '@/types'
+import type { WatchlistStatus } from '@/utils/watchlist'
 import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
 import { getDisplayTitle, getSearchableTitles } from '@/utils/titles'
@@ -589,7 +590,7 @@ export const useContentStore = defineStore('content', () => {
    */
   const addToWatchlist = async (
     contentId: string,
-    status: 'plan_to_watch' | 'watching' | 'completed' | 'dropped' = 'plan_to_watch',
+    status: WatchlistStatus = 'plan_to_watch',
     rating?: number,
     currentEpisode?: number,
     currentSeason?: number,

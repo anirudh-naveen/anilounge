@@ -301,6 +301,8 @@ class RelationshipService {
         headers: {
           'X-MAL-CLIENT-ID': process.env.MAL_CLIENT_ID || '',
         },
+        // Without a timeout a stalled MAL connection hangs whatever is saving the title.
+        signal: AbortSignal.timeout(20000),
       })
 
       if (!response.ok) {

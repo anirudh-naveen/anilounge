@@ -13,6 +13,7 @@ import Entity from '../models/Entity.js'
 import User from '../models/User.js'
 import { serializeEntity } from '../utils/entities.js'
 import { computeProfileStats } from '../utils/profileStats.js'
+import { loadWatchHistory } from '../services/watchEvents.js'
 import { getAvatar } from '../services/avatarService.js'
 import { moderationMessage } from '../utils/moderation.js'
 import { relationshipBetween } from '../services/friendService.js'
@@ -144,6 +145,7 @@ export const getPublicProfile = async (req, res) => {
 
     const relationship =
       req.user && !isOwner ? await relationshipBetween(req.user._id, user._id) : null
+    const history = shows('stats') ? await loadWatchHistory(user._id) : null
 
     res.json({
       success: true,
@@ -173,7 +175,7 @@ export const getPublicProfile = async (req, res) => {
               updatedAt: item.updatedAt,
             }))
           : null,
-        stats: shows('stats') ? computeProfileStats(watchlistRows) : null,
+        stats: shows('stats') ? computeProfileStats(watchlistRows, new Date(), history) : null,
       },
     })
   } catch (error) {

@@ -272,11 +272,7 @@
         </div>
       </div>
 
-      <EntityCastRow
-        :items="characters"
-        :content-id="show._id"
-        :loading="charactersLoading"
-      />
+      <EntityCastRow :items="characters" :content-id="show._id" :loading="charactersLoading" />
 
       <StudioLinks :content="show" />
     </div>
@@ -422,8 +418,7 @@ const renderShow = () => {
   if (!base) return
   const season = selectedSeasonInfo.value
   const latest = seasons.value[seasons.value.length - 1]
-  show.value =
-    season && !season.contentId ? seasonContent(base, season, season === latest) : base
+  show.value = season && !season.contentId ? seasonContent(base, season, season === latest) : base
   contentStore.cacheContent(base, true)
 }
 

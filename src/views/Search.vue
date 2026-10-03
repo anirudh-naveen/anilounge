@@ -88,7 +88,7 @@
         </div>
         <div class="filters-bar">
           <div class="filter-group">
-            <label>Genre:</label>
+            <label>Genre</label>
             <select v-model="filters.genre" data-testid="filter-genre">
               <option value="all">All Genres</option>
               <option value="Action">Action</option>
@@ -108,7 +108,7 @@
             </select>
           </div>
           <div class="filter-group">
-            <label>Language:</label>
+            <label>Language</label>
             <select v-model="filters.language">
               <option value="all">All Languages</option>
               <option value="Japanese">Japanese</option>
@@ -118,7 +118,7 @@
             </select>
           </div>
           <div class="filter-group">
-            <label>Country:</label>
+            <label>Country</label>
             <select v-model="filters.country" data-testid="filter-country">
               <option value="all">All Countries</option>
               <option
@@ -132,7 +132,7 @@
           </div>
           <div class="filter-row-time">
             <div class="filter-group">
-              <label>Year:</label>
+              <label>Year</label>
               <select v-model="filters.year" data-testid="filter-year">
                 <option
                   v-for="option in yearFilterOptions"
@@ -144,7 +144,7 @@
               </select>
             </div>
             <div class="filter-group">
-              <label>Season:</label>
+              <label>Season</label>
               <select v-model="filters.season" data-testid="filter-season">
                 <option
                   v-for="option in SEASON_FILTER_OPTIONS"
@@ -156,7 +156,7 @@
               </select>
             </div>
             <div class="filter-group">
-              <label>Status:</label>
+              <label>Status</label>
               <select v-model="filters.status" data-testid="filter-status">
                 <option
                   v-for="option in STATUS_FILTER_OPTIONS"
@@ -906,6 +906,7 @@ onMounted(() => {
 
 .sort-filter :deep(.sort-by-controls) {
   width: 100%;
+  gap: 0.25rem;
 }
 
 .filter-group label {
@@ -914,27 +915,54 @@ onMounted(() => {
   font-size: 0.85rem;
 }
 
+/* Same rounded control as SortByControls, so every filter reads as one set. */
 .filter-group select {
-  padding: 0.5rem;
-  border: 2px solid var(--text-primary);
-  border-radius: 6px;
-  background: var(--bg-card);
-  color: var(--text-strong);
+  height: 40px;
+  padding: 0 2.25rem 0 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background-color: var(--bg-card);
+  /* Chevron drawn from two gradients so it follows the theme's muted text color. */
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.15rem) 50%,
+    calc(100% - 0.85rem) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  box-shadow: 0 1px 2px rgba(21, 34, 56, 0.06);
+  color: var(--text-primary);
+  font: inherit;
   font-size: 0.9rem;
-  transition: all 0.3s ease;
+  font-weight: 500;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.filter-group select:hover {
+  border-color: var(--border-hover);
 }
 
 .filter-group select:focus {
   outline: none;
-  background: var(--bg-card);
   border-color: var(--coral-primary);
-  box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.2);
+}
+
+.filter-group select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .filter-group select:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-  background: var(--bg-muted);
+  background-color: var(--bg-muted);
 }
 
 .rating-slider {
