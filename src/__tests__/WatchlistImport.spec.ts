@@ -53,10 +53,10 @@ const doneJob = {
   },
 }
 
-const mountImport = async (path = '/settings') => {
+const mountImport = async (path = '/import') => {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/settings', component: { template: '<div />' } }],
+    routes: [{ path: '/import', component: { template: '<div />' } }],
   })
   await router.push(path)
   await router.isReady()
@@ -128,7 +128,7 @@ describe('WatchlistImport', () => {
 
     expect(open).toHaveBeenCalledWith('', '_blank')
     expect(tab.opener).toBeNull()
-    expect(api.tmdbToken).toHaveBeenCalledWith(`${window.location.origin}/settings?import=tmdb-tab`)
+    expect(api.tmdbToken).toHaveBeenCalledWith(`${window.location.origin}/import?import=tmdb-tab`)
     expect(tab.location.href).toBe('https://tmdb.example/ok')
     expect(wrapper.text()).toContain('Waiting for you to approve')
 
@@ -145,7 +145,7 @@ describe('WatchlistImport', () => {
   it('imports in this tab when TMDB sends the user back approved', async () => {
     api.start.mockResolvedValue({ data: { data: runningJob } })
     const { router } = await mountImport(
-      '/settings?import=tmdb&request_token=abc123def456&approved=true',
+      '/import?import=tmdb&request_token=abc123def456&approved=true',
     )
     expect(api.start).toHaveBeenCalledWith({
       sources: [{ source: 'tmdb', requestToken: 'abc123def456' }],
@@ -156,7 +156,7 @@ describe('WatchlistImport', () => {
 
   it('reports a denied TMDB approval without importing', async () => {
     const { wrapper } = await mountImport(
-      '/settings?import=tmdb&request_token=abc123def456&denied=true',
+      '/import?import=tmdb&request_token=abc123def456&denied=true',
     )
     expect(api.start).not.toHaveBeenCalled()
     expect(wrapper.find('.import-error').text()).toContain('not approved')
