@@ -97,6 +97,7 @@ describe('Watchlist status filter', () => {
       'Planned (0)',
       'Watching (1)',
       'Completed (1)',
+      'On Hold (0)',
       'Dropped (0)',
     ])
   })

@@ -708,6 +708,7 @@ export const addToWatchlist = async (req, res) => {
       existingItem.totalEpisodes = maxEpisodes
       existingItem.totalSeasons = maxSeasons
       existingItem.notes = notes || existingItem.notes
+      applyListDetails(existingItem, req.body)
       existingItem.updatedAt = new Date()
     } else {
       user.watchlist.push({
@@ -720,6 +721,9 @@ export const addToWatchlist = async (req, res) => {
         totalEpisodes: maxEpisodes,
         totalSeasons: maxSeasons,
         notes: notes || '',
+        startedOn: req.body.startedOn || null,
+        completedOn: req.body.completedOn || null,
+        rewatchCount: req.body.rewatchCount ?? 0,
         addedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -925,6 +929,7 @@ export const updateWatchlistItem = async (req, res) => {
     setWatchedEpisode(watchlistItem, currentEpisode)
     if (currentSeason !== undefined) watchlistItem.currentSeason = currentSeason
     if (notes !== undefined) watchlistItem.notes = notes
+    applyListDetails(watchlistItem, req.body)
 
     if (!watchlistItem.totalEpisodes) watchlistItem.totalEpisodes = maxEpisodes
     if (!watchlistItem.totalSeasons) watchlistItem.totalSeasons = maxSeasons
@@ -967,6 +972,20 @@ export const updateWatchlistItem = async (req, res) => {
  * @param {number|undefined} episode - New current episode from the request.
  * @returns {void}
  */
+/**
+ * Copy the optional start/finish dates and rewatch count from a request body
+ * (`null` clears a date; omitted fields are left alone).
+ *
+ * @param {object} item - Watchlist row, mutated in place.
+ * @param {{ startedOn?: string|null, completedOn?: string|null, rewatchCount?: number }} body
+ * @returns {void}
+ */
+function applyListDetails(item, body) {
+  if (body.startedOn !== undefined) item.startedOn = body.startedOn || null
+  if (body.completedOn !== undefined) item.completedOn = body.completedOn || null
+  if (body.rewatchCount !== undefined) item.rewatchCount = Number(body.rewatchCount)
+}
+
 function setWatchedEpisode(item, episode) {
   if (episode === undefined || episode === item.currentEpisode) return
   item.previousEpisode = item.currentEpisode || 0

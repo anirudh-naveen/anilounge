@@ -12,18 +12,28 @@ const TOP_GENRES = 8
 const IGNORED_GENRES = new Set(['animation'])
 
 /**
+ * How many full watches a completed row stands for (the first one plus rewatches).
+ * @param {{ rewatchCount?: number }} item
+ * @returns {number}
+ */
+function completedWatches(item) {
+  return 1 + Math.max(0, Number(item.rewatchCount) || 0)
+}
+
+/**
  * Episodes the user has watched for one watchlist row.
- * Completed series count every episode; in-progress rows count `currentEpisode`.
+ * Completed series count every episode once per watch; in-progress, paused, and
+ * dropped rows count `currentEpisode`.
  *
- * @param {{ status: string, currentEpisode?: number, content: object }} item
+ * @param {{ status: string, currentEpisode?: number, rewatchCount?: number, content: object }} item
  * @returns {number}
  */
 export function episodesWatched(item) {
   const content = item.content || {}
   const total = Number(content.episodeCount || content.malEpisodes || 0)
   const current = Number(item.currentEpisode || 0)
-  if (item.status === 'completed') return Math.max(total, current, 1)
-  if (item.status === 'watching' || item.status === 'dropped') return current
+  if (item.status === 'completed') return Math.max(total, current, 1) * completedWatches(item)
+  if (['watching', 'on_hold', 'dropped'].includes(item.status)) return current
   return 0
 }
 
@@ -42,7 +52,7 @@ export function minutesWatched(item) {
   const isMovie = content.contentType === 'movie'
   const isSingleSpecial = content.contentType === 'special' && episodeTotal <= 1
   if (isMovie || isSingleSpecial) {
-    return item.status === 'completed' ? runtime : 0
+    return item.status === 'completed' ? runtime * completedWatches(item) : 0
   }
   const perEpisode = content.contentType === 'special' && runtime ? runtime : DEFAULT_EPISODE_MINUTES
   return episodesWatched(item) * perEpisode
@@ -65,7 +75,7 @@ function monthKey(date) {
  * @param {Array<{ status: string, rating?: number|null, currentEpisode?: number, updatedAt?: string|Date, addedAt?: string|Date, content: object }>} watchlist - Rows with `content` populated.
  * @param {Date} [now=new Date()] - Reference point for the trailing 12 months.
  * @returns {{
- *   totals: { titles: number, completed: number, watching: number, planToWatch: number, dropped: number, completedSeries: number, completedMovies: number, episodesWatched: number, minutesWatched: number, averageRating: number|null, ratedCount: number },
+ *   totals: { titles: number, completed: number, watching: number, planToWatch: number, onHold: number, dropped: number, completedSeries: number, completedMovies: number, episodesWatched: number, minutesWatched: number, averageRating: number|null, ratedCount: number },
  *   monthly: Array<{ month: string, minutes: number }>,
  *   genres: Array<{ name: string, titles: number, minutes: number }>,
  *   ratingDistribution: number[],
@@ -86,6 +96,7 @@ export function computeProfileStats(watchlist, now = new Date()) {
     completed: 0,
     watching: 0,
     planToWatch: 0,
+    onHold: 0,
     dropped: 0,
     completedSeries: 0,
     completedMovies: 0,
@@ -102,6 +113,7 @@ export function computeProfileStats(watchlist, now = new Date()) {
     const { content } = item
     if (item.status === 'completed') totals.completed += 1
     else if (item.status === 'watching') totals.watching += 1
+    else if (item.status === 'on_hold') totals.onHold += 1
     else if (item.status === 'dropped') totals.dropped += 1
     else totals.planToWatch += 1
 

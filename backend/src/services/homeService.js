@@ -162,6 +162,8 @@ async function watchlistActivity(userIds, viewerId, limit) {
      LEFT JOIN series s ON s.content_id = c.id
      LEFT JOIN ratings r ON r.user_id = w.user_id AND r.content_id = w.content_id
      WHERE w.user_id = ANY($1::uuid[])
+       -- Rows an import wrote stay out until the user changes them.
+       AND (w.imported_at IS NULL OR w.updated_at > w.imported_at)
      ORDER BY w.updated_at DESC
      LIMIT $2`,
     [userIds, limit],

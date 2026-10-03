@@ -88,6 +88,19 @@ function mapUserRow(row) {
   }
 }
 
+/**
+ * `YYYY-MM-DD` for a DATE column. node-postgres reads DATE as local midnight, so the
+ * local getters give back the stored day.
+ * @param {Date|string|null|undefined} value
+ * @returns {string|null}
+ */
+function dateOnly(value) {
+  if (!value) return null
+  if (typeof value === 'string') return value.slice(0, 10)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+}
+
 async function loadUserChildren(doc) {
   const id = doc._id
   const [watchlist, ratings, favs] = await Promise.all([
@@ -112,6 +125,10 @@ async function loadUserChildren(doc) {
       previousEpisode: row.previous_episode ?? 0,
       currentSeason: row.current_season,
       notes: row.notes,
+      startedOn: dateOnly(row.started_on),
+      completedOn: dateOnly(row.completed_on),
+      rewatchCount: row.rewatch_count ?? 0,
+      importedAt: row.imported_at ?? null,
       addedAt: row.added_at,
       updatedAt: row.updated_at,
     }
@@ -274,6 +291,10 @@ User.prototype.save = async function save() {
       previous_episode: item.previousEpisode ?? 0,
       current_season: item.currentSeason ?? 1,
       notes: item.notes || null,
+      started_on: item.startedOn || null,
+      completed_on: item.completedOn || null,
+      rewatch_count: item.rewatchCount ?? 0,
+      imported_at: item.importedAt || null,
       added_at: item.addedAt || new Date(),
       updated_at: item.updatedAt || new Date(),
     })),
@@ -283,13 +304,14 @@ User.prototype.save = async function save() {
     await query(
       `INSERT INTO watchlist (
          user_id, content_id, status, current_episode, previous_episode, current_season, notes,
-         added_at, updated_at
+         started_on, completed_on, rewatch_count, imported_at, added_at, updated_at
        )
        SELECT $1, w.id, r.status, r.current_episode, r.previous_episode, r.current_season, r.notes,
-              r.added_at, r.updated_at
+              r.started_on, r.completed_on, r.rewatch_count, r.imported_at, r.added_at, r.updated_at
        FROM jsonb_to_recordset($2::jsonb) AS r(
          content_id text, status text, current_episode int, previous_episode int,
-         current_season int, notes text, added_at timestamptz, updated_at timestamptz
+         current_season int, notes text, started_on date, completed_on date, rewatch_count int,
+         imported_at timestamptz, added_at timestamptz, updated_at timestamptz
        )
        JOIN works w ON w.id::text = r.content_id
        ON CONFLICT (user_id, content_id) DO NOTHING`,

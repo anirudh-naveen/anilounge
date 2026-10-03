@@ -1,9 +1,15 @@
-export type WatchlistStatus = 'plan_to_watch' | 'watching' | 'completed' | 'dropped'
+export type WatchlistStatus =
+  | 'plan_to_watch'
+  | 'watching'
+  | 'completed'
+  | 'on_hold'
+  | 'dropped'
 
 export const WATCHLIST_STATUS_OPTIONS: { value: WatchlistStatus; label: string }[] = [
   { value: 'plan_to_watch', label: 'Planned' },
   { value: 'watching', label: 'Watching' },
   { value: 'completed', label: 'Completed' },
+  { value: 'on_hold', label: 'On Hold' },
   { value: 'dropped', label: 'Dropped' },
 ]
 

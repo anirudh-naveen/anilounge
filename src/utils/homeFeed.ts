@@ -73,6 +73,8 @@ export function describeActivity(
     }
     case 'completed':
       return 'completed'
+    case 'on_hold':
+      return 'put on hold'
     case 'dropped':
       return 'dropped'
     default:

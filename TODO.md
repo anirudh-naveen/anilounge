@@ -2,8 +2,8 @@
 
 ## Content
 
-1. Add method for user to upload their AniList/MAL,Tmdb watchlist
-   - Before this, incorporate all the stats that the sites store for user information, if not more, and properly map those to this site's database.
+1. Add method for user to upload their AniList/MAL,Tmdb watchlist ✅
+   - Before this, incorporate all the stats that the sites store for user information, if not more, and properly map those to this site's database. ✅
 
 ## Home
 

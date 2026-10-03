@@ -7,6 +7,7 @@ describe('watchlist status labels', () => {
     expect(getWatchlistStatusLabel('plan_to_watch')).toBe('Planned')
     expect(getWatchlistStatusLabel('watching')).toBe('Watching')
     expect(getWatchlistStatusLabel('completed')).toBe('Completed')
+    expect(getWatchlistStatusLabel('on_hold')).toBe('On Hold')
     expect(getWatchlistStatusLabel('dropped')).toBe('Dropped')
   })
 
@@ -16,6 +17,7 @@ describe('watchlist status labels', () => {
       'plan_to_watch',
       'watching',
       'completed',
+      'on_hold',
       'dropped',
     ])
   })
