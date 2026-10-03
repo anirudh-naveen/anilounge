@@ -151,6 +151,7 @@ export interface EntityAppearance {
         startSeasonYear?: number
         unifiedScore?: number
         malStatus?: string
+        franchise?: string | null
       }
   character?:
     | string

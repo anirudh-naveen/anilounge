@@ -8,6 +8,7 @@ import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import relationshipService from './relationshipService.js'
+import { runCatalogMaintenance } from './catalogMaintenance.js'
 import {
   ANILIST_ORIGIN_COUNTRIES,
   convertAnilistToContent,
@@ -193,6 +194,8 @@ class DatabasePopulator {
         await this.populateMalContent(malLimit)
       }
 
+      await this.groupNewTitlesIntoFranchises()
+
       await this.printFinalStats()
 
       console.log('Database population completed successfully!')
@@ -205,6 +208,16 @@ class DatabasePopulator {
         await this.disconnectDB()
       }
     }
+  }
+
+  /**
+   * Group this run's new titles into franchises and merge their duplicate
+   * characters (catalogMaintenance.js). It logs its own failures, so it never
+   * fails the sync.
+   * @returns {Promise<void>}
+   */
+  async groupNewTitlesIntoFranchises() {
+    await runCatalogMaintenance('content sync')
   }
 
   /**
@@ -341,7 +354,7 @@ class DatabasePopulator {
       if (contentData.tmdbId) {
         const existingByTmdb = await Content.findOne({ tmdbId: contentData.tmdbId })
         if (existingByTmdb) {
-          await this.mergeTmdbIntoExisting(existingByTmdb, contentData, detailedTmdbData)
+          await this.mergeTmdbIntoExisting(existingByTmdb, contentData)
           this.stats.updated++
           console.log(`Updated TMDB content: ${contentData.title}`)
           return
@@ -355,7 +368,7 @@ class DatabasePopulator {
         const existingContent = duplicate.content
 
         if (duplicate.reason === 'title_match') {
-          await this.mergeTmdbIntoExisting(existingContent, contentData, detailedTmdbData)
+          await this.mergeTmdbIntoExisting(existingContent, contentData)
           this.stats.merged++
           console.log(`Merged TMDB data into existing content: ${contentData.title}`)
         }
@@ -369,7 +382,7 @@ class DatabasePopulator {
         ? await Content.findOne({ malId: anilistData.malId })
         : null
       if (malOwner && !malOwner.tmdbId) {
-        await this.mergeTmdbIntoExisting(malOwner, contentData, detailedTmdbData, { save: false })
+        await this.mergeTmdbIntoExisting(malOwner, contentData, { save: false })
         await this.mergeAnilistIntoExisting(malOwner, anilistData)
         this.stats.merged++
         console.log(`Merged TMDB data into MAL title via AniList: ${contentData.title}`)
@@ -391,20 +404,6 @@ class DatabasePopulator {
       contentData.userRatingAverage = null
       contentData.userRatingCount = 0
       contentData.userRatingSum = 0
-
-      const relationships = await relationshipService.detectRelationshipsFromExternalData(
-        detailedTmdbData,
-        'tmdb',
-      )
-      if (relationships.franchise) {
-        contentData.franchise = relationships.franchise.name
-        contentData.relationships = {
-          sequels: [],
-          prequels: [],
-          related: [],
-          franchise: relationships.franchise.name,
-        }
-      }
 
       if (contentData.genres) {
         contentData.genres = this.deduplicateGenres(contentData.genres)
@@ -582,11 +581,6 @@ class DatabasePopulator {
             console.log(`Merged MAL data into existing content: ${contentData.title}`)
           }
         } else {
-          const relationships = await relationshipService.detectRelationshipsFromExternalData(
-            malData,
-            'mal',
-          )
-
           const contentWithRelationships = {
             ...contentData,
             unifiedScore:
@@ -608,16 +602,6 @@ class DatabasePopulator {
               tmdb: { hasData: false },
             },
             lastUpdated: new Date(),
-          }
-
-          if (relationships.franchise) {
-            contentWithRelationships.franchise = relationships.franchise.name
-            contentWithRelationships.relationships = {
-              sequels: [],
-              prequels: [],
-              related: [],
-              franchise: relationships.franchise.name,
-            }
           }
 
           if (contentWithRelationships.genres) {
@@ -686,11 +670,10 @@ class DatabasePopulator {
    * Recalculates unifiedScore from all three sources when present.
    * @param {object} existingContent
    * @param {object} tmdbData - Converted Content-shaped TMDB object
-   * @param {object} detailedTmdbData - Raw TMDB payload for franchise detection
    * @param {{ save?: boolean }} [options] - `save: false` leaves persisting to the caller
    * @returns {Promise<void>}
    */
-  async mergeTmdbIntoExisting(existingContent, tmdbData, detailedTmdbData, { save = true } = {}) {
+  async mergeTmdbIntoExisting(existingContent, tmdbData, { save = true } = {}) {
     this.assignTitleFields(
       existingContent,
       applyTitleFields(existingContent, tmdbData, { preferIncomingEnglish: true }),
@@ -762,12 +745,6 @@ class DatabasePopulator {
         existingContent.malScore ||
         0
     }
-
-    await relationshipService.processRelationshipsDuringMerge(
-      existingContent,
-      detailedTmdbData,
-      'tmdb',
-    )
 
     if (!existingContent.dataSources) {
       existingContent.dataSources = {}
@@ -861,8 +838,6 @@ class DatabasePopulator {
       malData.malScore ||
       existingContent.voteAverage ||
       0
-
-    await relationshipService.processRelationshipsDuringMerge(existingContent, malData, 'mal')
 
     if (!existingContent.dataSources) {
       existingContent.dataSources = {}

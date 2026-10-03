@@ -15,6 +15,7 @@ import { DocQuery } from '../db/query.js'
 import { applyAdminOverrides, readEditableFields } from '../utils/adminContent.js'
 import { planSyncChanges } from '../utils/syncReview.js'
 import { recordSyncNotices } from '../services/syncGuard.js'
+import catalogEvents from '../services/catalogEvents.js'
 
 /**
  * @param {object} row
@@ -260,7 +261,7 @@ Content.prototype.save = async function save() {
   applyAdminOverrides(this, overrides, kind)
   await protectExistingValues(this, kind, overrides, incoming)
   const name = this.englishTitle || this.title || 'Untitled'
-  const { rowCount } = await query(
+  const { rowCount, rows: saved } = await query(
     `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, anilist_id, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE((SELECT created_at FROM content WHERE id=$1), now()), now())
      ON CONFLICT (id) DO UPDATE SET
@@ -273,7 +274,8 @@ Content.prototype.save = async function save() {
        tmdb_id = EXCLUDED.tmdb_id,
        anilist_id = EXCLUDED.anilist_id,
        updated_at = now()
-     WHERE content.kind IN ('movie', 'series', 'special')`,
+     WHERE content.kind IN ('movie', 'series', 'special')
+     RETURNING (xmax = 0) AS inserted`,
     [
       id,
       kind,
@@ -393,6 +395,7 @@ Content.prototype.save = async function save() {
 
   await replaceChildren(this)
   this.$isNew = false
+  if (saved[0]?.inserted) catalogEvents.emit('title-added', String(id))
   return this
 }
 
@@ -508,6 +511,22 @@ async function upsertFranchise(name) {
   return id
 }
 
+/**
+ * Whether the work already belongs to a franchise row with this name.
+ * @param {string} workId
+ * @param {string} name
+ * @returns {Promise<boolean>}
+ */
+async function isCurrentFranchise(workId, name) {
+  const { rows } = await query(
+    `SELECT 1 FROM franchise_members fm
+     JOIN content f ON f.id = fm.franchise_id
+     WHERE fm.member_id = $1 AND f.name = $2`,
+    [workId, name],
+  )
+  return rows.length > 0
+}
+
 async function replaceChildren(doc) {
   const id = doc._id
   // An empty list from the sync means "unknown", not "none": keep what the row has.
@@ -516,7 +535,13 @@ async function replaceChildren(doc) {
   )
   const hasAkas = (doc.alternativeTitles || []).some(Boolean)
   const hasStudios = [...(doc.studios || []), ...(doc.productionCompanies || [])].some(Boolean)
-  const franchiseName = doc.franchise || doc.relationships?.franchise
+  let franchiseName = doc.franchise || doc.relationships?.franchise
+  if (franchiseName && (await isCurrentFranchise(id, franchiseName))) {
+    // Loaded docs echo their franchise's name back. If that row was renamed under
+    // us (e.g. clobbered by a person save), re-upserting by name would mint a new
+    // franchise with the bad name and strand the title there.
+    franchiseName = null
+  }
   if (hasGenres) await query('DELETE FROM content_genres WHERE content_id = $1', [id])
   if (hasAkas) await query('DELETE FROM content_akas WHERE content_id = $1', [id])
   if (hasStudios) {
