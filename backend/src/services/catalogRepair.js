@@ -10,6 +10,7 @@ import { query, startSession } from '../../config/postgres.js'
 import { titleKeySql } from '../db/mongoFilter.js'
 import Content from '../models/Content.js'
 import { foldEntityName, studioNameKey } from '../utils/entities.js'
+import { moveWatchHistory } from './watchEvents.js'
 
 const WATCHABLE = `('movie', 'series', 'special')`
 
@@ -99,6 +100,7 @@ export async function backupCatalog(now = new Date()) {
  * @returns {Promise<void>}
  */
 export async function mergeWorkInto(fromId, toId) {
+  await moveWatchHistory(fromId, toId)
   await query(
     `INSERT INTO watchlist (user_id, content_id, status, current_episode, previous_episode, current_season, notes, added_at, updated_at)
      SELECT user_id, $2, status, current_episode, previous_episode, current_season, notes, added_at, updated_at

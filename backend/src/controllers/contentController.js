@@ -31,6 +31,8 @@ import {
 import { validationResult } from 'express-validator'
 import { censorText } from '../utils/moderation.js'
 import { startSession } from '../../config/postgres.js'
+import { clearWatchHistory, recordWatch } from '../services/watchEvents.js'
+import { watchUnits } from '../utils/profileStats.js'
 
 const movieLikeTypes = ['movie', 'special']
 
@@ -698,6 +700,7 @@ export const addToWatchlist = async (req, res) => {
 
     const existingItem = user.watchlist.find((item) => item.content.toString() === contentId)
     const previousRating = getEffectiveUserRating(user, contentId)
+    const unitsBefore = existingItem ? watchUnits({ ...existingItem, content }) : 0
 
     if (existingItem) {
       existingItem.status = status || existingItem.status
@@ -708,6 +711,7 @@ export const addToWatchlist = async (req, res) => {
       existingItem.totalEpisodes = maxEpisodes
       existingItem.totalSeasons = maxSeasons
       existingItem.notes = notes || existingItem.notes
+      applyListDetails(existingItem, req.body)
       existingItem.updatedAt = new Date()
     } else {
       user.watchlist.push({
@@ -720,6 +724,9 @@ export const addToWatchlist = async (req, res) => {
         totalEpisodes: maxEpisodes,
         totalSeasons: maxSeasons,
         notes: notes || '',
+        startedOn: req.body.startedOn || null,
+        completedOn: req.body.completedOn || null,
+        rewatchCount: req.body.rewatchCount ?? 0,
         addedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -734,6 +741,8 @@ export const addToWatchlist = async (req, res) => {
     )
 
     await user.save({ session })
+    const savedItem = user.watchlist.find((item) => item.content.toString() === contentId)
+    await recordWatch(userId, contentId, watchUnits({ ...savedItem, content }) - unitsBefore)
     await session.commitTransaction()
 
     res.json({
@@ -835,6 +844,7 @@ export const removeFromWatchlist = async (req, res) => {
     }
 
     await user.save({ session })
+    await clearWatchHistory(userId, contentId)
     await session.commitTransaction()
 
     res.json({
@@ -919,12 +929,14 @@ export const updateWatchlistItem = async (req, res) => {
     }
 
     const previousRating = getEffectiveUserRating(user, contentId)
+    const unitsBefore = watchUnits({ ...watchlistItem, content })
 
     if (status) watchlistItem.status = status
     if (rating !== undefined) watchlistItem.rating = rating
     setWatchedEpisode(watchlistItem, currentEpisode)
     if (currentSeason !== undefined) watchlistItem.currentSeason = currentSeason
     if (notes !== undefined) watchlistItem.notes = notes
+    applyListDetails(watchlistItem, req.body)
 
     if (!watchlistItem.totalEpisodes) watchlistItem.totalEpisodes = maxEpisodes
     if (!watchlistItem.totalSeasons) watchlistItem.totalSeasons = maxSeasons
@@ -940,6 +952,7 @@ export const updateWatchlistItem = async (req, res) => {
     )
 
     await user.save({ session })
+    await recordWatch(userId, contentId, watchUnits({ ...watchlistItem, content }) - unitsBefore)
     await session.commitTransaction()
 
     res.json({
@@ -967,6 +980,20 @@ export const updateWatchlistItem = async (req, res) => {
  * @param {number|undefined} episode - New current episode from the request.
  * @returns {void}
  */
+/**
+ * Copy the optional start/finish dates and rewatch count from a request body
+ * (`null` clears a date; omitted fields are left alone).
+ *
+ * @param {object} item - Watchlist row, mutated in place.
+ * @param {{ startedOn?: string|null, completedOn?: string|null, rewatchCount?: number }} body
+ * @returns {void}
+ */
+function applyListDetails(item, body) {
+  if (body.startedOn !== undefined) item.startedOn = body.startedOn || null
+  if (body.completedOn !== undefined) item.completedOn = body.completedOn || null
+  if (body.rewatchCount !== undefined) item.rewatchCount = Number(body.rewatchCount)
+}
+
 function setWatchedEpisode(item, episode) {
   if (episode === undefined || episode === item.currentEpisode) return
   item.previousEpisode = item.currentEpisode || 0

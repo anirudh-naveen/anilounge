@@ -41,9 +41,7 @@
         <div class="studio-info">
           <p class="entity-kicker">Animation studio</p>
           <h1 class="studio-title">{{ studio.name }}</h1>
-          <p v-if="studio.nativeName" class="native-name">
-            Native Name: {{ studio.nativeName }}
-          </p>
+          <p v-if="studio.nativeName" class="native-name">Native Name: {{ studio.nativeName }}</p>
           <p class="studio-counts" data-testid="studio-counts">{{ countsLabel }}</p>
 
           <div class="studio-actions">
@@ -75,7 +73,9 @@
         class="studio-works"
         :data-testid="`studio-${section.key}`"
       >
-        <h2>{{ section.title }} <span class="section-count">{{ section.works.length }}</span></h2>
+        <h2>
+          {{ section.title }} <span class="section-count">{{ section.works.length }}</span>
+        </h2>
         <div class="content-grid">
           <div
             v-for="work in section.works"

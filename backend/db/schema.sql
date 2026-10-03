@@ -369,6 +369,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS announcement_emails BOOLEAN NOT NULL 
 -- Opt-out for friend request emails (services/emailPreferenceService.js).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_request_emails BOOLEAN NOT NULL DEFAULT true;
 
+-- When the user last finished a watchlist import (services/watchlistImportService.js).
+-- New accounts are reminded about importing for their first month until this is set.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS watchlist_imported_at TIMESTAMPTZ;
+
 -- Profile pictures live in the database (services/avatarService.js) so they survive
 -- redeploys and work from every environment that shares this database.
 CREATE TABLE IF NOT EXISTS user_avatars (
@@ -450,6 +454,44 @@ CREATE INDEX IF NOT EXISTS watchlist_content_idx ON watchlist (content_id);
 -- Episode the user had reached before their latest progress change.
 ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS previous_episode INTEGER NOT NULL DEFAULT 0;
 
+-- List fields AniList and MyAnimeList keep (services/watchlistImportService.js): a paused
+-- status ('on_hold'), when the user started and finished the title, and how many times
+-- they rewatched it.
+ALTER TABLE watchlist DROP CONSTRAINT IF EXISTS watchlist_status_check;
+ALTER TABLE watchlist ADD CONSTRAINT watchlist_status_check
+  CHECK (status IN ('plan_to_watch', 'watching', 'completed', 'on_hold', 'dropped'));
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS started_on DATE;
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS completed_on DATE;
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS rewatch_count INTEGER NOT NULL DEFAULT 0
+  CHECK (rewatch_count >= 0);
+-- When an import last wrote the row. The homepage feed skips rows not changed since,
+-- so importing a list doesn't flood friends' feeds.
+ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
+
+-- Watch history (services/watchEvents.js): units (episodes, or whole watches for
+-- movies) a user got through on a day. In-app progress changes log what they add
+-- ('manual'); imports log an estimate spread between the source's start and finish
+-- dates ('import'). The profile calendar places watch time by it.
+CREATE TABLE IF NOT EXISTS watch_events (
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  content_id  UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  watched_on  DATE NOT NULL,
+  source      TEXT NOT NULL CHECK (source IN ('manual', 'import')),
+  units       INTEGER NOT NULL CHECK (units > 0),
+  PRIMARY KEY (user_id, content_id, watched_on, source)
+);
+
+-- Import clashes waiting on the user (services/watchlistImportService.js): titles whose
+-- imported sources disagree, or disagree with the user's watchlist row. `options` holds
+-- each distinct imported version; nothing is written for the title until the user picks.
+CREATE TABLE IF NOT EXISTS watchlist_import_conflicts (
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  content_id  UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  options     JSONB NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, content_id)
+);
+
 CREATE TABLE IF NOT EXISTS ratings (
   user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   content_id UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
@@ -458,6 +500,11 @@ CREATE TABLE IF NOT EXISTS ratings (
   rated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, content_id)
 );
+
+-- Ratings to the tenth (8.5). `works` reads ratings.score, so it is dropped for the
+-- type change and recreated just below.
+DROP VIEW IF EXISTS works;
+ALTER TABLE ratings ALTER COLUMN score TYPE NUMERIC(3, 1);
 
 CREATE OR REPLACE VIEW works AS
 SELECT

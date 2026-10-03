@@ -25,6 +25,7 @@ const watchlist = [
       title: 'Frieren',
       overview: 'An elf journeys after the hero party disbands.',
       contentType: 'tv',
+      episodeCount: 28,
       genres: [],
     },
     status: 'watching',
@@ -74,53 +75,60 @@ const mountPage = async () => {
   return wrapper
 }
 
-describe('Watchlist status filter', () => {
+describe('Watchlist status sections', () => {
   beforeEach(() => {
     loadWatchlist.mockClear()
+    localStorage.clear()
   })
 
-  it('puts a status dropdown next to sort instead of status tabs', async () => {
+  it('groups titles into status sections next to the sort control, with no status dropdown', async () => {
     const wrapper = await mountPage()
 
-    expect(wrapper.find('.filter-tabs').exists()).toBe(false)
-    expect(wrapper.find('.tab-btn').exists()).toBe(false)
-    expect(
-      wrapper.find('.watchlist-toolbar [data-testid="watchlist-status-filter"]').exists(),
-    ).toBe(true)
+    expect(wrapper.find('[data-testid="watchlist-status-filter"]').exists()).toBe(false)
     expect(wrapper.find('.watchlist-toolbar .sort-by-controls').exists()).toBe(true)
 
-    const options = wrapper
-      .findAll('[data-testid="watchlist-status-filter"] option')
-      .map((option) => option.text())
-    expect(options).toEqual([
-      'All (2)',
-      'Planned (0)',
-      'Watching (1)',
-      'Completed (1)',
-      'Dropped (0)',
+    const headers = wrapper.findAll('.section-header').map((header) => header.text())
+    expect(headers).toEqual(['Watching1', 'Completed1'])
+    expect(wrapper.get('[data-testid="watchlist-section-watching"]').text()).toContain('Frieren')
+    expect(wrapper.get('[data-testid="watchlist-section-completed"]').text()).toContain(
+      'Spirited Away',
+    )
+  })
+
+  it('lists watching titles before completed ones', async () => {
+    const wrapper = await mountPage()
+    const titles = wrapper.findAll('.item-title').map((title) => title.text())
+    expect(titles).toEqual(['Frieren', 'Spirited Away'])
+  })
+
+  it('filters the list by the search box', async () => {
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="watchlist-search"]').setValue('spirit')
+    expect(wrapper.findAll('.item-title').map((title) => title.text())).toEqual(['Spirited Away'])
+
+    await wrapper.get('[data-testid="watchlist-search"]').setValue('nothing like it')
+    expect(wrapper.findAll('.item-title')).toHaveLength(0)
+    expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain('nothing like it')
+  })
+
+  it('collapses a section and remembers it', async () => {
+    const wrapper = await mountPage()
+    const header = wrapper.get('[data-testid="watchlist-section-completed"] .section-header')
+    const items = wrapper.get('[data-testid="watchlist-section-completed"] .section-items')
+
+    expect(header.attributes('aria-expanded')).toBe('true')
+    await header.trigger('click')
+
+    expect(header.attributes('aria-expanded')).toBe('false')
+    expect((items.element as HTMLElement).style.display).toBe('none')
+    expect(JSON.parse(localStorage.getItem('anilounge:watchlist-collapsed') || '[]')).toEqual([
+      'completed',
     ])
   })
 
-  it('filters the list when a status is selected', async () => {
+  it("shows a series' episode count from the catalog", async () => {
     const wrapper = await mountPage()
-
-    expect(wrapper.text()).toContain('Spirited Away')
-    expect(wrapper.text()).toContain('Frieren')
-
-    await wrapper.get('[data-testid="watchlist-status-filter"]').setValue('watching')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Frieren')
-    expect(wrapper.text()).not.toContain('Spirited Away')
-  })
-
-  it('explains when the selected status has no titles', async () => {
-    const wrapper = await mountPage()
-
-    await wrapper.get('[data-testid="watchlist-status-filter"]').setValue('dropped')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('No Dropped titles')
-    expect(wrapper.text()).not.toContain('No items in your watchlist')
+    const progress = wrapper.get('.episode-progress').text().replace(/\s+/g, '')
+    expect(progress).toBe('4/28🆕')
   })
 })

@@ -14,10 +14,10 @@
           <p class="kicker">Your lounge</p>
           <h1 class="home-title">
             Welcome back<span v-if="authStore.user?.username"
-              >, <span class="gradient-text">{{ authStore.user.username }}</span
-              ><RoleBadge :username="authStore.user.username" size="lg" /></span
+              >, <span class="gradient-text">{{ authStore.user.username }}</span></span
             >.
           </h1>
+          <ImportReminder class="home-import-reminder" />
         </template>
         <template v-else>
           <h1 class="home-title">
@@ -101,8 +101,7 @@
               <div class="activity-body">
                 <p class="activity-text">
                   <span class="activity-user">
-                    {{ entry.user.isSelf ? 'You' : entry.user.username
-                    }}<RoleBadge :username="entry.user.username" />
+                    {{ entry.user.isSelf ? 'You' : entry.user.username }}
                   </span>
                   {{ describeActivity(entry) }}
                   <router-link :to="titleRoute(entry.content)" class="activity-title">
@@ -253,7 +252,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import RoleBadge from '@/components/RoleBadge.vue'
+import ImportReminder from '@/components/ImportReminder.vue'
 import { getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
 import type { CatalogEntity, EntityAppearance } from '@/types/content'
 import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'
@@ -708,6 +707,11 @@ onUnmounted(() => {
   color: var(--movie-badge);
 }
 
+.status-chip.status-on_hold {
+  background: rgba(140, 120, 200, 0.14);
+  color: #6e5bb5;
+}
+
 .status-chip.status-plan_to_watch {
   background: rgba(232, 163, 23, 0.14);
   color: #a8750f;
@@ -1113,5 +1117,10 @@ onUnmounted(() => {
   .forum-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.home-import-reminder {
+  margin: 1rem 0 0;
+  max-width: 720px;
 }
 </style>

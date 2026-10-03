@@ -26,6 +26,7 @@ export interface ProfileStats {
     completed: number
     watching: number
     planToWatch: number
+    onHold?: number
     dropped: number
     completedSeries: number
     completedMovies: number
@@ -36,6 +37,8 @@ export interface ProfileStats {
   }
   /** Trailing 12 months, oldest first, keyed `YYYY-MM`. */
   monthly: Array<{ month: string; minutes: number }>
+  /** Sparse `YYYY-MM-DD` (UTC) -> minutes over the whole watch history. */
+  daily?: Record<string, number>
   genres: Array<{ name: string; titles: number; minutes: number }>
   /** Counts for ratings 1 through 10. */
   ratingDistribution: number[]

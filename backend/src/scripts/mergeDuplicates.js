@@ -9,6 +9,7 @@ import { connectPostgres, closePostgres, query } from '../../config/postgres.js'
 import Content from '../models/Content.js'
 import { applyTitleFields } from '../utils/titles.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
+import { moveWatchHistory } from '../services/watchEvents.js'
 
 dotenv.config()
 
@@ -172,6 +173,7 @@ function sameId(a, b) {
 }
 
 async function retargetUsers(fromId, toId) {
+  await moveWatchHistory(fromId, toId)
   await query(
     `UPDATE watchlist SET content_id = $2
      WHERE content_id = $1

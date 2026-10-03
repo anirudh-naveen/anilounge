@@ -12,9 +12,7 @@
       <header class="social-intro">
         <p class="social-kicker">Your circle</p>
         <h1 class="social-title">Friends</h1>
-        <p class="social-subtitle">
-          Friends see each other's watchlist updates on Home.
-        </p>
+        <p class="social-subtitle">Friends see each other's watchlist updates on Home.</p>
       </header>
 
       <div class="friends-layout">
@@ -78,7 +76,11 @@
             </p>
             <ul v-else class="social-list">
               <li v-for="friend in data.friends" :key="friend.user.id" class="social-row">
-                <UserAvatar :src="friend.user.profilePicture" :name="friend.user.username" :size="44" />
+                <UserAvatar
+                  :src="friend.user.profilePicture"
+                  :name="friend.user.username"
+                  :size="44"
+                />
                 <div class="social-row-body">
                   <router-link :to="profileRoute(friend.user.username)" class="social-name">
                     {{ friend.user.username }}
@@ -148,10 +150,7 @@
           />
           <p v-if="searchTerm.trim().length === 1" class="social-meta">Keep typing…</p>
           <div v-else-if="searching" class="social-loading"><div class="spinner"></div></div>
-          <p
-            v-else-if="searchTerm.trim().length >= 2 && !results.length"
-            class="social-empty"
-          >
+          <p v-else-if="searchTerm.trim().length >= 2 && !results.length" class="social-empty">
             No one found.
           </p>
           <ul v-else class="social-list">

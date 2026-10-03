@@ -140,16 +140,58 @@
                     data-testid="nav-avatar"
                   />
                   <span class="user-name">{{ authStore.user?.username }}</span>
-                  <RoleBadge :username="authStore.user?.username" />
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
                 </button>
 
                 <div v-if="showDropdown" class="dropdown-menu">
                   <router-link to="/profile" class="dropdown-item" @click="closeDropdown">
                     <span class="item-text">Profile</span>
+                    <span class="item-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <circle cx="12" cy="8" r="3.5" />
+                        <path d="M5 20a7 7 0 0 1 14 0" />
+                      </svg>
+                    </span>
                   </router-link>
                   <router-link to="/friends" class="dropdown-item" @click="closeDropdown">
                     <span class="item-text">Friends</span>
+                    <span class="item-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <circle cx="9" cy="8.5" r="3" />
+                        <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+                        <path d="M15.5 5.75a3 3 0 0 1 0 5.5M17 14a5.5 5.5 0 0 1 3.5 5" />
+                      </svg>
+                    </span>
+                  </router-link>
+                  <router-link to="/import" class="dropdown-item" @click="closeDropdown">
+                    <span class="item-text">Import</span>
+                    <span class="item-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" />
+                        <path d="M4.5 15.5v2A2.5 2.5 0 0 0 7 20h10a2.5 2.5 0 0 0 2.5-2.5v-2" />
+                      </svg>
+                    </span>
                   </router-link>
                   <router-link
                     v-if="authStore.canEditContent"
@@ -160,13 +202,56 @@
                     <span class="item-text">{{
                       authStore.isAdmin ? 'Admin' : 'Edit content'
                     }}</span>
+                    <span class="item-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M12 3.5 5 6.25v5.25c0 4.25 3 7.5 7 9 4-1.5 7-4.75 7-9V6.25L12 3.5Z"
+                        />
+                        <path d="m9.25 12 2 2 3.5-3.75" />
+                      </svg>
+                    </span>
                   </router-link>
                   <router-link to="/settings" class="dropdown-item" @click="closeDropdown">
                     <span class="item-text">Settings</span>
+                    <span class="item-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                        />
+                      </svg>
+                    </span>
                   </router-link>
                   <div class="dropdown-divider"></div>
                   <button @click="handleLogout" class="dropdown-item logout-item">
                     <span class="item-text">Logout</span>
+                    <span class="item-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M14 4.5h3A2.5 2.5 0 0 1 19.5 7v10a2.5 2.5 0 0 1-2.5 2.5h-3" />
+                        <path d="M10 8 6 12l4 4M6 12h9.5" />
+                      </svg>
+                    </span>
                   </button>
                 </div>
               </div>
@@ -205,7 +290,6 @@ import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import RoleBadge from '@/components/RoleBadge.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -514,12 +598,29 @@ const handleLogout = async () => {
 }
 
 .item-icon {
-  font-size: 1rem;
-  width: 16px;
-  text-align: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.item-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dropdown-item:hover .item-icon {
+  color: var(--coral-primary);
+}
+
+.dropdown-item.logout-item .item-icon {
+  color: inherit;
 }
 
 .item-text {
+  flex: 1;
   font-weight: 500;
 }
 
