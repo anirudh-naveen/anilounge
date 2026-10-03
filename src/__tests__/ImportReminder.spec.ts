@@ -34,12 +34,16 @@ describe('ImportReminder', () => {
   })
 
   const mountReminder = () =>
-    mount(ImportReminder, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
+    mount(ImportReminder, {
+      global: {
+        stubs: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
+      },
+    })
 
-  it('points new users to Settings and can be dismissed for good', async () => {
+  it('points new users to the Import page and can be dismissed for good', async () => {
     const wrapper = mountReminder()
-    expect(wrapper.text()).toContain('import your list in')
-    expect(wrapper.text()).toContain('Settings')
+    expect(wrapper.text()).toContain('Import your list')
+    expect(wrapper.get('a').attributes('href')).toBe('/import')
 
     await wrapper.get('.dismiss-btn').trigger('click')
     expect(wrapper.find('[data-testid="import-reminder"]').exists()).toBe(false)

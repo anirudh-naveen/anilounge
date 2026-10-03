@@ -2,14 +2,13 @@
   ImportReminder.vue — "import your list" reminder for new accounts (component).
 
   Shown on Home and Watchlist during an account's first month until the user
-  finishes an import (or dismisses it). Points to the import in Settings.
+  finishes an import (or dismisses it). Points to the Import page.
 -->
 <template>
   <div v-if="visible" class="import-reminder" role="status" data-testid="import-reminder">
     <p>
       <strong>Coming from AniList, MyAnimeList, or TMDB?</strong>
-      You can import your list in
-      <router-link to="/settings#import">Settings</router-link>.
+      <router-link to="/import">Import your list</router-link>.
     </p>
     <button type="button" class="dismiss-btn" aria-label="Dismiss" @click="dismiss">&times;</button>
   </div>

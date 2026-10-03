@@ -1,10 +1,10 @@
 <!--
   WatchlistImport.vue — import lists from AniList, MyAnimeList, and TMDB (component).
 
-  Two cards in Settings → Import. Anime lists: type the AniList/MyAnimeList usernames
+  Two cards on the Import page. Anime lists: type the AniList/MyAnimeList usernames
   and one Import runs them in order as a background job this form polls. TMDB: needs
   approval on themoviedb.org first, so it has its own Connect button that opens the
-  approval page in a new tab. When TMDB sends that tab back to /settings it hands the
+  approval page in a new tab. When TMDB sends that tab back to /import it hands the
   `request_token` to this tab over a BroadcastChannel and closes; if no tab answers
   (or the popup was blocked and the approval ran in this tab) it imports itself.
   Titles the sites disagree on are listed below for the user to pick a version
@@ -389,7 +389,7 @@ const connectTmdb = async () => {
   errorMessage.value = ''
   try {
     // No #fragment: TMDB appends `&request_token=…` to this address.
-    const redirectTo = `${window.location.origin}/settings?import=${tab ? 'tmdb-tab' : 'tmdb'}`
+    const redirectTo = `${window.location.origin}/import?import=${tab ? 'tmdb-tab' : 'tmdb'}`
     const response = await watchlistImportAPI.tmdbToken(redirectTo)
     const { requestToken, authorizeUrl } = response.data.data
     if (!tab) {
