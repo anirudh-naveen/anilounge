@@ -15,7 +15,6 @@
       <header class="social-intro">
         <p class="social-kicker">
           {{ authStore.isCreator ? 'Creator' : authStore.isAdmin ? 'Admin' : 'Developer' }}
-          <RoleBadge :username="authStore.user?.username" />
         </p>
         <h1 class="social-title">Manage AniLounge</h1>
         <p v-if="authStore.isAdmin" class="social-subtitle">

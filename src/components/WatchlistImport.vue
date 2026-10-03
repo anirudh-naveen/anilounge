@@ -1,11 +1,14 @@
 <!--
   WatchlistImport.vue — import lists from AniList, MyAnimeList, and TMDB (component).
 
-  Inline form in Settings → Import: type the usernames, optionally add TMDB, and one
-  Import runs them in order (AniList, MyAnimeList, TMDB) as a background job this
-  form polls. Titles the sites disagree on are listed below for the user to pick a
-  version (ImportConflicts). TMDB needs approval on themoviedb.org first, which sends
-  the user back to /settings with `request_token`; the form then finishes the import.
+  Two cards in Settings → Import. Anime lists: type the AniList/MyAnimeList usernames
+  and one Import runs them in order as a background job this form polls. TMDB: needs
+  approval on themoviedb.org first, so it has its own Connect button that opens the
+  approval page in a new tab. When TMDB sends that tab back to /settings it hands the
+  `request_token` to this tab over a BroadcastChannel and closes; if no tab answers
+  (or the popup was blocked and the approval ran in this tab) it imports itself.
+  Titles the sites disagree on are listed below for the user to pick a version
+  (ImportConflicts).
 -->
 <template>
   <div class="watchlist-import" data-testid="watchlist-import">
@@ -26,80 +29,138 @@
       </div>
     </div>
 
-    <!-- Title: Form -->
-    <form v-else class="import-form" @submit.prevent="startImport">
+    <!-- Title: Handed Off -->
+    <div v-else-if="handedOff" class="import-card" aria-live="polite">
+      <p class="result-lead">TMDB is connected. Your import is running in your other tab.</p>
+      <p class="hint">You can close this tab.</p>
+    </div>
+
+    <template v-else>
       <p v-if="errorMessage" class="import-error" role="alert">{{ errorMessage }}</p>
 
-      <label class="field">
-        <span class="field-label">AniList username</span>
-        <input
-          v-model.trim="anilistUser"
-          class="form-input"
-          autocomplete="off"
-          placeholder="Leave empty to skip"
-          data-testid="import-anilist-user"
-        />
-      </label>
+      <!-- Title: Anime Lists -->
+      <form class="import-card" @submit.prevent="startImport">
+        <div class="card-head">
+          <h4>AniList &amp; MyAnimeList</h4>
+          <p class="hint">Fill in either or both; AniList is imported first.</p>
+        </div>
 
-      <div class="field">
-        <label v-if="malMode === 'username'" class="field">
-          <span class="field-label">MyAnimeList username</span>
+        <label class="field">
+          <span class="field-label">AniList username</span>
           <input
-            v-model.trim="malUser"
+            v-model.trim="anilistUser"
             class="form-input"
             autocomplete="off"
             placeholder="Leave empty to skip"
-            data-testid="import-mal-user"
+            data-testid="import-anilist-user"
           />
         </label>
-        <label v-else class="field">
-          <span class="field-label">MyAnimeList export (.xml or .xml.gz)</span>
-          <input
-            type="file"
-            accept=".xml,.gz,application/xml,text/xml,application/gzip"
-            class="form-input"
-            data-testid="import-mal-file"
-            @change="onFileChosen"
-          />
-          <span class="hint">
-            On MyAnimeList open
-            <a href="https://myanimelist.net/panel.php?go=export" target="_blank" rel="noopener"
-              >Export</a
-            >, choose Anime List, and upload the file it downloads.
+
+        <div class="field">
+          <label v-if="malMode === 'username'" class="field">
+            <span class="field-label">MyAnimeList username</span>
+            <input
+              v-model.trim="malUser"
+              class="form-input"
+              autocomplete="off"
+              placeholder="Leave empty to skip"
+              data-testid="import-mal-user"
+            />
+          </label>
+          <label v-else class="field">
+            <span class="field-label">MyAnimeList export (.xml or .xml.gz)</span>
+            <input
+              type="file"
+              accept=".xml,.gz,application/xml,text/xml,application/gzip"
+              class="form-input"
+              data-testid="import-mal-file"
+              @change="onFileChosen"
+            />
+            <span class="hint">
+              On MyAnimeList open
+              <a href="https://myanimelist.net/panel.php?go=export" target="_blank" rel="noopener"
+                >Export</a
+              >, choose Anime List, and upload the file it downloads.
+            </span>
+          </label>
+          <button type="button" class="link-btn" @click="toggleMalMode">
+            {{
+              malMode === 'username'
+                ? 'Private list? Upload your MAL export file instead'
+                : 'Use a username instead'
+            }}
+          </button>
+        </div>
+
+        <label class="check">
+          <input v-model="addMissing" type="checkbox" />
+          <span>
+            Add anime AniLounge doesn't have yet
+            <span class="hint">Up to 60 per import; makes the import slower.</span>
           </span>
         </label>
-        <button type="button" class="link-btn" @click="toggleMalMode">
-          {{
-            malMode === 'username'
-              ? 'Private list? Upload your MAL export file instead'
-              : 'Use a username instead'
-          }}
-        </button>
+
+        <div class="import-actions">
+          <button type="submit" class="import-btn" :disabled="!canSubmit || isSubmitting">
+            Import
+          </button>
+        </div>
+      </form>
+
+      <!-- Title: TMDB -->
+      <div class="import-card" data-testid="import-tmdb-card">
+        <div class="card-head">
+          <h4>TMDB</h4>
+          <p class="hint">
+            Imports your TMDB watchlist and ratings. TMDB asks you to approve read access first, on
+            their site in a new tab.
+          </p>
+        </div>
+
+        <div v-if="tmdbPending" class="tmdb-waiting" aria-live="polite">
+          <div class="spinner small"></div>
+          <div>
+            <p>Waiting for you to approve AniLounge on TMDB…</p>
+            <p class="hint">
+              The import starts here on its own once you approve.
+              <a :href="tmdbPending.authorizeUrl" target="_blank" rel="noopener">Reopen TMDB</a>
+            </p>
+            <div class="import-actions">
+              <button
+                type="button"
+                class="import-btn secondary"
+                :disabled="isSubmitting"
+                data-testid="import-tmdb-approved"
+                @click="finishTmdb(tmdbPending.requestToken)"
+              >
+                I've approved it
+              </button>
+              <button type="button" class="link-btn" @click="cancelTmdb">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div v-else class="import-actions">
+          <button
+            type="button"
+            class="import-btn"
+            :disabled="isSubmitting"
+            data-testid="import-tmdb"
+            @click="connectTmdb"
+          >
+            Connect TMDB
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M14 5h5v5M19 5l-8 8M17 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
-
-      <label class="check">
-        <input v-model="includeTmdb" type="checkbox" data-testid="import-tmdb" />
-        <span>
-          Also import my TMDB watchlist and ratings
-          <span class="hint">You'll approve read access on TMDB first, then come back here.</span>
-        </span>
-      </label>
-
-      <label class="check">
-        <input v-model="addMissing" type="checkbox" />
-        <span>
-          Add anime AniLounge doesn't have yet
-          <span class="hint">Up to 60 per import; makes the import slower.</span>
-        </span>
-      </label>
-
-      <div class="import-actions">
-        <button type="submit" class="import-btn" :disabled="!canSubmit || isSubmitting">
-          {{ includeTmdb ? 'Continue to TMDB' : 'Import' }}
-        </button>
-        <span class="hint">Imports AniList, then MyAnimeList, then TMDB.</span>
-      </div>
-    </form>
+    </template>
 
     <!-- Title: Last Result -->
     <div v-if="job?.state === 'done' && job.result" class="import-result" aria-live="polite">
@@ -153,8 +214,10 @@ const emit = defineEmits<{ imported: [] }>()
 const route = useRoute()
 const router = useRouter()
 
-/** The form, kept across the TMDB round trip. */
-const PENDING_KEY = 'anilounge:pending-import'
+/** Carries TMDB's approval from the tab TMDB returns to back to the tab that asked. */
+const TMDB_CHANNEL = 'anilounge:tmdb-approval'
+/** How long the returning tab waits for the asking tab to take over before importing itself. */
+const HANDOFF_MS = 1500
 const POLL_MS = 1500
 /** Failed status checks in a row before the form says the server is unreachable. */
 const MAX_POLL_FAILURES = 4
@@ -165,8 +228,9 @@ const anilistUser = ref('')
 const malUser = ref('')
 const malMode = ref<'username' | 'file'>('username')
 const malFile = ref<File | null>(null)
-const includeTmdb = ref(false)
 const addMissing = ref(true)
+const tmdbPending = ref<{ requestToken: string; authorizeUrl: string } | null>(null)
+const handedOff = ref(false)
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 const job = ref<WatchlistImportJob | null>(null)
@@ -177,6 +241,7 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null
 let pollFailures = 0
 let progressKey = ''
 let progressAt = 0
+let channel: BroadcastChannel | null = null
 
 const sourceLabel = (source: WatchlistImportSource) =>
   ({ anilist: 'AniList', mal: 'MyAnimeList', mal_file: 'MyAnimeList', tmdb: 'TMDB' })[source]
@@ -184,8 +249,7 @@ const sourceLabel = (source: WatchlistImportSource) =>
 const canSubmit = computed(
   () =>
     Boolean(anilistUser.value) ||
-    (malMode.value === 'username' ? Boolean(malUser.value) : Boolean(malFile.value)) ||
-    includeTmdb.value,
+    (malMode.value === 'username' ? Boolean(malUser.value) : Boolean(malFile.value)),
 )
 
 const failedSources = computed(
@@ -234,7 +298,7 @@ const toBase64 = async (blob: Blob) => {
   return btoa(binary)
 }
 
-/** AniList and MyAnimeList sources from the form (TMDB is added once approved). */
+/** AniList and MyAnimeList sources from the form. */
 const formSources = async (): Promise<WatchlistImportSourceRequest[]> => {
   const sources: WatchlistImportSourceRequest[] = []
   if (anilistUser.value) sources.push({ source: 'anilist', username: anilistUser.value })
@@ -305,32 +369,8 @@ const begin = async (sources: WatchlistImportSourceRequest[]) => {
   }
 }
 
-/** Save the rest of the form, then send the user to TMDB to approve access. */
-const goToTmdb = async (sources: WatchlistImportSourceRequest[]) => {
-  isSubmitting.value = true
-  errorMessage.value = ''
-  try {
-    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ sources, addMissing: addMissing.value }))
-  } catch {
-    errorMessage.value =
-      "Your browser couldn't hold the MAL file during the TMDB step. Import it separately."
-    isSubmitting.value = false
-    return
-  }
-  try {
-    // No #fragment: TMDB appends `?request_token=…` to this address.
-    const redirectTo = `${window.location.origin}/settings?import=tmdb`
-    const response = await watchlistImportAPI.tmdbToken(redirectTo)
-    window.location.assign(response.data.data.authorizeUrl)
-  } catch (error) {
-    errorMessage.value = messageFrom(error, 'Could not reach TMDB. Try again.')
-    isSubmitting.value = false
-  }
-}
-
 const startImport = async () => {
   const sources = await formSources()
-  if (includeTmdb.value) return goToTmdb(sources)
   if (!sources.length) {
     errorMessage.value = 'Enter a username (or choose a file) to import.'
     return
@@ -338,30 +378,106 @@ const startImport = async () => {
   return begin(sources)
 }
 
+/**
+ * Open TMDB's approval page in a new tab. The tab is opened before the token request
+ * so popup blockers see it as part of the click; if it's blocked anyway, approve here.
+ */
+const connectTmdb = async () => {
+  const tab = window.open('', '_blank')
+  if (tab) tab.opener = null
+  isSubmitting.value = true
+  errorMessage.value = ''
+  try {
+    // No #fragment: TMDB appends `&request_token=…` to this address.
+    const redirectTo = `${window.location.origin}/settings?import=${tab ? 'tmdb-tab' : 'tmdb'}`
+    const response = await watchlistImportAPI.tmdbToken(redirectTo)
+    const { requestToken, authorizeUrl } = response.data.data
+    if (!tab) {
+      window.location.assign(authorizeUrl)
+      return
+    }
+    tab.location.href = authorizeUrl
+    tmdbPending.value = { requestToken, authorizeUrl }
+    listenForApproval()
+  } catch (error) {
+    tab?.close()
+    errorMessage.value = messageFrom(error, 'Could not reach TMDB. Try again.')
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const closeChannel = () => {
+  channel?.close()
+  channel = null
+}
+
+const cancelTmdb = () => {
+  tmdbPending.value = null
+  closeChannel()
+}
+
+const finishTmdb = async (requestToken: string) => {
+  tmdbPending.value = null
+  closeChannel()
+  await begin([{ source: 'tmdb', requestToken }])
+}
+
+/** In the asking tab: take over the import when the TMDB tab reports back. */
+const listenForApproval = () => {
+  closeChannel()
+  if (typeof BroadcastChannel === 'undefined') return
+  channel = new BroadcastChannel(TMDB_CHANNEL)
+  channel.onmessage = (event: MessageEvent) => {
+    const message = event.data as { type?: string; token?: string; approved?: boolean }
+    const pending = tmdbPending.value
+    if (message?.type !== 'tmdb-result' || !pending || message.token !== pending.requestToken) {
+      return
+    }
+    channel?.postMessage({ type: 'tmdb-ack', token: message.token })
+    if (message.approved) {
+      finishTmdb(pending.requestToken)
+    } else {
+      cancelTmdb()
+      errorMessage.value = 'TMDB access was not approved, so nothing was imported.'
+    }
+  }
+}
+
+/** In the TMDB tab: hand the result to the tab that asked; true if it took over. */
+const handOff = (token: string, approved: boolean) =>
+  new Promise<boolean>((resolve) => {
+    if (typeof BroadcastChannel === 'undefined') return resolve(false)
+    const reply = new BroadcastChannel(TMDB_CHANNEL)
+    const timer = setTimeout(() => {
+      reply.close()
+      resolve(false)
+    }, HANDOFF_MS)
+    reply.onmessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'tmdb-ack' || event.data.token !== token) return
+      clearTimeout(timer)
+      reply.close()
+      resolve(true)
+    }
+    reply.postMessage({ type: 'tmdb-result', token, approved })
+  })
+
 /** Finish the import when TMDB has sent the user back here. */
 const resumeTmdb = async () => {
-  const { request_token: token, approved, denied } = route.query
+  const { import: mode, request_token: token, approved, denied } = route.query
   if (!token && !denied) return false
   router.replace({ query: {} })
-  let saved: { sources?: WatchlistImportSourceRequest[]; addMissing?: boolean } = {}
-  try {
-    saved = JSON.parse(sessionStorage.getItem(PENDING_KEY) || '{}')
-    sessionStorage.removeItem(PENDING_KEY)
-  } catch {
-    saved = {}
+  const ok = !denied && approved === 'true' && typeof token === 'string'
+  if (mode === 'tmdb-tab' && typeof token === 'string' && (await handOff(token, ok))) {
+    handedOff.value = true
+    window.close()
+    return true
   }
-  const sources = Array.isArray(saved.sources) ? saved.sources : []
-  addMissing.value = saved.addMissing !== false
-  for (const item of sources) {
-    if (item.source === 'anilist') anilistUser.value = item.username || ''
-    if (item.source === 'mal') malUser.value = item.username || ''
-  }
-  if (denied || approved !== 'true' || typeof token !== 'string') {
-    includeTmdb.value = true
+  if (!ok) {
     errorMessage.value = 'TMDB access was not approved, so nothing was imported.'
     return true
   }
-  await begin([...sources, { source: 'tmdb', requestToken: token }])
+  await begin([{ source: 'tmdb', requestToken: token }])
   return true
 }
 
@@ -370,7 +486,10 @@ onMounted(async () => {
   await poll()
 })
 
-onUnmounted(stopPolling)
+onUnmounted(() => {
+  stopPolling()
+  closeChannel()
+})
 </script>
 
 <style scoped>
@@ -380,10 +499,35 @@ onUnmounted(stopPolling)
   gap: 1rem;
 }
 
-.import-form {
+.import-card {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+.card-head h4 {
+  margin: 0 0 0.2rem;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.tmdb-waiting {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+}
+
+.tmdb-waiting p {
+  margin: 0 0 0.4rem;
+  color: var(--text-primary);
+}
+
+.tmdb-waiting .import-actions {
+  margin-top: 0.5rem;
 }
 
 .field {
@@ -484,6 +628,22 @@ onUnmounted(stopPolling)
     box-shadow 0.2s ease;
 }
 
+.import-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.import-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.import-btn.secondary {
+  padding: 0.55rem 1.1rem;
+  font-size: 0.9rem;
+}
+
 .import-btn:hover:not(:disabled) {
   background: var(--coral-primary);
   transform: translateY(-2px);
@@ -524,6 +684,13 @@ onUnmounted(stopPolling)
   border-top-color: var(--coral-primary);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
+}
+
+.spinner.small {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+  margin-top: 0.1rem;
 }
 
 @keyframes spin {

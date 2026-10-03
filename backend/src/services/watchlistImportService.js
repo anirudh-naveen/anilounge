@@ -21,6 +21,7 @@ import { getPool, query } from '../../config/postgres.js'
 import DatabasePopulator from './contentSyncService.js'
 import { anilistRequest, fetchAnilistMediaBatch } from './anilistService.js'
 import { addAnilistTitle } from './anilistImport.js'
+import { writeImportedHistory } from './watchEvents.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 import { HttpError } from '../utils/httpError.js'
 
@@ -97,14 +98,15 @@ function count(value) {
 }
 
 /**
- * A source score on a 10-point scale as a 1-10 rating. 0 means unrated on every source.
+ * A source score on a 10-point scale as a 1-10 rating to the tenth (AniList keeps
+ * decimals). 0 means unrated on every source.
  * @param {unknown} value
  * @returns {number|null}
  */
 export function toRating(value) {
   const number = Number(value)
   if (!Number.isFinite(number) || number <= 0) return null
-  return Math.min(10, Math.max(1, Math.round(number)))
+  return Math.min(10, Math.max(1, Math.round(number * 10) / 10))
 }
 
 /**
@@ -918,7 +920,7 @@ function stripOption(option) {
 // ---------------------------------------------------------------------------
 
 const ROW_COLUMNS = `content_id uuid, status text, current_episode int, notes text,
-  started_on date, completed_on date, rewatch_count int, updated_at timestamptz, score int`
+  started_on date, completed_on date, rewatch_count int, updated_at timestamptz, score numeric`
 
 /**
  * Insert new titles, or replace existing rows (`replace`), and set their scores.
@@ -932,6 +934,8 @@ const ROW_COLUMNS = `content_id uuid, status text, current_episode int, notes te
 async function upsertRows(client, userId, rows, { replace }) {
   if (!rows.length) return []
   const payload = JSON.stringify(rows)
+  // New rows and replaced rows get a fresh estimate of when they were watched.
+  await writeImportedHistory(client, userId, rows, { replace: true })
   await client.query(
     `INSERT INTO watchlist (
        user_id, content_id, status, current_episode, previous_episode, current_season, notes,
@@ -982,6 +986,8 @@ async function upsertRows(client, userId, rows, { replace }) {
 async function fillRows(client, userId, rows) {
   if (!rows.length) return []
   const payload = JSON.stringify(rows)
+  // Agreeing rows keep any history they have; rows without one get the estimate.
+  await writeImportedHistory(client, userId, rows, { replace: false })
   await client.query(
     `UPDATE watchlist w SET
        started_on = COALESCE(w.started_on, r.started_on),

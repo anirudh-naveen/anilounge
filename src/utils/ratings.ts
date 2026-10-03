@@ -98,3 +98,14 @@ export function ratingMatchesFilter(
   const shown = displayedRating(average)
   return shown >= min && shown <= max
 }
+
+/**
+ * A user's rating from a form value: 1-10 to the tenth (8.5), or undefined when
+ * empty or not a number.
+ */
+export function toUserRating(value: unknown): number | undefined {
+  if (value === '' || value == null) return undefined
+  const number = Number(value)
+  if (!Number.isFinite(number) || number <= 0) return undefined
+  return Math.min(10, Math.max(1, Math.round(number * 10) / 10))
+}

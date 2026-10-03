@@ -125,6 +125,7 @@ const buildProfile = (overrides: Partial<PublicProfile> = {}): PublicProfile => 
       month: `2026-${String(index + 1).padStart(2, '0')}`,
       minutes: index === 1 ? 192 : 0,
     })),
+    daily: { [new Date().toISOString().slice(0, 10)]: 192, '2024-05-01': 60 },
     genres: [{ name: 'Mecha', titles: 1, minutes: 192 }],
     ratingDistribution: [0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
   },
@@ -180,8 +181,42 @@ describe('Profile', () => {
 
     expect(router.currentRoute.value.query.tab).toBe('stats')
     expect(wrapper.get('[data-testid="stat-watchtime"]').text()).toBe('3h')
-    expect(wrapper.findAll('.month-col')).toHaveLength(12)
+    const year = new Date().getUTCFullYear()
+    const calendar = wrapper.get(`[data-testid="watch-calendar-${year}"]`)
+    expect(calendar.findAll('.heatmap-cell.level-4')).toHaveLength(1)
+    expect(wrapper.text()).toContain(`3h watched in ${year}`)
     expect(wrapper.text()).toContain('Mecha')
+  })
+
+  it('shows a calendar for every year back to the first watch', async () => {
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile() } })
+    const { wrapper } = await mountAt('/u/mika?tab=stats')
+
+    const years = wrapper.findAll('.heatmap-year').map((node) => Number(node.text()))
+    expect(years[0]).toBe(2024)
+    expect(years.at(-1)).toBe(new Date().getUTCFullYear())
+    expect(wrapper.get('[data-testid="watch-calendar-2024"]').findAll('.level-2')).toHaveLength(1)
+  })
+
+  it('shows watch time over 100 hours in days', async () => {
+    const profile = buildProfile()
+    profile.stats!.totals.minutesWatched = 101 * 60
+    getPublicProfile.mockResolvedValue({ data: { data: profile } })
+    const { wrapper } = await mountAt('/u/mika?tab=stats')
+
+    expect(wrapper.get('[data-testid="stat-watchtime"]').text()).toBe('4.2d')
+  })
+
+  it('searches the watchlist tab by title', async () => {
+    const profile = buildProfile()
+    profile.settings.defaultTab = 'watchlist'
+    getPublicProfile.mockResolvedValue({ data: { data: profile } })
+    const { wrapper } = await mountAt('/u/mika')
+
+    await wrapper.get('[data-testid="profile-watchlist-search"]').setValue('nothing like it')
+    expect(wrapper.get('[data-testid="panel-watchlist"]').text()).toContain(
+      'No titles match your search.',
+    )
   })
 
   it('opens the default tab chosen by the owner', async () => {

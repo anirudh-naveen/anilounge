@@ -11,7 +11,7 @@
     <div class="container">
       <!-- Page Header -->
       <div class="page-header">
-        <h1 class="page-title">My Watchlist</h1>
+        <h1 class="page-title">Watchlist</h1>
         <p class="page-subtitle">Track your animated content progress</p>
       </div>
 
@@ -19,6 +19,12 @@
 
       <!-- Toolbar -->
       <div class="watchlist-toolbar">
+        <!-- Title: Search -->
+        <ListSearch
+          v-model="searchQuery"
+          placeholder="Search your watchlist"
+          data-testid="watchlist-search"
+        />
         <!-- Title: Sort -->
         <SortByControls v-model:sort-by="sortBy" v-model:sort-direction="sortDirection" />
       </div>
@@ -28,7 +34,6 @@
       <div v-if="isLoading" class="loading-container">
         <div class="spinner"></div>
         <p>Loading your watchlist...</p>
-        <button @click="refreshWatchlist" class="btn btn-secondary">Refresh</button>
       </div>
 
       <div v-else-if="contentStore.watchlist.length > 0" class="watchlist-container">
@@ -279,12 +284,13 @@
                             updateLocalFormData(
                               item,
                               'rating',
-                              parseInt(($event.target as HTMLInputElement).value) || undefined,
+                              toUserRating(($event.target as HTMLInputElement).value),
                             )
                           "
                           type="number"
                           min="1"
                           max="10"
+                          step="0.1"
                           class="rating-input"
                           placeholder="No rating"
                         />
@@ -378,6 +384,10 @@
             </div>
           </div>
         </section>
+
+        <p v-if="!sections.length" class="no-matches" data-testid="watchlist-no-matches">
+          No titles match “{{ searchQuery.trim() }}”.
+        </p>
       </div>
 
       <!-- Title: Empty State -->
@@ -403,7 +413,7 @@ import {
   tracksEpisodes,
 } from '@/services/api'
 import { getRatingColorHSL } from '@/utils/ratingColors'
-import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
+import { getTotalVoteCount, getWeightedAverage, toUserRating } from '@/utils/ratings'
 import { useToast } from 'vue-toastification'
 import type { WatchlistItem, TVShow } from '@/types'
 import SortByControls from '@/components/SortByControls.vue'
@@ -418,6 +428,7 @@ import {
   type WatchlistStatus,
 } from '@/utils/watchlist'
 import ImportReminder from '@/components/ImportReminder.vue'
+import ListSearch from '@/components/ListSearch.vue'
 
 const router = useRouter()
 const contentStore = useContentStore()
@@ -426,6 +437,7 @@ const toast = useToast()
 
 const isLoading = ref(false)
 const expandedItems = ref(new Set<string>())
+const searchQuery = ref('')
 const sortBy = ref<SortByOption>('relevance')
 const sortDirection = ref<SortDirection>('desc')
 
@@ -627,10 +639,22 @@ const getWatchlistSearchDate = (item: WatchlistItem) => {
   return getSearchCategoryDate(item.content)?.getTime() ?? 0
 }
 
-/** Non-empty status sections in display order, each sorted by the toolbar's choice. */
+/** Whether a row's title (display, original, or English) contains the search text. */
+const matchesSearch = (item: WatchlistItem, query: string) => {
+  if (!query) return true
+  if (typeof item.content === 'string' || !item.content) return false
+  const { title, originalTitle } = item.content
+  const englishTitle = (item.content as { englishTitle?: string }).englishTitle
+  return [getContentTitle(item), title, originalTitle, englishTitle].some((name) =>
+    name?.toLowerCase().includes(query),
+  )
+}
+
+/** Non-empty status sections in display order, filtered by search and sorted by the toolbar. */
 const sections = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
   const sorted = applySort(
-    contentStore.watchlist,
+    contentStore.watchlist.filter((item) => matchesSearch(item, query)),
     sortBy.value,
     sortDirection.value,
     getContentTitle,
@@ -815,40 +839,6 @@ const handleImageError = (event: Event) => {
   img.src = '/placeholder-movie.jpg'
 }
 
-const refreshWatchlist = async () => {
-  if (isLoading.value) return
-
-  if (!authStore.isAuthenticated) {
-    router.push('/login')
-    return
-  }
-
-  isLoading.value = true
-
-  const timeout = setTimeout(() => {
-    isLoading.value = false
-    toast.error('Loading timeout - please try again')
-  }, 5000)
-
-  try {
-    // Use the proper content store method to load watchlist
-    await contentStore.loadWatchlist(true) // Force reload
-    toast.success('Watchlist refreshed')
-  } catch (error: unknown) {
-    console.error('Error refreshing watchlist:', error)
-    toast.error('Failed to refresh watchlist')
-    if (error && typeof error === 'object' && 'response' in error) {
-      const axiosError = error as { response?: { status?: number } }
-      if (axiosError.response?.status === 401) {
-        router.push('/login')
-      }
-    }
-  } finally {
-    clearTimeout(timeout)
-    isLoading.value = false
-  }
-}
-
 // Watch for authentication state changes
 watch(
   () => authStore.isAuthenticated,
@@ -882,6 +872,7 @@ onMounted(async () => {
   }
 
   // Use the proper content store method to load watchlist
+  isLoading.value = true
   try {
     await contentStore.loadWatchlist(true) // Force reload to get latest data
   } catch (error) {
@@ -1021,6 +1012,16 @@ onUnmounted(() => {
   min-width: 240px;
 }
 
+.watchlist-toolbar :deep(.list-search) {
+  max-width: 420px;
+}
+
+.no-matches {
+  padding: 2rem 0;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
 .loading-container {
   text-align: center;
   padding: 4rem 0;
@@ -1029,6 +1030,22 @@ onUnmounted(() => {
 .loading-container p {
   margin-top: 1rem;
   color: var(--text-secondary);
+}
+
+.loading-container .spinner {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--coral-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .watchlist-container {
@@ -1548,6 +1565,11 @@ onUnmounted(() => {
     width: 100%;
     min-width: 0;
     flex: 1 1 100%;
+  }
+
+  .watchlist-toolbar :deep(.list-search) {
+    max-width: none;
+    flex-basis: 100%;
   }
 
   .list-column-header {

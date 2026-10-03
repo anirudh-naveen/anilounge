@@ -233,6 +233,20 @@
             </button>
           </div>
 
+          <!-- Title: Search and Sort -->
+          <div class="watchlist-tools">
+            <ListSearch
+              v-model="watchlistQuery"
+              placeholder="Search this watchlist"
+              data-testid="profile-watchlist-search"
+            />
+            <SortByControls
+              v-model:sort-by="watchlistSortBy"
+              v-model:sort-direction="watchlistSortDirection"
+              :options="WATCHLIST_SORT_OPTIONS"
+            />
+          </div>
+
           <div v-if="filteredWatchlist.length" class="poster-grid">
             <div
               v-for="entry in filteredWatchlist"
@@ -265,7 +279,9 @@
             </div>
           </div>
           <div v-else class="empty-panel">
-            <p>Nothing here yet.</p>
+            <p>
+              {{ watchlistQuery.trim() ? 'No titles match your search.' : 'Nothing here yet.' }}
+            </p>
           </div>
         </section>
 
@@ -308,23 +324,59 @@
           </div>
 
           <div class="stat-cards">
-            <!-- Title: Monthly Watch Time -->
+            <!-- Title: Watch Time Calendar -->
             <div class="stat-card wide">
-              <h3>Watch time, last 12 months</h3>
-              <p class="stat-note">Hours by the month each title was last updated.</p>
-              <div class="month-chart" data-testid="month-chart">
+              <h3>
+                {{ visibleCalendarYear.totalLabel }} watched in {{ visibleCalendarYear.year }}
+              </h3>
+              <p class="stat-note">
+                Episodes count on the day they were logged. Imported titles are spread between their
+                start and finish dates.
+              </p>
+              <div
+                ref="calendarScroller"
+                class="heatmap-scroll"
+                data-testid="watch-calendar"
+                @scroll.passive="onCalendarScroll"
+              >
                 <div
-                  v-for="row in monthlyBars"
-                  :key="row.month"
-                  class="month-col"
-                  :title="`${row.label}: ${row.hours}h`"
+                  v-for="calendarYear in calendarYears"
+                  :key="calendarYear.year"
+                  class="heatmap"
+                  :data-testid="`watch-calendar-${calendarYear.year}`"
                 >
-                  <span class="month-value">{{ row.hours || '' }}</span>
-                  <div class="month-track">
-                    <div class="month-bar" :style="{ height: `${row.percent}%` }"></div>
-                  </div>
-                  <span class="month-label">{{ row.label }}</span>
+                  <span class="heatmap-year" aria-hidden="true">{{ calendarYear.year }}</span>
+                  <span
+                    v-for="label in calendarYear.months"
+                    :key="label.text"
+                    class="heatmap-month"
+                    :style="{ gridColumn: label.column + 2 }"
+                    >{{ label.text }}</span
+                  >
+                  <span class="heatmap-day" style="grid-row: 3">Mon</span>
+                  <span class="heatmap-day" style="grid-row: 5">Wed</span>
+                  <span class="heatmap-day" style="grid-row: 7">Fri</span>
+                  <template v-for="(week, column) in calendarYear.weeks" :key="column">
+                    <span
+                      v-for="(day, row) in week"
+                      :key="`${column}-${row}`"
+                      class="heatmap-cell"
+                      :class="day ? `level-${day.level}` : 'empty'"
+                      :style="{ gridColumn: column + 2, gridRow: row + 2 }"
+                      :title="day ? day.title : undefined"
+                    ></span>
+                  </template>
                 </div>
+              </div>
+              <div class="heatmap-legend" aria-hidden="true">
+                Less
+                <span
+                  v-for="level in 5"
+                  :key="level"
+                  class="heatmap-cell"
+                  :class="`level-${level - 1}`"
+                ></span>
+                More
               </div>
             </div>
 
@@ -337,7 +389,7 @@
                   <div class="bar-track">
                     <div class="bar-fill" :style="{ width: `${genre.percent}%` }"></div>
                   </div>
-                  <span class="bar-value">{{ genre.hours }}h</span>
+                  <span class="bar-value">{{ genre.hours }}</span>
                 </div>
               </div>
               <p v-else class="stat-note">Start watching to see genre trends.</p>
@@ -544,7 +596,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineOptions, onMounted, ref, watch } from 'vue'
+import { computed, defineOptions, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
@@ -559,6 +611,11 @@ import { getRatingColorHSL, getRatingTextStyle } from '@/utils/ratingColors'
 import { getDisplayTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel, WATCHLIST_STATUS_OPTIONS } from '@/utils/watchlist'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import SortByControls from '@/components/SortByControls.vue'
+import ListSearch from '@/components/ListSearch.vue'
+import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
+import { getTotalVoteCount } from '@/utils/ratings'
+import { getSearchCategoryDate } from '@/utils/searchFilters'
 import PreferencesEditor from '@/components/PreferencesEditor.vue'
 import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
@@ -595,6 +652,17 @@ const profile = ref<PublicProfile | null>(null)
 const isLoading = ref(true)
 const activeTab = ref<ProfileTab>('favorites')
 const watchlistFilter = ref<'all' | PublicWatchlistEntry['status']>('all')
+const watchlistQuery = ref('')
+const watchlistSortBy = ref<SortByOption>('relevance')
+const watchlistSortDirection = ref<SortDirection>('desc')
+/** "Relevance" here is recency: the order titles were last updated. */
+const WATCHLIST_SORT_OPTIONS: { value: SortByOption; label: string }[] = [
+  { value: 'relevance', label: 'Last updated' },
+  { value: 'alphabetical', label: 'Alphabetical' },
+  { value: 'rating', label: 'Their rating' },
+  { value: 'popularity', label: 'Popularity' },
+  { value: 'date', label: 'Release date' },
+]
 
 const showCustomize = ref(false)
 const isSaving = ref(false)
@@ -727,11 +795,25 @@ const statusFilters = computed(() => {
 })
 
 const filteredWatchlist = computed(() => {
-  const rows = [...(profile.value?.watchlist || [])].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  const query = watchlistQuery.value.trim().toLowerCase()
+  const rows = (profile.value?.watchlist || []).filter((row) => {
+    if (watchlistFilter.value !== 'all' && row.status !== watchlistFilter.value) return false
+    if (!query) return true
+    const { title, englishTitle, originalTitle } = row.content
+    return [getDisplayTitle(row.content), title, englishTitle, originalTitle].some((name) =>
+      name?.toLowerCase().includes(query),
+    )
+  })
+  return applySort(
+    rows,
+    watchlistSortBy.value,
+    watchlistSortDirection.value,
+    (row) => getDisplayTitle(row.content),
+    (row) => row.rating ?? 0,
+    (row) => getTotalVoteCount(row.content),
+    (row) => new Date(row.updatedAt).getTime() || 0,
+    (row) => getSearchCategoryDate(row.content)?.getTime() ?? 0,
   )
-  if (watchlistFilter.value === 'all') return rows
-  return rows.filter((row) => row.status === watchlistFilter.value)
 })
 
 const progressLabel = (entry: PublicWatchlistEntry) => {
@@ -748,39 +830,121 @@ const progressLabel = (entry: PublicWatchlistEntry) => {
 // Stats
 // ---------------------------------------------------------------------------
 
-const toHours = (minutes: number) => Math.round(minutes / 6) / 10
+/** Whole hours up to 100, then days: `0.4h`, `42h`, `4.5d`. */
+const formatWatchTime = (minutes: number) => {
+  const hours = minutes / 60
+  if (hours > 100) return `${Math.round((minutes / 1440) * 10) / 10}d`
+  if (hours > 0 && hours < 1) return `${Math.round(hours * 10) / 10}h`
+  return `${Math.round(hours)}h`
+}
 
-const watchTimeLabel = computed(() => {
-  const minutes = profile.value?.stats?.totals.minutesWatched || 0
-  const hours = Math.round(minutes / 60)
-  if (hours >= 48) return `${Math.round((minutes / 1440) * 10) / 10}d`
-  return `${hours}h`
-})
+const watchTimeLabel = computed(() =>
+  formatWatchTime(profile.value?.stats?.totals.minutesWatched || 0),
+)
 
-const monthlyBars = computed(() => {
-  const rows = profile.value?.stats?.monthly || []
-  const max = Math.max(1, ...rows.map((row) => row.minutes))
-  return rows.map((row) => {
-    const [year, month] = row.month.split('-').map(Number)
-    const label = new Date(Date.UTC(year!, month! - 1, 1)).toLocaleDateString('en-US', {
-      month: 'short',
-      timeZone: 'UTC',
-    })
-    return {
-      month: row.month,
-      label,
-      hours: toHours(row.minutes),
-      percent: (row.minutes / max) * 100,
+/** Columns per year: a year touches at most 54 Sunday-first weeks. */
+const CALENDAR_WEEKS = 54
+const DAY_MS = 86_400_000
+
+type CalendarDay = { level: number; title: string } | null
+
+/**
+ * GitHub-style grids, one per calendar year from the first year with watch time to
+ * this one: a column per week (Sunday first), days outside the year or still to come
+ * left blank. Levels are scaled across the whole history so years compare. Days are
+ * UTC to match the server's `daily` keys.
+ */
+const calendarYears = computed(() => {
+  const daily = profile.value?.stats?.daily || {}
+  const now = new Date()
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const thisYear = now.getUTCFullYear()
+  const firstYear = Math.min(
+    thisYear,
+    ...Object.keys(daily)
+      .map((key) => Number(key.slice(0, 4)))
+      .filter(Number.isFinite),
+  )
+  const max = Math.max(1, ...Object.values(daily))
+
+  const years = []
+  for (let year = firstYear; year <= thisYear; year += 1) {
+    const jan1 = Date.UTC(year, 0, 1)
+    const start = jan1 - new Date(jan1).getUTCDay() * DAY_MS
+    let total = 0
+    const weeks: CalendarDay[][] = []
+    const months: Array<{ column: number; text: string }> = []
+    for (let column = 0; column < CALENDAR_WEEKS; column += 1) {
+      const week: CalendarDay[] = []
+      for (let row = 0; row < 7; row += 1) {
+        const time = start + (column * 7 + row) * DAY_MS
+        const date = new Date(time)
+        if (date.getUTCFullYear() !== year || time > today) {
+          week.push(null)
+          continue
+        }
+        const minutes = daily[date.toISOString().slice(0, 10)] || 0
+        total += minutes
+        const dateLabel = date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          timeZone: 'UTC',
+        })
+        week.push({
+          level: minutes ? Math.min(4, Math.ceil((minutes / max) * 4)) : 0,
+          title: minutes
+            ? `${formatWatchTime(minutes)} on ${dateLabel}`
+            : `Nothing on ${dateLabel}`,
+        })
+        if (date.getUTCDate() === 1) {
+          months.push({
+            column,
+            text: date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }),
+          })
+        }
+      }
+      weeks.push(week)
     }
-  })
+    years.push({ year, weeks, months, totalLabel: formatWatchTime(total) })
+  }
+  return years
 })
+
+/** The year grid in view; the scroller holds one year per screen width. */
+const calendarScroller = ref<HTMLElement | null>(null)
+const visibleCalendarIndex = ref(0)
+const visibleCalendarYear = computed(
+  () =>
+    calendarYears.value[visibleCalendarIndex.value] ??
+    calendarYears.value[calendarYears.value.length - 1]!,
+)
+
+const onCalendarScroll = () => {
+  const el = calendarScroller.value
+  if (!el?.clientWidth) return
+  const index = Math.round(el.scrollLeft / el.clientWidth)
+  visibleCalendarIndex.value = Math.min(Math.max(index, 0), calendarYears.value.length - 1)
+}
+
+/** Open the calendar on the current year (the right end). */
+watch(
+  () => [activeTab.value, calendarYears.value.length] as const,
+  async () => {
+    visibleCalendarIndex.value = calendarYears.value.length - 1
+    await nextTick()
+    const el = calendarScroller.value
+    if (el) el.scrollLeft = el.scrollWidth
+  },
+  { immediate: true },
+)
 
 const genreBars = computed(() => {
   const rows = profile.value?.stats?.genres || []
   const max = Math.max(1, ...rows.map((row) => row.minutes))
   return rows.map((row) => ({
     name: row.name,
-    hours: toHours(row.minutes),
+    hours: formatWatchTime(row.minutes),
     percent: Math.max(4, (row.minutes / max) * 100),
   }))
 })
@@ -1365,6 +1529,22 @@ const handleImageError = (event: Event) => {
   gap: 0.5rem;
 }
 
+.watchlist-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.watchlist-tools {
+  --list-search-accent: var(--profile-accent);
+}
+
+.watchlist-tools :deep(.sort-by-controls) {
+  min-width: 220px;
+}
+
 .status-chip {
   display: inline-flex;
   align-items: center;
@@ -1486,25 +1666,128 @@ const handleImageError = (event: Event) => {
   font-size: 0.8rem;
 }
 
-.month-chart,
+.heatmap-scroll {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  padding-bottom: 0.6rem;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--profile-accent) 55%, transparent) transparent;
+}
+
+.heatmap-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.heatmap-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.heatmap-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--profile-accent) 55%, transparent);
+}
+
+.heatmap {
+  position: relative;
+  flex: 0 0 max(100%, 560px);
+  scroll-snap-align: start;
+  display: grid;
+  grid-template-columns: 2rem repeat(54, minmax(0, 1fr));
+  grid-template-rows: auto repeat(7, auto);
+  gap: 3px;
+  isolation: isolate;
+}
+
+/* Shadow year: a large, faint numeral behind each year's grid. */
+.heatmap-year {
+  position: absolute;
+  inset: 1.1rem 0 0 2rem;
+  z-index: -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: clamp(4rem, 14vw, 9rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: color-mix(in srgb, var(--profile-accent) 14%, transparent);
+  pointer-events: none;
+  user-select: none;
+}
+
+.heatmap-month,
+.heatmap-day {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.heatmap-month {
+  grid-row: 1;
+  white-space: nowrap;
+  padding-bottom: 0.3rem;
+}
+
+.heatmap-day {
+  grid-column: 1;
+  align-self: center;
+}
+
+.heatmap-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  /* Translucent so the shadow year shows through empty days. */
+  background: color-mix(in srgb, var(--bg-muted, var(--bg-hover)) 70%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  outline-offset: -1px;
+}
+
+.heatmap-cell.empty {
+  visibility: hidden;
+}
+
+.heatmap-cell.level-1 {
+  background: color-mix(in srgb, var(--profile-accent) 30%, transparent);
+}
+
+.heatmap-cell.level-2 {
+  background: color-mix(in srgb, var(--profile-accent) 55%, transparent);
+}
+
+.heatmap-cell.level-3 {
+  background: color-mix(in srgb, var(--profile-accent) 78%, transparent);
+}
+
+.heatmap-cell.level-4 {
+  background: var(--profile-accent);
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 0.6rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.heatmap-legend .heatmap-cell {
+  width: 11px;
+}
+
 .rating-chart {
   display: grid;
   gap: 0.5rem;
   align-items: end;
-}
-
-.month-chart {
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  height: 190px;
-}
-
-.rating-chart {
   grid-template-columns: repeat(10, minmax(0, 1fr));
   height: 110px;
   margin-top: 0.75rem;
 }
 
-.month-col,
 .rating-col {
   display: flex;
   flex-direction: column;
@@ -1514,7 +1797,6 @@ const handleImageError = (event: Event) => {
   min-width: 0;
 }
 
-.month-track,
 .rating-track {
   flex: 1;
   width: 100%;
@@ -1522,23 +1804,12 @@ const handleImageError = (event: Event) => {
   align-items: flex-end;
 }
 
-.month-bar,
 .rating-bar {
   width: 100%;
   min-height: 2px;
   border-radius: 4px 4px 0 0;
-  background: var(--profile-accent);
-  transition: height 0.3s ease;
-}
-
-.rating-bar {
   background: color-mix(in srgb, var(--profile-accent) 70%, var(--teal-primary));
-}
-
-.month-value {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  min-height: 1em;
+  transition: height 0.3s ease;
 }
 
 .month-label {
@@ -1874,14 +2145,6 @@ textarea.form-control {
 
   .stat-cards {
     grid-template-columns: 1fr;
-  }
-
-  .month-chart {
-    gap: 0.2rem;
-  }
-
-  .month-value {
-    display: none;
   }
 
   .poster-grid {
