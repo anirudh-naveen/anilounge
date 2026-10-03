@@ -18,6 +18,7 @@
               ><RoleBadge :username="authStore.user.username" size="lg" /></span
             >.
           </h1>
+          <ImportReminder class="home-import-reminder" />
         </template>
         <template v-else>
           <h1 class="home-title">
@@ -254,6 +255,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import RoleBadge from '@/components/RoleBadge.vue'
+import ImportReminder from '@/components/ImportReminder.vue'
 import { getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
 import type { CatalogEntity, EntityAppearance } from '@/types/content'
 import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'
@@ -1118,5 +1120,10 @@ onUnmounted(() => {
   .forum-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.home-import-reminder {
+  margin: 1rem 0 0;
+  max-width: 720px;
 }
 </style>

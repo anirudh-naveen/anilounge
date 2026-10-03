@@ -7,25 +7,45 @@ const api = vi.hoisted(() => ({
   start: vi.fn(),
   status: vi.fn(),
   tmdbToken: vi.fn(),
+  conflicts: vi.fn(),
+  resolveConflicts: vi.fn(),
 }))
 
-vi.mock('@/services/api', () => ({ watchlistImportAPI: api }))
+vi.mock('@/services/api', () => ({
+  watchlistImportAPI: api,
+  getPosterUrl: (path: string) => path || '/placeholder-movie.jpg',
+}))
 
-const doneJob = {
+const runningJob = {
+  sources: ['anilist', 'mal'],
   source: 'anilist',
-  state: 'done',
-  phase: null,
+  state: 'running',
+  phase: 'reading',
   done: 0,
-  total: 3,
+  total: 0,
+  sourceResults: [],
+  result: null,
   error: null,
   startedAt: '2026-10-01T00:00:00Z',
+  finishedAt: null,
+}
+
+const doneJob = {
+  ...runningJob,
+  source: 'mal',
+  state: 'done',
+  phase: null,
+  sourceResults: [
+    { source: 'anilist', entries: 3, error: null },
+    { source: 'mal', entries: 0, error: 'There\'s no MyAnimeList user named "ghost".' },
+  ],
   finishedAt: '2026-10-01T00:00:05Z',
   result: {
     total: 3,
     matched: 2,
-    added: 2,
-    updated: 0,
+    added: 1,
     unchanged: 0,
+    conflicts: 1,
     rated: 1,
     catalogAdded: 0,
     notFound: 1,
@@ -33,10 +53,10 @@ const doneJob = {
   },
 }
 
-const mountImport = async (path = '/watchlist') => {
+const mountImport = async (path = '/settings') => {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/watchlist', component: { template: '<div />' } }],
+    routes: [{ path: '/settings', component: { template: '<div />' } }],
   })
   await router.push(path)
   await router.isReady()
@@ -48,68 +68,109 @@ const mountImport = async (path = '/watchlist') => {
 describe('WatchlistImport', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    api.start.mockReset()
-    api.status.mockReset().mockResolvedValue({ data: { data: null } })
-    api.tmdbToken.mockReset()
+    sessionStorage.clear()
+    for (const fn of Object.values(api)) fn.mockReset()
+    api.status.mockResolvedValue({ data: { data: null } })
+    api.conflicts.mockResolvedValue({ data: { data: [] } })
   })
 
   afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('starts an AniList import and shows the summary when the job finishes', async () => {
+  it('shows the username fields inline and only enables Import once one is filled', async () => {
     const { wrapper } = await mountImport()
-    await wrapper.find('#import-anilist-user').setValue('someone')
-    api.start.mockResolvedValue({
-      data: { data: { ...doneJob, state: 'running', phase: 'reading', result: null } },
-    })
-    await wrapper.find('form').trigger('submit')
+    expect(wrapper.find('[data-testid="import-anilist-user"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="import-mal-user"]').exists()).toBe(true)
+    expect(wrapper.get('.import-btn').attributes('disabled')).toBeDefined()
+
+    await wrapper.get('[data-testid="import-mal-user"]').setValue('someone')
+    expect(wrapper.get('.import-btn').attributes('disabled')).toBeUndefined()
+  })
+
+  it('imports every filled-in site in one go and reports each', async () => {
+    const { wrapper } = await mountImport()
+    await wrapper.get('[data-testid="import-anilist-user"]').setValue('someone')
+    await wrapper.get('[data-testid="import-mal-user"]').setValue('ghost')
+    api.start.mockResolvedValue({ data: { data: runningJob } })
+    await wrapper.get('form').trigger('submit')
     await flushPromises()
 
     expect(api.start).toHaveBeenCalledWith({
-      source: 'anilist',
-      username: 'someone',
-      overwrite: false,
+      sources: [
+        { source: 'anilist', username: 'someone' },
+        { source: 'mal', username: 'ghost' },
+      ],
       addMissing: true,
     })
-    expect(wrapper.text()).toContain('Reading your AniList list')
+    expect(wrapper.text()).toContain('Reading your AniList list (1 of 2)')
 
     api.status.mockResolvedValue({ data: { data: doneJob } })
     await vi.advanceTimersByTimeAsync(1500)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Imported 2 of 3 entries from AniList')
-    expect(wrapper.text()).toContain('1 not on AniLounge')
+    expect(wrapper.text()).toContain('1 added')
+    expect(wrapper.text()).toContain('1 to review below')
+    expect(wrapper.text()).toContain('MyAnimeList: There\'s no MyAnimeList user named "ghost".')
     expect(wrapper.emitted('imported')).toHaveLength(1)
+    expect(api.conflicts).toHaveBeenCalledTimes(2)
   })
 
-  it('shows the server message when an import cannot start', async () => {
+  it('saves the usernames before sending the user to TMDB', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign, origin: 'http://localhost:5173' })
     const { wrapper } = await mountImport()
-    await wrapper.find('#import-anilist-user').setValue('ghost')
-    api.start.mockRejectedValue({
-      response: { data: { message: 'An import is already running. Wait for it to finish.' } },
-    })
-    await wrapper.find('form').trigger('submit')
+    await wrapper.get('[data-testid="import-anilist-user"]').setValue('someone')
+    await wrapper.get('[data-testid="import-tmdb"]').setValue(true)
+    api.tmdbToken.mockResolvedValue({ data: { data: { authorizeUrl: 'https://tmdb.example/ok' } } })
+    await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.find('.import-error').text()).toContain('already running')
+
+    expect(api.tmdbToken).toHaveBeenCalledWith('http://localhost:5173/settings?import=tmdb')
+    expect(assign).toHaveBeenCalledWith('https://tmdb.example/ok')
+    expect(JSON.parse(sessionStorage.getItem('anilounge:pending-import') || '{}').sources).toEqual([
+      { source: 'anilist', username: 'someone' },
+    ])
+    vi.unstubAllGlobals()
   })
 
-  it('finishes a TMDB import when TMDB sends the user back approved', async () => {
-    api.start.mockResolvedValue({
-      data: { data: { ...doneJob, source: 'tmdb', state: 'running', result: null } },
-    })
-    const { router } = await mountImport('/watchlist?import=tmdb&request_token=abc123def456&approved=true')
+  it('finishes the import in order when TMDB sends the user back approved', async () => {
+    sessionStorage.setItem(
+      'anilounge:pending-import',
+      JSON.stringify({ sources: [{ source: 'anilist', username: 'someone' }], addMissing: false }),
+    )
+    api.start.mockResolvedValue({ data: { data: runningJob } })
+    const { router } = await mountImport(
+      '/settings?import=tmdb&request_token=abc123def456&approved=true',
+    )
     expect(api.start).toHaveBeenCalledWith({
-      source: 'tmdb',
-      requestToken: 'abc123def456',
-      overwrite: false,
+      sources: [
+        { source: 'anilist', username: 'someone' },
+        { source: 'tmdb', requestToken: 'abc123def456' },
+      ],
+      addMissing: false,
     })
     expect(router.currentRoute.value.query).toEqual({})
   })
 
   it('reports a denied TMDB approval without importing', async () => {
-    const { wrapper } = await mountImport('/watchlist?import=tmdb&request_token=abc123def456&denied=true')
+    const { wrapper } = await mountImport(
+      '/settings?import=tmdb&request_token=abc123def456&denied=true',
+    )
     expect(api.start).not.toHaveBeenCalled()
     expect(wrapper.find('.import-error').text()).toContain('not approved')
+  })
+
+  it('says so when the server forgets a running import instead of spinning forever', async () => {
+    const { wrapper } = await mountImport()
+    await wrapper.get('[data-testid="import-anilist-user"]').setValue('someone')
+    api.start.mockResolvedValue({ data: { data: runningJob } })
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    api.status.mockResolvedValue({ data: { data: null } })
+    await vi.advanceTimersByTimeAsync(1500)
+    await flushPromises()
+    expect(wrapper.find('.import-error').text()).toContain('interrupted')
   })
 })

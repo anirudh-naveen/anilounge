@@ -3,7 +3,7 @@
  */
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
-import { query } from '../../config/postgres.js'
+import { query, startSession } from '../../config/postgres.js'
 import { compileMongoFilter } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId } from '../db/ids.js'
@@ -76,6 +76,8 @@ function mapUserRow(row) {
     lockUntil: row.lock_until,
     lastLogin: row.last_login_at,
     createdAt: row.created_at,
+    // Missing column (schema not applied yet) reads as never imported.
+    watchlistImportedAt: row.watchlist_imported_at ?? null,
     // A missing column (schema not applied yet) reads as verified / 2FA off.
     emailVerified: row.email_verified_at === undefined ? true : Boolean(row.email_verified_at),
     twoFactorEnabled: Boolean(row.two_factor_enabled),
@@ -239,37 +241,60 @@ User.prototype.toObject = function toObject() {
   return this.toJSON()
 }
 
-User.prototype.save = async function save() {
-  let passwordHash = this.password
+/**
+ * Persist the user and replace their watchlist, ratings, and favorites. The child
+ * tables are rewritten delete-then-insert, so it runs in a transaction: a failed
+ * insert must roll back rather than leave the user with an empty list.
+ * @param {{ session?: object }} [options] - A caller's open transaction to join.
+ * @returns {Promise<User>}
+ */
+User.prototype.save = async function save(options = {}) {
+  if (options.session) return writeUser(this)
+  const session = await startSession()
+  try {
+    await session.startTransaction()
+    await writeUser(this)
+    await session.commitTransaction()
+    return this
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}
+
+async function writeUser(user) {
+  let passwordHash = user.password
   if (passwordHash && !isBcrypt(passwordHash)) {
     passwordHash = await bcrypt.hash(passwordHash, 12)
-    this.password = passwordHash
+    user.password = passwordHash
   }
   const lockUntil =
-    this.lockUntil == null || this.lockUntil === undefined
+    user.lockUntil == null || user.lockUntil === undefined
       ? null
-      : this.lockUntil instanceof Date
-        ? this.lockUntil
-        : new Date(this.lockUntil)
+      : user.lockUntil instanceof Date
+        ? user.lockUntil
+        : new Date(user.lockUntil)
 
   const columns = {
-    id: this._id,
-    username: this.username,
-    email: this.email,
+    id: user._id,
+    username: user.username,
+    email: user.email,
     password_hash: passwordHash,
-    profile_picture: this.profilePicture || null,
-    bio: this.bio || null,
-    is_demo: Boolean(this.isDemoAccount) || this.email === DEMO_USER_EMAIL,
-    failed_login_attempts: this.failedLoginAttempts || 0,
+    profile_picture: user.profilePicture || null,
+    bio: user.bio || null,
+    is_demo: Boolean(user.isDemoAccount) || user.email === DEMO_USER_EMAIL,
+    failed_login_attempts: user.failedLoginAttempts || 0,
     lock_until: lockUntil,
-    last_login_at: this.lastLogin || null,
+    last_login_at: user.lastLogin || null,
   }
   const optional = await presentOptionalColumns()
   if (optional.has('preferences')) {
-    columns.preferences = JSON.stringify(normalizePreferences(this.preferences))
+    columns.preferences = JSON.stringify(normalizePreferences(user.preferences))
   }
   if (optional.has('profile_settings')) {
-    columns.profile_settings = JSON.stringify(normalizeProfileSettings(this.profileSettings))
+    columns.profile_settings = JSON.stringify(normalizeProfileSettings(user.profileSettings))
   }
   const names = Object.keys(columns)
   const placeholders = names.map((_, index) => `$${index + 1}`)
@@ -284,7 +309,7 @@ User.prototype.save = async function save() {
   )
 
   const watchlistRows = firstByContentId(
-    (this.watchlist || []).map((item) => ({
+    (user.watchlist || []).map((item) => ({
       content_id: asId(item.content),
       status: item.status || 'plan_to_watch',
       current_episode: item.currentEpisode ?? 0,
@@ -299,7 +324,7 @@ User.prototype.save = async function save() {
       updated_at: item.updatedAt || new Date(),
     })),
   )
-  await query('DELETE FROM watchlist WHERE user_id = $1', [this._id])
+  await query('DELETE FROM watchlist WHERE user_id = $1', [user._id])
   if (watchlistRows.length) {
     await query(
       `INSERT INTO watchlist (
@@ -315,13 +340,13 @@ User.prototype.save = async function save() {
        )
        JOIN works w ON w.id::text = r.content_id
        ON CONFLICT (user_id, content_id) DO NOTHING`,
-      [this._id, JSON.stringify(watchlistRows)],
+      [user._id, JSON.stringify(watchlistRows)],
     )
   }
 
   // Legacy `ratings` entries override watchlist ratings for the same title.
   const ratingRows = new Map()
-  for (const item of this.watchlist || []) {
+  for (const item of user.watchlist || []) {
     const contentId = asId(item.content)
     if (!contentId || item.rating == null) continue
     ratingRows.set(contentId, {
@@ -331,7 +356,7 @@ User.prototype.save = async function save() {
       rated_at: item.updatedAt || new Date(),
     })
   }
-  for (const item of this.ratings || []) {
+  for (const item of user.ratings || []) {
     const contentId = asId(item.content)
     if (!contentId || item.rating == null) continue
     const previous = ratingRows.get(contentId)
@@ -342,7 +367,7 @@ User.prototype.save = async function save() {
       rated_at: previous ? previous.rated_at : item.watchedAt || new Date(),
     })
   }
-  await query('DELETE FROM ratings WHERE user_id = $1', [this._id])
+  await query('DELETE FROM ratings WHERE user_id = $1', [user._id])
   if (ratingRows.size) {
     await query(
       `INSERT INTO ratings (user_id, content_id, score, review, rated_at)
@@ -351,29 +376,29 @@ User.prototype.save = async function save() {
          content_id text, score numeric, review text, rated_at timestamptz
        )
        JOIN works w ON w.id::text = r.content_id`,
-      [this._id, JSON.stringify([...ratingRows.values()])],
+      [user._id, JSON.stringify([...ratingRows.values()])],
     )
   }
 
   const favoriteRows = firstByContentId(
-    (this.favoriteEntities || []).map((item) => ({
+    (user.favoriteEntities || []).map((item) => ({
       content_id: asId(item.entity),
       added_at: item.addedAt || new Date(),
     })),
   )
-  await query('DELETE FROM favorites WHERE user_id = $1', [this._id])
+  await query('DELETE FROM favorites WHERE user_id = $1', [user._id])
   if (favoriteRows.length) {
     await query(
       `INSERT INTO favorites (user_id, content_id, added_at)
        SELECT $1, r.content_id::uuid, r.added_at
        FROM jsonb_to_recordset($2::jsonb) AS r(content_id text, added_at timestamptz)
        ON CONFLICT DO NOTHING`,
-      [this._id, JSON.stringify(favoriteRows)],
+      [user._id, JSON.stringify(favoriteRows)],
     )
   }
 
-  this.$isNew = false
-  return this
+  user.$isNew = false
+  return user
 }
 
 /**

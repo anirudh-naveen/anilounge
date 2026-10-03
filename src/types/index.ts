@@ -75,6 +75,8 @@ export interface User {
   role?: 'user' | 'admin' | 'creator'
   profilePicture?: string
   createdAt?: string
+  /** When the user last finished a watchlist import; null if they never have. */
+  watchlistImportedAt?: string | null
   preferences?: {
     favoriteGenres: string[]
   }
@@ -193,13 +195,18 @@ export interface WatchlistData {
 
 export type WatchlistImportSource = 'anilist' | 'mal' | 'mal_file' | 'tmdb'
 
-export interface WatchlistImportRequest {
+/** One site to import: a username, a MAL export file, or an approved TMDB token. */
+export interface WatchlistImportSourceRequest {
   source: WatchlistImportSource
   username?: string
   /** MAL export: the XML text, or the `.xml.gz` as base64. */
   file?: { xml?: string; gzipBase64?: string }
   requestToken?: string
-  overwrite?: boolean
+}
+
+export interface WatchlistImportRequest {
+  /** Run AniList, then MyAnimeList, then TMDB, whatever order they're sent in. */
+  sources: WatchlistImportSourceRequest[]
   addMissing?: boolean
 }
 
@@ -207,24 +214,54 @@ export interface WatchlistImportResult {
   total: number
   matched: number
   added: number
-  updated: number
   unchanged: number
+  /** Titles held back for the user to pick a version. */
+  conflicts: number
   rated: number
   catalogAdded: number
+  /** Titles AniLounge already had under another id, now linked to AniList. */
+  catalogLinked?: number
   notFound: number
   notFoundTitles: string[]
 }
 
 export interface WatchlistImportJob {
-  source: WatchlistImportSource
+  sources: WatchlistImportSource[]
+  /** The source being read right now (or last read). */
+  source: WatchlistImportSource | null
   state: 'running' | 'done' | 'failed'
   phase: 'reading' | 'matching' | 'adding' | 'saving' | null
   done: number
   total: number
+  sourceResults: { source: WatchlistImportSource; entries: number; error: string | null }[]
   result: WatchlistImportResult | null
   error: string | null
   startedAt: string
   finishedAt: string | null
+}
+
+/** One version of a clashing title: what one or more sources say. */
+export interface ImportConflictOption {
+  /** Sources joined with `+`, e.g. `anilist+mal`; send it back to pick this version. */
+  key: string
+  sources: WatchlistImportSource[]
+  status: WatchlistStatus
+  currentEpisode: number
+  score: number | null
+  startedOn: string | null
+  completedOn: string | null
+  rewatchCount: number
+}
+
+export interface ImportConflict {
+  contentId: string
+  title: string
+  posterPath: string
+  contentType: string
+  episodeCount: number | null
+  /** The user's watchlist row now, or null when the title isn't on it. */
+  current: { status: WatchlistStatus; currentEpisode: number; score: number | null } | null
+  options: ImportConflictOption[]
 }
 
 export interface UpdateWatchlistData {

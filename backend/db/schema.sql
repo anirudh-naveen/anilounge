@@ -369,6 +369,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS announcement_emails BOOLEAN NOT NULL 
 -- Opt-out for friend request emails (services/emailPreferenceService.js).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_request_emails BOOLEAN NOT NULL DEFAULT true;
 
+-- When the user last finished a watchlist import (services/watchlistImportService.js).
+-- New accounts are reminded about importing for their first month until this is set.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS watchlist_imported_at TIMESTAMPTZ;
+
 -- Profile pictures live in the database (services/avatarService.js) so they survive
 -- redeploys and work from every environment that shares this database.
 CREATE TABLE IF NOT EXISTS user_avatars (
@@ -463,6 +467,17 @@ ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS rewatch_count INTEGER NOT NULL DE
 -- When an import last wrote the row. The homepage feed skips rows not changed since,
 -- so importing a list doesn't flood friends' feeds.
 ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
+
+-- Import clashes waiting on the user (services/watchlistImportService.js): titles whose
+-- imported sources disagree, or disagree with the user's watchlist row. `options` holds
+-- each distinct imported version; nothing is written for the title until the user picks.
+CREATE TABLE IF NOT EXISTS watchlist_import_conflicts (
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  content_id  UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  options     JSONB NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, content_id)
+);
 
 CREATE TABLE IF NOT EXISTS ratings (
   user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,

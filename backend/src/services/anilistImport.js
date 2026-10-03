@@ -147,14 +147,25 @@ async function importOne(media, populator) {
  * try to link it to TMDB when it is new. Used by the watchlist import.
  * @param {object} media - AniList media with MEDIA_FIELDS
  * @param {import('./contentSyncService.js').default} populator
+ * @param {{ create?: boolean }} [options] - `create: false` only links a title the
+ *   catalog already holds (by AniList or MAL id, or as a same-title duplicate) and
+ *   never creates one; it makes no MAL calls.
  * @returns {Promise<{ outcome: 'existing' | 'added' | 'merged' | 'skipped' | 'failed', contentId?: string }>}
  */
-export async function addAnilistTitle(media, populator) {
-  if (!anilistContentType(media?.format)) return { outcome: 'skipped' }
+export async function addAnilistTitle(media, populator, { create = true } = {}) {
+  // Same rule as the popularity import: adult titles never enter the catalog.
+  if (!anilistContentType(media?.format) || media.isAdult) return { outcome: 'skipped' }
   const owner = await catalogOwner(media)
   if (owner) {
     if (owner.anilist_id == null) await claimExternalId(owner.id, 'anilist_id', media.id)
     return { outcome: 'existing', contentId: owner.id }
+  }
+  if (!create) {
+    const data = anilistToNewContent(media)
+    const [duplicate] = data ? await populator.findDuplicateContent(data) : []
+    if (!duplicate) return { outcome: 'skipped' }
+    await attachAnilist(duplicate.content, convertAnilistToContent(media), populator)
+    return { outcome: 'merged', contentId: String(duplicate.content._id) }
   }
   const { outcome, content } = await importOne(media, populator)
   if (outcome === 'failed' || !content) return { outcome: 'failed' }

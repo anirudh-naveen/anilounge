@@ -155,6 +155,26 @@
           </div>
         </div>
 
+        <!-- Import -->
+        <div id="import" class="settings-section">
+          <h2>Import</h2>
+          <div class="settings-card">
+            <!-- Title: Watchlist Import -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <h3>Import your watchlist</h3>
+                <p v-if="authStore.isDemoUser">Disabled for the demo account</p>
+                <p v-else>
+                  Bring your list from AniList, MyAnimeList, or TMDB, with all the data preserved
+                </p>
+              </div>
+              <div v-if="!authStore.isDemoUser" class="setting-control">
+                <WatchlistImport @imported="onImported" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Privacy -->
         <div class="settings-section">
           <h2>Privacy & Security</h2>
@@ -435,6 +455,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
 import { useTheme, type ThemePreference } from '@/composables/useTheme'
+import { useContentStore } from '@/stores/content'
+import WatchlistImport from '@/components/WatchlistImport.vue'
 
 // Component name for Vue devtools
 defineOptions({
@@ -445,6 +467,11 @@ const authStore = useAuthStore()
 const toast = useToast()
 const router = useRouter()
 const route = useRoute()
+
+const onImported = async () => {
+  if (authStore.user) authStore.user.watchlistImportedAt = new Date().toISOString()
+  await useContentStore().loadWatchlist(true)
+}
 
 // Form data
 const username = ref('')
@@ -709,9 +736,11 @@ onMounted(() => {
   email.value = authStore.user?.email || ''
   loadSecurityStatus()
   loadEmailPreferences()
-  // Email footers link to /settings#email.
-  if (route.hash === '#email') {
-    nextTick(() => document.getElementById('email')?.scrollIntoView({ behavior: 'smooth' }))
+  // Email footers link to /settings#email; the import reminder to /settings#import.
+  // TMDB returns to /settings?import=tmdb (a #fragment would break its redirect).
+  const target = route.query.import ? 'import' : route.hash.slice(1)
+  if (target === 'email' || target === 'import') {
+    nextTick(() => document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' }))
   }
 })
 </script>

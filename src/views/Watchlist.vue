@@ -2,8 +2,9 @@
 <!--
   Watchlist.vue — authenticated watchlist view.
 
-  Status filter dropdown and sort toolbar over a compact expandable list of
-  tracked movies and series. Progress, rating, and status are editable per row.
+  Sort toolbar over collapsible status sections (Watching, On Hold, Planned,
+  Completed, Dropped), each a compact expandable list of tracked titles.
+  Progress, rating, and status are editable per row.
 -->
 <template>
   <div class="watchlist-page">
@@ -12,34 +13,12 @@
       <div class="page-header">
         <h1 class="page-title">My Watchlist</h1>
         <p class="page-subtitle">Track your animated content progress</p>
-        <button
-          type="button"
-          class="btn btn-secondary import-open-btn"
-          data-testid="watchlist-import-open"
-          @click="showImport = true"
-        >
-          Import from AniList, MAL, or TMDB
-        </button>
       </div>
 
-      <WatchlistImport v-if="showImport" @close="showImport = false" @imported="onImported" />
+      <ImportReminder />
 
       <!-- Toolbar -->
       <div class="watchlist-toolbar">
-        <!-- Title: Status Filter -->
-        <div class="status-filter">
-          <label for="watchlist-status-filter">Status:</label>
-          <select
-            id="watchlist-status-filter"
-            v-model="selectedStatus"
-            data-testid="watchlist-status-filter"
-            class="status-filter-select"
-          >
-            <option v-for="status in statusOptions" :key="status.value" :value="status.value">
-              {{ status.label }} ({{ getStatusCount(status.value) }})
-            </option>
-          </select>
-        </div>
         <!-- Title: Sort -->
         <SortByControls v-model:sort-by="sortBy" v-model:sort-direction="sortDirection" />
       </div>
@@ -52,7 +31,7 @@
         <button @click="refreshWatchlist" class="btn btn-secondary">Refresh</button>
       </div>
 
-      <div v-else-if="filteredWatchlist.length > 0" class="watchlist-container">
+      <div v-else-if="contentStore.watchlist.length > 0" class="watchlist-container">
         <!-- Title: Column Header -->
         <div class="list-column-header">
           <span class="col-poster"></span>
@@ -63,303 +42,350 @@
           <span class="col-expand"></span>
         </div>
 
-        <div
-          v-for="item in filteredWatchlist"
-          :key="getContentId(item)"
-          class="watchlist-item"
-          :class="{ expanded: expandedItems.has(getContentId(item)) }"
+        <!-- Title: Status Sections -->
+        <section
+          v-for="section in sections"
+          :key="section.status"
+          class="status-section"
+          :data-testid="`watchlist-section-${section.status}`"
         >
-          <!-- Title: Compact Row -->
-          <div class="item-header" @click="toggleExpanded(item)">
-            <div class="item-poster">
-              <img
-                :src="getPosterUrl(getContentPosterPath(item))"
-                :alt="getContentTitle(item)"
-                @error="handleImageError"
-              />
-            </div>
+          <button
+            type="button"
+            class="section-header"
+            :aria-expanded="!collapsedSections.has(section.status)"
+            :aria-controls="`watchlist-section-${section.status}-items`"
+            @click="toggleSection(section.status)"
+          >
+            <span
+              class="section-dot"
+              :class="getStatusClass(section.status)"
+              aria-hidden="true"
+            ></span>
+            <span class="section-label">{{ section.label }}</span>
+            <span class="section-count">{{ section.items.length }}</span>
+            <svg
+              class="section-chevron"
+              :class="{ collapsed: collapsedSections.has(section.status) }"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div
+            v-show="!collapsedSections.has(section.status)"
+            :id="`watchlist-section-${section.status}-items`"
+            class="section-items"
+          >
+            <div
+              v-for="item in section.items"
+              :key="getContentId(item)"
+              class="watchlist-item"
+              :class="{ expanded: expandedItems.has(getContentId(item)) }"
+            >
+              <!-- Title: Compact Row -->
+              <div class="item-header" @click="toggleExpanded(item)">
+                <div class="item-poster">
+                  <img
+                    :src="getPosterUrl(getContentPosterPath(item))"
+                    :alt="getContentTitle(item)"
+                    @error="handleImageError"
+                  />
+                </div>
 
-            <div class="item-title-section">
-              <h3 class="item-title" @click.stop="viewContentDetails(item)">
-                {{ getContentTitle(item) }}
-              </h3>
-              <div class="item-meta">
-                <span class="item-type">{{ getContentType(item) }}</span>
-                <span v-if="getContentYear(item)" class="item-year">{{
-                  getContentYear(item)
-                }}</span>
-                <AiringBadge
-                  v-if="typeof item.content !== 'string' && item.content"
-                  :content="item.content"
-                  variant="inline"
-                />
-              </div>
-            </div>
+                <div class="item-title-section">
+                  <h3 class="item-title" @click.stop="viewContentDetails(item)">
+                    {{ getContentTitle(item) }}
+                  </h3>
+                  <div class="item-meta">
+                    <span class="item-type">{{ getContentType(item) }}</span>
+                    <span v-if="getContentYear(item)" class="item-year">{{
+                      getContentYear(item)
+                    }}</span>
+                    <AiringBadge
+                      v-if="typeof item.content !== 'string' && item.content"
+                      :content="item.content"
+                      variant="inline"
+                    />
+                  </div>
+                </div>
 
-            <div class="item-progress">
-              <div v-if="tracksItemEpisodes(item)" class="episode-progress">
-                <span class="episodes-watched">{{ getCurrentEpisodes(item) }}</span>
-                <span class="episode-separator">/</span>
-                <span class="total-episodes">{{ getTotalEpisodes(item) }}</span>
-                <span
-                  v-if="hasNewEpisodes(item)"
-                  class="new-episodes-indicator"
-                  title="New episodes available"
-                  >🆕</span
-                >
-              </div>
-              <div v-else class="movie-progress">—</div>
-            </div>
-
-            <div class="item-rating">
-              <span v-if="item.rating" class="rating-value" :style="getRatingStyle(item.rating)">{{
-                item.rating
-              }}</span>
-              <span v-else class="no-rating-text">—</span>
-            </div>
-
-            <div class="item-status" :class="getStatusClass(item.status)">
-              {{ getStatusLabel(item.status) }}
-            </div>
-
-            <div class="item-actions">
-              <button
-                class="expand-btn"
-                type="button"
-                :aria-expanded="expandedItems.has(getContentId(item))"
-                :aria-label="
-                  expandedItems.has(getContentId(item)) ? 'Collapse details' : 'Expand details'
-                "
-              >
-                {{ expandedItems.has(getContentId(item)) ? '▼' : '▶' }}
-              </button>
-            </div>
-
-            <div class="item-progress-track">
-              <div
-                class="item-progress-bar"
-                :class="getStatusClass(item.status)"
-                :style="{ width: getProgressPercent(item) + '%' }"
-              ></div>
-            </div>
-          </div>
-
-          <!-- Title: Expanded Details -->
-          <div v-if="expandedItems.has(getContentId(item))" class="item-details">
-            <div class="details-content">
-              <div class="content-description">
-                <h4>Description</h4>
-                <p>{{ getContentOverview(item) }}</p>
-
-                <div class="content-genres">
-                  <h5>Genres:</h5>
-                  <div class="genre-tags">
+                <div class="item-progress">
+                  <div v-if="tracksItemEpisodes(item)" class="episode-progress">
+                    <span class="episodes-watched">{{ getCurrentEpisodes(item) }}</span>
+                    <span class="episode-separator">/</span>
+                    <span class="total-episodes">{{ getTotalEpisodes(item) || '?' }}</span>
                     <span
-                      v-for="genre in getContentGenres(item)"
-                      :key="typeof genre === 'string' ? genre : genre.id"
-                      class="genre-tag"
+                      v-if="hasNewEpisodes(item)"
+                      class="new-episodes-indicator"
+                      title="New episodes available"
+                      >🆕</span
                     >
-                      {{ typeof genre === 'string' ? genre : genre.name }}
-                    </span>
                   </div>
+                  <div v-else class="movie-progress">—</div>
                 </div>
 
-                <div class="content-info">
-                  <div class="info-item">
-                    <span class="info-label">Release Date:</span>
-                    <span class="info-value">{{ getContentReleaseDate(item) }}</span>
-                  </div>
-                  <div v-if="isTvContent(item)" class="info-item">
-                    <span class="info-label">Seasons:</span>
-                    <span class="info-value">{{ getContentSeasons(item) }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">Rating:</span>
-                    <span class="info-value">{{ getContentRating(item) }}</span>
-                  </div>
+                <div class="item-rating">
+                  <span
+                    v-if="item.rating"
+                    class="rating-value"
+                    :style="getRatingStyle(item.rating)"
+                    >{{ item.rating }}</span
+                  >
+                  <span v-else class="no-rating-text">—</span>
+                </div>
+
+                <div class="item-status" :class="getStatusClass(item.status)">
+                  {{ getStatusLabel(item.status) }}
+                </div>
+
+                <div class="item-actions">
+                  <button
+                    class="expand-btn"
+                    type="button"
+                    :aria-expanded="expandedItems.has(getContentId(item))"
+                    :aria-label="
+                      expandedItems.has(getContentId(item)) ? 'Collapse details' : 'Expand details'
+                    "
+                  >
+                    {{ expandedItems.has(getContentId(item)) ? '▼' : '▶' }}
+                  </button>
+                </div>
+
+                <div class="item-progress-track">
+                  <div
+                    class="item-progress-bar"
+                    :class="getStatusClass(item.status)"
+                    :style="{ width: getProgressPercent(item) + '%' }"
+                  ></div>
                 </div>
               </div>
 
-              <div class="user-data">
-                <h4>Your Progress</h4>
+              <!-- Title: Expanded Details -->
+              <div v-if="expandedItems.has(getContentId(item))" class="item-details">
+                <div class="details-content">
+                  <div class="content-description">
+                    <h4>Description</h4>
+                    <p>{{ getContentOverview(item) }}</p>
 
-                <div class="progress-section">
-                  <div class="status-control">
-                    <label>Status:</label>
-                    <select
-                      :value="getLocalFormData(item).status"
-                      @change="
-                        updateLocalFormData(
-                          item,
-                          'status',
-                          ($event.target as HTMLSelectElement).value,
-                        )
-                      "
-                      class="status-select"
-                    >
-                      <option
-                        v-for="option in WATCHLIST_STATUS_OPTIONS"
-                        :key="option.value"
-                        :value="option.value"
+                    <div class="content-genres">
+                      <h5>Genres:</h5>
+                      <div class="genre-tags">
+                        <span
+                          v-for="genre in getContentGenres(item)"
+                          :key="typeof genre === 'string' ? genre : genre.id"
+                          class="genre-tag"
+                        >
+                          {{ typeof genre === 'string' ? genre : genre.name }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div class="content-info">
+                      <div class="info-item">
+                        <span class="info-label">Release Date:</span>
+                        <span class="info-value">{{ getContentReleaseDate(item) }}</span>
+                      </div>
+                      <div v-if="isTvContent(item)" class="info-item">
+                        <span class="info-label">Seasons:</span>
+                        <span class="info-value">{{ getContentSeasons(item) }}</span>
+                      </div>
+                      <div class="info-item">
+                        <span class="info-label">Rating:</span>
+                        <span class="info-value">{{ getContentRating(item) }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="user-data">
+                    <h4>Your Progress</h4>
+
+                    <div class="progress-section">
+                      <div class="status-control">
+                        <label>Status:</label>
+                        <select
+                          :value="getLocalFormData(item).status"
+                          @change="
+                            updateLocalFormData(
+                              item,
+                              'status',
+                              ($event.target as HTMLSelectElement).value,
+                            )
+                          "
+                          class="status-select"
+                        >
+                          <option
+                            v-for="option in WATCHLIST_STATUS_OPTIONS"
+                            :key="option.value"
+                            :value="option.value"
+                          >
+                            {{ option.label }}
+                          </option>
+                        </select>
+                      </div>
+
+                      <div v-if="tracksItemEpisodes(item)" class="episode-control">
+                        <label>Episodes Watched:</label>
+                        <input
+                          :value="getLocalFormData(item).currentEpisode"
+                          @change="
+                            updateLocalFormData(
+                              item,
+                              'currentEpisode',
+                              parseInt(($event.target as HTMLInputElement).value) || 0,
+                            )
+                          "
+                          type="number"
+                          min="0"
+                          :max="getTotalEpisodes(item) || undefined"
+                          class="episode-input"
+                        />
+                      </div>
+
+                      <div
+                        v-if="isTvContent(item) && getTotalSeasons(item) > 1"
+                        class="season-control"
                       >
-                        {{ option.label }}
-                      </option>
-                    </select>
-                  </div>
+                        <label>Current Season:</label>
+                        <select
+                          :value="getLocalFormData(item).currentSeason || 1"
+                          @change="
+                            updateLocalFormData(
+                              item,
+                              'currentSeason',
+                              parseInt(($event.target as HTMLSelectElement).value) || 1,
+                            )
+                          "
+                          class="season-select"
+                        >
+                          <option
+                            v-for="season in getTotalSeasons(item)"
+                            :key="season"
+                            :value="season"
+                          >
+                            Season {{ season }}
+                          </option>
+                        </select>
+                      </div>
 
-                  <div v-if="tracksItemEpisodes(item)" class="episode-control">
-                    <label>Episodes Watched:</label>
-                    <input
-                      :value="getLocalFormData(item).currentEpisode"
-                      @change="
-                        updateLocalFormData(
-                          item,
-                          'currentEpisode',
-                          parseInt(($event.target as HTMLInputElement).value) || 0,
-                        )
-                      "
-                      type="number"
-                      min="0"
-                      :max="getTotalEpisodes(item)"
-                      class="episode-input"
-                    />
-                  </div>
+                      <div class="rating-control">
+                        <label>Your Rating (1-10):</label>
+                        <input
+                          :value="getLocalFormData(item).rating || ''"
+                          @change="
+                            updateLocalFormData(
+                              item,
+                              'rating',
+                              parseInt(($event.target as HTMLInputElement).value) || undefined,
+                            )
+                          "
+                          type="number"
+                          min="1"
+                          max="10"
+                          class="rating-input"
+                          placeholder="No rating"
+                        />
+                      </div>
 
-                  <div v-if="isTvContent(item) && getTotalSeasons(item) > 1" class="season-control">
-                    <label>Current Season:</label>
-                    <select
-                      :value="getLocalFormData(item).currentSeason || 1"
-                      @change="
-                        updateLocalFormData(
-                          item,
-                          'currentSeason',
-                          parseInt(($event.target as HTMLSelectElement).value) || 1,
-                        )
-                      "
-                      class="season-select"
-                    >
-                      <option v-for="season in getTotalSeasons(item)" :key="season" :value="season">
-                        Season {{ season }}
-                      </option>
-                    </select>
-                  </div>
+                      <div class="dates-control">
+                        <label>
+                          Started
+                          <input
+                            :value="getLocalFormData(item).startedOn"
+                            @change="
+                              updateLocalFormData(
+                                item,
+                                'startedOn',
+                                ($event.target as HTMLInputElement).value,
+                              )
+                            "
+                            type="date"
+                            class="date-input"
+                          />
+                        </label>
+                        <label>
+                          Finished
+                          <input
+                            :value="getLocalFormData(item).completedOn"
+                            @change="
+                              updateLocalFormData(
+                                item,
+                                'completedOn',
+                                ($event.target as HTMLInputElement).value,
+                              )
+                            "
+                            type="date"
+                            class="date-input"
+                          />
+                        </label>
+                        <label>
+                          Rewatches
+                          <input
+                            :value="getLocalFormData(item).rewatchCount"
+                            @change="
+                              updateLocalFormData(
+                                item,
+                                'rewatchCount',
+                                Math.max(
+                                  0,
+                                  parseInt(($event.target as HTMLInputElement).value) || 0,
+                                ),
+                              )
+                            "
+                            type="number"
+                            min="0"
+                            max="999"
+                            class="rewatch-input"
+                          />
+                        </label>
+                      </div>
 
-                  <div class="rating-control">
-                    <label>Your Rating (1-10):</label>
-                    <input
-                      :value="getLocalFormData(item).rating || ''"
-                      @change="
-                        updateLocalFormData(
-                          item,
-                          'rating',
-                          parseInt(($event.target as HTMLInputElement).value) || undefined,
-                        )
-                      "
-                      type="number"
-                      min="1"
-                      max="10"
-                      class="rating-input"
-                      placeholder="No rating"
-                    />
-                  </div>
+                      <div class="notes-control">
+                        <label>Your Review:</label>
+                        <textarea
+                          :value="getLocalFormData(item).notes"
+                          @change="
+                            updateLocalFormData(
+                              item,
+                              'notes',
+                              ($event.target as HTMLTextAreaElement).value,
+                            )
+                          "
+                          class="notes-textarea"
+                          placeholder="Add your thoughts..."
+                          rows="3"
+                        ></textarea>
+                      </div>
+                    </div>
 
-                  <div class="dates-control">
-                    <label>
-                      Started
-                      <input
-                        :value="getLocalFormData(item).startedOn"
-                        @change="
-                          updateLocalFormData(
-                            item,
-                            'startedOn',
-                            ($event.target as HTMLInputElement).value,
-                          )
-                        "
-                        type="date"
-                        class="date-input"
-                      />
-                    </label>
-                    <label>
-                      Finished
-                      <input
-                        :value="getLocalFormData(item).completedOn"
-                        @change="
-                          updateLocalFormData(
-                            item,
-                            'completedOn',
-                            ($event.target as HTMLInputElement).value,
-                          )
-                        "
-                        type="date"
-                        class="date-input"
-                      />
-                    </label>
-                    <label>
-                      Rewatches
-                      <input
-                        :value="getLocalFormData(item).rewatchCount"
-                        @change="
-                          updateLocalFormData(
-                            item,
-                            'rewatchCount',
-                            Math.max(0, parseInt(($event.target as HTMLInputElement).value) || 0),
-                          )
-                        "
-                        type="number"
-                        min="0"
-                        max="999"
-                        class="rewatch-input"
-                      />
-                    </label>
+                    <div class="action-buttons">
+                      <button @click="viewContentDetails(item)" class="btn btn-secondary">
+                        View Details
+                      </button>
+                      <button @click="saveWatchlistItem(item)" class="save-watch-btn">
+                        Save Watch
+                      </button>
+                      <button @click="removeFromWatchlist(item)" class="btn btn-danger">
+                        Remove from Watchlist
+                      </button>
+                    </div>
                   </div>
-
-                  <div class="notes-control">
-                    <label>Your Review:</label>
-                    <textarea
-                      :value="getLocalFormData(item).notes"
-                      @change="
-                        updateLocalFormData(
-                          item,
-                          'notes',
-                          ($event.target as HTMLTextAreaElement).value,
-                        )
-                      "
-                      class="notes-textarea"
-                      placeholder="Add your thoughts..."
-                      rows="3"
-                    ></textarea>
-                  </div>
-                </div>
-
-                <div class="action-buttons">
-                  <button @click="viewContentDetails(item)" class="btn btn-secondary">
-                    View Details
-                  </button>
-                  <button @click="saveWatchlistItem(item)" class="save-watch-btn">
-                    Save Watch
-                  </button>
-                  <button @click="removeFromWatchlist(item)" class="btn btn-danger">
-                    Remove from Watchlist
-                  </button>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
       <!-- Title: Empty State -->
       <div v-else class="empty-state">
         <div class="empty-icon">Watchlist</div>
-        <template v-if="contentStore.watchlist.length === 0">
-          <h3>No items in your watchlist</h3>
-          <p>Start adding movies and series to track your progress!</p>
-          <router-link to="/search" class="btn btn-primary">Browse the catalog</router-link>
-        </template>
-        <template v-else>
-          <h3>No {{ selectedStatusLabel }} titles</h3>
-          <p>Try another status, or add more titles to your watchlist.</p>
-        </template>
+        <h3>No items in your watchlist</h3>
+        <p>Start adding movies and series to track your progress!</p>
+        <router-link to="/search" class="btn btn-primary">Browse the catalog</router-link>
       </div>
     </div>
   </div>
@@ -387,36 +413,44 @@ import { getDisplayTitle } from '@/utils/titles'
 import { getSearchCategoryDate } from '@/utils/searchFilters'
 import {
   getWatchlistStatusLabel,
-  WATCHLIST_STATUS_FILTER_OPTIONS,
   WATCHLIST_STATUS_OPTIONS,
+  WATCHLIST_STATUS_ORDER,
   type WatchlistStatus,
 } from '@/utils/watchlist'
-import WatchlistImport from '@/components/WatchlistImport.vue'
+import ImportReminder from '@/components/ImportReminder.vue'
 
 const router = useRouter()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const toast = useToast()
 
-const selectedStatus = ref('all')
 const isLoading = ref(false)
 const expandedItems = ref(new Set<string>())
 const sortBy = ref<SortByOption>('relevance')
 const sortDirection = ref<SortDirection>('desc')
 
-const statusOptions = WATCHLIST_STATUS_FILTER_OPTIONS
-// Opened by the header button, or by TMDB sending the user back with an approved token.
-const { request_token: tmdbToken, denied: tmdbDenied } = router.currentRoute.value.query
-const showImport = ref(Boolean(tmdbToken || tmdbDenied))
-
-const onImported = async () => {
-  await contentStore.loadWatchlist(true)
+/** Collapsed status sections, remembered per browser. */
+const COLLAPSED_KEY = 'anilounge:watchlist-collapsed'
+const readCollapsed = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]')
+    return new Set<string>(Array.isArray(saved) ? saved : [])
+  } catch {
+    return new Set<string>()
+  }
 }
-const selectedStatusLabel = computed(() => getWatchlistStatusLabel(selectedStatus.value))
+const collapsedSections = ref(readCollapsed())
 
-const getStatusCount = (status: string) => {
-  if (status === 'all') return contentStore.watchlist.length
-  return contentStore.watchlist.filter((item) => item.status === status).length
+const toggleSection = (status: string) => {
+  const next = new Set(collapsedSections.value)
+  if (next.has(status)) next.delete(status)
+  else next.add(status)
+  collapsedSections.value = next
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]))
+  } catch {
+    // Storage unavailable: the choice lasts until the page reloads.
+  }
 }
 
 const getStatusLabel = (status: string) => getWatchlistStatusLabel(status)
@@ -503,7 +537,7 @@ const getContentSeasons = (item: WatchlistItem) => {
   const content = item.content
   if (!content) return 'Unknown'
   return content.contentType === 'tv'
-    ? (content as unknown as TVShow).numberOfSeasons || 'Unknown'
+    ? content.seasonCount || (content as unknown as TVShow).numberOfSeasons || 'Unknown'
     : 'N/A'
 }
 
@@ -524,9 +558,15 @@ const getTotalEpisodes = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 0
   const content = item.content
   if (!content) return 0
-  return content.contentType === 'tv'
-    ? (content as unknown as TVShow).numberOfEpisodes || item.totalEpisodes || 0
-    : 0
+  // The API sends `episodeCount` / `malEpisodes`; `totalEpisodes` is never stored, and
+  // 0 means the episode count isn't known yet (e.g. a show still airing).
+  return (
+    content.episodeCount ||
+    content.malEpisodes ||
+    (content as unknown as TVShow).numberOfEpisodes ||
+    item.totalEpisodes ||
+    0
+  )
 }
 
 const getTotalSeasons = (item: WatchlistItem) => {
@@ -535,16 +575,27 @@ const getTotalSeasons = (item: WatchlistItem) => {
   const content = item.content
   if (!content) return 1
   return content.contentType === 'tv'
-    ? (content as unknown as TVShow).numberOfSeasons || item.totalSeasons || 1
+    ? content.seasonCount ||
+        (content as unknown as TVShow).numberOfSeasons ||
+        item.totalSeasons ||
+        1
     : 1
 }
 
+/** Episodes out so far: up to the next scheduled one while airing, else the total. */
+const getAiredEpisodes = (item: WatchlistItem) => {
+  if (typeof item.content === 'string' || !item.content) return 0
+  const { malStatus, nextEpisodeNumber } = item.content
+  if (malStatus === 'not_yet_aired') return 0
+  if (nextEpisodeNumber && nextEpisodeNumber > 1) return nextEpisodeNumber - 1
+  return getTotalEpisodes(item)
+}
+
+/** A show the user is watching or plans to watch has aired episodes they haven't seen. */
 const hasNewEpisodes = (item: WatchlistItem) => {
   if (typeof item === 'string') return false
-  if (typeof item.content === 'string') return false
-  const current = getCurrentEpisodes(item)
-  const total = getTotalEpisodes(item)
-  return current < total
+  if (item.status !== 'watching' && item.status !== 'plan_to_watch') return false
+  return getCurrentEpisodes(item) < getAiredEpisodes(item)
 }
 
 const getProgressPercent = (item: WatchlistItem) => {
@@ -576,14 +627,10 @@ const getWatchlistSearchDate = (item: WatchlistItem) => {
   return getSearchCategoryDate(item.content)?.getTime() ?? 0
 }
 
-const filteredWatchlist = computed(() => {
-  const items =
-    selectedStatus.value === 'all'
-      ? contentStore.watchlist
-      : contentStore.watchlist.filter((item) => item.status === selectedStatus.value)
-
-  return applySort(
-    items,
+/** Non-empty status sections in display order, each sorted by the toolbar's choice. */
+const sections = computed(() => {
+  const sorted = applySort(
+    contentStore.watchlist,
     sortBy.value,
     sortDirection.value,
     getContentTitle,
@@ -592,6 +639,11 @@ const filteredWatchlist = computed(() => {
     getWatchlistAddedAt,
     getWatchlistSearchDate,
   )
+  return WATCHLIST_STATUS_ORDER.map((status) => ({
+    status,
+    label: getWatchlistStatusLabel(status),
+    items: sorted.filter((item) => item.status === status),
+  })).filter((section) => section.items.length > 0)
 })
 
 const toggleExpanded = (item: WatchlistItem) => {
@@ -885,33 +937,84 @@ onUnmounted(() => {
   margin-bottom: 1.25rem;
 }
 
-.status-filter {
+.status-section {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  min-width: 180px;
+  gap: 0.35rem;
 }
 
-.status-filter label {
-  color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 0.85rem;
+.status-section + .status-section {
+  margin-top: 1rem;
 }
 
-.status-filter-select {
-  padding: 0.5rem;
-  border: 2px solid var(--text-primary);
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.section-header:hover {
+  background: var(--bg-hover);
+}
+
+.section-header:focus-visible {
+  outline: 2px solid var(--coral-primary);
+  outline-offset: 2px;
   border-radius: 6px;
-  background: var(--bg-card);
-  color: var(--text-strong);
-  font-size: 0.9rem;
 }
 
-.status-filter-select:focus {
-  outline: none;
-  background: var(--bg-card);
-  border-color: var(--coral-primary);
-  box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.25);
+.section-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.section-dot.status-plan-to-watch {
+  background: var(--text-muted);
+}
+
+.section-label {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.section-count {
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.section-chevron {
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.section-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .watchlist-toolbar :deep(.sort-by-controls) {
@@ -1334,10 +1437,6 @@ onUnmounted(() => {
   font-size: 0.9rem;
 }
 
-.import-open-btn {
-  margin-top: 1rem;
-}
-
 .notes-textarea {
   resize: vertical;
   min-height: 80px;
@@ -1445,7 +1544,6 @@ onUnmounted(() => {
     justify-content: stretch;
   }
 
-  .status-filter,
   .watchlist-toolbar :deep(.sort-by-controls) {
     width: 100%;
     min-width: 0;
