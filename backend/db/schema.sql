@@ -468,6 +468,19 @@ ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS rewatch_count INTEGER NOT NULL DE
 -- so importing a list doesn't flood friends' feeds.
 ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
 
+-- Watch history (services/watchEvents.js): units (episodes, or whole watches for
+-- movies) a user got through on a day. In-app progress changes log what they add
+-- ('manual'); imports log an estimate spread between the source's start and finish
+-- dates ('import'). The profile calendar places watch time by it.
+CREATE TABLE IF NOT EXISTS watch_events (
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  content_id  UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  watched_on  DATE NOT NULL,
+  source      TEXT NOT NULL CHECK (source IN ('manual', 'import')),
+  units       INTEGER NOT NULL CHECK (units > 0),
+  PRIMARY KEY (user_id, content_id, watched_on, source)
+);
+
 -- Import clashes waiting on the user (services/watchlistImportService.js): titles whose
 -- imported sources disagree, or disagree with the user's watchlist row. `options` holds
 -- each distinct imported version; nothing is written for the title until the user picks.
@@ -487,6 +500,11 @@ CREATE TABLE IF NOT EXISTS ratings (
   rated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, content_id)
 );
+
+-- Ratings to the tenth (8.5). `works` reads ratings.score, so it is dropped for the
+-- type change and recreated just below.
+DROP VIEW IF EXISTS works;
+ALTER TABLE ratings ALTER COLUMN score TYPE NUMERIC(3, 1);
 
 CREATE OR REPLACE VIEW works AS
 SELECT

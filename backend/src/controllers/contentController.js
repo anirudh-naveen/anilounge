@@ -31,6 +31,8 @@ import {
 import { validationResult } from 'express-validator'
 import { censorText } from '../utils/moderation.js'
 import { startSession } from '../../config/postgres.js'
+import { clearWatchHistory, recordWatch } from '../services/watchEvents.js'
+import { watchUnits } from '../utils/profileStats.js'
 
 const movieLikeTypes = ['movie', 'special']
 
@@ -698,6 +700,7 @@ export const addToWatchlist = async (req, res) => {
 
     const existingItem = user.watchlist.find((item) => item.content.toString() === contentId)
     const previousRating = getEffectiveUserRating(user, contentId)
+    const unitsBefore = existingItem ? watchUnits({ ...existingItem, content }) : 0
 
     if (existingItem) {
       existingItem.status = status || existingItem.status
@@ -738,6 +741,8 @@ export const addToWatchlist = async (req, res) => {
     )
 
     await user.save({ session })
+    const savedItem = user.watchlist.find((item) => item.content.toString() === contentId)
+    await recordWatch(userId, contentId, watchUnits({ ...savedItem, content }) - unitsBefore)
     await session.commitTransaction()
 
     res.json({
@@ -839,6 +844,7 @@ export const removeFromWatchlist = async (req, res) => {
     }
 
     await user.save({ session })
+    await clearWatchHistory(userId, contentId)
     await session.commitTransaction()
 
     res.json({
@@ -923,6 +929,7 @@ export const updateWatchlistItem = async (req, res) => {
     }
 
     const previousRating = getEffectiveUserRating(user, contentId)
+    const unitsBefore = watchUnits({ ...watchlistItem, content })
 
     if (status) watchlistItem.status = status
     if (rating !== undefined) watchlistItem.rating = rating
@@ -945,6 +952,7 @@ export const updateWatchlistItem = async (req, res) => {
     )
 
     await user.save({ session })
+    await recordWatch(userId, contentId, watchUnits({ ...watchlistItem, content }) - unitsBefore)
     await session.commitTransaction()
 
     res.json({

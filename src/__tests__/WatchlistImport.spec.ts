@@ -116,39 +116,40 @@ describe('WatchlistImport', () => {
     expect(api.conflicts).toHaveBeenCalledTimes(2)
   })
 
-  it('saves the usernames before sending the user to TMDB', async () => {
-    const assign = vi.fn()
-    vi.stubGlobal('location', { ...window.location, assign, origin: 'http://localhost:5173' })
+  it('opens TMDB approval in a new tab and imports once approved', async () => {
+    const tab = { opener: {}, location: { href: '' }, close: vi.fn() }
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
     const { wrapper } = await mountImport()
-    await wrapper.get('[data-testid="import-anilist-user"]').setValue('someone')
-    await wrapper.get('[data-testid="import-tmdb"]').setValue(true)
-    api.tmdbToken.mockResolvedValue({ data: { data: { authorizeUrl: 'https://tmdb.example/ok' } } })
-    await wrapper.get('form').trigger('submit')
+    api.tmdbToken.mockResolvedValue({
+      data: { data: { requestToken: 'abc123def456', authorizeUrl: 'https://tmdb.example/ok' } },
+    })
+    await wrapper.get('[data-testid="import-tmdb"]').trigger('click')
     await flushPromises()
 
-    expect(api.tmdbToken).toHaveBeenCalledWith('http://localhost:5173/settings?import=tmdb')
-    expect(assign).toHaveBeenCalledWith('https://tmdb.example/ok')
-    expect(JSON.parse(sessionStorage.getItem('anilounge:pending-import') || '{}').sources).toEqual([
-      { source: 'anilist', username: 'someone' },
-    ])
-    vi.unstubAllGlobals()
+    expect(open).toHaveBeenCalledWith('', '_blank')
+    expect(tab.opener).toBeNull()
+    expect(api.tmdbToken).toHaveBeenCalledWith(`${window.location.origin}/settings?import=tmdb-tab`)
+    expect(tab.location.href).toBe('https://tmdb.example/ok')
+    expect(wrapper.text()).toContain('Waiting for you to approve')
+
+    api.start.mockResolvedValue({ data: { data: runningJob } })
+    await wrapper.get('[data-testid="import-tmdb-approved"]').trigger('click')
+    await flushPromises()
+    expect(api.start).toHaveBeenCalledWith({
+      sources: [{ source: 'tmdb', requestToken: 'abc123def456' }],
+      addMissing: true,
+    })
+    open.mockRestore()
   })
 
-  it('finishes the import in order when TMDB sends the user back approved', async () => {
-    sessionStorage.setItem(
-      'anilounge:pending-import',
-      JSON.stringify({ sources: [{ source: 'anilist', username: 'someone' }], addMissing: false }),
-    )
+  it('imports in this tab when TMDB sends the user back approved', async () => {
     api.start.mockResolvedValue({ data: { data: runningJob } })
     const { router } = await mountImport(
       '/settings?import=tmdb&request_token=abc123def456&approved=true',
     )
     expect(api.start).toHaveBeenCalledWith({
-      sources: [
-        { source: 'anilist', username: 'someone' },
-        { source: 'tmdb', requestToken: 'abc123def456' },
-      ],
-      addMissing: false,
+      sources: [{ source: 'tmdb', requestToken: 'abc123def456' }],
+      addMissing: true,
     })
     expect(router.currentRoute.value.query).toEqual({})
   })

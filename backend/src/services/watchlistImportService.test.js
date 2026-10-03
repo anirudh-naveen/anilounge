@@ -22,8 +22,9 @@ import {
 } from './watchlistImportService.js'
 
 describe('toRating', () => {
-  it('rounds 10-point scores and treats 0 as unrated', () => {
-    assert.equal(toRating(8.6), 9)
+  it('keeps 10-point scores to the tenth and treats 0 as unrated', () => {
+    assert.equal(toRating(8.6), 8.6)
+    assert.equal(toRating(7.25), 7.3)
     assert.equal(toRating(0.4), 1)
     assert.equal(toRating(0), null)
     assert.equal(toRating(null), null)
@@ -57,7 +58,7 @@ describe('mapAnilistEntry', () => {
     assert.equal(entry.anilistId, 21)
     assert.equal(entry.malId, 20)
     assert.equal(entry.status, 'on_hold')
-    assert.equal(entry.score, 8)
+    assert.equal(entry.score, 7.5)
     assert.equal(entry.progress, 5)
     assert.equal(entry.rewatchCount, 2)
     assert.equal(entry.startedOn, '2023-01-02')
@@ -156,7 +157,7 @@ describe('mapTmdbLists', () => {
     assert.equal(entries.length, 2)
     const movie = entries.find((entry) => entry.tmdbType === 'movie')
     assert.equal(movie.status, 'completed')
-    assert.equal(movie.score, 10)
+    assert.equal(movie.score, 9.5)
     const show = entries.find((entry) => entry.tmdbType === 'tv')
     assert.equal(show.status, 'plan_to_watch')
     assert.equal(show.score, null)

@@ -140,7 +140,6 @@
                     data-testid="nav-avatar"
                   />
                   <span class="user-name">{{ authStore.user?.username }}</span>
-                  <RoleBadge :username="authStore.user?.username" />
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
                 </button>
 
@@ -205,7 +204,6 @@ import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import RoleBadge from '@/components/RoleBadge.vue'
 
 const router = useRouter()
 const route = useRoute()

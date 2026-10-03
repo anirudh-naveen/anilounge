@@ -101,6 +101,16 @@ describe('Watchlist status sections', () => {
     expect(titles).toEqual(['Frieren', 'Spirited Away'])
   })
 
+  it('filters the list by the search box', async () => {
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="watchlist-search"]').setValue('spirit')
+    expect(wrapper.findAll('.item-title').map((title) => title.text())).toEqual(['Spirited Away'])
+
+    await wrapper.get('[data-testid="watchlist-search"]').setValue('nothing like it')
+    expect(wrapper.findAll('.item-title')).toHaveLength(0)
+    expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain('nothing like it')
+  })
+
   it('collapses a section and remembers it', async () => {
     const wrapper = await mountPage()
     const header = wrapper.get('[data-testid="watchlist-section-completed"] .section-header')

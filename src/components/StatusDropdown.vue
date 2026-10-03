@@ -38,6 +38,7 @@
             type="number"
             min="1"
             max="10"
+            step="0.1"
             class="rating-input"
             placeholder="Optional"
           />
@@ -84,6 +85,7 @@ import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import { WATCHLIST_STATUS_OPTIONS, type WatchlistStatus } from '@/utils/watchlist'
+import { toUserRating } from '@/utils/ratings'
 
 interface Props {
   showDropdown: boolean
@@ -147,7 +149,7 @@ const saveWatchlist = async () => {
     if (isEditing.value) {
       await contentStore.updateWatchlistItem(props.contentId, {
         status: selectedStatus.value,
-        rating: selectedRating.value,
+        rating: toUserRating(selectedRating.value),
         currentEpisode: props.contentType === 'tv' ? selectedEpisodes.value : undefined,
         notes: selectedNotes.value || undefined,
       })
@@ -156,7 +158,7 @@ const saveWatchlist = async () => {
       await contentStore.addToWatchlist(
         props.contentId,
         selectedStatus.value,
-        selectedRating.value,
+        toUserRating(selectedRating.value),
         props.contentType === 'tv' ? selectedEpisodes.value : undefined,
         undefined, // currentSeason - not used in quick add
         selectedNotes.value || undefined,
