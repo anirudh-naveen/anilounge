@@ -264,19 +264,34 @@ router.put(
   contentController.updateWatchlistItem,
 )
 
-/** Import from AniList, MyAnimeList (username or export file), or TMDB; runs as a polled job. */
+/**
+ * Import from AniList, MyAnimeList (username or export file), and/or TMDB in one polled
+ * job; titles the sources disagree on wait in /conflicts for the user to pick.
+ */
 router.get('/watchlist/import', watchlistImportController.getImport)
 router.post(
   '/watchlist/import',
   [
-    body('source').isIn(['anilist', 'mal', 'mal_file', 'tmdb']).withMessage('Choose a list to import'),
-    body('username').optional().isString().isLength({ max: 30 }),
-    body('requestToken').optional().isString().isLength({ max: 80 }),
-    body('file').optional().isObject(),
-    body('overwrite').optional().isBoolean(),
+    body('sources').isArray({ min: 1, max: 3 }).withMessage('Enter at least one username to import'),
+    body('sources.*.source')
+      .isIn(['anilist', 'mal', 'mal_file', 'tmdb'])
+      .withMessage('Choose AniList, MyAnimeList, or TMDB'),
+    body('sources.*.username').optional().isString().isLength({ max: 30 }),
+    body('sources.*.requestToken').optional().isString().isLength({ max: 80 }),
+    body('sources.*.file').optional().isObject(),
     body('addMissing').optional().isBoolean(),
   ],
   watchlistImportController.startImport,
+)
+router.get('/watchlist/import/conflicts', watchlistImportController.getConflicts)
+router.post(
+  '/watchlist/import/conflicts',
+  [
+    body('choices').isArray({ min: 1, max: 5000 }).withMessage('Choose a version for a title'),
+    body('choices.*.contentId').custom((value) => isCatalogId(value)),
+    body('choices.*.choice').isString().isLength({ max: 40 }),
+  ],
+  watchlistImportController.resolveConflicts,
 )
 router.post(
   '/watchlist/import/tmdb/token',

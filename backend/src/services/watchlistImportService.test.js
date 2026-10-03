@@ -10,7 +10,11 @@ import {
   matchEntries,
   mergeByTitle,
   parseMalExport,
+  planImport,
   prepareImport,
+  prepareSources,
+  rowsAgree,
+  distinctOptions,
   readMalExportFile,
   toDate,
   toRating,
@@ -209,8 +213,14 @@ describe('combineStatus and mergeByTitle', () => {
     assert.equal(combineStatus('completed', 'dropped'), 'dropped')
     const title = { id: 'a', kind: 'series', episodeCount: 24 }
     const [merged] = mergeByTitle([
-      { entry: entry({ status: 'completed', progress: 12, score: 7, startedOn: '2020-01-01' }), title },
-      { entry: entry({ status: 'watching', progress: 4, score: 9, startedOn: '2021-01-01' }), title },
+      {
+        entry: entry({ status: 'completed', progress: 12, score: 7, startedOn: '2020-01-01' }),
+        title,
+      },
+      {
+        entry: entry({ status: 'watching', progress: 4, score: 9, startedOn: '2021-01-01' }),
+        title,
+      },
     ])
     assert.equal(merged.entry.status, 'watching')
     assert.equal(merged.entry.progress, 16)
@@ -223,7 +233,10 @@ describe('toWatchlistRow', () => {
   it('fills completed titles and caps progress at the episode count', () => {
     const series = { id: 'a', kind: 'series', episodeCount: 12 }
     assert.equal(toWatchlistRow(entry({ status: 'completed' }), series).current_episode, 12)
-    assert.equal(toWatchlistRow(entry({ status: 'watching', progress: 30 }), series).current_episode, 12)
+    assert.equal(
+      toWatchlistRow(entry({ status: 'watching', progress: 30 }), series).current_episode,
+      12,
+    )
     const movie = { id: 'b', kind: 'movie', episodeCount: null }
     assert.equal(toWatchlistRow(entry({ status: 'completed' }), movie).current_episode, 1)
     assert.equal(
@@ -238,5 +251,105 @@ describe('prepareImport', () => {
     assert.throws(() => prepareImport('anilist', { username: 'bad name!' }), ImportError)
     assert.throws(() => prepareImport('letterboxd', {}), ImportError)
     assert.equal(typeof prepareImport('anilist', { username: 'Someone_1' }), 'function')
+  })
+})
+
+const row = (overrides) => ({
+  content_id: 't1',
+  status: 'completed',
+  current_episode: 12,
+  score: 8,
+  started_on: null,
+  completed_on: null,
+  rewatch_count: 0,
+  notes: null,
+  updated_at: null,
+  ...overrides,
+})
+
+describe('rowsAgree and distinctOptions', () => {
+  it('treats a missing score as agreeing with any score', () => {
+    assert.equal(rowsAgree(row(), row({ score: null })), true)
+    assert.equal(rowsAgree(row(), row({ score: 6 })), false)
+    assert.equal(rowsAgree(row(), row({ current_episode: 11 })), false)
+  })
+
+  it('folds agreeing sources into one option that lists both', () => {
+    const options = distinctOptions([
+      { source: 'anilist', row: row({ started_on: '2024-02-01' }) },
+      { source: 'mal', row: row({ score: null, started_on: '2024-01-01', rewatch_count: 1 }) },
+      { source: 'tmdb', row: row({ status: 'plan_to_watch', current_episode: 0, score: null }) },
+    ])
+    assert.equal(options.length, 2)
+    assert.deepEqual(options[0].sources, ['anilist', 'mal'])
+    assert.equal(options[0].key, 'anilist+mal')
+    assert.equal(options[0].score, 8)
+    assert.equal(options[0].started_on, '2024-01-01')
+    assert.equal(options[0].rewatch_count, 1)
+    assert.equal(options[1].key, 'tmdb')
+  })
+})
+
+describe('planImport', () => {
+  it('adds new agreeing titles, fills matching ones, and flags clashes', () => {
+    const versions = new Map([
+      ['new', [{ source: 'anilist', row: row({ content_id: 'new' }) }]],
+      ['same', [{ source: 'anilist', row: row({ content_id: 'same' }) }]],
+      ['differs', [{ source: 'anilist', row: row({ content_id: 'differs' }) }]],
+      [
+        'sources-disagree',
+        [
+          { source: 'anilist', row: row({ content_id: 'sources-disagree' }) },
+          {
+            source: 'mal',
+            row: row({ content_id: 'sources-disagree', status: 'dropped', current_episode: 3 }),
+          },
+        ],
+      ],
+    ])
+    const existing = new Map([
+      ['same', { status: 'completed', current_episode: 12, score: null }],
+      ['differs', { status: 'watching', current_episode: 4, score: null }],
+    ])
+    const plan = planImport(versions, existing)
+    assert.deepEqual(
+      plan.add.map((r) => r.content_id),
+      ['new'],
+    )
+    assert.deepEqual(
+      plan.fill.map((r) => r.content_id),
+      ['same'],
+    )
+    assert.deepEqual(
+      plan.clashes.map((c) => c.contentId),
+      ['differs', 'sources-disagree'],
+    )
+    assert.equal(plan.clashes[1].options.length, 2)
+  })
+})
+
+describe('prepareSources', () => {
+  it('runs AniList, then MyAnimeList, then TMDB whatever order they were sent in', () => {
+    const prepared = prepareSources([
+      { source: 'tmdb', requestToken: 'abc123def456' },
+      { source: 'mal', username: 'someone' },
+      { source: 'anilist', username: 'someone' },
+    ])
+    assert.deepEqual(
+      prepared.map((item) => item.source),
+      ['anilist', 'mal', 'tmdb'],
+    )
+  })
+
+  it('rejects an empty request and the same site twice', () => {
+    assert.throws(() => prepareSources([]), ImportError)
+    assert.throws(
+      () =>
+        prepareSources([
+          { source: 'mal', username: 'a_user' },
+          { source: 'mal_file', file: { xml: '<myanimelist></myanimelist>' } },
+        ]),
+      ImportError,
+    )
   })
 })

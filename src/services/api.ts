@@ -396,6 +396,13 @@ export const watchlistImportAPI = {
 
   /** TMDB step 1: a token to approve on themoviedb.org, which then returns to `redirectTo`. */
   tmdbToken: (redirectTo: string) => api.post('/watchlist/import/tmdb/token', { redirectTo }),
+
+  /** Imported titles waiting on the user to pick a version. */
+  conflicts: () => api.get('/watchlist/import/conflicts'),
+
+  /** Pick versions: `choice` is an option key, or `keep` to leave the watchlist as is. */
+  resolveConflicts: (choices: { contentId: string; choice: string }[]) =>
+    api.post('/watchlist/import/conflicts', { choices }),
 }
 
 /**

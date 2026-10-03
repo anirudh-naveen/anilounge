@@ -168,6 +168,7 @@ export const refreshAccessToken = async (req, res) => {
           role: user.role,
           profilePicture: user.profilePicture,
           createdAt: user.createdAt,
+          watchlistImportedAt: user.watchlistImportedAt,
           preferences: user.preferences,
         },
       },

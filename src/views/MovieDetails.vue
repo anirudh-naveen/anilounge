@@ -242,11 +242,7 @@
         </div>
       </div>
 
-      <EntityCastRow
-        :items="characters"
-        :content-id="movie._id"
-        :loading="charactersLoading"
-      />
+      <EntityCastRow :items="characters" :content-id="movie._id" :loading="charactersLoading" />
 
       <StudioLinks :content="movie" />
     </div>

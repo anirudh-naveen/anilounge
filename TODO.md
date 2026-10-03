@@ -27,6 +27,7 @@
    - For any associated forums, allow some of the leading forum posts and a few highlighted comments to the associated content's screen.
    - Update Home with a few highlighted forum posts that refresh every few hours and depend on the user watchlist.
 5. Add an inbox in the profile dropwdown to see any site news, friend invites, comments on a post/comment.
+   - Include unresolved watchlist import clashes: when an import finds titles the sites disagree on (or that disagree with the watchlist) and the user leaves Settings before picking a version, prompt them here. Clashes are already saved server-side (`watchlist_import_conflicts`, `GET /api/watchlist/import/conflicts`); for now they only show in Settings → Import.
 
 ## Infrastructure
 

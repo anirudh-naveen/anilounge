@@ -40,7 +40,9 @@
 
         <div class="character-info">
           <p class="entity-kicker">Character</p>
-          <h1 class="character-title">{{ canonicalCharacterName(character.name) || character.name }}</h1>
+          <h1 class="character-title">
+            {{ canonicalCharacterName(character.name) || character.name }}
+          </h1>
           <p v-if="character.nativeName" class="original-title">
             Native Name: {{ character.nativeName }}
           </p>

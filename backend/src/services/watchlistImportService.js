@@ -25,6 +25,8 @@ import { calculateUnifiedScore } from '../utils/ratings.js'
 import { HttpError } from '../utils/httpError.js'
 
 export const IMPORT_SOURCES = ['anilist', 'mal', 'mal_file', 'tmdb']
+/** Order sources run in when several are imported together. */
+const SOURCE_ORDER = ['anilist', 'mal', 'mal_file', 'tmdb']
 
 /** Catalog titles one import may add; the rest are reported as not in the catalog. */
 export const MAX_CATALOG_ADDS = 60
@@ -266,7 +268,9 @@ function decodeXmlText(text) {
 export function parseMalExport(xml) {
   const text = String(xml || '')
   if (!/<myanimelist>/i.test(text)) {
-    throw new ImportError("That file isn't a MyAnimeList export. Use the anime list file from MAL's export page.")
+    throw new ImportError(
+      "That file isn't a MyAnimeList export. Use the anime list file from MAL's export page.",
+    )
   }
   const entries = []
   for (const [, block] of text.matchAll(/<anime>([\s\S]*?)<\/anime>/gi)) {
@@ -312,7 +316,9 @@ export function readMalExportFile({ xml, gzipBase64 } = {}) {
     try {
       return gunzipSync(Buffer.from(gzipBase64, 'base64')).toString('utf8')
     } catch {
-      throw new ImportError("Couldn't unzip that file. Upload the .xml.gz from MAL as is, or the .xml inside it.")
+      throw new ImportError(
+        "Couldn't unzip that file. Upload the .xml.gz from MAL as is, or the .xml inside it.",
+      )
     }
   }
   throw new ImportError('Choose your MyAnimeList export file.')
@@ -500,7 +506,9 @@ function tmdbKey() {
  * @returns {Promise<{ requestToken: string, authorizeUrl: string }>}
  */
 export async function createTmdbRequestToken(redirectTo) {
-  const { status, body } = await fetchJson(`${TMDB_API}/authentication/token/new?api_key=${tmdbKey()}`)
+  const { status, body } = await fetchJson(
+    `${TMDB_API}/authentication/token/new?api_key=${tmdbKey()}`,
+  )
   if (status !== 200 || !body?.request_token) {
     throw new ImportError("TMDB didn't answer. Try again in a few minutes.", 502)
   }
@@ -525,7 +533,8 @@ async function fetchTmdbPages(path, sessionId) {
     const { status, body } = await fetchJson(
       `${TMDB_API}${path}?api_key=${tmdbKey()}&session_id=${encodeURIComponent(sessionId)}&page=${page}`,
     )
-    if (status !== 200 || !body) throw new ImportError("TMDB didn't answer. Try again in a few minutes.", 502)
+    if (status !== 200 || !body)
+      throw new ImportError("TMDB didn't answer. Try again in a few minutes.", 502)
     results.push(...(body.results || []))
     if (page >= Number(body.total_pages || 1)) break
   }
@@ -668,18 +677,20 @@ export function combineStatus(a, b) {
 }
 
 /**
- * Several source entries can land on one catalog title (e.g. MAL splits a show into
- * seasons that the catalog keeps as one). Keep one row per title with the combined
- * status and progress, the best score, the earliest start, and the latest finish.
+ * Several entries from one source can land on one catalog title (e.g. MAL splits a
+ * show into seasons that the catalog keeps as one). Keep one row per source and title
+ * with the combined status and progress, the best score, the earliest start, and the
+ * latest finish. Different sources stay apart; `planImport` compares them.
  * @param {Array<{ entry: ImportEntry, title: CatalogTitle }>} matched
  * @returns {Array<{ entry: ImportEntry, title: CatalogTitle }>}
  */
 export function mergeByTitle(matched) {
   const byId = new Map()
   for (const pair of matched) {
-    const previous = byId.get(pair.title.id)
+    const key = `${pair.entry.source}:${pair.title.id}`
+    const previous = byId.get(key)
     if (!previous) {
-      byId.set(pair.title.id, { entry: { ...pair.entry }, title: pair.title })
+      byId.set(key, { entry: { ...pair.entry }, title: pair.title })
       continue
     }
     const a = previous.entry
@@ -728,119 +739,317 @@ export function toWatchlistRow(entry, title) {
   }
 }
 
+/** Longest one catalog addition may take before the import moves on without it. */
+const ADD_TITLE_TIMEOUT_MS = 90 * 1000
+
 /**
- * Add anime the catalog lacks through the AniList importer, up to `limit`.
+ * Resolve with the promise, or with `fallback` once `ms` pass. The slow work keeps
+ * running in the background; the import just stops waiting for it.
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @param {T} fallback
+ * @returns {Promise<T>}
+ */
+function withTimeout(promise, ms, fallback) {
+  let timer
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+/**
+ * Bring unmatched anime into the catalog through the AniList importer. Titles the
+ * catalog already holds under another id are linked whatever their number; only
+ * genuinely new titles count toward `limit`.
  * @param {ImportEntry[]} unmatched
  * @param {{ limit: number, onProgress?: (done: number, total: number) => void }} options
- * @returns {Promise<number>} Titles added or linked.
+ * @returns {Promise<{ linked: number, added: number }>}
  */
 async function addMissingAnime(unmatched, { limit, onProgress = () => {} }) {
-  const anime = unmatched.filter((entry) => entry.anilistId || entry.malId).slice(0, limit)
-  if (!anime.length) return 0
+  const anime = unmatched.filter((entry) => entry.anilistId || entry.malId)
+  if (!anime.length) return { linked: 0, added: 0 }
   const media = await fetchAnilistMediaBatch({
     anilistIds: anime.map((entry) => entry.anilistId).filter(Boolean),
     malIds: anime.filter((entry) => !entry.anilistId).map((entry) => entry.malId),
   })
   const populator = new DatabasePopulator()
+  let linked = 0
   let added = 0
   for (const [index, item] of media.entries()) {
     try {
-      const { outcome } = await addAnilistTitle(item, populator)
-      if (outcome !== 'skipped' && outcome !== 'failed') added += 1
+      const create = added < limit
+      const { outcome } = await withTimeout(
+        addAnilistTitle(item, populator, { create }),
+        ADD_TITLE_TIMEOUT_MS,
+        { outcome: 'failed' },
+      )
+      if (outcome === 'added') added += 1
+      else if (outcome === 'existing' || outcome === 'merged') linked += 1
+      else if (outcome === 'failed')
+        console.warn(`Watchlist import: AniList ${item.id} was not added`)
     } catch (error) {
       console.warn(`Watchlist import: adding AniList ${item.id} failed: ${error.message}`)
     }
     onProgress(index + 1, media.length)
   }
-  return added
+  return { linked, added }
+}
+
+// ---------------------------------------------------------------------------
+// Planning: what to add, what already matches, what clashes
+// ---------------------------------------------------------------------------
+
+/**
+ * @typedef {object} ImportRow - One source's version of a title (see `toWatchlistRow`).
+ * @property {string} content_id
+ * @property {string} status
+ * @property {number} current_episode
+ * @property {number|null} score
+ * @property {string|null} started_on
+ * @property {string|null} completed_on
+ * @property {number} rewatch_count
+ * @property {string|null} notes
+ * @property {string|null} updated_at
+ */
+
+/**
+ * @typedef {object} ImportOption - A version of a title offered when sources clash.
+ * @property {string} key - The sources it came from, joined with `+` (e.g. `anilist+mal`).
+ * @property {string[]} sources
+ */
+
+/**
+ * Two versions agree when status and progress match and their scores don't
+ * contradict (a missing score agrees with any score).
+ * @param {{ status: string, current_episode: number, score: number|null }} a
+ * @param {{ status: string, current_episode: number, score: number|null }} b
+ * @returns {boolean}
+ */
+export function rowsAgree(a, b) {
+  return (
+    a.status === b.status &&
+    Number(a.current_episode) === Number(b.current_episode) &&
+    (a.score == null || b.score == null || Number(a.score) === Number(b.score))
+  )
+}
+
+/**
+ * Fold versions that agree into one: the score either has, the earliest start, the
+ * latest finish, the most rewatches, the first notes.
+ * @param {ImportRow} a
+ * @param {ImportRow} b
+ * @returns {ImportRow}
+ */
+function combineRows(a, b) {
+  return {
+    ...a,
+    score: a.score ?? b.score ?? null,
+    started_on: [a.started_on, b.started_on].filter(Boolean).sort()[0] || null,
+    completed_on: [a.completed_on, b.completed_on].filter(Boolean).sort().at(-1) || null,
+    rewatch_count: Math.max(a.rewatch_count || 0, b.rewatch_count || 0),
+    notes: a.notes || b.notes || null,
+    updated_at: [a.updated_at, b.updated_at].filter(Boolean).sort().at(-1) || null,
+  }
+}
+
+/**
+ * Group each title's source versions into distinct options (versions that agree
+ * share one option and list every source behind it).
+ * @param {Array<{ source: string, row: ImportRow }>} versions - In source order.
+ * @returns {Array<ImportRow & ImportOption>}
+ */
+export function distinctOptions(versions) {
+  const options = []
+  for (const { source, row } of versions) {
+    const same = options.find((option) => rowsAgree(option, row))
+    if (same) {
+      Object.assign(same, combineRows(same, row))
+      same.sources.push(source)
+      same.key = same.sources.join('+')
+    } else {
+      options.push({ ...row, sources: [source], key: source })
+    }
+  }
+  return options
+}
+
+/**
+ * Decide each title's fate.
+ * - One option, not on the watchlist: add it.
+ * - One option that agrees with the watchlist row: keep the row, filling in dates,
+ *   rewatches, and a missing score from the import.
+ * - Otherwise (sources disagree, or the import disagrees with the watchlist): a clash
+ *   the user resolves.
+ * @param {Map<string, Array<{ source: string, row: ImportRow }>>} versionsByTitle
+ * @param {Map<string, { status: string, current_episode: number, score: number|null }>} existing
+ * @returns {{ add: ImportRow[], fill: ImportRow[], clashes: Array<{ contentId: string, options: object[] }> }}
+ */
+export function planImport(versionsByTitle, existing) {
+  const add = []
+  const fill = []
+  const clashes = []
+  for (const [contentId, versions] of versionsByTitle) {
+    const options = distinctOptions(versions)
+    const current = existing.get(contentId)
+    if (options.length === 1 && !current) {
+      add.push(stripOption(options[0]))
+    } else if (options.length === 1 && rowsAgree(options[0], current)) {
+      fill.push(stripOption(options[0]))
+    } else {
+      clashes.push({ contentId, options })
+    }
+  }
+  return { add, fill, clashes }
+}
+
+/**
+ * @param {ImportRow & Partial<ImportOption>} option
+ * @returns {ImportRow}
+ */
+function stripOption(option) {
+  const { key: _key, sources: _sources, ...row } = option
+  return row
 }
 
 // ---------------------------------------------------------------------------
 // Writing
 // ---------------------------------------------------------------------------
 
+const ROW_COLUMNS = `content_id uuid, status text, current_episode int, notes text,
+  started_on date, completed_on date, rewatch_count int, updated_at timestamptz, score int`
+
 /**
- * Write the rows in one transaction. Without `overwrite`, titles already on the
- * watchlist (and ratings already given) are left as they are.
+ * Insert new titles, or replace existing rows (`replace`), and set their scores.
+ * Runs on the caller's transaction client.
+ * @param {import('pg').PoolClient} client
  * @param {string} userId
- * @param {object[]} rows - From `toWatchlistRow`.
- * @param {{ overwrite: boolean }} options
- * @returns {Promise<{ added: number, updated: number, unchanged: number, ratingIds: string[] }>}
+ * @param {ImportRow[]} rows
+ * @param {{ replace: boolean }} options
+ * @returns {Promise<string[]>} Titles whose rating changed.
  */
-async function writeRows(userId, rows, { overwrite }) {
-  if (!rows.length) return { added: 0, updated: 0, unchanged: 0, ratingIds: [] }
+async function upsertRows(client, userId, rows, { replace }) {
+  if (!rows.length) return []
   const payload = JSON.stringify(rows)
-  // A dedicated client rather than startSession(): the job keeps running queries after
-  // this, and they must not inherit the transaction's async context.
+  await client.query(
+    `INSERT INTO watchlist (
+       user_id, content_id, status, current_episode, previous_episode, current_season, notes,
+       started_on, completed_on, rewatch_count, imported_at, added_at, updated_at
+     )
+     SELECT $1, r.content_id, r.status, r.current_episode, 0, 1, r.notes,
+            r.started_on, r.completed_on, r.rewatch_count, now(),
+            LEAST(COALESCE(r.updated_at, now()), now()), LEAST(COALESCE(r.updated_at, now()), now())
+     FROM jsonb_to_recordset($2::jsonb) AS r(${ROW_COLUMNS})
+     ON CONFLICT (user_id, content_id) DO ${
+       replace
+         ? `UPDATE SET
+              status = EXCLUDED.status,
+              previous_episode = watchlist.current_episode,
+              current_episode = EXCLUDED.current_episode,
+              notes = COALESCE(EXCLUDED.notes, watchlist.notes),
+              started_on = COALESCE(EXCLUDED.started_on, watchlist.started_on),
+              completed_on = EXCLUDED.completed_on,
+              rewatch_count = EXCLUDED.rewatch_count,
+              imported_at = now(),
+              updated_at = now()`
+         : 'NOTHING'
+     }`,
+    [userId, payload],
+  )
+  // A version without a score leaves an existing rating alone.
+  const { rows: rated } = await client.query(
+    `INSERT INTO ratings (user_id, content_id, score, rated_at)
+     SELECT $1, r.content_id, r.score, COALESCE(r.updated_at, now())
+     FROM jsonb_to_recordset($2::jsonb) AS r(${ROW_COLUMNS})
+     WHERE r.score BETWEEN 1 AND 10
+     ON CONFLICT (user_id, content_id) DO UPDATE SET score = EXCLUDED.score
+       WHERE ratings.score IS DISTINCT FROM EXCLUDED.score
+     RETURNING content_id::text AS id`,
+    [userId, payload],
+  )
+  return rated.map((row) => row.id)
+}
+
+/**
+ * Fill what an agreeing import knows and the watchlist row lacks: dates, rewatches,
+ * notes, and a score. Status and progress already match, so they stay.
+ * @param {import('pg').PoolClient} client
+ * @param {string} userId
+ * @param {ImportRow[]} rows
+ * @returns {Promise<string[]>} Titles that gained a rating.
+ */
+async function fillRows(client, userId, rows) {
+  if (!rows.length) return []
+  const payload = JSON.stringify(rows)
+  await client.query(
+    `UPDATE watchlist w SET
+       started_on = COALESCE(w.started_on, r.started_on),
+       completed_on = COALESCE(w.completed_on, r.completed_on),
+       rewatch_count = GREATEST(w.rewatch_count, r.rewatch_count),
+       notes = COALESCE(w.notes, r.notes)
+     FROM jsonb_to_recordset($2::jsonb) AS r(${ROW_COLUMNS})
+     WHERE w.user_id = $1 AND w.content_id = r.content_id`,
+    [userId, payload],
+  )
+  const { rows: rated } = await client.query(
+    `INSERT INTO ratings (user_id, content_id, score, rated_at)
+     SELECT $1, r.content_id, r.score, COALESCE(r.updated_at, now())
+     FROM jsonb_to_recordset($2::jsonb) AS r(${ROW_COLUMNS})
+     WHERE r.score BETWEEN 1 AND 10
+     ON CONFLICT (user_id, content_id) DO NOTHING
+     RETURNING content_id::text AS id`,
+    [userId, payload],
+  )
+  return rated.map((row) => row.id)
+}
+
+/**
+ * Run `work` in one transaction on a dedicated client (not startSession(): the job
+ * keeps querying afterwards and must not inherit the transaction's async context).
+ * @template T
+ * @param {(client: import('pg').PoolClient) => Promise<T>} work
+ * @returns {Promise<T>}
+ */
+async function inTransaction(work) {
   const client = await getPool().connect()
   try {
     await client.query('BEGIN')
-    const { rows: existing } = await client.query(
-      'SELECT content_id::text AS id FROM watchlist WHERE user_id = $1 AND content_id = ANY($2::uuid[])',
-      [userId, rows.map((row) => row.content_id)],
-    )
-    const already = new Set(existing.map((row) => row.id))
-
-    await client.query(
-      `INSERT INTO watchlist (
-         user_id, content_id, status, current_episode, previous_episode, current_season, notes,
-         started_on, completed_on, rewatch_count, imported_at, added_at, updated_at
-       )
-       SELECT $1, r.content_id, r.status, r.current_episode, 0, 1, r.notes,
-              r.started_on, r.completed_on, r.rewatch_count, now(),
-              LEAST(COALESCE(r.updated_at, now()), now()), LEAST(COALESCE(r.updated_at, now()), now())
-       FROM jsonb_to_recordset($2::jsonb) AS r(
-         content_id uuid, status text, current_episode int, notes text,
-         started_on date, completed_on date, rewatch_count int, updated_at timestamptz
-       )
-       ON CONFLICT (user_id, content_id) DO ${
-         overwrite
-           ? `UPDATE SET
-                status = EXCLUDED.status,
-                previous_episode = watchlist.current_episode,
-                current_episode = EXCLUDED.current_episode,
-                notes = COALESCE(EXCLUDED.notes, watchlist.notes),
-                started_on = COALESCE(EXCLUDED.started_on, watchlist.started_on),
-                completed_on = COALESCE(EXCLUDED.completed_on, watchlist.completed_on),
-                rewatch_count = GREATEST(EXCLUDED.rewatch_count, watchlist.rewatch_count),
-                imported_at = now(),
-                updated_at = now()`
-           : 'NOTHING'
-       }`,
-      [userId, payload],
-    )
-
-    // Without overwrite, titles already on the watchlist keep their rating (or lack of one).
-    const ratingRows = overwrite ? rows : rows.filter((row) => !already.has(row.content_id))
-    const { rows: rated } = await client.query(
-      `INSERT INTO ratings (user_id, content_id, score, rated_at)
-       SELECT $1, r.content_id, r.score, COALESCE(r.updated_at, now())
-       FROM jsonb_to_recordset($2::jsonb) AS r(content_id uuid, score int, updated_at timestamptz)
-       WHERE r.score BETWEEN 1 AND 10
-       ON CONFLICT (user_id, content_id) DO ${
-         overwrite
-           ? 'UPDATE SET score = EXCLUDED.score WHERE ratings.score IS DISTINCT FROM EXCLUDED.score'
-           : 'NOTHING'
-       }
-       RETURNING content_id::text AS id`,
-      [userId, JSON.stringify(ratingRows)],
-    )
-
+    const result = await work(client)
     await client.query('COMMIT')
-    const added = rows.filter((row) => !already.has(row.content_id)).length
-    const updated = overwrite ? rows.length - added : 0
-    return {
-      added,
-      updated,
-      unchanged: rows.length - added - updated,
-      ratingIds: rated.map((row) => row.id),
-    }
+    return result
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {})
     throw error
   } finally {
     client.release()
   }
+}
+
+/**
+ * The user's watchlist rows (status, progress, score) for these titles.
+ * @param {string} userId
+ * @param {string[]} contentIds
+ * @returns {Promise<Map<string, { status: string, current_episode: number, score: number|null }>>}
+ */
+async function loadExisting(userId, contentIds) {
+  const { rows } = await query(
+    `SELECT w.content_id::text AS id, w.status, w.current_episode, r.score
+     FROM watchlist w
+     LEFT JOIN ratings r ON r.user_id = w.user_id AND r.content_id = w.content_id
+     WHERE w.user_id = $1 AND w.content_id = ANY($2::uuid[])`,
+    [userId, contentIds],
+  )
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      {
+        status: row.status,
+        current_episode: Number(row.current_episode),
+        score: row.score != null ? Number(row.score) : null,
+      },
+    ]),
+  )
 }
 
 const SCORE_TABLES = { movie: 'movies', series: 'series', special: 'specials' }
@@ -875,24 +1084,29 @@ async function refreshScores(contentIds) {
 }
 
 /**
- * Match, optionally grow the catalog, and write. Exported for tests and scripts.
+ * Match entries from every source, optionally grow the catalog, then add new titles,
+ * fill agreeing ones, and save clashes for the user to resolve. Exported for tests
+ * and scripts.
  * @param {string} userId
- * @param {ImportEntry[]} entries
- * @param {{ overwrite?: boolean, addMissing?: boolean, onProgress?: (phase: string, done?: number, total?: number) => void }} [options]
+ * @param {ImportEntry[]} entries - From every source, in source order.
+ * @param {{ addMissing?: boolean, onProgress?: (phase: string, done?: number, total?: number) => void }} [options]
  * @returns {Promise<object>} The import summary.
  */
 export async function importEntries(userId, entries, options = {}) {
-  const { overwrite = false, addMissing = true, onProgress = () => {} } = options
+  const { addMissing = true, onProgress = () => {} } = options
   onProgress('matching')
   let { matched, unmatched } = matchEntries(entries, await loadCatalogTitles(entries))
 
   let catalogAdded = 0
+  let catalogLinked = 0
   if (addMissing && unmatched.length) {
-    catalogAdded = await addMissingAnime(unmatched, {
+    const result = await addMissingAnime(unmatched, {
       limit: MAX_CATALOG_ADDS,
       onProgress: (done, total) => onProgress('adding', done, total),
     })
-    if (catalogAdded) {
+    catalogAdded = result.added
+    catalogLinked = result.linked
+    if (catalogAdded || catalogLinked) {
       const retry = matchEntries(unmatched, await loadCatalogTitles(unmatched))
       matched = matched.concat(retry.matched)
       unmatched = retry.unmatched
@@ -900,27 +1114,185 @@ export async function importEntries(userId, entries, options = {}) {
   }
 
   onProgress('saving')
-  const merged = mergeByTitle(matched)
-  const rows = merged.map(({ entry, title }) => toWatchlistRow(entry, title))
-  const written = await writeRows(userId, rows, { overwrite })
-  await refreshScores(written.ratingIds)
+  const versionsByTitle = new Map()
+  for (const { entry, title } of mergeByTitle(matched)) {
+    const versions = versionsByTitle.get(title.id) || []
+    versions.push({ source: entry.source, row: toWatchlistRow(entry, title) })
+    versionsByTitle.set(title.id, versions)
+  }
+  const existing = await loadExisting(userId, [...versionsByTitle.keys()])
+  const plan = planImport(versionsByTitle, existing)
+
+  const ratingIds = await inTransaction(async (client) => {
+    const added = await upsertRows(client, userId, plan.add, { replace: false })
+    const filled = await fillRows(client, userId, plan.fill)
+    if (plan.clashes.length) {
+      await client.query(
+        `INSERT INTO watchlist_import_conflicts (user_id, content_id, options)
+         SELECT $1, c.content_id, c.options
+         FROM jsonb_to_recordset($2::jsonb) AS c(content_id uuid, options jsonb)
+         ON CONFLICT (user_id, content_id)
+           DO UPDATE SET options = EXCLUDED.options, created_at = now()`,
+        [
+          userId,
+          JSON.stringify(
+            plan.clashes.map((clash) => ({ content_id: clash.contentId, options: clash.options })),
+          ),
+        ],
+      )
+    }
+    return [...added, ...filled]
+  })
+  await refreshScores(ratingIds)
 
   return {
     total: entries.length,
     matched: matched.length,
-    added: written.added,
-    updated: written.updated,
-    unchanged: written.unchanged,
-    rated: written.ratingIds.length,
+    added: plan.add.length,
+    unchanged: plan.fill.length,
+    conflicts: plan.clashes.length,
+    rated: ratingIds.length,
     catalogAdded,
+    catalogLinked,
     notFound: unmatched.length,
     notFoundTitles: unmatched.slice(0, 50).map((entry) => entry.title),
   }
 }
 
+// ---------------------------------------------------------------------------
+// Clashes
+// ---------------------------------------------------------------------------
+
 /**
- * Check a request and return the loader for its source. Problems the user can fix
- * (bad username, unreadable file) throw here, before a job starts.
+ * @param {object} option - A stored ImportOption row (snake_case).
+ * @returns {object} The camelCase shape the page shows.
+ */
+function publicOption(option) {
+  return {
+    key: option.key,
+    sources: option.sources,
+    status: option.status,
+    currentEpisode: Number(option.current_episode || 0),
+    score: option.score ?? null,
+    startedOn: option.started_on || null,
+    completedOn: option.completed_on || null,
+    rewatchCount: Number(option.rewatch_count || 0),
+  }
+}
+
+/**
+ * Unresolved clashes, oldest first, with the title and the user's current row (if any).
+ * @param {string} userId
+ * @returns {Promise<object[]>}
+ */
+export async function listImportConflicts(userId) {
+  const { rows } = await query(
+    `SELECT c.content_id::text AS id, c.options, c.created_at,
+            wk.title, wk.poster_path, wk.content_type, wk.episode_count,
+            w.status AS current_status, w.current_episode AS current_episode, r.score AS current_score
+     FROM watchlist_import_conflicts c
+     JOIN works wk ON wk.id = c.content_id
+     LEFT JOIN watchlist w ON w.user_id = c.user_id AND w.content_id = c.content_id
+     LEFT JOIN ratings r ON r.user_id = c.user_id AND r.content_id = c.content_id
+     WHERE c.user_id = $1
+     ORDER BY c.created_at, wk.title`,
+    [userId],
+  )
+  return rows.map((row) => ({
+    contentId: row.id,
+    title: row.title,
+    posterPath: row.poster_path || '',
+    contentType: row.content_type,
+    episodeCount: row.episode_count != null ? Number(row.episode_count) : null,
+    current: row.current_status
+      ? {
+          status: row.current_status,
+          currentEpisode: Number(row.current_episode || 0),
+          score: row.current_score != null ? Number(row.current_score) : null,
+        }
+      : null,
+    options: (row.options || []).map(publicOption),
+  }))
+}
+
+/**
+ * Settle clashes. `choice` is an option key to use that version, or `keep` to leave
+ * the watchlist as it is (for a title not on it yet, that means don't add it).
+ * @param {string} userId
+ * @param {Array<{ contentId: string, choice: string }>} choices
+ * @returns {Promise<{ resolved: number, remaining: number }>}
+ */
+export async function resolveImportConflicts(userId, choices) {
+  const wanted = new Map()
+  for (const { contentId, choice } of choices || []) {
+    if (typeof contentId === 'string' && typeof choice === 'string') wanted.set(contentId, choice)
+  }
+  if (!wanted.size) throw new ImportError('Choose a version for at least one title.')
+
+  const { rows } = await query(
+    `SELECT content_id::text AS id, options FROM watchlist_import_conflicts
+     WHERE user_id = $1 AND content_id = ANY($2::uuid[])`,
+    [userId, [...wanted.keys()]],
+  )
+  const apply = []
+  const settled = []
+  for (const row of rows) {
+    const choice = wanted.get(row.id)
+    if (choice === 'keep') {
+      settled.push(row.id)
+      continue
+    }
+    const option = (row.options || []).find((candidate) => candidate.key === choice)
+    if (!option) continue
+    apply.push({ ...stripOption(option), content_id: row.id })
+    settled.push(row.id)
+  }
+
+  const ratingIds = await inTransaction(async (client) => {
+    const rated = await upsertRows(client, userId, apply, { replace: true })
+    await client.query(
+      'DELETE FROM watchlist_import_conflicts WHERE user_id = $1 AND content_id = ANY($2::uuid[])',
+      [userId, settled],
+    )
+    return rated
+  })
+  await refreshScores(ratingIds)
+
+  const { rows: left } = await query(
+    'SELECT count(*)::int AS count FROM watchlist_import_conflicts WHERE user_id = $1',
+    [userId],
+  )
+  return { resolved: settled.length, remaining: left[0].count }
+}
+
+// ---------------------------------------------------------------------------
+// Requests and jobs
+// ---------------------------------------------------------------------------
+
+/**
+ * Check a request's sources and return their loaders in run order (AniList, then
+ * MyAnimeList, then TMDB). Problems the user can fix (bad username, unreadable
+ * file, the same site twice) throw here, before a job starts.
+ * @param {Array<{ source: string, username?: string, file?: { xml?: string, gzipBase64?: string }, requestToken?: string }>} sources
+ * @returns {Array<{ source: string, load: () => Promise<ImportEntry[]> }>}
+ */
+export function prepareSources(sources) {
+  if (!Array.isArray(sources) || !sources.length) {
+    throw new ImportError('Enter at least one username to import.')
+  }
+  const sites = new Set()
+  const prepared = []
+  for (const item of sources) {
+    const site = item?.source === 'mal_file' ? 'mal' : item?.source
+    if (sites.has(site)) throw new ImportError('Each site can only be imported once at a time.')
+    sites.add(site)
+    prepared.push({ source: item.source, load: prepareImport(item.source, item) })
+  }
+  return prepared.sort((a, b) => SOURCE_ORDER.indexOf(a.source) - SOURCE_ORDER.indexOf(b.source))
+}
+
+/**
+ * The loader for one source.
  * @param {string} source
  * @param {{ username?: string, file?: { xml?: string, gzipBase64?: string }, requestToken?: string }} body
  * @returns {() => Promise<ImportEntry[]>}
@@ -948,9 +1320,31 @@ export function prepareImport(source, body = {}) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Jobs
-// ---------------------------------------------------------------------------
+/** Watchlist columns the import writes (db/schema.sql). */
+const IMPORT_COLUMNS = ['started_on', 'completed_on', 'rewatch_count', 'imported_at']
+let schemaReady = false
+
+/**
+ * Refuse to start when the database predates the import's schema, before anything
+ * (including catalog additions) is written. Checked once per process once it passes.
+ * @returns {Promise<void>}
+ */
+export async function assertImportSchema() {
+  if (schemaReady) return
+  const { rows } = await query(
+    `SELECT
+       (SELECT count(*)::int FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'watchlist'
+          AND column_name = ANY($1)) AS columns,
+       to_regclass('watchlist_import_conflicts') IS NOT NULL AS conflicts_table`,
+    [IMPORT_COLUMNS],
+  )
+  if (rows[0].columns < IMPORT_COLUMNS.length || !rows[0].conflicts_table) {
+    console.error('Watchlist import: database schema is out of date; run `npm run db:schema`.')
+    throw new ImportError("Importing isn't available yet. Nothing was changed.", 503)
+  }
+  schemaReady = true
+}
 
 /** @type {Map<string, object>} userId -> job */
 const jobs = new Map()
@@ -980,30 +1374,34 @@ export function getImportJob(userId) {
 }
 
 /**
- * Start an import in the background. `load` reads the source; its ImportErrors
- * become the job's error message.
+ * Start an import in the background. Sources are read in order; one that fails
+ * (private list, unknown user) is reported and the rest still import.
  * @param {string} userId
- * @param {'anilist'|'mal'|'mal_file'|'tmdb'} source
- * @param {() => Promise<ImportEntry[]>} load
- * @param {{ overwrite?: boolean, addMissing?: boolean }} [options]
+ * @param {Array<{ source: string, load: () => Promise<ImportEntry[]> }>} sources - From `prepareSources`.
+ * @param {{ addMissing?: boolean }} [options]
  * @returns {object} The new job.
  */
-export function startImportJob(userId, source, load, options = {}) {
+export function startImportJob(userId, sources, options = {}) {
   const key = String(userId)
   const current = jobs.get(key)
   if (current?.state === 'running') {
     throw new ImportError('An import is already running. Wait for it to finish.', 409)
   }
-  if (current?.finishedAt && Date.now() - new Date(current.finishedAt).getTime() < IMPORT_COOLDOWN_MS) {
+  if (
+    current?.finishedAt &&
+    Date.now() - new Date(current.finishedAt).getTime() < IMPORT_COOLDOWN_MS
+  ) {
     throw new ImportError('You just imported a list. Try again in a minute.', 429)
   }
   const job = {
     userId: key,
-    source,
+    sources: sources.map((item) => item.source),
+    source: sources[0]?.source || null,
     state: 'running',
     phase: 'reading',
     done: 0,
     total: 0,
+    sourceResults: [],
     result: null,
     error: null,
     startedAt: new Date().toISOString(),
@@ -1013,8 +1411,30 @@ export function startImportJob(userId, source, load, options = {}) {
 
   const run = async () => {
     try {
-      const entries = await load()
-      if (!entries.length) throw new ImportError('That list is empty, so there was nothing to import.')
+      const entries = []
+      for (const item of sources) {
+        job.source = item.source
+        job.phase = 'reading'
+        try {
+          const loaded = await item.load()
+          entries.push(...loaded)
+          job.sourceResults.push({ source: item.source, entries: loaded.length, error: null })
+        } catch (error) {
+          if (!(error instanceof ImportError))
+            console.error(`Watchlist import (${item.source}):`, error)
+          job.sourceResults.push({
+            source: item.source,
+            entries: 0,
+            error: error instanceof ImportError ? error.message : "Couldn't read that list.",
+          })
+        }
+      }
+      if (!entries.length) {
+        const reasons = job.sourceResults.map((result) => result.error).filter(Boolean)
+        throw new ImportError(
+          reasons[0] || 'Those lists are empty, so there was nothing to import.',
+        )
+      }
       job.total = entries.length
       job.result = await importEntries(key, entries, {
         ...options,
@@ -1025,10 +1445,15 @@ export function startImportJob(userId, source, load, options = {}) {
         },
       })
       job.state = 'done'
+      await query('UPDATE users SET watchlist_imported_at = now() WHERE id = $1', [key]).catch(
+        (error) => console.warn(`Watchlist import: could not record the import: ${error.message}`),
+      )
     } catch (error) {
       job.state = 'failed'
       job.error =
-        error instanceof ImportError ? error.message : 'The import failed and your watchlist was not changed. Try again later.'
+        error instanceof ImportError
+          ? error.message
+          : 'The import failed and your watchlist was not changed. Try again later.'
       if (!(error instanceof ImportError)) console.error('Watchlist import failed:', error)
     } finally {
       job.phase = null
