@@ -58,6 +58,7 @@ import {
 import { bridgeTmdbTitles, linkMalTitles } from '../services/anilistLinking.js'
 import { importPopularAnilist } from '../services/anilistImport.js'
 import { mergeAllFranchiseCharacters } from '../services/characterMerge.js'
+import { applyFranchisePlan, loadFranchisePlan } from '../services/franchiseBuilder.js'
 import * as repair from '../services/catalogRepair.js'
 
 dotenv.config()
@@ -318,7 +319,7 @@ async function reloadTitle(id, populator, byMal) {
       if (!details) continue
       const converted = unifiedContentService.convertTmdbToContent(details, type, { minVoteCount: 0 })
       if (!converted) continue
-      await populator.mergeTmdbIntoExisting(content, converted, details, { save: false })
+      await populator.mergeTmdbIntoExisting(content, converted, { save: false })
       tmdbOk = true
       break
     }
@@ -639,6 +640,8 @@ async function phaseCleanup() {
     populator.isLikelySameContent(left, right),
   )
   console.log(`  Merged ${titles} titles stored twice under differently spaced/cased names`)
+  const franchises = await applyFranchisePlan(await loadFranchisePlan())
+  console.log(`  Franchises: ${franchises.created} created, ${franchises.added} titles added`)
   console.log(`  Merged ${await mergeAllFranchiseCharacters()} duplicate franchise characters`)
   console.log(`  Merged ${await repair.mergeDuplicateVoices()} voice actors listed by two sources`)
   console.log(`  Removed ${await repair.dedupeVoiceCredits()} repeated voice credits`)

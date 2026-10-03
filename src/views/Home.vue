@@ -156,6 +156,18 @@
               </h2>
               <p v-if="character.nativeName" class="character-native">{{ character.nativeName }}</p>
               <p v-if="characterBio" class="character-blurb">{{ characterBio }}</p>
+              <div
+                v-if="characterFranchiseNames.length"
+                class="character-titles"
+                data-testid="character-of-the-day-franchises"
+              >
+                <span class="titles-label">
+                  {{ characterFranchiseNames.length === 1 ? 'Franchise' : 'Franchises' }}
+                </span>
+                <span v-for="name in characterFranchiseNames" :key="name" class="franchise-chip">
+                  {{ name }}
+                </span>
+              </div>
               <div v-if="characterTitles.length" class="character-titles">
                 <span class="titles-label">Appears in</span>
                 <router-link
@@ -258,6 +270,7 @@ import type { CatalogEntity, EntityAppearance } from '@/types/content'
 import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'
 import { getDisplayTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel } from '@/utils/watchlist'
+import { characterFranchises } from '@/utils/entities'
 import {
   characterBlurb,
   describeActivity,
@@ -333,6 +346,8 @@ const characterRoute = computed(() => ({
 }))
 
 const characterBio = computed(() => characterBlurb(character.value?.about))
+
+const characterFranchiseNames = computed(() => characterFranchises(character.value))
 
 const characterTitles = computed(() => {
   const seen = new Set<string>()
@@ -907,6 +922,15 @@ onUnmounted(() => {
 
 .title-chip:hover {
   background: rgba(224, 122, 95, 0.2);
+}
+
+.franchise-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(90deg, var(--coral-light), var(--tan-primary));
 }
 
 /* Release updates */

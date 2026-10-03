@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { beforeEach, describe, it } from 'node:test'
 import {
+  anilistFullName,
   anilistImage,
   anilistRequest,
   anilistStatus,
@@ -314,5 +315,23 @@ describe('fetchAnilistMediaBatch', () => {
     await fetchAnilistMediaBatch({ malIds: [2] }, { fetchImpl, withCharacters: true })
     assert.equal(calls.length, 2)
     assert.match(calls[1].query, /characters\(/)
+  })
+})
+
+describe('anilistFullName', () => {
+  it('keeps the middle name AniList drops from `full`', () => {
+    assert.equal(
+      anilistFullName({ first: 'Luffy', middle: 'D.', last: 'Monkey', full: 'Luffy Monkey' }),
+      'Luffy D. Monkey',
+    )
+  })
+
+  it('uses `full` when it already has the middle name or there is none', () => {
+    assert.equal(
+      anilistFullName({ first: 'Ace', middle: 'D.', last: 'Portgas', full: 'Ace D. Portgas' }),
+      'Ace D. Portgas',
+    )
+    assert.equal(anilistFullName({ first: 'Subaru', last: 'Natsuki', full: 'Subaru Natsuki' }), 'Subaru Natsuki')
+    assert.equal(anilistFullName({ full: 'Pikachu' }), 'Pikachu')
   })
 })

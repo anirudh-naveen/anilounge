@@ -85,6 +85,19 @@ const canonicalKey = (value?: string) =>
     .trim()
 
 /**
+ * Franchises a character belongs to, through the titles they appear in.
+ * Appearances arrive main roles first, so the character's home franchise leads.
+ */
+export function characterFranchises(entity?: CatalogEntity | null): string[] {
+  const names = new Set<string>()
+  for (const row of entity?.appearances || []) {
+    const content = row.content
+    if (content && typeof content === 'object' && content.franchise) names.add(content.franchise)
+  }
+  return [...names]
+}
+
+/**
  * Unique voice credits for a character, Japanese first.
  */
 export function collectVoiceActors(entity?: CatalogEntity | null): EntityVoiceCredit[] {
