@@ -371,9 +371,12 @@ describe('studio lookups', () => {
 describe('franchise character name merge keys', () => {
   it('treats swapped first/last names as the same character', () => {
     assert.equal(canonicalCharacterName('Natsuki, Subaru'), 'Subaru Natsuki')
-    assert.equal(canonicalCharacterNameKey('Natsuki, Subaru'), 'subaru natsuki')
-    assert.equal(canonicalCharacterNameKey('Subaru Natsuki'), 'subaru natsuki')
+    assert.equal(canonicalCharacterNameKey('Natsuki, Subaru'), 'natsuki subaru')
+    assert.equal(canonicalCharacterNameKey('Subaru Natsuki'), 'natsuki subaru')
     assert.equal(characterNamesEqual('Natsuki, Subaru', 'Subaru Natsuki'), true)
+    assert.equal(characterNamesEqual('Luffy D. Monkey', 'Monkey D. Luffy'), true)
+    assert.equal(characterNamesEqual('Luffy Monkey D.', 'Monkey D. Luffy'), true)
+    assert.equal(characterNamesEqual('Luffy Monkey', 'Monkey D. Luffy'), false)
     assert.equal(characterNamesEqual('Rem', 'Ram'), false)
   })
 
@@ -425,6 +428,25 @@ describe('compareCharactersForContent admin order', () => {
     assert.deepEqual(
       list.map((entry) => entry.name),
       ['First', 'Second', 'Main A'],
+    )
+  })
+})
+
+describe('serializeEntity character names', () => {
+  it('shows the English name set on the row over the source name', () => {
+    const out = serializeEntity({
+      _id: 'c1',
+      entityType: 'character',
+      name: 'Luffy D. Monkey',
+      englishName: 'Monkey D. Luffy',
+    })
+    assert.equal(out.name, 'Monkey D. Luffy')
+  })
+
+  it('falls back to the source name without an English name', () => {
+    assert.equal(
+      serializeEntity({ _id: 'c2', entityType: 'character', name: 'Natsuki, Subaru' }).name,
+      'Subaru Natsuki',
     )
   })
 })

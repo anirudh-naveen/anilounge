@@ -293,12 +293,14 @@ export function canonicalCharacterName(value) {
 }
 
 /**
- * Folded key so `"Natsuki, Subaru"` and `"Subaru Natsuki"` compare equal.
+ * Folded key so `"Natsuki, Subaru"`, `"Subaru Natsuki"` and `"Natsuki Subaru"`
+ * compare equal. Name parts are sorted because sources disagree on order
+ * (AniList "Luffy D. Monkey", TMDB "Monkey D. Luffy").
  * @param {unknown} value
  * @returns {string}
  */
 export function canonicalCharacterNameKey(value) {
-  return foldEntityName(canonicalCharacterName(value))
+  return foldEntityName(canonicalCharacterName(value)).split(' ').sort().join(' ')
 }
 
 /**
@@ -796,7 +798,8 @@ export function serializeEntity(doc, options = {}) {
 function serializedEntityName(raw) {
   if (raw.entityType === 'voice_actor') return displayPersonName(raw.name)
   if (raw.entityType === 'studio') return displayStudioName(raw.name)
-  return canonicalCharacterName(raw.name) || raw.name
+  // An English name set on the row ("Monkey D. Luffy") beats the source's order.
+  return canonicalCharacterName(raw.englishName) || canonicalCharacterName(raw.name) || raw.name
 }
 
 function serializedEntityImage(raw) {
