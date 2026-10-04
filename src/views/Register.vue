@@ -154,7 +154,13 @@ const handleRegister = async () => {
   padding: 2rem 0;
 }
 
+.register-page .container {
+  width: 100%;
+  padding: 0 1rem;
+}
+
 .register-container {
+  margin: 0 auto;
   background: var(--bg-card);
   border-radius: 16px;
   padding: 3rem;
@@ -246,9 +252,15 @@ const handleRegister = async () => {
 }
 
 @media (max-width: 480px) {
+  /* Start under the header instead of centering in the full screen height. */
+  .register-page {
+    min-height: 0;
+    align-items: flex-start;
+    padding: 1.5rem 0 2rem;
+  }
+
   .register-container {
-    padding: 2rem;
-    margin: 1rem;
+    padding: 2rem 1.5rem;
   }
 }
 </style>

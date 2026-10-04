@@ -185,7 +185,13 @@ const resetTwoFactor = () => {
   padding: 2rem 0;
 }
 
+.login-page .container {
+  width: 100%;
+  padding: 0 1rem;
+}
+
 .login-container {
+  margin: 0 auto;
   background: var(--bg-card);
   border-radius: 16px;
   padding: 3rem;
@@ -300,9 +306,15 @@ const resetTwoFactor = () => {
 }
 
 @media (max-width: 480px) {
+  /* Start under the header instead of centering in the full screen height. */
+  .login-page {
+    min-height: 0;
+    align-items: flex-start;
+    padding: 1.5rem 0 2rem;
+  }
+
   .login-container {
-    padding: 2rem;
-    margin: 1rem;
+    padding: 2rem 1.5rem;
   }
 }
 </style>
