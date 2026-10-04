@@ -712,6 +712,7 @@ export const addToWatchlist = async (req, res) => {
       existingItem.totalSeasons = maxSeasons
       existingItem.notes = notes || existingItem.notes
       applyListDetails(existingItem, req.body)
+      stampListDates(existingItem)
       existingItem.updatedAt = new Date()
     } else {
       user.watchlist.push({
@@ -731,6 +732,7 @@ export const addToWatchlist = async (req, res) => {
         updatedAt: new Date(),
       })
     }
+    stampListDates(user.watchlist[user.watchlist.length - 1])
 
     syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
     await applyContentRatingChange(
@@ -937,6 +939,7 @@ export const updateWatchlistItem = async (req, res) => {
     if (currentSeason !== undefined) watchlistItem.currentSeason = currentSeason
     if (notes !== undefined) watchlistItem.notes = notes
     applyListDetails(watchlistItem, req.body)
+    stampListDates(watchlistItem)
 
     if (!watchlistItem.totalEpisodes) watchlistItem.totalEpisodes = maxEpisodes
     if (!watchlistItem.totalSeasons) watchlistItem.totalSeasons = maxSeasons
@@ -992,6 +995,22 @@ function applyListDetails(item, body) {
   if (body.startedOn !== undefined) item.startedOn = body.startedOn || null
   if (body.completedOn !== undefined) item.completedOn = body.completedOn || null
   if (body.rewatchCount !== undefined) item.rewatchCount = Number(body.rewatchCount)
+}
+
+/**
+ * Fill in start/finish dates the user left empty: started today once there is
+ * progress (or the title is being watched), finished today once completed.
+ * Dates the user or an import already set are kept.
+ *
+ * @param {object} item - Watchlist row, mutated in place.
+ * @param {Date} [now=new Date()]
+ * @returns {void}
+ */
+function stampListDates(item, now = new Date()) {
+  const today = now.toISOString().slice(0, 10)
+  const started = item.currentEpisode > 0 || ['watching', 'completed'].includes(item.status)
+  if (!item.startedOn && started) item.startedOn = today
+  if (!item.completedOn && item.status === 'completed') item.completedOn = today
 }
 
 function setWatchedEpisode(item, episode) {
