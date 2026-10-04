@@ -1172,6 +1172,7 @@ const handleImageError = (event: Event) => {
   font-weight: 650;
   color: var(--text-primary);
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .private-badge {
@@ -1405,6 +1406,7 @@ const handleImageError = (event: Event) => {
 
 .tab-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2rem;
 }
 
@@ -1643,6 +1645,7 @@ const handleImageError = (event: Event) => {
 }
 
 .stat-card {
+  min-width: 0;
   padding: 1.25rem 1.4rem;
 }
 
@@ -2129,6 +2132,14 @@ textarea.form-control {
     padding-top: 0;
   }
 
+  .hero-info {
+    align-self: stretch;
+  }
+
+  .hero-info h1 {
+    font-size: clamp(1.5rem, 7vw, 2rem);
+  }
+
   .hero-name-row,
   .genre-tags {
     justify-content: center;
@@ -2144,7 +2155,7 @@ textarea.form-control {
   }
 
   .stat-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .poster-grid {

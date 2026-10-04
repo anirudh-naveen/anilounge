@@ -1,7 +1,7 @@
 /**
  * useTheme.ts — light/dark theme preference (composable).
  *
- * Shared state for the navbar toggle and the Settings appearance picker. The
+ * Shared state for the Settings appearance picker (App.vue initializes it). The
  * choice is `light`, `dark`, or `system` (follows the OS), saved in localStorage
  * as a display preference, and applied as `data-theme` on <html>. index.html
  * applies the saved theme before first paint so pages do not flash.
