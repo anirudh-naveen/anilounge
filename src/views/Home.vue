@@ -493,6 +493,7 @@ onUnmounted(() => {
 .home-sidebar {
   position: sticky;
   top: 96px;
+  min-width: 0;
 }
 
 .panel {
@@ -1114,7 +1115,7 @@ onUnmounted(() => {
 
 @media (max-width: 640px) {
   .home-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .home-sidebar {

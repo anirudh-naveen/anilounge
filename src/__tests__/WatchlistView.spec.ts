@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import Watchlist from '@/views/Watchlist.vue'
 
 const loadWatchlist = vi.fn().mockResolvedValue(undefined)
+const updateWatchlistItem = vi.fn().mockResolvedValue(true)
 
 const watchlist = [
   {
@@ -26,6 +27,7 @@ const watchlist = [
       overview: 'An elf journeys after the hero party disbands.',
       contentType: 'tv',
       episodeCount: 28,
+      seasonCount: 2,
       genres: [],
     },
     status: 'watching',
@@ -43,6 +45,7 @@ vi.mock('@/stores/content', () => ({
   useContentStore: () => ({
     watchlist,
     loadWatchlist,
+    updateWatchlistItem,
     scrollToTop: vi.fn(),
   }),
 }))
@@ -78,6 +81,7 @@ const mountPage = async () => {
 describe('Watchlist status sections', () => {
   beforeEach(() => {
     loadWatchlist.mockClear()
+    updateWatchlistItem.mockClear()
     localStorage.clear()
   })
 
@@ -130,5 +134,32 @@ describe('Watchlist status sections', () => {
     const wrapper = await mountPage()
     const progress = wrapper.get('.episode-progress').text().replace(/\s+/g, '')
     expect(progress).toBe('4/28🆕')
+  })
+
+  it('puts progress first and tucks dates and title info into collapsed sections', async () => {
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="watchlist-section-watching"] .item-header').trigger('click')
+
+    const details = wrapper.get('.details-content')
+    expect(details.element.firstElementChild?.classList.contains('user-data')).toBe(true)
+    expect(details.find('.status-select').exists()).toBe(true)
+    expect(details.find('.episode-input').exists()).toBe(true)
+    expect(details.find('.rating-input').exists()).toBe(true)
+    expect(details.find('.more-details .date-input').exists()).toBe(true)
+    expect(details.find('details.content-description').exists()).toBe(true)
+  })
+
+  it('saves the chosen season with the rest of the progress', async () => {
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="watchlist-section-watching"] .item-header').trigger('click')
+
+    await wrapper.get('.season-select').setValue('2')
+    await wrapper.get('.save-watch-btn').trigger('click')
+    await flushPromises()
+
+    expect(updateWatchlistItem).toHaveBeenCalledWith(
+      'tv-1',
+      expect.objectContaining({ currentSeason: 2, currentEpisode: 4 }),
+    )
   })
 })
