@@ -65,13 +65,9 @@ describe('App', () => {
     expect(wrapper.find('[data-testid="chat-launcher"]').exists()).toBe(false)
   })
 
-  it('switches the page to dark mode from the navbar toggle', async () => {
-    document.documentElement.dataset.theme = 'light'
+  it('does not show a theme toggle in the navbar', async () => {
     const wrapper = await mountApp()
-    await wrapper.get('[data-testid="theme-toggle"]').trigger('click')
-    expect(document.documentElement.dataset.theme).toBe('dark')
-    await wrapper.get('[data-testid="theme-toggle"]').trigger('click')
-    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(wrapper.find('[data-testid="theme-toggle"]').exists()).toBe(false)
   })
 
   it('removes access tokens left in localStorage by older builds', async () => {
