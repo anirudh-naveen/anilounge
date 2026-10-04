@@ -63,7 +63,7 @@ const mountPage = async () => {
   const wrapper = mount(MovieDetails, {
     global: {
       plugins: [router],
-      stubs: { StatusDropdown: true, EntityCastRow: true },
+      stubs: { EntityCastRow: true },
     },
   })
   await flushPromises()
@@ -77,20 +77,18 @@ describe('MovieDetails watchlist action', () => {
     loadWatchlist.mockClear()
   })
 
-  it('shows Add to Watchlist when the title is not saved', async () => {
+  it('offers Add to Watchlist in the page when the title is not saved', async () => {
     const wrapper = await mountPage()
-    expect(wrapper.get('[data-testid="watchlist-action"]').text()).toContain('Add to Watchlist')
+    expect(wrapper.get('[data-testid="watchlist-panel"]').text()).toContain('Add to Watchlist')
+    expect(wrapper.find('[data-testid="watchlist-save"]').exists()).toBe(false)
   })
 
-  it('shows the current status and opens the editor when the title is saved', async () => {
-    getWatchlistItem.mockReturnValue({ status: 'watching' })
+  it('shows the current status and the editor in the page when the title is saved', async () => {
+    getWatchlistItem.mockReturnValue({ status: 'watching', currentEpisode: 0 })
     const wrapper = await mountPage()
 
-    const button = wrapper.get('[data-testid="watchlist-action"]')
-    expect(button.text()).toContain('Watching')
-    expect(button.text()).not.toContain('In Watchlist')
-
-    await button.trigger('click')
-    expect(wrapper.find('status-dropdown-stub').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="watchlist-panel-status"]').text()).toBe('Watching')
+    expect(wrapper.find('[data-testid="watchlist-save"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="watchlist-add"]').exists()).toBe(false)
   })
 })

@@ -106,21 +106,18 @@
 
           <!-- Title: Actions -->
           <div class="show-actions">
-            <button
-              v-if="authStore.isAuthenticated"
-              data-testid="watchlist-action"
-              @click="showStatusDropdown = true"
-              :class="
-                isInWatchlist ? 'btn-secondary watchlist-status' : 'btn-primary add-to-watchlist'
-              "
-            >
-              {{ isInWatchlist ? watchlistStatusLabel : 'Add to Watchlist' }}
-            </button>
-
             <button @click="shareShow" class="btn-outline">Share</button>
           </div>
         </div>
       </div>
+
+      <!-- Title: Watchlist -->
+      <WatchlistPanel
+        :content-id="show._id"
+        content-type="tv"
+        :total-episodes="show.episodeCount || show.malEpisodes || 0"
+        :total-seasons="show.seasonCount || 1"
+      />
 
       <!-- Body -->
       <!-- Title: Overview -->
@@ -276,19 +273,11 @@
 
       <StudioLinks :content="show" />
     </div>
-
-    <!-- Title: Watchlist -->
-    <StatusDropdown
-      v-if="showStatusDropdown"
-      :show-dropdown="showStatusDropdown"
-      :content-id="show?._id || ''"
-      :content-type="'tv'"
-      @close="showStatusDropdown = false"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
+import { goBackOr } from '@/utils/navigation'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
@@ -299,7 +288,7 @@ import {
   getCardContentTypeDisplay,
   getDetailsRouteName,
 } from '@/services/api'
-import StatusDropdown from '@/components/StatusDropdown.vue'
+import WatchlistPanel from '@/components/WatchlistPanel.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EpisodeRow from '@/components/EpisodeRow.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
@@ -314,7 +303,6 @@ import type {
 import { useEntityStore } from '@/stores/entities'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
-import { getWatchlistStatusLabel } from '@/utils/watchlist'
 import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airing'
 import { findRouteSeason, formatSeasonLabel, seasonContent } from '@/utils/episodes'
 import {
@@ -334,7 +322,6 @@ const entityStore = useEntityStore()
 const show = ref<UnifiedContent | null>(null)
 const loading = ref(true)
 const error = ref('')
-const showStatusDropdown = ref(false)
 const relatedContent = ref<{
   sequels: UnifiedContent[]
   prequels: UnifiedContent[]
@@ -371,12 +358,6 @@ const seasonLabel = computed(() =>
     ? formatSeasonLabel(selectedSeasonInfo.value)
     : '',
 )
-
-const watchlistItem = computed(() =>
-  show.value ? contentStore.getWatchlistItem(show.value._id) : undefined,
-)
-const isInWatchlist = computed(() => Boolean(watchlistItem.value))
-const watchlistStatusLabel = computed(() => getWatchlistStatusLabel(watchlistItem.value?.status))
 
 const getDisplayScore = (content: UnifiedContent) => {
   const average = getWeightedAverage(content)
@@ -487,7 +468,10 @@ const selectSeason = (seasonNumber: number) => {
   void router.replace({ name: 'TVShowDetails', params: { id }, query })
 }
 
-const goBack = () => {
+const goBack = () => goBackOr(router, goBackFallback)
+
+/** Where Back goes when the page was opened directly (no in-app history). */
+const goBackFallback = () => {
   // Check if we have a previous page in the route state
   const previousPage = route.query.from as string
   if (previousPage) {

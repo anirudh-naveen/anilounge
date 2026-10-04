@@ -2593,11 +2593,11 @@ onUnmounted(() => {
 
 @media (max-width: 860px) {
   .sync-diff {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-list-panel {

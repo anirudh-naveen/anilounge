@@ -87,21 +87,13 @@
 
           <!-- Title: Actions -->
           <div class="movie-actions">
-            <button
-              v-if="authStore.isAuthenticated"
-              data-testid="watchlist-action"
-              @click="showStatusDropdown = true"
-              :class="
-                isInWatchlist ? 'btn-secondary watchlist-status' : 'btn-primary add-to-watchlist'
-              "
-            >
-              {{ isInWatchlist ? watchlistStatusLabel : 'Add to Watchlist' }}
-            </button>
-
             <button @click="shareMovie" class="btn-outline">Share</button>
           </div>
         </div>
       </div>
+
+      <!-- Title: Watchlist -->
+      <WatchlistPanel :content-id="movie._id" content-type="movie" />
 
       <!-- Body -->
       <!-- Title: Overview -->
@@ -246,20 +238,12 @@
 
       <StudioLinks :content="movie" />
     </div>
-
-    <!-- Title: Watchlist -->
-    <StatusDropdown
-      v-if="showStatusDropdown"
-      :show-dropdown="showStatusDropdown"
-      :content-id="movie?._id || ''"
-      :content-type="'movie'"
-      @close="showStatusDropdown = false"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { goBackOr } from '@/utils/navigation'
+import { ref, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
@@ -269,7 +253,7 @@ import {
   getCardContentTypeDisplay,
   getDetailsRouteName,
 } from '@/services/api'
-import StatusDropdown from '@/components/StatusDropdown.vue'
+import WatchlistPanel from '@/components/WatchlistPanel.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
@@ -277,7 +261,6 @@ import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import { useEntityStore } from '@/stores/entities'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
-import { getWatchlistStatusLabel } from '@/utils/watchlist'
 import { isUpcoming } from '@/utils/airing'
 import {
   isMovieCatalogPath,
@@ -296,7 +279,6 @@ const entityStore = useEntityStore()
 const movie = ref<UnifiedContent | null>(null)
 const loading = ref(true)
 const error = ref('')
-const showStatusDropdown = ref(false)
 const characters = ref<CatalogEntity[]>([])
 const charactersLoading = ref(false)
 const relatedContent = ref<{
@@ -308,12 +290,6 @@ const relatedContentLoading = ref(false)
 let detailsRequestId = 0
 let relatedRequestId = 0
 let charactersRequestId = 0
-
-const watchlistItem = computed(() =>
-  movie.value ? contentStore.getWatchlistItem(movie.value._id) : undefined,
-)
-const isInWatchlist = computed(() => Boolean(watchlistItem.value))
-const watchlistStatusLabel = computed(() => getWatchlistStatusLabel(watchlistItem.value?.status))
 
 const getDisplayScore = (content: UnifiedContent) => {
   const average = getWeightedAverage(content)
@@ -382,7 +358,10 @@ const loadMovie = async (movieId: string) => {
   }
 }
 
-const goBack = () => {
+const goBack = () => goBackOr(router, goBackFallback)
+
+/** Where Back goes when the page was opened directly (no in-app history). */
+const goBackFallback = () => {
   // Check if we have a previous page in the route state
   const previousPage = route.query.from as string
   if (previousPage) {
