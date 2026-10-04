@@ -100,7 +100,7 @@ const mountPage = async (path: string) => {
   const wrapper = mount(TVShowDetails, {
     global: {
       plugins: [router],
-      stubs: { StatusDropdown: true, EntityCastRow: true, StudioLinks: true },
+      stubs: { WatchlistPanel: true, EntityCastRow: true, StudioLinks: true },
     },
   })
   await flushPromises()

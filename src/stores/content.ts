@@ -639,7 +639,16 @@ export const useContentStore = defineStore('content', () => {
 
         if (itemIndex !== -1) {
           const existingItem = watchlist.value[itemIndex]
-          watchlist.value[itemIndex] = { ...existingItem, ...updates } as WatchlistItem
+          // The server fills in start/finish dates left empty, so take those from its reply.
+          const saved = response.data.data as Partial<WatchlistItem> | undefined
+          const serverDates = saved
+            ? { startedOn: saved.startedOn ?? null, completedOn: saved.completedOn ?? null }
+            : {}
+          watchlist.value[itemIndex] = {
+            ...existingItem,
+            ...updates,
+            ...serverDates,
+          } as WatchlistItem
         }
       }
 
