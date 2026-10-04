@@ -102,6 +102,7 @@
 </template>
 
 <script setup lang="ts">
+import { goBackOr } from '@/utils/navigation'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -170,7 +171,10 @@ const openCharacter = (row: { id: string }) => {
   })
 }
 
-const goBack = () => {
+const goBack = () => goBackOr(router, goBackFallback)
+
+/** Where Back goes when the page was opened directly (no in-app history). */
+const goBackFallback = () => {
   const previous = route.query.from as string
   if (previous) {
     router.push(previous)

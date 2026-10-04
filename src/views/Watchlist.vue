@@ -31,7 +31,7 @@
 
       <!-- List -->
       <!-- Title: Loading State -->
-      <div v-if="isLoading" class="loading-container">
+      <div v-if="isLoading && !contentStore.watchlist.length" class="loading-container">
         <div class="spinner"></div>
         <p>Loading your watchlist...</p>
       </div>

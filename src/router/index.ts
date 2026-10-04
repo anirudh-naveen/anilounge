@@ -10,8 +10,29 @@ import Home from '@/views/Home.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
 
+/**
+ * Wait (briefly) until the page is tall enough to scroll to `top`, so going
+ * back to a list that is still rendering lands where the user left it.
+ */
+const whenScrollable = (top: number, timeoutMs = 1500) =>
+  new Promise<void>((resolve) => {
+    const started = Date.now()
+    const check = () => {
+      const reachable = document.documentElement.scrollHeight - window.innerHeight >= top
+      if (reachable || Date.now() - started > timeoutMs) resolve()
+      else requestAnimationFrame(check)
+    }
+    check()
+  })
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  // Back/forward returns to the saved position; other navigations leave scrolling to each view.
+  async scrollBehavior(_to, _from, savedPosition) {
+    if (!savedPosition) return false
+    await whenScrollable(savedPosition.top)
+    return savedPosition
+  },
   routes: [
     {
       path: '/',
