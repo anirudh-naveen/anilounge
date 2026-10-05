@@ -142,10 +142,11 @@ function recordOutage() {
  * outage failures AniList is skipped for a cooldown.
  * @param {string} query
  * @param {object} [variables]
- * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @param {{ fetchImpl?: typeof fetch, token?: string }} [options] - `token` is an AniList
+ *   OAuth access token, sent as a Bearer header (needed for list mutations).
  * @returns {Promise<object|null>} The `data` object.
  */
-export async function anilistRequest(query, variables = {}, { fetchImpl = fetch } = {}) {
+export async function anilistRequest(query, variables = {}, { fetchImpl = fetch, token } = {}) {
   if (!anilistStatus().available) return null
   let serverRetries = 0
   for (let attempt = 0; attempt <= RETRIES; attempt += 1) {
@@ -158,7 +159,11 @@ export async function anilistRequest(query, variables = {}, { fetchImpl = fetch 
     try {
       const response = await fetchImpl(ANILIST_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ query, variables }),
         signal: controller.signal,
       })

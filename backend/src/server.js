@@ -40,6 +40,7 @@ import { ensureDemoAccount } from './services/demoAccount.js'
 import { startInactiveAccountScheduler } from './services/inactiveAccountService.js'
 import { startUnverifiedAccountScheduler } from './services/unverifiedAccountService.js'
 import { startFriendRequestCleanupScheduler } from './services/friendService.js'
+import { startAnilistSync } from './services/anilistSync.js'
 import { emailProvider } from './services/emailService.js'
 
 dotenv.config()
@@ -369,6 +370,7 @@ app
     startInactiveAccountScheduler()
     startUnverifiedAccountScheduler()
     startFriendRequestCleanupScheduler()
+    startAnilistSync()
     console.log(`Email delivery: ${emailProvider()}`)
     ensureDemoAccount()
       .then((result) => {
