@@ -83,10 +83,9 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Messages live in the Friends page's Messages tab.
       path: '/messages',
-      name: 'messages',
-      component: () => import('@/views/Messages.vue'),
-      meta: { requiresAuth: true },
+      redirect: (to) => ({ name: 'friends', query: to.query }),
     },
     {
       path: '/u/:username',

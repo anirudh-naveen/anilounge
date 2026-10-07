@@ -126,30 +126,13 @@
                       </svg>
                     </span>
                   </router-link>
-                  <router-link to="/friends" class="dropdown-item" @click="closeDropdown">
-                    <span class="item-text">Friends</span>
-                    <span class="item-icon" aria-hidden="true">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.75"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      >
-                        <circle cx="9" cy="8.5" r="3" />
-                        <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
-                        <path d="M15.5 5.75a3 3 0 0 1 0 5.5M17 14a5.5 5.5 0 0 1 3.5 5" />
-                      </svg>
-                    </span>
-                  </router-link>
                   <router-link
-                    to="/messages"
+                    to="/friends"
                     class="dropdown-item"
-                    data-testid="nav-messages"
+                    data-testid="nav-friends"
                     @click="closeDropdown"
                   >
-                    <span class="item-text">Messages</span>
+                    <span class="item-text">Friends</span>
                     <span
                       v-if="messagesStore.total"
                       class="item-count"
@@ -165,10 +148,9 @@
                         stroke-linecap="round"
                         stroke-linejoin="round"
                       >
-                        <path
-                          d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a1 1 0 0 1-1-1v-9Z"
-                        />
-                        <path d="M8.5 9h7M8.5 12h4.5" />
+                        <circle cx="9" cy="8.5" r="3" />
+                        <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+                        <path d="M15.5 5.75a3 3 0 0 1 0 5.5M17 14a5.5 5.5 0 0 1 3.5 5" />
                       </svg>
                     </span>
                   </router-link>

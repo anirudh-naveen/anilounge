@@ -1,8 +1,8 @@
 /**
- * messages.ts — Pinia store for the unread badge on the profile menu's Messages item.
+ * messages.ts — Pinia store for the unread badge on the profile menu's Friends item.
  *
  * Counts unread direct messages plus incoming friend requests (both live in the
- * Messages tab). Failures keep the last counts rather than breaking the menu.
+ * Friends page). Failures keep the last counts rather than breaking the menu.
  */
 
 import { defineStore } from 'pinia'
