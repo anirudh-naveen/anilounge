@@ -240,6 +240,18 @@ export const emailPreferencesAPI = {
   update: (changes: Partial<EmailPreferences>) => api.put('/account/email-preferences', changes),
 }
 
+/** Settings → Communication. */
+export interface CommunicationSettings {
+  /** Curses go through in private messages when both people turn this on; slurs never do. */
+  allowProfanity: boolean
+}
+
+export const communicationAPI = {
+  get: () => api.get('/account/communication'),
+
+  update: (changes: CommunicationSettings) => api.put('/account/communication', changes),
+}
+
 export const profileAPI = {
   getPublicProfile: (username: string) => api.get(`/users/${encodeURIComponent(username)}`),
 

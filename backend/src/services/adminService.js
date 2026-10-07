@@ -507,7 +507,9 @@ export async function resolveSyncChanges(actor, ids, action) {
 const USER_COLUMNS = `u.id, u.username, u.email, u.profile_picture, u.role, u.is_demo,
   u.email_verified_at, u.created_at, u.last_active_at, u.muted_until, u.mute_reason,
   u.banned_at, u.ban_reason, u.cosmetic_roles,
-  (SELECT count(*)::int FROM language_warnings w WHERE w.user_id = u.id) AS language_warnings`
+  (SELECT count(*)::int FROM language_warnings w WHERE w.user_id = u.id) AS language_warnings,
+  (SELECT count(*)::int FROM language_warnings w
+   WHERE w.user_id = u.id AND w.category = 'slur') AS slur_warnings`
 
 /**
  * @param {object} row - users row.
@@ -541,6 +543,8 @@ function adminUserView(row, owners) {
     banReason: row.ban_reason || null,
     cosmeticRoles: row.cosmetic_roles || [],
     languageWarnings: row.language_warnings || 0,
+    curseWarnings: (row.language_warnings || 0) - (row.slur_warnings || 0),
+    slurWarnings: row.slur_warnings || 0,
     flagged: (row.language_warnings || 0) > WARNING_LIMIT,
   }
 }
@@ -576,10 +580,10 @@ export async function listUsers({ q, filter, page } = {}) {
     )
   }
   const where = clauses.join(' AND ')
-  // Flagged users: most warnings first.
+  // Flagged users: most slurs first, then most warnings.
   const order =
     filter === 'flagged'
-      ? 'language_warnings DESC, lower(u.username)'
+      ? 'slur_warnings DESC, language_warnings DESC, lower(u.username)'
       : "CASE u.role WHEN 'creator' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, lower(u.username)"
 
   const [{ rows }, count] = await Promise.all([

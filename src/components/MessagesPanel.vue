@@ -145,6 +145,14 @@
             {{ thread.user.username }}
             <RoleBadge :username="thread.user.username" />
           </router-link>
+          <span
+            v-if="thread.profanityAllowed"
+            class="profanity-note social-meta"
+            title="You both allow profanity in Settings → Communication. Slurs are still blocked."
+            data-testid="profanity-allowed"
+          >
+            Profanity allowed
+          </span>
         </header>
 
         <div ref="scroller" class="thread-scroll" data-testid="thread-messages">
@@ -692,6 +700,13 @@ onUnmounted(() => {
 
 .thread-back {
   display: none;
+}
+
+.profanity-note {
+  margin-left: auto;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
 }
 
 .thread-scroll {

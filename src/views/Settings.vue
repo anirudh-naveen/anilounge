@@ -2,7 +2,8 @@
   Settings.vue — account settings view.
 
   Edit username, email, profile picture, favorite genres/studios, and
-  password. The shared demo account cannot change its password.
+  password; choose optional emails and whether to allow profanity in private
+  messages (Communication). The shared demo account cannot change its password.
   Profile-picture crop happens in a modal overlay.
 -->
 <template>
@@ -150,6 +151,35 @@
                   Sign-up and sign-in codes, unlock links, email-change notices, and account
                   deletion warnings always send, since they protect your account.
                 </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Communication -->
+        <div id="communication" class="settings-section">
+          <h2>Communication</h2>
+          <div class="settings-card">
+            <!-- Title: Allow Profanity -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <h3>Allow profanity</h3>
+                <p>
+                  In private messages, curse words go through unfiltered when both you and your
+                  friend turn this on. Slurs are always blocked, and public text is always filtered.
+                </p>
+              </div>
+              <div class="setting-control">
+                <label class="email-toggle">
+                  <input
+                    type="checkbox"
+                    :checked="communication?.allowProfanity ?? false"
+                    :disabled="!communication || communicationSaving || authStore.isDemoUser"
+                    data-testid="allow-profanity"
+                    @change="saveAllowProfanity"
+                  />
+                  <span>{{ communication?.allowProfanity ? 'On' : 'Off' }}</span>
+                </label>
               </div>
             </div>
           </div>
@@ -430,7 +460,13 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { emailPreferencesAPI, securityAPI, type EmailPreferences } from '@/services/api'
+import {
+  communicationAPI,
+  emailPreferencesAPI,
+  securityAPI,
+  type CommunicationSettings,
+  type EmailPreferences,
+} from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
@@ -703,12 +739,44 @@ const saveEmailPreference = async (key: keyof EmailPreferences, event: Event) =>
   }
 }
 
+const communication = ref<CommunicationSettings | null>(null)
+const communicationSaving = ref(false)
+
+const loadCommunication = async () => {
+  try {
+    const response = await communicationAPI.get()
+    communication.value = response.data.data as CommunicationSettings
+  } catch (err) {
+    toast.error(apiMessage(err, 'Could not load communication settings.'))
+  }
+}
+
+const saveAllowProfanity = async (event: Event) => {
+  const allowProfanity = (event.target as HTMLInputElement).checked
+  communicationSaving.value = true
+  try {
+    const response = await communicationAPI.update({ allowProfanity })
+    communication.value = response.data.data as CommunicationSettings
+    toast.success(
+      allowProfanity
+        ? 'Profanity allowed in private messages with friends who also allow it.'
+        : 'Profanity filtered in your private messages.',
+    )
+  } catch (err) {
+    ;(event.target as HTMLInputElement).checked = !allowProfanity
+    toast.error(apiMessage(err, 'Could not save communication settings.'))
+  } finally {
+    communicationSaving.value = false
+  }
+}
+
 // Initialize form data
 onMounted(() => {
   username.value = authStore.user?.username || ''
   email.value = authStore.user?.email || ''
   loadSecurityStatus()
   loadEmailPreferences()
+  loadCommunication()
   // Email footers link to /settings#email.
   if (route.hash === '#email') {
     nextTick(() => document.getElementById('email')?.scrollIntoView({ behavior: 'smooth' }))

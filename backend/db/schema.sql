@@ -624,6 +624,15 @@ CREATE TABLE IF NOT EXISTS language_warnings (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS language_warnings_user_idx ON language_warnings (user_id, created_at DESC);
+-- 'curse' or 'slur' (utils/moderation.js termCategory); older rows count as curses.
+ALTER TABLE language_warnings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'curse';
+ALTER TABLE language_warnings DROP CONSTRAINT IF EXISTS language_warnings_category_check;
+ALTER TABLE language_warnings ADD CONSTRAINT language_warnings_category_check
+  CHECK (category IN ('curse', 'slur'));
+
+-- Settings → Communication. When both people in a private chat turn this on, curses
+-- go through unmasked between them; slurs are always masked (services/messageService.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS allow_profanity BOOLEAN NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (

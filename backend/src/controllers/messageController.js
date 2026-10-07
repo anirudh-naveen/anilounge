@@ -82,4 +82,44 @@ export const sendMessage = async (req, res) => {
   }
 }
 
-export default { getConversations, getUnreadCount, getThread, sendMessage }
+/**
+ * Settings → Communication, e.g. `{ allowProfanity: false }`.
+ *
+ * @param {import('express').Request} req - `req.user`.
+ * @param {import('express').Response} res - 200 `{ data: settings }` or 500.
+ * @returns {Promise<void>}
+ */
+export const getCommunicationSettings = async (req, res) => {
+  try {
+    const data = await messageService.getCommunicationSettings(req.user._id)
+    res.json({ success: true, data })
+  } catch (error) {
+    sendError(res, error, 'Error loading communication settings')
+  }
+}
+
+/**
+ * Save Settings → Communication. The demo account can't change it.
+ *
+ * @param {import('express').Request} req - `body.allowProfanity` (boolean).
+ * @param {import('express').Response} res - 200 `{ data: settings }`, 400, 403 demo, or 500.
+ * @returns {Promise<void>}
+ */
+export const updateCommunicationSettings = async (req, res) => {
+  try {
+    assertNotDemo(req.user)
+    const data = await messageService.setCommunicationSettings(req.user._id, req.body || {})
+    res.json({ success: true, message: 'Communication settings saved.', data })
+  } catch (error) {
+    sendError(res, error, 'Error saving communication settings')
+  }
+}
+
+export default {
+  getConversations,
+  getUnreadCount,
+  getThread,
+  sendMessage,
+  getCommunicationSettings,
+  updateCommunicationSettings,
+}

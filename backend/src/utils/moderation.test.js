@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import {
   assertCleanLanguage,
   censorText,
+  classifyLanguage,
+  termCategory,
   containsBlockedLanguage,
   findBlockedTerm,
   moderationMessage,
@@ -64,4 +66,25 @@ test('assertCleanLanguage throws for express-validator', () => {
 test('moderationMessage names the first failing field', () => {
   assert.equal(moderationMessage({ Title: 'Great show', Body: 'fine' }), null)
   assert.match(moderationMessage({ Title: 'ok', Body: 'shit' }), /^Body contains/)
+})
+
+test('termCategory splits slurs from curses', () => {
+  assert.equal(termCategory('nigger'), 'slur')
+  assert.equal(termCategory('faggot'), 'slur')
+  assert.equal(termCategory('fuck'), 'curse')
+  assert.equal(termCategory('shit'), 'curse')
+})
+
+test('classifyLanguage reports a slur over an earlier curse', () => {
+  assert.deepEqual(classifyLanguage('fuck you f4ggot'), { term: 'faggot', category: 'slur' })
+  assert.deepEqual(classifyLanguage('what the fuck'), { term: 'fuck', category: 'curse' })
+  assert.equal(classifyLanguage('a classic scene'), null)
+})
+
+test('allowCurses lets curses through but never slurs', () => {
+  const options = { allowCurses: true }
+  assert.equal(findBlockedTerm('what the fuck', options), null)
+  assert.equal(findBlockedTerm('f u c k', options), null)
+  assert.equal(findBlockedTerm('damn sp1c', options), 'spic')
+  assert.equal(censorText('fuck you f4ggot', options), 'fuck you f*****')
 })
