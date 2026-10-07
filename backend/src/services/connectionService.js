@@ -82,12 +82,14 @@ export function providerSync(provider) {
 }
 
 /**
- * Whether this server has the keys a provider needs.
+ * Whether this server has the keys a provider needs. Every site also needs
+ * CONNECTIONS_SECRET, which encrypts the stored tokens.
  * @param {string} provider
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {boolean}
  */
 export function isProviderConfigured(provider, env = process.env) {
+  if (!env.CONNECTIONS_SECRET) return false
   switch (provider) {
     case 'anilist':
       return Boolean(env.ANILIST_CLIENT_ID && env.ANILIST_CLIENT_SECRET)

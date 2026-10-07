@@ -5,6 +5,7 @@ import {
   malListStatusFields,
   pollConfig,
   providerPulls,
+  syncEnabled,
   rowMatchesEntry,
   tmdbRatingValue,
   toFuzzyDate,
@@ -88,6 +89,14 @@ describe('polling', () => {
     assert.equal(providerPulls('anilist'), true)
     assert.equal(providerPulls('mal'), true)
     assert.equal(providerPulls('tmdb'), false)
+  })
+
+  it('is on unless CONNECTIONS_SYNC_ENABLED turns it off', () => {
+    assert.equal(syncEnabled({}), true)
+    assert.equal(syncEnabled({ CONNECTIONS_SYNC_ENABLED: 'true' }), true)
+    for (const off of ['false', 'FALSE', '0', 'off', ' no ']) {
+      assert.equal(syncEnabled({ CONNECTIONS_SYNC_ENABLED: off }), false)
+    }
   })
 
   it('reads its budget from the environment with safe floors', () => {
