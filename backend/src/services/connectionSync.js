@@ -36,6 +36,7 @@ import {
   RECONNECT_STATUS,
   TMDB_API,
   accessTokenFor,
+  envValue,
   isProviderConfigured,
   loadConnection,
   loadConnections,
@@ -252,7 +253,7 @@ async function malFetch(row, url, init = {}) {
 async function tmdbFetch(row, path, method, body) {
   const sessionId = await accessTokenFor(row)
   const url =
-    `${TMDB_API}${path}?api_key=${encodeURIComponent(process.env.TMDB_API_KEY || '')}` +
+    `${TMDB_API}${path}?api_key=${encodeURIComponent(envValue('TMDB_API_KEY'))}` +
     `&session_id=${encodeURIComponent(sessionId)}`
   return fetchJson(url, {
     method,

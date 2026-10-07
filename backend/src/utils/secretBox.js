@@ -12,7 +12,7 @@ import crypto from 'node:crypto'
  * @returns {Buffer}
  */
 function key(env = process.env) {
-  const secret = env.CONNECTIONS_SECRET
+  const secret = String(env.CONNECTIONS_SECRET ?? '').trim()
   if (!secret) throw new Error('CONNECTIONS_SECRET must be set to store tokens')
   return crypto.createHash('sha256').update(`anilounge-connections:${secret}`).digest()
 }
