@@ -88,6 +88,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/inbox',
+      name: 'inbox',
+      component: () => import('@/views/Inbox.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       // Messages live in the Friends page's Messages tab.
       path: '/messages',
       redirect: (to) => ({ name: 'friends', query: to.query }),

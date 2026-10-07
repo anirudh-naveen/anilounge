@@ -2,9 +2,10 @@
 <!--
   Forum.vue — forum post list (view).
 
-  Discussions and reviews, filtered by type and by tag (a title, franchise,
-  character, or one episode via `?tag=&season=&episode=`), sorted hot, new, top,
-  or by latest activity. Signed-in users write posts in the inline composer,
+  Discussions and reviews, searchable (`?q=`, matching titles, text, and tag
+  names), filtered by type and by tag (a title, franchise, character, or one
+  episode via `?tag=&season=&episode=`), sorted hot, new, top, or by latest
+  activity. Signed-in users write posts in the inline composer,
   which starts with the current tag; `?compose=1` opens it (title pages link
   here to start a discussion) and `?compose=review` opens it as a review. All filters live in the query string.
 -->
@@ -77,6 +78,19 @@
         />
       </section>
 
+      <!-- Title: Search -->
+      <div class="forum-search">
+        <input
+          v-model="searchTerm"
+          type="search"
+          class="input"
+          placeholder="Search posts, titles, and characters"
+          aria-label="Search the forum"
+          maxlength="100"
+          data-testid="forum-search"
+        />
+      </div>
+
       <!-- Title: Controls -->
       <div class="forum-controls">
         <div class="kind-tabs" role="tablist" aria-label="Post type">
@@ -138,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import ForumComposer from '@/components/ForumComposer.vue'
@@ -157,6 +171,7 @@ const KIND_FILTERS: { value: PostKind | ''; label: string }[] = [
   { value: 'discussion', label: 'Discussions' },
   { value: 'review', label: 'Reviews' },
 ]
+const SEARCH_DELAY_MS = 350
 const SORT_OPTIONS: { value: PostSort; label: string }[] = [
   { value: 'hot', label: 'Hot' },
   { value: 'new', label: 'New' },
@@ -199,16 +214,41 @@ const heading = computed(() => {
   if (kindFilter.value === 'discussion') return 'Discussions'
   return 'Forum'
 })
-const subtitle = computed(() =>
-  page.value?.tag
-    ? `Posts about ${tagLabel({ ...page.value.tag, season: season.value, episode: episode.value })}.`
-    : 'Reviews, episode threads, and franchise talk from the lounge.',
-)
-const emptyCopy = computed(() =>
-  page.value?.tag
+const query = computed(() => text(route.query.q).trim())
+const subtitle = computed(() => {
+  const about = page.value?.tag
+    ? `about ${tagLabel({ ...page.value.tag, season: season.value, episode: episode.value })}`
+    : ''
+  if (query.value) {
+    const count = page.value
+      ? `${page.value.total} ${page.value.total === 1 ? 'post' : 'posts'}`
+      : 'Posts'
+    return `${count} matching “${query.value}”${about ? ` ${about}` : ''}.`
+  }
+  return about ? `Posts ${about}.` : 'Reviews, episode threads, and franchise talk from the lounge.'
+})
+const emptyCopy = computed(() => {
+  if (query.value) return `No posts match “${query.value}”. Try other words.`
+  return page.value?.tag
     ? 'No posts here yet. Start the conversation.'
-    : 'No posts yet. Be the first to write one.',
-)
+    : 'No posts yet. Be the first to write one.'
+})
+
+/** Search box text; pushed to `?q=` after a pause so typing doesn't refetch per key. */
+const searchTerm = ref(query.value)
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+watch(searchTerm, (value) => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    const q = value.trim()
+    if (q !== query.value) router.replace(withQuery({ q: q || undefined, page: undefined }))
+  }, SEARCH_DELAY_MS)
+})
+// Back/forward or a link changed the query: show it in the box.
+watch(query, (value) => {
+  if (value !== searchTerm.value.trim()) searchTerm.value = value
+})
+onUnmounted(() => clearTimeout(searchTimer))
 
 /** Tags the composer starts with: the current filter, narrowed to its episode. */
 const presetTags = computed<PostTag[]>(() =>
@@ -238,6 +278,7 @@ const load = async () => {
       season: season.value ?? undefined,
       episode: episode.value ?? undefined,
       kind: kindFilter.value || undefined,
+      q: query.value || undefined,
       sort: sort.value,
       page: pageNumber.value,
     })
@@ -269,7 +310,15 @@ const onSaved = (post: ForumPost) => {
 }
 
 watch(
-  () => [tagId.value, season.value, episode.value, kindFilter.value, sort.value, pageNumber.value],
+  () => [
+    tagId.value,
+    season.value,
+    episode.value,
+    kindFilter.value,
+    sort.value,
+    pageNumber.value,
+    query.value,
+  ],
   load,
   { immediate: true },
 )
@@ -332,6 +381,10 @@ watch(
 
 .composer-panel .social-panel-title {
   margin-bottom: 1rem;
+}
+
+.forum-search {
+  margin-bottom: 0.85rem;
 }
 
 .forum-controls {

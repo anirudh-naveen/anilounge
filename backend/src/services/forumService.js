@@ -52,6 +52,7 @@ const HOME_LIMIT = 6
 const HIGHLIGHT_POSTS = 3
 const HIGHLIGHT_COMMENTS = 3
 const CHARACTERS_MAX = 30
+const SEARCH_WORDS_MAX = 6
 
 /**
  * Ranking for 'hot': engagement decayed by age in hours (comments weigh double).
@@ -576,9 +577,22 @@ const intOrNull = (value) => {
 }
 
 /**
+ * Words of a forum search, at most SEARCH_WORDS_MAX, each 2+ characters.
+ * @param {unknown} q
+ * @returns {string[]}
+ */
+export function searchWords(q) {
+  if (typeof q !== 'string') return []
+  return [...new Set(q.trim().slice(0, 100).toLowerCase().split(/\s+/))]
+    .filter((word) => word.length >= 2)
+    .slice(0, SEARCH_WORDS_MAX)
+}
+
+/**
  * A page of posts.
  * @param {object | null} viewer
- * @param {{ tag?: unknown, season?: unknown, episode?: unknown, kind?: unknown, sort?: unknown, page?: unknown, author?: unknown }} [filters]
+ * @param {{ tag?: unknown, season?: unknown, episode?: unknown, kind?: unknown, sort?: unknown, page?: unknown, author?: unknown, q?: unknown }} [filters]
+ *   `q` searches post titles, bodies, and tag names; every word must match.
  * @returns {Promise<{ items: object[], page: number, pageSize: number, total: number, tag: object | null, sort: string }>}
  * @throws {HttpError} 400 bad tag, 404 unknown tag.
  */
@@ -599,6 +613,14 @@ export async function listPosts(viewer, filters = {}) {
   if (typeof filters.author === 'string' && filters.author) {
     params.push(filters.author)
     clauses.push(`lower(u.username) = lower($${params.length})`)
+  }
+  for (const word of searchWords(filters.q)) {
+    params.push(`%${escapeLike(word)}%`)
+    const like = `$${params.length}`
+    clauses.push(`(p.title ILIKE ${like} OR p.body ILIKE ${like} OR EXISTS (
+      SELECT 1 FROM post_tags st JOIN content sc ON sc.id = st.content_id
+      WHERE st.post_id = p.id AND (sc.name ILIKE ${like} OR sc.native_name ILIKE ${like})
+    ))`)
   }
   const tagSql = tagFilterSql(params, {
     tag: tagId,

@@ -107,6 +107,29 @@ describe('Forum', () => {
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'discussion' }))
   })
 
+  it('searches after a pause and keeps other filters', async () => {
+    vi.useFakeTimers()
+    const { wrapper, router } = await mountAt('/forum?kind=review')
+    await wrapper.get('[data-testid="forum-search"]').setValue('fri')
+    await wrapper.get('[data-testid="forum-search"]').setValue('frieren ending')
+    await vi.advanceTimersByTimeAsync(400)
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ kind: 'review', q: 'frieren ending' })
+    expect(list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'review', q: 'frieren ending', page: 1 }),
+    )
+    // One refetch for the search, not one per keystroke.
+    expect(list).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+
+  it('says when a search finds nothing', async () => {
+    list.mockResolvedValue(pagePayload({ items: [], total: 0 }))
+    const { wrapper } = await mountAt('/forum?q=zzz')
+    expect(wrapper.get('[data-testid="forum-search"]').element).toHaveProperty('value', 'zzz')
+    expect(wrapper.get('[data-testid="forum-empty"]').text()).toContain('No posts match “zzz”')
+  })
+
   it('shows an empty state', async () => {
     list.mockResolvedValue(pagePayload({ items: [], total: 0 }))
     const { wrapper } = await mountAt('/forum')

@@ -92,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+import { showPosterPlaceholder } from '@/utils/posters'
 import { ref, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -133,10 +134,7 @@ const toggleChatbot = () => {
   emit('close')
 }
 
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.src = '/placeholder-movie.jpg'
-}
+const handleImageError = showPosterPlaceholder
 
 const openDetails = (item: UnifiedContent) => {
   router.push({
@@ -199,8 +197,7 @@ const sendMessage = async () => {
     const errorMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'bot',
-      text:
-        rejection || "Sorry, I'm having trouble connecting right now. Please try again later.",
+      text: rejection || "Sorry, I'm having trouble connecting right now. Please try again later.",
       timestamp: new Date(),
     }
     messages.value.push(errorMessage)

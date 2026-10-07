@@ -14,6 +14,7 @@ import profileController from '../controllers/profileController.js'
 import friendController from '../controllers/friendController.js'
 import messageController from '../controllers/messageController.js'
 import forumController from '../controllers/forumController.js'
+import inboxController from '../controllers/inboxController.js'
 import emailPreferenceController from '../controllers/emailPreferenceController.js'
 import watchlistImportController from '../controllers/watchlistImportController.js'
 import securityController from '../controllers/securityController.js'
@@ -391,6 +392,11 @@ router.get('/messages', messageController.getConversations)
 router.get('/messages/unread', messageController.getUnreadCount)
 router.get('/messages/:id', validateObjectId, messageController.getThread)
 router.post('/messages/:id', validateObjectId, blockWhenMuted(), messageController.sendMessage)
+
+/** Profile-menu inbox: notifications, site news, and the import clash count. */
+router.get('/inbox', inboxController.getInbox)
+router.get('/inbox/unread', inboxController.getUnread)
+router.post('/inbox/read', inboxController.markRead)
 
 /** Forum writes. `:id` is a post id (or a comment id under /forum/comments). */
 router.post('/forum/posts', blockWhenMuted(), forumController.createPost)

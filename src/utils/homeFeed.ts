@@ -55,18 +55,33 @@ export function timeUntil(at: Date, now = new Date()) {
 }
 
 /**
+ * Who did it: "You" for the viewer's own entries, otherwise the username.
+ * @param entry - Feed entry.
+ */
+export function activitySubject(entry: Pick<ActivityEntry, 'user'>) {
+  return entry.user.isSelf ? 'You' : entry.user.username
+}
+
+/**
  * What a watchlist change did, as the words between the user and the title.
  * Progress reads as the span watched since the user left off, e.g.
  * `watched episodes 5–8 of`; a single new episode reads `watched episode 8 of`.
- * @param entry - Feed entry.
+ * Present-tense verbs agree with the subject: "You are watching" for the viewer's
+ * own entries, "kai is watching" for everyone else's.
+ * @param entry - Feed entry; `user.isSelf` marks the viewer's own.
  */
 export function describeActivity(
-  entry: Pick<ActivityEntry, 'action' | 'status' | 'currentEpisode' | 'previousEpisode'>,
+  entry: Pick<ActivityEntry, 'action' | 'status' | 'currentEpisode' | 'previousEpisode'> & {
+    user?: Pick<ActivityEntry['user'], 'isSelf'>
+  },
 ) {
   switch (entry.status) {
     case 'watching': {
       const latest = entry.currentEpisode
-      if (latest <= 0) return entry.action === 'added' ? 'started watching' : 'is watching'
+      if (latest <= 0) {
+        if (entry.action === 'added') return 'started watching'
+        return entry.user?.isSelf ? 'are watching' : 'is watching'
+      }
       const first = (entry.previousEpisode || 0) + 1
       if (first >= latest) return `watched episode ${latest} of`
       return `watched episodes ${first}–${latest} of`
