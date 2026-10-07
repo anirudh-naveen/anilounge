@@ -102,6 +102,9 @@
         <p>{{ movie.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Forum -->
+      <ForumHighlights :content-id="movie._id" :name="getDisplayTitle(movie)" reviewable />
+
       <!-- Title: Related Loading -->
       <div v-if="relatedContentLoading" class="related-content-loading">
         <h3>Loading Related Content...</h3>
@@ -256,6 +259,7 @@ import {
 import WatchlistPanel from '@/components/WatchlistPanel.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
+import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import { useEntityStore } from '@/stores/entities'

@@ -1,8 +1,10 @@
 <!--
-  Friends.vue — friends and friend requests (view).
+  Friends.vue — friends, friend requests, and direct messages (view).
 
-  Find people by username and send a request with an optional note, answer
-  incoming requests, manage the friends list, and cancel sent requests.
+  Two tabs. Messages (default, `MessagesPanel`): chats with friends, with incoming
+  requests shown as opening messages. Friends (`?tab=friends`): find people by
+  username and send a request with an optional note, answer incoming requests,
+  manage the friends list, and cancel sent requests. `?user=<id>` opens that chat.
   Opened from the profile menu; requires sign-in.
 -->
 <template>
@@ -12,10 +14,42 @@
       <header class="social-intro">
         <p class="social-kicker">Your circle</p>
         <h1 class="social-title">Friends</h1>
-        <p class="social-subtitle">Friends see each other's watchlist updates on Home.</p>
+        <p class="social-subtitle">
+          Chat with friends. Friends see each other's watchlist updates on Home.
+        </p>
       </header>
 
-      <div class="friends-layout">
+      <!-- Title: Tabs -->
+      <nav class="friends-tabs" role="tablist" aria-label="Friends sections">
+        <router-link
+          :to="{ name: 'friends' }"
+          class="friends-tab"
+          :class="{ active: tab === 'messages' }"
+          role="tab"
+          :aria-selected="tab === 'messages'"
+          data-testid="tab-messages"
+        >
+          Messages
+          <span v-if="messagesStore.counts.messages" class="social-count">{{
+            messagesStore.counts.messages
+          }}</span>
+        </router-link>
+        <router-link
+          :to="{ name: 'friends', query: { tab: 'friends' } }"
+          class="friends-tab"
+          :class="{ active: tab === 'friends' }"
+          role="tab"
+          :aria-selected="tab === 'friends'"
+          data-testid="tab-friends"
+        >
+          Friends
+          <span v-if="data.incoming.length" class="social-count">{{ data.incoming.length }}</span>
+        </router-link>
+      </nav>
+
+      <MessagesPanel v-if="tab === 'messages'" />
+
+      <div v-else class="friends-layout">
         <div class="friends-main">
           <!-- Requests -->
           <!-- Title: Incoming Requests -->
@@ -216,12 +250,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import FriendButton from '@/components/FriendButton.vue'
+import MessagesPanel from '@/components/MessagesPanel.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import { friendsAPI } from '@/services/api'
+import { useMessagesStore } from '@/stores/messages'
 import type { FriendsPayload, Relationship, UserSearchHit } from '@/types/social'
 import { timeAgo, timeUntil } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
@@ -232,6 +269,13 @@ const NOTE_MAX = 300
 const SEARCH_DELAY_MS = 300
 
 const toast = useToast()
+const route = useRoute()
+const messagesStore = useMessagesStore()
+
+/** Messages unless `?tab=friends`; an open chat (`?user=`) always shows Messages. */
+const tab = computed(() =>
+  route.query.tab === 'friends' && !route.query.user ? 'friends' : 'messages',
+)
 
 const data = ref<FriendsPayload>({ friends: [], incoming: [], outgoing: [] })
 const loading = ref(true)
@@ -253,6 +297,7 @@ const load = async () => {
   try {
     const response = await friendsAPI.list()
     data.value = response.data.data as FriendsPayload
+    messagesStore.refresh()
   } catch (error) {
     toast.error(apiErrorMessage(error, 'Could not load friends.'))
   } finally {
@@ -316,10 +361,45 @@ const onSearchChange = (hit: UserSearchHit, value: Relationship) => {
 }
 
 onMounted(load)
+// Requests may have been answered from the Messages tab.
+watch(tab, (value) => {
+  if (value === 'friends') load()
+})
 onUnmounted(() => clearTimeout(searchTimer))
 </script>
 
 <style scoped>
+.friends-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.friends-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 1rem;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.friends-tab:hover {
+  color: var(--text-primary);
+}
+
+.friends-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--coral-primary);
+}
+
 .friends-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;

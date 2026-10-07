@@ -35,12 +35,7 @@
               </span>
               <span class="nav-text">Home</span>
             </router-link>
-            <router-link
-              to="/forum"
-              class="nav-link nav-link-locked"
-              aria-label="Forum (coming soon)"
-              title="Forum (coming soon)"
-            >
+            <router-link to="/forum" class="nav-link" aria-label="Forum" title="Forum">
               <span class="nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
                   <path
@@ -52,12 +47,6 @@
                 </svg>
               </span>
               <span class="nav-text">Forum</span>
-              <span class="nav-lock" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="6" y="11" width="12" height="9" rx="1.75" />
-                  <path stroke-linecap="round" d="M8.5 11V8.25a3.5 3.5 0 0 1 7 0V11" />
-                </svg>
-              </span>
             </router-link>
             <router-link
               to="/watchlist"
@@ -100,6 +89,12 @@
                     data-testid="nav-avatar"
                   />
                   <span class="user-name">{{ authStore.user?.username }}</span>
+                  <span
+                    v-if="messagesStore.total"
+                    class="unread-dot"
+                    data-testid="nav-unread-dot"
+                    aria-label="Unread messages"
+                  ></span>
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
                 </button>
 
@@ -120,8 +115,19 @@
                       </svg>
                     </span>
                   </router-link>
-                  <router-link to="/friends" class="dropdown-item" @click="closeDropdown">
+                  <router-link
+                    to="/friends"
+                    class="dropdown-item"
+                    data-testid="nav-friends"
+                    @click="closeDropdown"
+                  >
                     <span class="item-text">Friends</span>
+                    <span
+                      v-if="messagesStore.total"
+                      class="item-count"
+                      :aria-label="`${messagesStore.total} unread`"
+                      >{{ messagesStore.total > 99 ? '99+' : messagesStore.total }}</span
+                    >
                     <span class="item-icon" aria-hidden="true">
                       <svg
                         viewBox="0 0 24 24"
@@ -242,10 +248,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted } from 'vue'
+import { onMounted, ref, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
+import { useMessagesStore } from '@/stores/messages'
 import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
@@ -257,6 +264,11 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 const showDropdown = ref(false)
+const messagesStore = useMessagesStore()
+
+/** How often the profile-menu badge rechecks unread messages and requests. */
+const UNREAD_POLL_MS = 60_000
+let unreadTimer: ReturnType<typeof setInterval> | undefined
 // Theme is chosen in Settings; calling this here keeps it applied (and following the OS) site-wide.
 useTheme()
 
@@ -264,10 +276,24 @@ onMounted(() => {
   authStore.restoreSession()
   // Close dropdown when clicking outside
   document.addEventListener('click', handleClickOutside)
+  unreadTimer = setInterval(() => {
+    if (authStore.isAuthenticated && !document.hidden) messagesStore.refresh()
+  }, UNREAD_POLL_MS)
 })
+
+// Refresh the badge on sign-in and page changes; clear it on sign-out.
+watch(
+  () => [authStore.isAuthenticated, route.path] as const,
+  ([signedIn]) => {
+    if (signedIn) messagesStore.refresh()
+    else messagesStore.reset()
+  },
+  { immediate: true },
+)
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  clearInterval(unreadTimer)
 })
 
 const toggleDropdown = () => {
@@ -407,24 +433,6 @@ const handleLogout = async () => {
   background: rgba(224, 122, 95, 0.22);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(224, 122, 95, 0.18);
-}
-
-.nav-link-locked {
-  color: rgba(232, 237, 245, 0.72);
-}
-
-.nav-lock {
-  width: 12px;
-  height: 12px;
-  display: inline-flex;
-  color: var(--tan-primary);
-  flex-shrink: 0;
-}
-
-.nav-lock svg {
-  width: 100%;
-  height: 100%;
-  display: block;
 }
 
 .nav-icon {
@@ -585,6 +593,29 @@ const handleLogout = async () => {
   font-weight: 500;
 }
 
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--coral-light);
+  box-shadow: 0 0 0 2px rgba(21, 34, 56, 0.9);
+  flex-shrink: 0;
+}
+
+.item-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--coral-primary);
+  color: var(--text-on-accent);
+}
+
 .dropdown-divider {
   height: 1px;
   background: var(--border-color);
@@ -719,19 +750,6 @@ const handleLogout = async () => {
 
   .nav-text {
     display: none;
-  }
-
-  .nav-link-locked {
-    position: relative;
-  }
-
-  .nav-lock {
-    position: absolute;
-    top: 2px;
-    right: 6px;
-    width: 10px;
-    height: 10px;
-    color: var(--coral-light);
   }
 
   .nav-actions {

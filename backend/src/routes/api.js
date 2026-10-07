@@ -12,6 +12,8 @@ import entityController from '../controllers/entityController.js'
 import homeController from '../controllers/homeController.js'
 import profileController from '../controllers/profileController.js'
 import friendController from '../controllers/friendController.js'
+import messageController from '../controllers/messageController.js'
+import forumController from '../controllers/forumController.js'
 import emailPreferenceController from '../controllers/emailPreferenceController.js'
 import watchlistImportController from '../controllers/watchlistImportController.js'
 import securityController from '../controllers/securityController.js'
@@ -131,6 +133,14 @@ router.get('/franchise/:franchiseName', contentController.getFranchiseContent)
 /** Homepage sections. Release updates use the watchlist when a token is present. */
 router.get('/home/updates', optionalAuthenticate, homeController.getUpdates)
 router.get('/home/character-of-the-day', homeController.getCharacterOfTheDay)
+router.get('/home/forum', optionalAuthenticate, forumController.getHomeHighlights)
+
+/** Forum reads (public; signed-in viewers also get their likes and edit rights). */
+router.get('/forum/posts', optionalAuthenticate, forumController.listPosts)
+router.get('/forum/posts/:id', validateObjectId, optionalAuthenticate, forumController.getPost)
+router.get('/forum/tags', forumController.searchTags)
+router.get('/forum/tags/:id/characters', validateObjectId, forumController.contentCharacters)
+router.get('/forum/highlights/:id', validateObjectId, optionalAuthenticate, forumController.getHighlights)
 
 /** Gemini-backed search and chat. Optional auth personalizes from watchlist/preferences. */
 router.post(
@@ -371,6 +381,33 @@ router.get('/friends/search', friendController.searchUsers)
 router.post('/friends/requests', blockWhenMuted(), friendController.sendRequest)
 router.post('/friends/requests/:id/accept', validateObjectId, friendController.acceptRequest)
 router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
+
+/** Settings → Communication (allow profanity in private messages). */
+router.get('/account/communication', messageController.getCommunicationSettings)
+router.put('/account/communication', messageController.updateCommunicationSettings)
+
+/** Direct messages between friends. `:id` is the other user's id. */
+router.get('/messages', messageController.getConversations)
+router.get('/messages/unread', messageController.getUnreadCount)
+router.get('/messages/:id', validateObjectId, messageController.getThread)
+router.post('/messages/:id', validateObjectId, blockWhenMuted(), messageController.sendMessage)
+
+/** Forum writes. `:id` is a post id (or a comment id under /forum/comments). */
+router.post('/forum/posts', blockWhenMuted(), forumController.createPost)
+router.patch('/forum/posts/:id', validateObjectId, blockWhenMuted(), forumController.updatePost)
+router.delete('/forum/posts/:id', validateObjectId, forumController.deletePost)
+router.put('/forum/posts/:id/like', validateObjectId, forumController.likePost)
+router.delete('/forum/posts/:id/like', validateObjectId, forumController.unlikePost)
+router.post(
+  '/forum/posts/:id/comments',
+  validateObjectId,
+  blockWhenMuted(),
+  forumController.createComment,
+)
+router.patch('/forum/comments/:id', validateObjectId, blockWhenMuted(), forumController.updateComment)
+router.delete('/forum/comments/:id', validateObjectId, forumController.deleteComment)
+router.put('/forum/comments/:id/like', validateObjectId, forumController.likeComment)
+router.delete('/forum/comments/:id/like', validateObjectId, forumController.unlikeComment)
 
 /**
  * Admin page. Catalog content (edit rows, links, cast order): admins and developers.

@@ -8,6 +8,7 @@
  */
 
 import axios from 'axios'
+import type { PostInput } from '@/types/forum'
 import type {
   LoginCredentials,
   RegisterData,
@@ -240,6 +241,18 @@ export const emailPreferencesAPI = {
   update: (changes: Partial<EmailPreferences>) => api.put('/account/email-preferences', changes),
 }
 
+/** Settings → Communication. */
+export interface CommunicationSettings {
+  /** Curses go through in private messages when both people turn this on; slurs never do. */
+  allowProfanity: boolean
+}
+
+export const communicationAPI = {
+  get: () => api.get('/account/communication'),
+
+  update: (changes: CommunicationSettings) => api.put('/account/communication', changes),
+}
+
 export const profileAPI = {
   getPublicProfile: (username: string) => api.get(`/users/${encodeURIComponent(username)}`),
 
@@ -316,6 +329,65 @@ export const friendsAPI = {
 
   /** Decline an incoming request, cancel an outgoing one, or unfriend. */
   remove: (userId: string) => api.delete(`/friends/${userId}`),
+}
+
+export const messagesAPI = {
+  list: () => api.get('/messages'),
+
+  unread: () => api.get('/messages/unread'),
+
+  /** A page of one conversation; `before`/`after` are message ids. Marks it read. */
+  thread: (userId: string, cursor: { before?: string; after?: string } = {}) =>
+    api.get(`/messages/${userId}`, { params: cursor }),
+
+  send: (userId: string, body: string) => api.post(`/messages/${userId}`, { body }),
+}
+
+export const forumAPI = {
+  list: (params: {
+    tag?: string
+    season?: number
+    episode?: number
+    kind?: string
+    sort?: string
+    page?: number
+    author?: string
+  }) => api.get('/forum/posts', { params }),
+
+  get: (postId: string) => api.get(`/forum/posts/${postId}`),
+
+  create: (input: PostInput) => api.post('/forum/posts', input),
+
+  update: (postId: string, input: PostInput) => api.patch(`/forum/posts/${postId}`, input),
+
+  remove: (postId: string) => api.delete(`/forum/posts/${postId}`),
+
+  like: (postId: string, liked: boolean) =>
+    liked ? api.put(`/forum/posts/${postId}/like`) : api.delete(`/forum/posts/${postId}/like`),
+
+  comment: (postId: string, body: string, parentId?: string | null) =>
+    api.post(`/forum/posts/${postId}/comments`, { body, parentId: parentId || undefined }),
+
+  updateComment: (commentId: string, body: string) =>
+    api.patch(`/forum/comments/${commentId}`, { body }),
+
+  removeComment: (commentId: string) => api.delete(`/forum/comments/${commentId}`),
+
+  likeComment: (commentId: string, liked: boolean) =>
+    liked
+      ? api.put(`/forum/comments/${commentId}/like`)
+      : api.delete(`/forum/comments/${commentId}/like`),
+
+  searchTags: (q: string) => api.get('/forum/tags', { params: { q } }),
+
+  /** Characters in a title, main cast first (tag picker). */
+  contentCharacters: (contentId: string) => api.get(`/forum/tags/${contentId}/characters`),
+
+  /** Leading posts and highlighted comments for a title or character page. */
+  highlights: (contentId: string) => api.get(`/forum/highlights/${contentId}`),
+
+  /** Home's forum section; the pick refreshes every few hours. */
+  home: () => api.get('/home/forum'),
 }
 
 export const adminAPI = {

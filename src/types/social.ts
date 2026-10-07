@@ -1,5 +1,5 @@
 /**
- * social.ts — friends payloads (`/friends/*`).
+ * social.ts — friends and direct-message payloads (`/friends/*`, `/messages/*`).
  */
 
 export interface PublicUser {
@@ -33,4 +33,57 @@ export interface FriendsPayload {
 
 export interface UserSearchHit extends PublicUser {
   relationship: Relationship
+}
+
+/** One direct message, from the viewer's side (`/messages/*`). */
+export interface DirectMessage {
+  id: string
+  body: string
+  at: string
+  fromMe: boolean
+  readAt: string | null
+}
+
+export interface ConversationSummary {
+  user: PublicUser
+  lastMessage: { body: string; at: string; fromMe: boolean }
+  unread: number
+  /** False once the two are no longer friends; history stays readable. */
+  canMessage: boolean
+}
+
+export interface ConversationsPayload {
+  conversations: ConversationSummary[]
+  /** Incoming friend requests, shown so their notes read like opening messages. */
+  requests: FriendRequest[]
+}
+
+export interface MessageThread {
+  user: PublicUser
+  relationship: Relationship
+  canMessage: boolean
+  /** Open friend request between the two, either direction. */
+  request: { message: string; at: string; expiresAt: string; fromMe: boolean } | null
+  messages: DirectMessage[]
+  /** More, older messages exist (page back with `before`). */
+  hasMore: boolean
+  /** Both people allow profanity, so curses aren't masked here (slurs still are). */
+  profanityAllowed: boolean
+}
+
+export interface UnreadCounts {
+  messages: number
+  requests: number
+}
+
+/** Returned when blocked language in what you sent was masked (or refused). */
+export interface LanguageWarning {
+  /** Warnings so far, including this one. */
+  count: number
+  /** Warnings before admins are alerted. */
+  limit: number
+  /** True once past the limit and admins were notified. */
+  alerted: boolean
+  category: 'curse' | 'slur'
+  message: string
 }

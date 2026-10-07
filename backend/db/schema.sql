@@ -576,6 +576,69 @@ CREATE TABLE IF NOT EXISTS comments (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Forum (services/forumService.js). A post is a discussion or a review (reviews carry
+-- a 1–10 score); `content_id` is unused, tags live in post_tags. Text is masked for
+-- blocked language like direct messages, with language warnings to the author.
+-- `last_activity_at` moves on new comments so active threads sort up.
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS score NUMERIC(3, 1) CHECK (score BETWEEN 1 AND 10);
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS spoiler BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_title_length_check;
+ALTER TABLE posts ADD CONSTRAINT posts_title_length_check
+  CHECK (char_length(title) BETWEEN 1 AND 150);
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_body_length_check;
+ALTER TABLE posts ADD CONSTRAINT posts_body_length_check
+  CHECK (char_length(body) BETWEEN 1 AND 10000);
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_review_score_check;
+ALTER TABLE posts ADD CONSTRAINT posts_review_score_check
+  CHECK ((kind = 'review') = (score IS NOT NULL));
+CREATE INDEX IF NOT EXISTS posts_activity_idx ON posts (last_activity_at DESC);
+CREATE INDEX IF NOT EXISTS posts_user_idx ON posts (user_id, created_at DESC);
+
+-- What a post is about: a movie, series, special, franchise, or character, or one
+-- episode of a series (season_number + episode_number set; both or neither).
+CREATE TABLE IF NOT EXISTS post_tags (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id         UUID NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+  content_id      UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  season_number   INTEGER CHECK (season_number BETWEEN 0 AND 999),
+  episode_number  INTEGER CHECK (episode_number BETWEEN 1 AND 9999),
+  CHECK ((season_number IS NULL) = (episode_number IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS post_tags_unique
+  ON post_tags (post_id, content_id, COALESCE(season_number, -1), COALESCE(episode_number, -1));
+CREATE INDEX IF NOT EXISTS post_tags_content_idx ON post_tags (content_id, season_number, episode_number);
+-- A review's subject (posts.content_id): its first movie/series/special tag. Its score
+-- shows the author's watchlist rating for that title.
+UPDATE posts p SET content_id = (
+  SELECT t.content_id FROM post_tags t JOIN content c ON c.id = t.content_id
+  WHERE t.post_id = p.id AND c.kind IN ('movie', 'series', 'special')
+  ORDER BY t.id LIMIT 1
+) WHERE p.kind = 'review' AND p.content_id IS NULL;
+
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+-- A deleted comment that has replies is blanked (body '[deleted]') instead of removed.
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE comments DROP CONSTRAINT IF EXISTS comments_body_length_check;
+ALTER TABLE comments ADD CONSTRAINT comments_body_length_check
+  CHECK (char_length(body) BETWEEN 1 AND 4000);
+CREATE INDEX IF NOT EXISTS comments_post_idx ON comments (post_id, created_at);
+
+-- Likes. "Leading" posts and "highlighted" comments are ranked by these.
+CREATE TABLE IF NOT EXISTS post_likes (
+  post_id     UUID NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS comment_likes (
+  comment_id  UUID NOT NULL REFERENCES comments (id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (comment_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS messages (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sender_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -584,6 +647,16 @@ CREATE TABLE IF NOT EXISTS messages (
   read_at       TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Direct messages (services/messageService.js). Only friends can send; history stays
+-- readable after an unfriend. `read_at` is set when the recipient opens the thread.
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_body_length_check;
+ALTER TABLE messages ADD CONSTRAINT messages_body_length_check
+  CHECK (char_length(body) BETWEEN 1 AND 2000);
+CREATE INDEX IF NOT EXISTS messages_pair_idx
+  ON messages (LEAST(sender_id, recipient_id), GREATEST(sender_id, recipient_id), created_at DESC);
+CREATE INDEX IF NOT EXISTS messages_unread_idx
+  ON messages (recipient_id, sender_id) WHERE read_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS notifications (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -598,6 +671,31 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- Inbox (services/notificationService.js): the comment a post_comment/comment_reply
 -- notification points at.
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS comment_id UUID REFERENCES comments (id) ON DELETE CASCADE;
+-- Extra fields for kinds that need them (e.g. a language warning's masked excerpt).
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS detail JSONB;
+
+-- Language warnings (services/languageWarningService.js). One row each time a user
+-- sends text with blocked language; the text goes out masked. Past the warning limit
+-- every offense alerts admins (admin log, plus one email to SUPPORT_EMAIL).
+-- `excerpt` is the masked text; `term` is the matched list term, for admins.
+CREATE TABLE IF NOT EXISTS language_warnings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  surface     TEXT NOT NULL,
+  term        TEXT NOT NULL,
+  excerpt     TEXT NOT NULL CHECK (char_length(excerpt) <= 300),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS language_warnings_user_idx ON language_warnings (user_id, created_at DESC);
+-- 'curse' or 'slur' (utils/moderation.js termCategory); older rows count as curses.
+ALTER TABLE language_warnings ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'curse';
+ALTER TABLE language_warnings DROP CONSTRAINT IF EXISTS language_warnings_category_check;
+ALTER TABLE language_warnings ADD CONSTRAINT language_warnings_category_check
+  CHECK (category IN ('curse', 'slur'));
+
+-- Settings → Communication. When both people in a private chat turn this on, curses
+-- go through unmasked between them; slurs are always masked (services/messageService.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS allow_profanity BOOLEAN NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
