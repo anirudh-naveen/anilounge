@@ -40,7 +40,7 @@ import { censorText } from '../utils/moderation.js'
 import { startSession } from '../../config/postgres.js'
 import { clearWatchHistory, recordWatch } from '../services/watchEvents.js'
 import { watchUnits } from '../utils/profileStats.js'
-import { mirrorToAnilist } from '../services/anilistSync.js'
+import { mirrorWatchlistChange } from '../services/connectionSync.js'
 
 const movieLikeTypes = ['movie', 'special']
 
@@ -754,7 +754,7 @@ export const addToWatchlist = async (req, res) => {
     const savedItem = user.watchlist.find((item) => item.content.toString() === contentId)
     await recordWatch(userId, contentId, watchUnits({ ...savedItem, content }) - unitsBefore)
     await session.commitTransaction()
-    mirrorToAnilist(user, content, savedItem)
+    mirrorWatchlistChange(user, content, savedItem)
 
     res.json({
       success: true,
@@ -857,7 +857,7 @@ export const removeFromWatchlist = async (req, res) => {
     await user.save({ session })
     await clearWatchHistory(userId, contentId)
     await session.commitTransaction()
-    mirrorToAnilist(user, content, null)
+    mirrorWatchlistChange(user, content, null)
 
     res.json({
       success: true,
@@ -967,7 +967,7 @@ export const updateWatchlistItem = async (req, res) => {
     await user.save({ session })
     await recordWatch(userId, contentId, watchUnits({ ...watchlistItem, content }) - unitsBefore)
     await session.commitTransaction()
-    mirrorToAnilist(user, content, watchlistItem)
+    mirrorWatchlistChange(user, content, watchlistItem)
 
     res.json({
       success: true,
@@ -1045,7 +1045,7 @@ export const voteContent = async (req, res) => {
 
     await user.save({ session })
     await session.commitTransaction()
-    if (watchlistItem) mirrorToAnilist(user, content, watchlistItem)
+    if (watchlistItem) mirrorWatchlistChange(user, content, watchlistItem)
 
     const updatedContent = await Content.findById(contentId)
 

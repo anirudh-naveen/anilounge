@@ -195,13 +195,34 @@ export interface WatchlistData {
 
 export type WatchlistImportSource = 'anilist' | 'mal' | 'mal_file' | 'tmdb'
 
-/** One site to import: a username, a MAL export file, or an approved TMDB token. */
+/** One site to import: the connected account, a username, or a MAL export file. */
 export interface WatchlistImportSourceRequest {
   source: WatchlistImportSource
+  /** Read the user's connected account on that site (TMDB can only be read this way). */
+  connected?: boolean
   username?: string
   /** MAL export: the XML text, or the `.xml.gz` as base64. */
   file?: { xml?: string; gzipBase64?: string }
-  requestToken?: string
+}
+
+export type ConnectionProvider = 'anilist' | 'mal' | 'tmdb'
+
+/** A site the user can link, and their link to it if any. */
+export interface AccountConnection {
+  provider: ConnectionProvider
+  label: string
+  /** `two-way`: changes flow both ways; `push`: AniLounge only sends changes to it. */
+  sync: 'two-way' | 'push'
+  /** False when the server has no keys for this site. */
+  available: boolean
+  connected: boolean
+  username: string | null
+  externalId: string | null
+  connectedAt: string | null
+  lastSyncedAt: string | null
+  lastError: string | null
+  /** AniList sign-ins last a year; after this the user reconnects. */
+  expiresAt: string | null
 }
 
 export interface WatchlistImportRequest {

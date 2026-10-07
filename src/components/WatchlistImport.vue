@@ -1,14 +1,12 @@
 <!--
-  WatchlistImport.vue — import lists from AniList, MyAnimeList, and TMDB (component).
+  WatchlistImport.vue — import progress, results, clashes, and imports without an
+  account connection (component).
 
-  Two cards on the Import page. Anime lists: type the AniList/MyAnimeList usernames
-  and one Import runs them in order as a background job this form polls. TMDB: needs
-  approval on themoviedb.org first, so it has its own Connect button that opens the
-  approval page in a new tab. When TMDB sends that tab back to /import it hands the
-  `request_token` to this tab over a BroadcastChannel and closes; if no tab answers
-  (or the popup was blocked and the approval ran in this tab) it imports itself.
-  Titles the sites disagree on are listed below for the user to pick a version
-  (ImportConflicts).
+  The Connections page starts imports from connected accounts through `begin()`; this
+  component runs every import as a background job it polls, shows the result, and lists
+  titles the sites disagree on for the user to pick a version (ImportConflicts). Below
+  that, "Import without connecting" takes AniList/MyAnimeList usernames or a MyAnimeList
+  export file.
 -->
 <template>
   <div class="watchlist-import" data-testid="watchlist-import">
@@ -29,22 +27,50 @@
       </div>
     </div>
 
-    <!-- Title: Handed Off -->
-    <div v-else-if="handedOff" class="import-card" aria-live="polite">
-      <p class="result-lead">TMDB is connected. Your import is running in your other tab.</p>
-      <p class="hint">You can close this tab.</p>
+    <p v-if="errorMessage" class="import-error" role="alert">{{ errorMessage }}</p>
+
+    <!-- Title: Last Result -->
+    <div v-if="job?.state === 'done' && job.result" class="import-result" aria-live="polite">
+      <p class="result-lead">
+        Imported {{ job.result.matched }} of {{ job.result.total }} entries from
+        {{ job.sources.map(sourceLabel).join(', ') }}: {{ job.result.added }} added<template
+          v-if="job.result.unchanged"
+          >, {{ job.result.unchanged }} already matched</template
+        ><template v-if="job.result.conflicts"
+          >, {{ job.result.conflicts }} to review below</template
+        >.
+      </p>
+      <p v-for="failed in failedSources" :key="failed.source" class="import-error">
+        {{ sourceLabel(failed.source) }}: {{ failed.error }}
+      </p>
+      <p v-if="job.result.catalogAdded || job.result.catalogLinked" class="hint">
+        {{ job.result.catalogAdded }} new titles added to AniLounge<template
+          v-if="job.result.catalogLinked"
+          >, {{ job.result.catalogLinked }} linked to AniList</template
+        >.
+      </p>
+      <details v-if="job.result.notFound" class="not-found">
+        <summary>{{ job.result.notFound }} not on AniLounge</summary>
+        <ul>
+          <li v-for="title in job.result.notFoundTitles" :key="title">{{ title }}</li>
+          <li v-if="job.result.notFound > job.result.notFoundTitles.length" class="hint">
+            and {{ job.result.notFound - job.result.notFoundTitles.length }} more
+          </li>
+        </ul>
+      </details>
     </div>
+    <p v-else-if="job?.state === 'failed'" class="import-error" role="alert">{{ job.error }}</p>
 
-    <template v-else>
-      <p v-if="errorMessage" class="import-error" role="alert">{{ errorMessage }}</p>
+    <ImportConflicts ref="conflictsPanel" @resolved="emit('imported')" />
 
-      <!-- Title: Anime Lists -->
-      <form class="import-card" @submit.prevent="startImport">
-        <div class="card-head">
-          <h4>AniList &amp; MyAnimeList</h4>
-          <p class="hint">Fill in either or both; AniList is imported first.</p>
-        </div>
+    <!-- Title: Import Without Connecting -->
+    <details class="manual-import" :open="manualOpen" @toggle="onManualToggle">
+      <summary>
+        <span>Import without connecting</span>
+        <span class="hint">Use a public username or a MyAnimeList export file. No syncing.</span>
+      </summary>
 
+      <form class="manual-form" @submit.prevent="startImport">
         <label class="field">
           <span class="field-label">AniList username</span>
           <input
@@ -92,115 +118,23 @@
           </button>
         </div>
 
-        <label class="check">
-          <input v-model="addMissing" type="checkbox" />
-          <span>
-            Add anime AniLounge doesn't have yet
-            <span class="hint">Up to 60 per import; makes the import slower.</span>
-          </span>
-        </label>
-
         <div class="import-actions">
-          <button type="submit" class="import-btn" :disabled="!canSubmit || isSubmitting">
+          <button
+            type="submit"
+            class="import-btn"
+            :disabled="!canSubmit || isSubmitting || busy"
+            data-testid="import-manual-submit"
+          >
             Import
           </button>
         </div>
       </form>
-
-      <!-- Title: TMDB -->
-      <div class="import-card" data-testid="import-tmdb-card">
-        <div class="card-head">
-          <h4>TMDB</h4>
-          <p class="hint">
-            Imports your TMDB watchlist and ratings. TMDB asks you to approve read access first, on
-            their site in a new tab.
-          </p>
-        </div>
-
-        <div v-if="tmdbPending" class="tmdb-waiting" aria-live="polite">
-          <div class="spinner small"></div>
-          <div>
-            <p>Waiting for you to approve AniLounge on TMDB…</p>
-            <p class="hint">
-              The import starts here on its own once you approve.
-              <a :href="tmdbPending.authorizeUrl" target="_blank" rel="noopener">Reopen TMDB</a>
-            </p>
-            <div class="import-actions">
-              <button
-                type="button"
-                class="import-btn secondary"
-                :disabled="isSubmitting"
-                data-testid="import-tmdb-approved"
-                @click="finishTmdb(tmdbPending.requestToken)"
-              >
-                I've approved it
-              </button>
-              <button type="button" class="link-btn" @click="cancelTmdb">Cancel</button>
-            </div>
-          </div>
-        </div>
-        <div v-else class="import-actions">
-          <button
-            type="button"
-            class="import-btn"
-            :disabled="isSubmitting"
-            data-testid="import-tmdb"
-            @click="connectTmdb"
-          >
-            Connect TMDB
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M14 5h5v5M19 5l-8 8M17 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </template>
-
-    <!-- Title: Last Result -->
-    <div v-if="job?.state === 'done' && job.result" class="import-result" aria-live="polite">
-      <p class="result-lead">
-        Imported {{ job.result.matched }} of {{ job.result.total }} entries from
-        {{ job.sources.map(sourceLabel).join(', ') }}: {{ job.result.added }} added<template
-          v-if="job.result.unchanged"
-          >, {{ job.result.unchanged }} already matched</template
-        ><template v-if="job.result.conflicts"
-          >, {{ job.result.conflicts }} to review below</template
-        >.
-      </p>
-      <p v-for="failed in failedSources" :key="failed.source" class="import-error">
-        {{ sourceLabel(failed.source) }}: {{ failed.error }}
-      </p>
-      <p v-if="job.result.catalogAdded || job.result.catalogLinked" class="hint">
-        {{ job.result.catalogAdded }} new titles added to AniLounge<template
-          v-if="job.result.catalogLinked"
-          >, {{ job.result.catalogLinked }} linked to AniList</template
-        >.
-      </p>
-      <details v-if="job.result.notFound" class="not-found">
-        <summary>{{ job.result.notFound }} not on AniLounge</summary>
-        <ul>
-          <li v-for="title in job.result.notFoundTitles" :key="title">{{ title }}</li>
-          <li v-if="job.result.notFound > job.result.notFoundTitles.length" class="hint">
-            and {{ job.result.notFound - job.result.notFoundTitles.length }} more
-          </li>
-        </ul>
-      </details>
-    </div>
-    <p v-else-if="job?.state === 'failed'" class="import-error" role="alert">{{ job.error }}</p>
-
-    <ImportConflicts ref="conflictsPanel" @resolved="emit('imported')" />
+    </details>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { watchlistImportAPI } from '@/services/api'
 import ImportConflicts from '@/components/ImportConflicts.vue'
 import type {
@@ -209,15 +143,9 @@ import type {
   WatchlistImportSourceRequest,
 } from '@/types'
 
+const props = withDefaults(defineProps<{ addMissing?: boolean }>(), { addMissing: true })
 const emit = defineEmits<{ imported: [] }>()
 
-const route = useRoute()
-const router = useRouter()
-
-/** Carries TMDB's approval from the tab TMDB returns to back to the tab that asked. */
-const TMDB_CHANNEL = 'anilounge:tmdb-approval'
-/** How long the returning tab waits for the asking tab to take over before importing itself. */
-const HANDOFF_MS = 1500
 const POLL_MS = 1500
 /** Failed status checks in a row before the form says the server is unreachable. */
 const MAX_POLL_FAILURES = 4
@@ -228,9 +156,7 @@ const anilistUser = ref('')
 const malUser = ref('')
 const malMode = ref<'username' | 'file'>('username')
 const malFile = ref<File | null>(null)
-const addMissing = ref(true)
-const tmdbPending = ref<{ requestToken: string; authorizeUrl: string } | null>(null)
-const handedOff = ref(false)
+const manualOpen = ref(false)
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 const job = ref<WatchlistImportJob | null>(null)
@@ -241,10 +167,12 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null
 let pollFailures = 0
 let progressKey = ''
 let progressAt = 0
-let channel: BroadcastChannel | null = null
 
 const sourceLabel = (source: WatchlistImportSource) =>
   ({ anilist: 'AniList', mal: 'MyAnimeList', mal_file: 'MyAnimeList', tmdb: 'TMDB' })[source]
+
+/** An import is starting or running; the page disables other import buttons meanwhile. */
+const busy = computed(() => isSubmitting.value || job.value?.state === 'running')
 
 const canSubmit = computed(
   () =>
@@ -278,6 +206,10 @@ const phaseLabel = computed(() => {
 const messageFrom = (error: unknown, fallback: string) => {
   const data = (error as { response?: { data?: { message?: string } } })?.response?.data
   return data?.message || fallback
+}
+
+const onManualToggle = (event: Event) => {
+  manualOpen.value = (event.target as HTMLDetailsElement).open
 }
 
 const toggleMalMode = () => {
@@ -353,17 +285,20 @@ const poll = async () => {
   }
 }
 
+/** Start an import job and follow it. Returns false when it couldn't start. */
 const begin = async (sources: WatchlistImportSourceRequest[]) => {
   isSubmitting.value = true
   errorMessage.value = ''
   try {
-    const response = await watchlistImportAPI.start({ sources, addMissing: addMissing.value })
+    const response = await watchlistImportAPI.start({ sources, addMissing: props.addMissing })
     job.value = response.data.data
     progressKey = ''
     progressAt = Date.now()
     pollTimer = setTimeout(poll, POLL_MS)
+    return true
   } catch (error) {
     errorMessage.value = messageFrom(error, 'Could not start the import. Try again.')
+    return false
   } finally {
     isSubmitting.value = false
   }
@@ -378,156 +313,50 @@ const startImport = async () => {
   return begin(sources)
 }
 
-/**
- * Open TMDB's approval page in a new tab. The tab is opened before the token request
- * so popup blockers see it as part of the click; if it's blocked anyway, approve here.
- */
-const connectTmdb = async () => {
-  const tab = window.open('', '_blank')
-  if (tab) tab.opener = null
-  isSubmitting.value = true
-  errorMessage.value = ''
-  try {
-    // No #fragment: TMDB appends `&request_token=…` to this address.
-    const redirectTo = `${window.location.origin}/import?import=${tab ? 'tmdb-tab' : 'tmdb'}`
-    const response = await watchlistImportAPI.tmdbToken(redirectTo)
-    const { requestToken, authorizeUrl } = response.data.data
-    if (!tab) {
-      window.location.assign(authorizeUrl)
-      return
-    }
-    tab.location.href = authorizeUrl
-    tmdbPending.value = { requestToken, authorizeUrl }
-    listenForApproval()
-  } catch (error) {
-    tab?.close()
-    errorMessage.value = messageFrom(error, 'Could not reach TMDB. Try again.')
-  } finally {
-    isSubmitting.value = false
-  }
-}
+defineExpose({ begin, busy })
 
-const closeChannel = () => {
-  channel?.close()
-  channel = null
-}
+onMounted(poll)
 
-const cancelTmdb = () => {
-  tmdbPending.value = null
-  closeChannel()
-}
-
-const finishTmdb = async (requestToken: string) => {
-  tmdbPending.value = null
-  closeChannel()
-  await begin([{ source: 'tmdb', requestToken }])
-}
-
-/** In the asking tab: take over the import when the TMDB tab reports back. */
-const listenForApproval = () => {
-  closeChannel()
-  if (typeof BroadcastChannel === 'undefined') return
-  channel = new BroadcastChannel(TMDB_CHANNEL)
-  channel.onmessage = (event: MessageEvent) => {
-    const message = event.data as { type?: string; token?: string; approved?: boolean }
-    const pending = tmdbPending.value
-    if (message?.type !== 'tmdb-result' || !pending || message.token !== pending.requestToken) {
-      return
-    }
-    channel?.postMessage({ type: 'tmdb-ack', token: message.token })
-    if (message.approved) {
-      finishTmdb(pending.requestToken)
-    } else {
-      cancelTmdb()
-      errorMessage.value = 'TMDB access was not approved, so nothing was imported.'
-    }
-  }
-}
-
-/** In the TMDB tab: hand the result to the tab that asked; true if it took over. */
-const handOff = (token: string, approved: boolean) =>
-  new Promise<boolean>((resolve) => {
-    if (typeof BroadcastChannel === 'undefined') return resolve(false)
-    const reply = new BroadcastChannel(TMDB_CHANNEL)
-    const timer = setTimeout(() => {
-      reply.close()
-      resolve(false)
-    }, HANDOFF_MS)
-    reply.onmessage = (event: MessageEvent) => {
-      if (event.data?.type !== 'tmdb-ack' || event.data.token !== token) return
-      clearTimeout(timer)
-      reply.close()
-      resolve(true)
-    }
-    reply.postMessage({ type: 'tmdb-result', token, approved })
-  })
-
-/** Finish the import when TMDB has sent the user back here. */
-const resumeTmdb = async () => {
-  const { import: mode, request_token: token, approved, denied } = route.query
-  if (!token && !denied) return false
-  router.replace({ query: {} })
-  const ok = !denied && approved === 'true' && typeof token === 'string'
-  if (mode === 'tmdb-tab' && typeof token === 'string' && (await handOff(token, ok))) {
-    handedOff.value = true
-    window.close()
-    return true
-  }
-  if (!ok) {
-    errorMessage.value = 'TMDB access was not approved, so nothing was imported.'
-    return true
-  }
-  await begin([{ source: 'tmdb', requestToken: token }])
-  return true
-}
-
-onMounted(async () => {
-  if (await resumeTmdb()) return
-  await poll()
-})
-
-onUnmounted(() => {
-  stopPolling()
-  closeChannel()
-})
+onUnmounted(stopPolling)
 </script>
 
 <style scoped>
-.watchlist-import {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.import-card {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.1rem 1.25rem;
+.manual-import {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   background: var(--bg-card);
 }
 
-.card-head h4 {
-  margin: 0 0 0.2rem;
-  color: var(--text-primary);
-  font-size: 1rem;
-}
-
-.tmdb-waiting {
+.manual-import summary {
   display: flex;
-  gap: 0.85rem;
-  align-items: flex-start;
-}
-
-.tmdb-waiting p {
-  margin: 0 0 0.4rem;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.95rem 1.25rem;
+  cursor: pointer;
   color: var(--text-primary);
+  font-weight: 600;
+  list-style: none;
 }
 
-.tmdb-waiting .import-actions {
-  margin-top: 0.5rem;
+.manual-import summary::-webkit-details-marker {
+  display: none;
+}
+
+.manual-import summary .hint {
+  font-weight: 400;
+}
+
+.manual-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0 1.25rem 1.25rem;
+}
+
+.watchlist-import {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .field {
@@ -577,24 +406,6 @@ onUnmounted(() => {
   text-decoration: underline;
 }
 
-.check {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  color: var(--text-primary);
-  font-size: 0.95rem;
-}
-
-.check input {
-  margin-top: 0.25rem;
-  accent-color: var(--coral-primary);
-}
-
-.check .hint {
-  display: block;
-  margin-top: 0.15rem;
-}
-
 .hint {
   margin: 0;
   color: var(--text-muted);
@@ -632,16 +443,6 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.import-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.import-btn.secondary {
-  padding: 0.55rem 1.1rem;
-  font-size: 0.9rem;
 }
 
 .import-btn:hover:not(:disabled) {
@@ -684,13 +485,6 @@ onUnmounted(() => {
   border-top-color: var(--coral-primary);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
-}
-
-.spinner.small {
-  width: 20px;
-  height: 20px;
-  border-width: 2px;
-  margin-top: 0.1rem;
 }
 
 @keyframes spin {

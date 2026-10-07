@@ -17,6 +17,7 @@ import type {
   WatchlistData,
   UpdateWatchlistData,
   WatchlistImportRequest,
+  ConnectionProvider,
   ContentParams,
 } from '@/types'
 import type { ProfileSettings } from '@/types/profile'
@@ -479,15 +480,32 @@ export const watchlistImportAPI = {
 
   status: () => api.get('/watchlist/import'),
 
-  /** TMDB step 1: a token to approve on themoviedb.org, which then returns to `redirectTo`. */
-  tmdbToken: (redirectTo: string) => api.post('/watchlist/import/tmdb/token', { redirectTo }),
-
   /** Imported titles waiting on the user to pick a version. */
   conflicts: () => api.get('/watchlist/import/conflicts'),
 
   /** Pick versions: `choice` is an option key, or `keep` to leave the watchlist as is. */
   resolveConflicts: (choices: { contentId: string; choice: string }[]) =>
     api.post('/watchlist/import/conflicts', { choices }),
+}
+
+export const connectionsAPI = {
+  /** Every site with the user's connection state. */
+  list: () => api.get('/connections'),
+
+  /** Where to send the user to approve AniLounge (TMDB returns them to `redirectTo`). */
+  start: (provider: ConnectionProvider, redirectTo?: string) =>
+    api.post(`/connections/${provider}/start`, { redirectTo }),
+
+  /** What the site sent back: `code` + `state` (AniList, MAL) or `requestToken` (TMDB). */
+  finish: (
+    provider: ConnectionProvider,
+    data: { code?: string; state?: string; requestToken?: string },
+  ) => api.post(`/connections/${provider}/callback`, data),
+
+  /** Pull a two-way site's recent changes now. */
+  sync: (provider: ConnectionProvider) => api.post(`/connections/${provider}/sync`),
+
+  disconnect: (provider: ConnectionProvider) => api.delete(`/connections/${provider}`),
 }
 
 /**
