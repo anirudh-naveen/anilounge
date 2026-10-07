@@ -119,7 +119,7 @@
               />
               <router-link
                 v-if="profile.relationship === 'friends'"
-                :to="{ name: 'messages', query: { user: profile.user.id } }"
+                :to="{ name: 'friends', query: { user: profile.user.id } }"
                 class="btn btn-secondary"
                 data-testid="message-friend"
               >

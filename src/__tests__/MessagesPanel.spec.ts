@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import Messages from '@/views/Messages.vue'
+import MessagesPanel from '@/components/MessagesPanel.vue'
 import type { ConversationsPayload, MessageThread } from '@/types/social'
 
 const list = vi.fn()
@@ -83,19 +83,18 @@ const mountAt = async (path: string) => {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/messages', name: 'messages', component: Messages },
+      { path: '/friends', name: 'friends', component: MessagesPanel },
       { path: '/u/:username', name: 'publicProfile', component: { template: '<div />' } },
-      { path: '/friends', name: 'friends', component: { template: '<div />' } },
     ],
   })
   await router.push(path)
   await router.isReady()
-  const wrapper = mount(Messages, { global: { plugins: [router] } })
+  const wrapper = mount(MessagesPanel, { global: { plugins: [router] } })
   await flushPromises()
   return { wrapper, router }
 }
 
-describe('Messages', () => {
+describe('MessagesPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     list.mockResolvedValue({ data: { data: conversations() } })
@@ -103,7 +102,7 @@ describe('Messages', () => {
   })
 
   it('lists friend requests and conversations', async () => {
-    const { wrapper } = await mountAt('/messages')
+    const { wrapper } = await mountAt('/friends')
     const requests = wrapper.get('[data-testid="message-requests"]')
     expect(requests.text()).toContain('shinji')
     expect(requests.text()).toContain('Loved your Eva review')
@@ -114,7 +113,7 @@ describe('Messages', () => {
   })
 
   it('opens the thread from the query and refreshes the badge', async () => {
-    const { wrapper } = await mountAt('/messages?user=u2')
+    const { wrapper } = await mountAt('/friends?user=u2')
     expect(thread).toHaveBeenCalledWith('u2')
     const messages = wrapper.get('[data-testid="thread-messages"]')
     expect(messages.text()).toContain('Hey!')
@@ -134,7 +133,7 @@ describe('Messages', () => {
         },
       },
     })
-    const { wrapper } = await mountAt('/messages?user=u2')
+    const { wrapper } = await mountAt('/friends?user=u2')
     await wrapper.get('[data-testid="message-composer"] textarea').setValue('  On my way  ')
     await wrapper.get('[data-testid="message-composer"]').trigger('submit')
     await flushPromises()
@@ -159,7 +158,7 @@ describe('Messages', () => {
         }),
       },
     })
-    const { wrapper } = await mountAt('/messages?user=u3')
+    const { wrapper } = await mountAt('/friends?user=u3')
     expect(wrapper.get('[data-testid="thread-request"]').text()).toContain('Loved your Eva review')
     expect(wrapper.find('[data-testid="friend-accept"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="message-composer"]').exists()).toBe(false)
@@ -170,7 +169,7 @@ describe('Messages', () => {
     thread.mockResolvedValue({
       data: { data: buildThread({ relationship: 'none', canMessage: false }) },
     })
-    const { wrapper } = await mountAt('/messages?user=u2')
+    const { wrapper } = await mountAt('/friends?user=u2')
     expect(wrapper.get('[data-testid="thread-messages"]').text()).toContain('Hey!')
     expect(wrapper.find('[data-testid="message-composer"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="composer-locked"]').text()).toContain("aren't friends")

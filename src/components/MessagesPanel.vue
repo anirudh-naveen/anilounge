@@ -1,282 +1,265 @@
 <!--
-  Messages.vue — direct messages between friends (view).
+  MessagesPanel.vue — direct messages between friends (component).
 
-  Conversation list on the left (incoming friend requests first, so a request's
-  note reads like an opening message), the open thread on the right. Only friends
-  can send; history stays readable after an unfriend. The open thread polls for
-  new messages. `?user=<id>` picks the open thread (a query, so switching chats
-  doesn't remount the page). Opened from the profile menu; requires sign-in.
+  The Messages tab of the Friends page. Conversation list on the left (incoming
+  friend requests first, so a request's note reads like an opening message), the
+  open thread on the right. Only friends can send; history stays readable after an
+  unfriend. The open thread polls for new messages. `?user=<id>` on the Friends
+  route picks the open thread (a query, so switching chats doesn't remount the page).
 -->
 <template>
-  <div class="social-page">
-    <div class="social-container">
-      <!-- Header -->
-      <header class="social-intro">
-        <p class="social-kicker">Your circle</p>
-        <h1 class="social-title">Messages</h1>
-        <p class="social-subtitle">Chat with your friends. Friend requests show up here too.</p>
+  <div class="messages-layout" :class="{ 'thread-open': !!activeId }">
+    <!-- Title: Conversation List -->
+    <aside class="social-panel conversation-panel" data-testid="conversation-list">
+      <header class="social-panel-header">
+        <h2 class="social-panel-title">Chats</h2>
+        <button
+          type="button"
+          class="btn btn-primary btn-small"
+          data-testid="new-message"
+          @click="togglePicker"
+        >
+          {{ pickerOpen ? 'Close' : 'New message' }}
+        </button>
       </header>
 
-      <div class="messages-layout" :class="{ 'thread-open': !!activeId }">
-        <!-- Title: Conversation List -->
-        <aside class="social-panel conversation-panel" data-testid="conversation-list">
-          <header class="social-panel-header">
-            <h2 class="social-panel-title">Chats</h2>
-            <button
-              type="button"
-              class="btn btn-primary btn-small"
-              data-testid="new-message"
-              @click="togglePicker"
-            >
-              {{ pickerOpen ? 'Close' : 'New message' }}
-            </button>
-          </header>
-
-          <!-- Title: Friend Picker -->
-          <div v-if="pickerOpen" class="friend-picker" data-testid="friend-picker">
-            <input
-              v-model="pickerTerm"
-              type="search"
-              class="input"
-              placeholder="Search your friends"
-              aria-label="Search your friends"
-            />
-            <div v-if="friendsLoading" class="social-loading"><div class="spinner"></div></div>
-            <p v-else-if="!pickerFriends.length" class="social-empty">
-              <template v-if="friends.length">No friends match.</template>
-              <template v-else>
-                Add friends to message them.
-                <router-link to="/friends">Find people</router-link>
-              </template>
-            </p>
-            <ul v-else class="social-list picker-list">
-              <li v-for="friend in pickerFriends" :key="friend.user.id">
-                <button type="button" class="picker-row" @click="openThread(friend.user.id)">
-                  <UserAvatar
-                    :src="friend.user.profilePicture"
-                    :name="friend.user.username"
-                    :size="32"
-                  />
-                  <span class="social-name">{{ friend.user.username }}</span>
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          <div v-if="listLoading" class="social-loading"><div class="spinner"></div></div>
+      <!-- Title: Friend Picker -->
+      <div v-if="pickerOpen" class="friend-picker" data-testid="friend-picker">
+        <input
+          v-model="pickerTerm"
+          type="search"
+          class="input"
+          placeholder="Search your friends"
+          aria-label="Search your friends"
+        />
+        <div v-if="friendsLoading" class="social-loading"><div class="spinner"></div></div>
+        <p v-else-if="!pickerFriends.length" class="social-empty">
+          <template v-if="friends.length">No friends match.</template>
           <template v-else>
-            <!-- Title: Requests -->
-            <template v-if="list.requests.length">
-              <h3 class="conversation-heading">
-                Friend requests <span class="social-count">{{ list.requests.length }}</span>
-              </h3>
-              <ul class="conversation-list" data-testid="message-requests">
-                <li v-for="request in list.requests" :key="`r-${request.user.id}`">
-                  <button
-                    type="button"
-                    class="conversation-row"
-                    :class="{ active: activeId === request.user.id }"
-                    @click="openThread(request.user.id)"
-                  >
-                    <UserAvatar
-                      :src="request.user.profilePicture"
-                      :name="request.user.username"
-                      :size="40"
-                    />
-                    <span class="conversation-body">
-                      <span class="conversation-top">
-                        <span class="social-name">{{ request.user.username }}</span>
-                        <span class="social-meta">{{ timeAgo(request.at) }}</span>
-                      </span>
-                      <span class="conversation-preview unread">
-                        {{ request.message || 'Wants to be friends' }}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              </ul>
-            </template>
-
-            <!-- Title: Conversations -->
-            <h3 v-if="list.requests.length" class="conversation-heading">Conversations</h3>
-            <p v-if="!list.conversations.length" class="social-empty">
-              No messages yet. Start one with a friend.
-            </p>
-            <ul v-else class="conversation-list">
-              <li v-for="convo in list.conversations" :key="convo.user.id">
-                <button
-                  type="button"
-                  class="conversation-row"
-                  :class="{ active: activeId === convo.user.id }"
-                  :data-testid="`conversation-${convo.user.username}`"
-                  @click="openThread(convo.user.id)"
-                >
-                  <UserAvatar
-                    :src="convo.user.profilePicture"
-                    :name="convo.user.username"
-                    :size="40"
-                  />
-                  <span class="conversation-body">
-                    <span class="conversation-top">
-                      <span class="social-name">{{ convo.user.username }}</span>
-                      <span class="social-meta">{{ timeAgo(convo.lastMessage.at) }}</span>
-                    </span>
-                    <span class="conversation-preview" :class="{ unread: convo.unread > 0 }">
-                      <template v-if="convo.lastMessage.fromMe">You: </template
-                      >{{ convo.lastMessage.body }}
-                    </span>
-                  </span>
-                  <span v-if="convo.unread" class="social-count">{{ convo.unread }}</span>
-                </button>
-              </li>
-            </ul>
+            Add friends to message them.
+            <router-link :to="{ name: 'friends', query: { tab: 'friends' } }"
+              >Find people</router-link
+            >
           </template>
-        </aside>
+        </p>
+        <ul v-else class="social-list picker-list">
+          <li v-for="friend in pickerFriends" :key="friend.user.id">
+            <button type="button" class="picker-row" @click="openThread(friend.user.id)">
+              <UserAvatar
+                :src="friend.user.profilePicture"
+                :name="friend.user.username"
+                :size="32"
+              />
+              <span class="social-name">{{ friend.user.username }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
 
-        <!-- Title: Thread -->
-        <section class="social-panel thread-panel" data-testid="message-thread">
-          <p v-if="!activeId" class="social-empty thread-placeholder">
-            Pick a conversation, or start a new one.
-          </p>
-          <div v-else-if="threadLoading && !thread" class="social-loading">
-            <div class="spinner"></div>
-          </div>
-          <template v-else-if="thread">
-            <header class="thread-header">
+      <div v-if="listLoading" class="social-loading"><div class="spinner"></div></div>
+      <template v-else>
+        <!-- Title: Requests -->
+        <template v-if="list.requests.length">
+          <h3 class="conversation-heading">
+            Friend requests <span class="social-count">{{ list.requests.length }}</span>
+          </h3>
+          <ul class="conversation-list" data-testid="message-requests">
+            <li v-for="request in list.requests" :key="`r-${request.user.id}`">
               <button
                 type="button"
-                class="btn btn-ghost btn-small thread-back"
-                aria-label="Back to chats"
-                @click="closeThread"
+                class="conversation-row"
+                :class="{ active: activeId === request.user.id }"
+                @click="openThread(request.user.id)"
               >
-                ←
-              </button>
-              <UserAvatar
-                :src="thread.user.profilePicture"
-                :name="thread.user.username"
-                :size="40"
-              />
-              <router-link :to="profileRoute(thread.user.username)" class="social-name">
-                {{ thread.user.username }}
-                <RoleBadge :username="thread.user.username" />
-              </router-link>
-            </header>
-
-            <div ref="scroller" class="thread-scroll" data-testid="thread-messages">
-              <div v-if="thread.hasMore" class="load-older">
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-small"
-                  :disabled="loadingOlder"
-                  @click="loadOlder"
-                >
-                  Load older messages
-                </button>
-              </div>
-
-              <ul class="bubble-list">
-                <li
-                  v-for="(message, index) in thread.messages"
-                  :key="message.id"
-                  class="bubble-row"
-                  :class="{ mine: message.fromMe }"
-                >
-                  <p
-                    v-if="showDayBreak(index)"
-                    class="day-break social-meta"
-                    :data-testid="`day-${index}`"
-                  >
-                    {{ formatDay(message.at) }}
-                  </p>
-                  <div class="bubble" :title="new Date(message.at).toLocaleString()">
-                    {{ message.body }}
-                  </div>
-                  <span
-                    v-if="message.fromMe && index === lastMineIndex"
-                    class="social-meta bubble-status"
-                  >
-                    {{ message.readAt ? 'Seen' : 'Sent' }} · {{ timeAgo(message.at) }}
-                  </span>
-                </li>
-              </ul>
-
-              <!-- Title: Friend Request -->
-              <div v-if="thread.request" class="request-card" data-testid="thread-request">
-                <p class="social-meta">
-                  {{
-                    thread.request.fromMe
-                      ? 'You sent a friend request'
-                      : `${thread.user.username} sent you a friend request`
-                  }}
-                  · {{ timeAgo(thread.request.at) }} · Expires
-                  {{ timeUntil(new Date(thread.request.expiresAt)) }}
-                </p>
-                <p v-if="thread.request.message" class="social-note">
-                  {{ thread.request.message }}
-                </p>
-                <FriendButton
-                  :user-id="thread.user.id"
-                  :username="thread.user.username"
-                  :relationship="thread.relationship"
-                  @update:relationship="onRelationshipChange"
+                <UserAvatar
+                  :src="request.user.profilePicture"
+                  :name="request.user.username"
+                  :size="40"
                 />
-              </div>
+                <span class="conversation-body">
+                  <span class="conversation-top">
+                    <span class="social-name">{{ request.user.username }}</span>
+                    <span class="social-meta">{{ timeAgo(request.at) }}</span>
+                  </span>
+                  <span class="conversation-preview unread">
+                    {{ request.message || 'Wants to be friends' }}
+                  </span>
+                </span>
+              </button>
+            </li>
+          </ul>
+        </template>
 
-              <p
-                v-if="!thread.messages.length && !thread.request && thread.canMessage"
-                class="social-empty"
-              >
-                Say hi to {{ thread.user.username }}.
-              </p>
-            </div>
-
-            <!-- Title: Composer -->
-            <form
-              v-if="thread.canMessage"
-              class="composer"
-              data-testid="message-composer"
-              @submit.prevent="send"
+        <!-- Title: Conversations -->
+        <h3 v-if="list.requests.length" class="conversation-heading">Conversations</h3>
+        <p v-if="!list.conversations.length" class="social-empty">
+          No messages yet. Start one with a friend.
+        </p>
+        <ul v-else class="conversation-list">
+          <li v-for="convo in list.conversations" :key="convo.user.id">
+            <button
+              type="button"
+              class="conversation-row"
+              :class="{ active: activeId === convo.user.id }"
+              :data-testid="`conversation-${convo.user.username}`"
+              @click="openThread(convo.user.id)"
             >
-              <textarea
-                ref="composerInput"
-                v-model="draft"
-                class="input social-textarea composer-input"
-                rows="1"
-                :maxlength="MESSAGE_MAX"
-                :placeholder="`Message ${thread.user.username}`"
-                aria-label="Message"
-                @keydown.enter.exact.prevent="send"
-              ></textarea>
-              <div class="composer-actions">
-                <span
-                  v-if="draft.length > MESSAGE_MAX * 0.8"
-                  class="social-char-count"
-                  :class="{ over: draft.length >= MESSAGE_MAX }"
-                  >{{ draft.length }}/{{ MESSAGE_MAX }}</span
-                >
-                <button
-                  type="submit"
-                  class="btn btn-primary btn-small"
-                  :disabled="sending || !draft.trim()"
-                  data-testid="message-send"
-                >
-                  Send
-                </button>
-              </div>
-            </form>
-            <p v-else class="social-meta composer-locked" data-testid="composer-locked">
-              {{
-                thread.relationship === 'incoming'
-                  ? 'Accept the request to start chatting.'
-                  : thread.relationship === 'outgoing'
-                    ? 'You can chat once they accept your request.'
-                    : `You and ${thread.user.username} aren't friends, so you can't send messages.`
-              }}
-            </p>
-          </template>
-        </section>
+              <UserAvatar :src="convo.user.profilePicture" :name="convo.user.username" :size="40" />
+              <span class="conversation-body">
+                <span class="conversation-top">
+                  <span class="social-name">{{ convo.user.username }}</span>
+                  <span class="social-meta">{{ timeAgo(convo.lastMessage.at) }}</span>
+                </span>
+                <span class="conversation-preview" :class="{ unread: convo.unread > 0 }">
+                  <template v-if="convo.lastMessage.fromMe">You: </template
+                  >{{ convo.lastMessage.body }}
+                </span>
+              </span>
+              <span v-if="convo.unread" class="social-count">{{ convo.unread }}</span>
+            </button>
+          </li>
+        </ul>
+      </template>
+    </aside>
+
+    <!-- Title: Thread -->
+    <section class="social-panel thread-panel" data-testid="message-thread">
+      <p v-if="!activeId" class="social-empty thread-placeholder">
+        Pick a conversation, or start a new one.
+      </p>
+      <div v-else-if="threadLoading && !thread" class="social-loading">
+        <div class="spinner"></div>
       </div>
-    </div>
+      <template v-else-if="thread">
+        <header class="thread-header">
+          <button
+            type="button"
+            class="btn btn-ghost btn-small thread-back"
+            aria-label="Back to chats"
+            @click="closeThread"
+          >
+            ←
+          </button>
+          <UserAvatar :src="thread.user.profilePicture" :name="thread.user.username" :size="40" />
+          <router-link :to="profileRoute(thread.user.username)" class="social-name">
+            {{ thread.user.username }}
+            <RoleBadge :username="thread.user.username" />
+          </router-link>
+        </header>
+
+        <div ref="scroller" class="thread-scroll" data-testid="thread-messages">
+          <div v-if="thread.hasMore" class="load-older">
+            <button
+              type="button"
+              class="btn btn-ghost btn-small"
+              :disabled="loadingOlder"
+              @click="loadOlder"
+            >
+              Load older messages
+            </button>
+          </div>
+
+          <ul class="bubble-list">
+            <li
+              v-for="(message, index) in thread.messages"
+              :key="message.id"
+              class="bubble-row"
+              :class="{ mine: message.fromMe }"
+            >
+              <p
+                v-if="showDayBreak(index)"
+                class="day-break social-meta"
+                :data-testid="`day-${index}`"
+              >
+                {{ formatDay(message.at) }}
+              </p>
+              <div class="bubble" :title="new Date(message.at).toLocaleString()">
+                {{ message.body }}
+              </div>
+              <span
+                v-if="message.fromMe && index === lastMineIndex"
+                class="social-meta bubble-status"
+              >
+                {{ message.readAt ? 'Seen' : 'Sent' }} · {{ timeAgo(message.at) }}
+              </span>
+            </li>
+          </ul>
+
+          <!-- Title: Friend Request -->
+          <div v-if="thread.request" class="request-card" data-testid="thread-request">
+            <p class="social-meta">
+              {{
+                thread.request.fromMe
+                  ? 'You sent a friend request'
+                  : `${thread.user.username} sent you a friend request`
+              }}
+              · {{ timeAgo(thread.request.at) }} · Expires
+              {{ timeUntil(new Date(thread.request.expiresAt)) }}
+            </p>
+            <p v-if="thread.request.message" class="social-note">
+              {{ thread.request.message }}
+            </p>
+            <FriendButton
+              :user-id="thread.user.id"
+              :username="thread.user.username"
+              :relationship="thread.relationship"
+              @update:relationship="onRelationshipChange"
+            />
+          </div>
+
+          <p
+            v-if="!thread.messages.length && !thread.request && thread.canMessage"
+            class="social-empty"
+          >
+            Say hi to {{ thread.user.username }}.
+          </p>
+        </div>
+
+        <!-- Title: Composer -->
+        <form
+          v-if="thread.canMessage"
+          class="composer"
+          data-testid="message-composer"
+          @submit.prevent="send"
+        >
+          <textarea
+            ref="composerInput"
+            v-model="draft"
+            class="input social-textarea composer-input"
+            rows="1"
+            :maxlength="MESSAGE_MAX"
+            :placeholder="`Message ${thread.user.username}`"
+            aria-label="Message"
+            @keydown.enter.exact.prevent="send"
+          ></textarea>
+          <div class="composer-actions">
+            <span
+              v-if="draft.length > MESSAGE_MAX * 0.8"
+              class="social-char-count"
+              :class="{ over: draft.length >= MESSAGE_MAX }"
+              >{{ draft.length }}/{{ MESSAGE_MAX }}</span
+            >
+            <button
+              type="submit"
+              class="btn btn-primary btn-small"
+              :disabled="sending || !draft.trim()"
+              data-testid="message-send"
+            >
+              Send
+            </button>
+          </div>
+        </form>
+        <p v-else class="social-meta composer-locked" data-testid="composer-locked">
+          {{
+            thread.relationship === 'incoming'
+              ? 'Accept the request to start chatting.'
+              : thread.relationship === 'outgoing'
+                ? 'You can chat once they accept your request.'
+                : `You and ${thread.user.username} aren't friends, so you can't send messages.`
+          }}
+        </p>
+      </template>
+    </section>
   </div>
 </template>
 
@@ -299,7 +282,7 @@ import type {
 import { timeAgo, timeUntil } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
-defineOptions({ name: 'MessagesPage' })
+defineOptions({ name: 'MessagesPanel' })
 
 const MESSAGE_MAX = 2000
 const THREAD_POLL_MS = 8000
@@ -419,7 +402,7 @@ const loadThread = async (userId: string) => {
   } catch (error) {
     if (seq !== threadSeq) return
     toast.error(apiErrorMessage(error, 'Could not load this conversation.'))
-    router.replace({ name: 'messages' })
+    router.replace({ name: 'friends' })
   } finally {
     if (seq === threadSeq) threadLoading.value = false
   }
@@ -509,10 +492,10 @@ const clearUnread = (userId: string) => {
 const openThread = (userId: string) => {
   pickerOpen.value = false
   pickerTerm.value = ''
-  if (userId !== activeId.value) router.push({ name: 'messages', query: { user: userId } })
+  if (userId !== activeId.value) router.push({ name: 'friends', query: { user: userId } })
 }
 
-const closeThread = () => router.push({ name: 'messages' })
+const closeThread = () => router.push({ name: 'friends' })
 
 const togglePicker = async () => {
   pickerOpen.value = !pickerOpen.value
