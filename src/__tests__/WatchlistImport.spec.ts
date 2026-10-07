@@ -6,7 +6,6 @@ import WatchlistImport from '@/components/WatchlistImport.vue'
 const api = vi.hoisted(() => ({
   start: vi.fn(),
   status: vi.fn(),
-  tmdbToken: vi.fn(),
   conflicts: vi.fn(),
   resolveConflicts: vi.fn(),
 }))
@@ -53,10 +52,10 @@ const doneJob = {
   },
 }
 
-const mountImport = async (path = '/import') => {
+const mountImport = async (path = '/connections') => {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/import', component: { template: '<div />' } }],
+    routes: [{ path: '/connections', component: { template: '<div />' } }],
   })
   await router.push(path)
   await router.isReady()
@@ -116,50 +115,19 @@ describe('WatchlistImport', () => {
     expect(api.conflicts).toHaveBeenCalledTimes(2)
   })
 
-  it('opens TMDB approval in a new tab and imports once approved', async () => {
-    const tab = { opener: {}, location: { href: '' }, close: vi.fn() }
-    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window)
+  it('starts imports from connected accounts for the Connections page', async () => {
     const { wrapper } = await mountImport()
-    api.tmdbToken.mockResolvedValue({
-      data: { data: { requestToken: 'abc123def456', authorizeUrl: 'https://tmdb.example/ok' } },
-    })
-    await wrapper.get('[data-testid="import-tmdb"]').trigger('click')
-    await flushPromises()
-
-    expect(open).toHaveBeenCalledWith('', '_blank')
-    expect(tab.opener).toBeNull()
-    expect(api.tmdbToken).toHaveBeenCalledWith(`${window.location.origin}/import?import=tmdb-tab`)
-    expect(tab.location.href).toBe('https://tmdb.example/ok')
-    expect(wrapper.text()).toContain('Waiting for you to approve')
-
     api.start.mockResolvedValue({ data: { data: runningJob } })
-    await wrapper.get('[data-testid="import-tmdb-approved"]').trigger('click')
-    await flushPromises()
+    const exposed = wrapper.vm as unknown as {
+      begin: (sources: unknown[]) => Promise<boolean>
+      busy: boolean
+    }
+    expect(await exposed.begin([{ source: 'anilist', connected: true }])).toBe(true)
     expect(api.start).toHaveBeenCalledWith({
-      sources: [{ source: 'tmdb', requestToken: 'abc123def456' }],
+      sources: [{ source: 'anilist', connected: true }],
       addMissing: true,
     })
-    open.mockRestore()
-  })
-
-  it('imports in this tab when TMDB sends the user back approved', async () => {
-    api.start.mockResolvedValue({ data: { data: runningJob } })
-    const { router } = await mountImport(
-      '/import?import=tmdb&request_token=abc123def456&approved=true',
-    )
-    expect(api.start).toHaveBeenCalledWith({
-      sources: [{ source: 'tmdb', requestToken: 'abc123def456' }],
-      addMissing: true,
-    })
-    expect(router.currentRoute.value.query).toEqual({})
-  })
-
-  it('reports a denied TMDB approval without importing', async () => {
-    const { wrapper } = await mountImport(
-      '/import?import=tmdb&request_token=abc123def456&denied=true',
-    )
-    expect(api.start).not.toHaveBeenCalled()
-    expect(wrapper.find('.import-error').text()).toContain('not approved')
+    expect(exposed.busy).toBe(true)
   })
 
   it('says so when the server forgets a running import instead of spinning forever', async () => {

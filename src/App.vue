@@ -172,8 +172,8 @@
                       </svg>
                     </span>
                   </router-link>
-                  <router-link to="/import" class="dropdown-item" @click="closeDropdown">
-                    <span class="item-text">Import</span>
+                  <router-link to="/connections" class="dropdown-item" @click="closeDropdown">
+                    <span class="item-text">Connections</span>
                     <span class="item-icon" aria-hidden="true">
                       <svg
                         viewBox="0 0 24 24"
@@ -183,8 +183,8 @@
                         stroke-linecap="round"
                         stroke-linejoin="round"
                       >
-                        <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" />
-                        <path d="M4.5 15.5v2A2.5 2.5 0 0 0 7 20h10a2.5 2.5 0 0 0 2.5-2.5v-2" />
+                        <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
+                        <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
                       </svg>
                     </span>
                   </router-link>
