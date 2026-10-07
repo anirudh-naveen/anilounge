@@ -51,6 +51,7 @@ describe('ForumHighlights', () => {
     const wrapper = await mountHighlights({ contentId: 's1', name: 'Frieren', reviewable: true })
     expect(highlights).toHaveBeenCalledWith('s1')
     const panel = wrapper.get('[data-testid="forum-highlights"]')
+    expect(panel.text()).toContain('Hot in the Forum')
     expect(panel.text()).toContain('7 posts about Frieren or the Frieren franchise')
     expect(panel.text()).toContain('Episode 5 thoughts')
     expect(panel.text()).toContain('Beautiful episode.')
@@ -65,7 +66,8 @@ describe('ForumHighlights', () => {
       data: { data: { posts: [], comments: [], total: 0, franchise: null } },
     })
     const wrapper = await mountHighlights({ contentId: 'c1', name: 'Himmel' })
-    expect(wrapper.text()).toContain('No posts about Himmel yet.')
+    expect(wrapper.text()).toContain('No forum posts about Himmel yet.')
+    expect(wrapper.get('[data-testid="forum-highlights"]').classes()).toContain('empty')
     expect(wrapper.find('[data-testid="highlights-review"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="highlights-discuss"]').exists()).toBe(true)
   })

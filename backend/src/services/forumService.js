@@ -8,6 +8,12 @@
  * one level: a reply to a reply attaches to the top-level comment. Likes rank the
  * "leading" posts and "highlighted" comments shown on title pages and on Home.
  *
+ * A review's score follows the author's watchlist: it shows their current rating for
+ * the reviewed title (`posts.content_id`, the first movie/series/special tag), falling
+ * back to the score saved with the post when they have no rating. The client writes
+ * the score to the watchlist when the review is saved. Tags are listed franchise
+ * first, then movies/series/specials (episodes after their series), then characters.
+ *
  * Text is public, so blocked language is always masked (no profanity opt-in) and the
  * author gets a language warning (`screenText`). Authors edit and delete their own
  * posts and comments; admins can delete anyone's (logged). Banned users' posts and
@@ -45,6 +51,7 @@ export const HOME_REFRESH_HOURS = 3
 const HOME_LIMIT = 6
 const HIGHLIGHT_POSTS = 3
 const HIGHLIGHT_COMMENTS = 3
+const CHARACTERS_MAX = 30
 
 /**
  * Ranking for 'hot': engagement decayed by age in hours (comments weigh double).
@@ -63,12 +70,20 @@ const likeCountSql = (alias) => `(SELECT count(*) FROM post_likes l WHERE l.post
 const commentCountSql = (alias) =>
   `(SELECT count(*) FROM comments c WHERE c.post_id = ${alias}.id AND c.deleted_at IS NULL)`
 
+/** Tag display order: franchise, then movies/series/specials, then characters. */
+const TAG_LEVEL_SQL = `CASE tc.kind WHEN 'franchise' THEN 0 WHEN 'character' THEN 2 ELSE 1 END`
+
 /**
  * Columns for a post card. `$1` must be the viewer id (or null).
  * @returns {string}
  */
 function postColumns() {
-  return `p.id, p.kind, p.title, p.body, p.score, p.spoiler, p.created_at, p.edited_at,
+  return `p.id, p.kind, p.title, p.body, p.content_id AS subject_id, p.spoiler,
+    p.created_at, p.edited_at,
+    COALESCE((
+      SELECT r.score FROM ratings r
+      WHERE r.user_id = p.user_id AND r.content_id = p.content_id AND r.score >= 1
+    ), p.score) AS score,
     p.last_activity_at, u.id AS author_id, u.username AS author_username,
     u.profile_picture AS author_picture,
     ${likeCountSql('p')}::int AS like_count,
@@ -78,7 +93,7 @@ function postColumns() {
       SELECT json_agg(json_build_object(
         'contentId', t.content_id, 'kind', tc.kind, 'name', tc.name,
         'imagePath', tc.image_path, 'season', t.season_number, 'episode', t.episode_number
-      ) ORDER BY t.season_number NULLS FIRST, t.episode_number, tc.name)
+      ) ORDER BY ${TAG_LEVEL_SQL}, tc.name, t.season_number NULLS FIRST, t.episode_number)
       FROM post_tags t JOIN content tc ON tc.id = t.content_id
       WHERE t.post_id = p.id
     ), '[]'::json) AS tags`
@@ -115,6 +130,7 @@ export function postEntry(row, { full = false, viewer = null } = {}) {
     title: row.title,
     ...(full ? { body: row.body } : { excerpt: excerptOf(row.body) }),
     score: row.score === null || row.score === undefined ? null : Number(row.score),
+    subjectId: row.subject_id ? String(row.subject_id) : null,
     spoiler: Boolean(row.spoiler),
     createdAt: row.created_at,
     editedAt: row.edited_at || null,
@@ -314,6 +330,15 @@ export async function validatePostInput(input = {}, { partial = false, kind: fix
 }
 
 /**
+ * The title a review scores: its first movie, series, or special tag.
+ * @param {Array<{ contentId: string, kind: string }>} tags - Validated, in submitted order.
+ * @returns {string | null}
+ */
+export function reviewSubject(tags) {
+  return tags.find((tag) => REVIEWABLE_KINDS.includes(tag.kind))?.contentId || null
+}
+
+/**
  * Refuse a write while the author is over a burst limit.
  * @param {string} table - 'posts' or 'comments'.
  * @param {string} userId
@@ -403,8 +428,8 @@ export async function createPost(user, input) {
   const screened = await screenText(user, 'post', { title: fields.title, body: fields.body })
   const postId = await inTransaction(async () => {
     const { rows } = await query(
-      `INSERT INTO posts (user_id, kind, title, body, score, spoiler)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      `INSERT INTO posts (user_id, kind, title, body, score, spoiler, content_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
       [
         user._id,
         fields.kind,
@@ -412,6 +437,7 @@ export async function createPost(user, input) {
         screened.fields.body,
         fields.kind === 'review' ? fields.score : null,
         fields.spoiler === true,
+        fields.kind === 'review' ? reviewSubject(fields.tags) : null,
       ],
     )
     await insertTags(rows[0].id, fields.tags)
@@ -450,6 +476,7 @@ export async function updatePost(user, postId, input = {}) {
          body = COALESCE($3, body),
          score = COALESCE($4, score),
          spoiler = COALESCE($5, spoiler),
+         content_id = COALESCE($6, content_id),
          edited_at = now()
        WHERE id = $1`,
       [
@@ -458,6 +485,7 @@ export async function updatePost(user, postId, input = {}) {
         screened.fields.body ?? null,
         fields.score ?? null,
         fields.spoiler ?? null,
+        row.kind === 'review' && fields.tags ? reviewSubject(fields.tags) : null,
       ],
     )
     if (fields.tags) {
@@ -857,9 +885,36 @@ export async function searchTags(term) {
 }
 
 /**
+ * Characters in a movie, series, or special, for the tag picker's expandable list:
+ * main cast first, then by importance.
+ * @param {string} contentId
+ * @returns {Promise<Array<{ contentId: string, kind: 'character', name: string, imagePath: string | null, role: string }>>}
+ * @throws {HttpError} 400 invalid id.
+ */
+export async function contentCharacters(contentId) {
+  if (!isUuid(contentId)) throw new HttpError(400, 'Invalid content id.')
+  const { rows } = await query(
+    `SELECT c.id, c.name, c.image_path, a.role
+     FROM appearances a JOIN content c ON c.id = a.character_id
+     WHERE a.work_id = $1
+     ORDER BY CASE a.role WHEN 'main' THEN 0 WHEN 'supporting' THEN 1 ELSE 2 END,
+              a.importance DESC, c.name
+     LIMIT ${CHARACTERS_MAX}`,
+    [contentId],
+  )
+  return rows.map((row) => ({
+    contentId: String(row.id),
+    kind: 'character',
+    name: row.name,
+    imagePath: row.image_path || null,
+    role: row.role,
+  }))
+}
+
+/**
  * Leading posts and highlighted comments for a title or character page: posts tagged
- * with it (or, for a franchise member, with its franchise), ranked by likes and
- * comments; comments with at least one like on those posts.
+ * with it (or, for a franchise member, with its franchise), ranked hot (recent
+ * engagement); comments with at least one like on those posts, most liked first.
  * @param {object | null} viewer
  * @param {string} contentId
  * @returns {Promise<{ posts: object[], comments: object[], total: number, franchise: object | null }>}
@@ -882,7 +937,7 @@ export async function getHighlights(viewer, contentId) {
     query(
       `SELECT ${postColumns()} FROM posts p JOIN users u ON u.id = p.user_id
        WHERE u.banned_at IS NULL AND ${tagged}
-       ORDER BY (${likeCountSql('p')} * 2 + ${commentCountSql('p')}) DESC, p.created_at DESC
+       ORDER BY ${hotScoreSql('p')} DESC, p.created_at DESC
        LIMIT ${HIGHLIGHT_POSTS}`,
       [viewer?._id || null, ids],
     ),
@@ -1032,6 +1087,7 @@ export default {
   deleteComment,
   setCommentLike,
   searchTags,
+  contentCharacters,
   getHighlights,
   getHomeHighlights,
   validatePostInput,

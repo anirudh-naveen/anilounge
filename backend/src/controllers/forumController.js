@@ -56,6 +56,12 @@ export const searchTags = handle(
   'Error searching tags',
 )
 
+/** `GET /forum/tags/:id/characters` — characters in a title, for the tag picker. */
+export const contentCharacters = handle(
+  async (req) => ({ data: await forumService.contentCharacters(req.params.id) }),
+  'Error loading characters',
+)
+
 /** `GET /forum/highlights/:id` — leading posts and highlighted comments for a page. */
 export const getHighlights = handle(
   async (req) => ({ data: await forumService.getHighlights(req.user || null, req.params.id) }),
@@ -144,6 +150,7 @@ export default {
   listPosts,
   getPost,
   searchTags,
+  contentCharacters,
   getHighlights,
   getHomeHighlights,
   createPost,

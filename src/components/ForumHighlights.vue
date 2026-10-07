@@ -1,22 +1,28 @@
 <!--
   ForumHighlights.vue — forum posts about a title or character (component).
 
-  For movie, series, and character pages: the leading posts tagged with this page
-  (or its franchise) and a few highlighted comments from them, with links to see
-  every post, start a discussion, or (for titles) write a review. Hidden while
-  loading and on errors so it never blocks the page.
+  For movie, series, and character pages, near the top: the hot posts tagged with
+  this page (or its franchise) and a few highlighted comments from them, with links
+  to see every post, start a discussion, or (for titles) write a review. With no
+  posts yet it shrinks to a one-line prompt. Hidden while loading and on errors so
+  it never blocks the page.
 -->
 <template>
-  <section v-if="data" class="forum-highlights" data-testid="forum-highlights">
+  <section
+    v-if="data"
+    class="forum-highlights"
+    :class="{ empty: !data.total }"
+    data-testid="forum-highlights"
+  >
     <header class="highlights-head">
       <div>
-        <h2>From the Forum</h2>
+        <h2 v-if="data.total">Hot in the Forum</h2>
         <p class="social-meta">
           <template v-if="data.total">
             {{ data.total }} {{ data.total === 1 ? 'post' : 'posts' }} about {{ name }}
             <template v-if="data.franchise">or the {{ data.franchise.name }} franchise</template>
           </template>
-          <template v-else>No posts about {{ name }} yet.</template>
+          <template v-else>No forum posts about {{ name }} yet.</template>
         </p>
       </div>
       <div class="highlights-actions">
@@ -133,6 +139,21 @@ watch(
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.forum-highlights.empty {
+  padding: 0.85rem 1.25rem;
+  box-shadow: none;
+}
+
+.forum-highlights.empty .highlights-head {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.forum-highlights.empty .social-meta {
+  margin: 0;
+  font-size: 0.92rem;
 }
 
 .highlights-head h2 {

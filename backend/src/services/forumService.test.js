@@ -4,6 +4,7 @@ import {
   BODY_MAX,
   excerptOf,
   homeWindowEnd,
+  reviewSubject,
   TAGS_MAX,
   TITLE_MAX,
   validatePostInput,
@@ -94,5 +95,18 @@ describe('validateTags', () => {
   it('treats missing tags as none', async () => {
     assert.deepEqual(await validateTags(undefined), [])
     assert.deepEqual(await validateTags([]), [])
+  })
+})
+
+describe('reviewSubject', () => {
+  it('is the first movie, series, or special tag', () => {
+    const tags = [
+      { contentId: 'f', kind: 'franchise' },
+      { contentId: 'c', kind: 'character' },
+      { contentId: 's', kind: 'series' },
+      { contentId: 'm', kind: 'movie' },
+    ]
+    assert.equal(reviewSubject(tags), 's')
+    assert.equal(reviewSubject([{ contentId: 'c', kind: 'character' }]), null)
   })
 })

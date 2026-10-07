@@ -102,6 +102,9 @@
         <p>{{ movie.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Forum -->
+      <ForumHighlights :content-id="movie._id" :name="getDisplayTitle(movie)" reviewable />
+
       <!-- Title: Related Loading -->
       <div v-if="relatedContentLoading" class="related-content-loading">
         <h3>Loading Related Content...</h3>
@@ -235,9 +238,6 @@
       </div>
 
       <EntityCastRow :items="characters" :content-id="movie._id" :loading="charactersLoading" />
-
-      <!-- Title: Forum -->
-      <ForumHighlights :content-id="movie._id" :name="getDisplayTitle(movie)" reviewable />
 
       <StudioLinks :content="movie" />
     </div>

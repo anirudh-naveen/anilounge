@@ -8,6 +8,7 @@ const create = vi.fn()
 const update = vi.fn()
 const searchTags = vi.fn()
 const getContentEpisodes = vi.fn()
+const contentCharacters = vi.fn()
 const toast = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
@@ -16,6 +17,21 @@ const toast = vi.hoisted(() => ({
 }))
 
 vi.mock('vue-toastification', () => ({ useToast: () => toast }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isAuthenticated: true }) }))
+
+const watchlist = vi.hoisted(() => ({
+  items: new Map<string, { rating?: number }>(),
+  add: vi.fn(),
+  update: vi.fn(),
+}))
+vi.mock('@/stores/content', () => ({
+  useContentStore: () => ({
+    loadWatchlist: vi.fn(),
+    getWatchlistItem: (id: string) => watchlist.items.get(id),
+    addToWatchlist: (...args: unknown[]) => watchlist.add(...args),
+    updateWatchlistItem: (...args: unknown[]) => watchlist.update(...args),
+  }),
+}))
 vi.mock('@/services/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/api')>()
   return {
@@ -25,6 +41,7 @@ vi.mock('@/services/api', async (importOriginal) => {
       create: (...args: unknown[]) => create(...args),
       update: (...args: unknown[]) => update(...args),
       searchTags: (...args: unknown[]) => searchTags(...args),
+      contentCharacters: (...args: unknown[]) => contentCharacters(...args),
     },
     contentAPI: {
       ...actual.contentAPI,
@@ -47,6 +64,7 @@ describe('ForumComposer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useRealTimers()
+    watchlist.items.clear()
     getContentEpisodes.mockResolvedValue({
       data: {
         data: {
@@ -128,6 +146,121 @@ describe('ForumComposer', () => {
     await withSeries.get('form').trigger('submit')
     await flushPromises()
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: 'review', score: 8.5 }))
+    expect(watchlist.add).toHaveBeenCalledWith('s1', 'completed', 8.5)
+  })
+
+  it('starts from the watchlist rating and writes changes back', async () => {
+    watchlist.items.set('s1', { rating: 6 })
+    const wrapper = mount(ForumComposer, {
+      props: { presetTags: [character, series], presetKind: 'review' },
+    })
+    expect((wrapper.get('[data-testid="composer-score"]').element as HTMLInputElement).value).toBe(
+      '6',
+    )
+    expect(wrapper.get('[data-testid="composer-score-note"]').text()).toContain(
+      'your watchlist rating for Frieren',
+    )
+    // Same rating colors as the rest of the site (6/10 is yellow-green).
+    expect(wrapper.get('[data-testid="composer-score-value"]').attributes('style')).toContain(
+      'rgb(',
+    )
+    await wrapper.get('[data-testid="composer-title"]').setValue('Good')
+    await wrapper.get('[data-testid="composer-body"]').setValue('Solid')
+    await wrapper.get('[data-testid="composer-score"]').setValue('7.5')
+    create.mockResolvedValue({ data: { data: buildPost({ kind: 'review', score: 6 }) } })
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(watchlist.update).toHaveBeenCalledWith('s1', { rating: 7.5 })
+    expect(watchlist.add).not.toHaveBeenCalled()
+    expect(wrapper.emitted('saved')?.[0]?.[0]).toMatchObject({ score: 7.5 })
+  })
+
+  it('keeps tags in hierarchy order', async () => {
+    const franchise: PostTag = {
+      ...series,
+      contentId: 'f1',
+      kind: 'franchise',
+      name: 'Zz Franchise',
+    }
+    const wrapper = mount(ForumComposer, { props: { presetTags: [character, series] } })
+    searchTags.mockResolvedValue({
+      data: {
+        data: [
+          {
+            contentId: 'f1',
+            kind: 'franchise',
+            name: franchise.name,
+            imagePath: null,
+            seasonCount: null,
+            episodeCount: null,
+            year: null,
+          },
+        ],
+      },
+    })
+    vi.useFakeTimers()
+    await wrapper.get('[data-testid="tag-search"]').setValue('zz')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    await wrapper.get('[data-testid="tag-results"] button').trigger('click')
+    vi.useRealTimers()
+    const chips = wrapper.findAll('[data-testid="selected-tags"] .tag-chip-main')
+    expect(chips.map((chip) => chip.text())).toEqual([
+      expect.stringContaining('Zz Franchise'),
+      expect.stringContaining('Frieren'),
+      expect.stringContaining('Himmel'),
+    ])
+  })
+
+  it('lists a title’s characters under its search result', async () => {
+    vi.useFakeTimers()
+    searchTags.mockResolvedValue({
+      data: {
+        data: [
+          {
+            contentId: 's1',
+            kind: 'series',
+            name: 'Frieren',
+            imagePath: null,
+            seasonCount: 2,
+            episodeCount: 28,
+            year: 2023,
+          },
+        ],
+      },
+    })
+    contentCharacters.mockResolvedValue({
+      data: {
+        data: [
+          { contentId: 'c1', kind: 'character', name: 'Himmel', imagePath: null, role: 'main' },
+          {
+            contentId: 'c2',
+            kind: 'character',
+            name: 'Stark',
+            imagePath: null,
+            role: 'supporting',
+          },
+        ],
+      },
+    })
+    const wrapper = mount(ForumComposer)
+    await wrapper.get('[data-testid="tag-search"]').setValue('frieren')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    await wrapper.get('[data-testid="characters-toggle-s1"]').trigger('click')
+    await flushPromises()
+    expect(contentCharacters).toHaveBeenCalledWith('s1')
+    const list = wrapper.get('[data-testid="characters-s1"]')
+    expect(list.text()).toContain('Himmel')
+    expect(list.text()).toContain('Character · main')
+    await list.findAll('button')[1]!.trigger('click')
+    await list.findAll('button')[0]!.trigger('click')
+    // Both added; the list stays open to pick more.
+    const selected = wrapper.get('[data-testid="selected-tags"]').text()
+    expect(selected).toContain('Stark')
+    expect(selected).toContain('Himmel')
+    expect(wrapper.find('[data-testid="characters-s1"]').exists()).toBe(true)
+    vi.useRealTimers()
   })
 
   it('edits an existing post and shows a language warning', async () => {

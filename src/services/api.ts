@@ -380,6 +380,9 @@ export const forumAPI = {
 
   searchTags: (q: string) => api.get('/forum/tags', { params: { q } }),
 
+  /** Characters in a title, main cast first (tag picker). */
+  contentCharacters: (contentId: string) => api.get(`/forum/tags/${contentId}/characters`),
+
   /** Leading posts and highlighted comments for a title or character page. */
   highlights: (contentId: string) => api.get(`/forum/highlights/${contentId}`),
 

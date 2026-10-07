@@ -2,9 +2,11 @@
   ForumTagPicker.vue — choose what a forum post is about (component).
 
   Search movies, series, specials, franchises, and characters by name and add up
-  to TAGS_MAX tags. A series tag can be narrowed to one episode, picked from the
-  series' episode list (the same one its page shows), to make an episode thread.
-  v-model is the selected tag list.
+  to TAGS_MAX tags. Title results expand to list their characters, main cast
+  first. A series tag can be narrowed to one episode, picked from the series'
+  episode list (the same one its page shows), to make an episode thread.
+  v-model is the selected tag list, kept in hierarchy order (franchise, titles,
+  characters).
 -->
 <template>
   <div class="tag-picker">
@@ -93,21 +95,62 @@
       />
       <ul v-if="results.length" class="tag-results" data-testid="tag-results">
         <li v-for="hit in results" :key="hit.contentId">
-          <button type="button" class="tag-result" @click="add(hit)">
-            <img
-              v-if="hit.imagePath"
-              :src="getPosterUrl(hit.imagePath)"
-              alt=""
-              class="tag-result-image"
-              loading="lazy"
-            />
-            <span class="tag-result-body">
-              <span class="tag-result-name">{{ hit.name }}</span>
-              <span class="social-meta">
-                {{ KIND_LABELS[hit.kind] }}<template v-if="hit.year"> · {{ hit.year }}</template>
+          <div class="tag-result-row">
+            <button type="button" class="tag-result" @click="add(hit)">
+              <img
+                v-if="hit.imagePath"
+                :src="getPosterUrl(hit.imagePath)"
+                alt=""
+                class="tag-result-image"
+                loading="lazy"
+              />
+              <span class="tag-result-body">
+                <span class="tag-result-name">{{ hit.name }}</span>
+                <span class="social-meta">
+                  {{ KIND_LABELS[hit.kind] }}<template v-if="hit.year"> · {{ hit.year }}</template>
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+            <!-- Title: Characters Toggle -->
+            <button
+              v-if="REVIEWABLE_KINDS.includes(hit.kind)"
+              type="button"
+              class="tag-expand"
+              :aria-expanded="expanded === hit.contentId"
+              :data-testid="`characters-toggle-${hit.contentId}`"
+              @click="toggleCharacters(hit.contentId)"
+            >
+              Characters {{ expanded === hit.contentId ? '▴' : '▾' }}
+            </button>
+          </div>
+          <!-- Title: Characters -->
+          <div
+            v-if="expanded === hit.contentId"
+            class="tag-characters"
+            :data-testid="`characters-${hit.contentId}`"
+          >
+            <p v-if="characters[hit.contentId] === 'loading'" class="social-meta">Loading…</p>
+            <p v-else-if="!characterList(hit.contentId).length" class="social-meta">
+              No characters listed.
+            </p>
+            <ul v-else>
+              <li v-for="person in characterList(hit.contentId)" :key="person.contentId">
+                <button type="button" class="tag-result character" @click="add(person)">
+                  <img
+                    v-if="person.imagePath"
+                    :src="getPosterUrl(person.imagePath)"
+                    alt=""
+                    class="tag-result-image round"
+                    loading="lazy"
+                  />
+                  <span class="tag-result-body">
+                    <span class="tag-result-name">{{ person.name }}</span>
+                    <span class="social-meta">Character · {{ person.role }}</span>
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </div>
         </li>
       </ul>
       <p v-else-if="searched && term.trim().length >= 2 && !searching" class="social-meta">
@@ -122,8 +165,8 @@
 import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { contentAPI, forumAPI, getPosterUrl } from '@/services/api'
 import type { Episode } from '@/types/content'
-import type { PostTag, TagSearchHit } from '@/types/forum'
-import { KIND_LABELS, TAGS_MAX, tagLabel } from '@/utils/forum'
+import type { CharacterHit, PostTag, TagSearchHit } from '@/types/forum'
+import { KIND_LABELS, REVIEWABLE_KINDS, sortTags, TAGS_MAX, tagLabel } from '@/utils/forum'
 
 const SEARCH_DELAY_MS = 250
 
@@ -182,9 +225,31 @@ const changeSeason = (index: number, season: number) => {
   setEpisode(index, season, episodesOf(tag.contentId, season)[0]?.episodeNumber ?? null)
 }
 
-const update = (tags: PostTag[]) => emit('update:modelValue', tags)
+/** Emit tags kept in hierarchy order: franchise, titles, characters. */
+const update = (tags: PostTag[]) => emit('update:modelValue', sortTags(tags))
 
-const add = (hit: TagSearchHit) => {
+/** Title id → its characters (or 'loading'), for the expandable list under a result. */
+const characters = reactive<Record<string, CharacterHit[] | 'loading'>>({})
+const expanded = ref<string | null>(null)
+
+const characterList = (contentId: string) => {
+  const list = characters[contentId]
+  return Array.isArray(list) ? list : []
+}
+
+const toggleCharacters = async (contentId: string) => {
+  expanded.value = expanded.value === contentId ? null : contentId
+  if (expanded.value !== contentId || characters[contentId]) return
+  characters[contentId] = 'loading'
+  try {
+    const response = await forumAPI.contentCharacters(contentId)
+    characters[contentId] = response.data.data as CharacterHit[]
+  } catch {
+    characters[contentId] = []
+  }
+}
+
+const add = (hit: TagSearchHit | CharacterHit) => {
   const exists = props.modelValue.some(
     (tag) => tag.contentId === hit.contentId && tag.season === null,
   )
@@ -201,7 +266,8 @@ const add = (hit: TagSearchHit) => {
       },
     ])
   }
-  term.value = ''
+  // Clear the search unless the user is picking several characters from one title.
+  if (hit.kind !== 'character' || !expanded.value) term.value = ''
 }
 
 const remove = (index: number) => update(props.modelValue.filter((_, i) => i !== index))
@@ -352,6 +418,52 @@ onUnmounted(() => clearTimeout(timer))
   box-shadow: var(--shadow-md);
   max-height: 280px;
   overflow-y: auto;
+}
+
+.tag-result-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.tag-expand {
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.tag-expand:hover,
+.tag-expand[aria-expanded='true'] {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.tag-characters {
+  margin: 0.15rem 0 0.4rem 1.6rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border-color);
+}
+
+.tag-characters ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tag-characters .social-meta {
+  margin: 0.3rem 0;
+}
+
+.tag-result-image.round {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
 }
 
 .tag-result {
