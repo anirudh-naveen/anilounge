@@ -404,25 +404,22 @@ export function sendFriendRequestEmail(recipient, requester, note, expiresAt, un
 
 /**
  * Tell the support inbox a user has gone past the language-warning limit, so an
- * admin can review them for a mute or ban. The excerpt is already masked.
+ * admin can review them for a mute or ban. Sent once per category (curse, slur);
+ * the subject leads with the category. The excerpt is already masked.
  * @param {{ id: string, username: string }} user
- * @param {{ count: number, limit: number, surface: string, term: string, excerpt: string }} warning
+ * @param {{ count: number, curses: number, slurs: number, category: 'curse' | 'slur', limit: number, surface: string, term: string, excerpt: string }} warning
  * @returns {Promise<{ delivered: boolean }>}
  */
 export function sendLanguageAlertEmail(user, warning) {
   const link = `${appUrl()}/admin`
-  const summary = `${user.username} has ${warning.count} language warnings (limit ${warning.limit}). Latest: a ${warning.surface} matching "${warning.term}".`
+  const label = warning.category === 'slur' ? 'Slur' : 'Curse'
+  const summary = `${user.username} has ${warning.count} language warnings (${warning.curses} curses, ${warning.slurs} slurs; limit ${warning.limit}). Latest: a ${warning.surface} with a ${warning.category} matching "${warning.term}".`
   return sendEmail({
     to: supportEmail(),
-    subject: `[AniLounge moderation] ${user.username} passed the language warning limit`,
-    text: `${summary}
-
-What they sent (masked): "${warning.excerpt}"
-
-Review them under Admin → Users → Flagged: ${link}
-User ID: ${user.id}`,
+    subject: `[AniLounge moderation] ${label}: ${user.username} passed the language warning limit`,
+    text: `${summary}\n\nWhat they sent (masked): "${warning.excerpt}"\n\nReview them under Admin → Users → Flagged: ${link}\nUser ID: ${user.id}`,
     html: layout(
-      'Language warning limit reached',
+      `${label} alert: language warning limit reached`,
       `<p>${escapeHtml(summary)}</p>
 <p style="margin:16px 0;padding:12px 16px;background:#f4f5f7;border-radius:8px;white-space:pre-wrap">${escapeHtml(warning.excerpt)}</p>
 <p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Review in Admin</a></p>

@@ -67,6 +67,8 @@ export interface MessageThread {
   messages: DirectMessage[]
   /** More, older messages exist (page back with `before`). */
   hasMore: boolean
+  /** Both people allow profanity, so curses aren't masked here (slurs still are). */
+  profanityAllowed: boolean
 }
 
 export interface UnreadCounts {
@@ -82,5 +84,6 @@ export interface LanguageWarning {
   limit: number
   /** True once past the limit and admins were notified. */
   alerted: boolean
+  category: 'curse' | 'slur'
   message: string
 }

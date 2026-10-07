@@ -83,6 +83,7 @@ const buildThread = (overrides: Partial<MessageThread> = {}): MessageThread => (
     },
   ],
   hasMore: false,
+  profanityAllowed: false,
   ...overrides,
 })
 
@@ -158,7 +159,13 @@ describe('MessagesPanel', () => {
           fromMe: true,
           readAt: null,
         },
-        warning: { count: 1, limit: 3, alerted: false, message: 'Warning 1 of 3.' },
+        warning: {
+          count: 1,
+          limit: 3,
+          alerted: false,
+          category: 'curse',
+          message: 'Warning 1 of 3.',
+        },
       },
     })
     const { wrapper } = await mountAt('/friends?user=u2')
@@ -191,6 +198,12 @@ describe('MessagesPanel', () => {
     expect(wrapper.find('[data-testid="friend-accept"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="message-composer"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="composer-locked"]').text()).toContain('Accept the request')
+  })
+
+  it('notes when both people allow profanity', async () => {
+    thread.mockResolvedValue({ data: { data: buildThread({ profanityAllowed: true }) } })
+    const { wrapper } = await mountAt('/friends?user=u2')
+    expect(wrapper.find('[data-testid="profanity-allowed"]').exists()).toBe(true)
   })
 
   it('keeps history readable but blocks sending after an unfriend', async () => {

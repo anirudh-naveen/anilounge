@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  breakdown,
   excerpt,
   EXCERPT_MAX,
   maskTerm,
@@ -42,5 +43,22 @@ describe('warningMessage', () => {
 
   it('says when the text was refused instead of sent', () => {
     assert.match(warningMessage(2, 'direct message', false), /so it wasn't sent/)
+  })
+})
+
+describe('warningMessage categories', () => {
+  it('names slurs as never allowed', () => {
+    assert.match(
+      warningMessage(1, 'direct message', true, 'slur'),
+      /a slur, which is never allowed/,
+    )
+    assert.match(warningMessage(1, 'direct message', true, 'curse'), /language that isn't allowed/)
+  })
+})
+
+describe('breakdown', () => {
+  it('counts each category', () => {
+    assert.equal(breakdown(3, 1), '3 curses, 1 slur')
+    assert.equal(breakdown(1, 0), '1 curse, 0 slurs')
   })
 })

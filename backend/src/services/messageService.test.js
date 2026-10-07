@@ -74,6 +74,20 @@ describe('maskLanguage', () => {
     })
   })
 
+  it('leaves curses but masks slurs when both allow profanity', () => {
+    const options = { allowCurses: true }
+    assert.deepEqual(maskLanguage('what the fuck', options), {
+      body: 'what the fuck',
+      term: null,
+      clean: true,
+    })
+    assert.deepEqual(maskLanguage('fuck off, spic', options), {
+      body: 'fuck off, s***',
+      term: 'spic',
+      clean: true,
+    })
+  })
+
   it('masks spelled-out words', () => {
     assert.equal(maskLanguage('f u c k this').body, 'f * * * this')
     assert.equal(maskLanguage('f u c k this').clean, true)

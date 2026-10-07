@@ -373,6 +373,10 @@ router.post('/friends/requests', blockWhenMuted(), friendController.sendRequest)
 router.post('/friends/requests/:id/accept', validateObjectId, friendController.acceptRequest)
 router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
 
+/** Settings → Communication (allow profanity in private messages). */
+router.get('/account/communication', messageController.getCommunicationSettings)
+router.put('/account/communication', messageController.updateCommunicationSettings)
+
 /** Direct messages between friends. `:id` is the other user's id. */
 router.get('/messages', messageController.getConversations)
 router.get('/messages/unread', messageController.getUnreadCount)

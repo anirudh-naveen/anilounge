@@ -754,18 +754,25 @@
                     Muted {{ muteLabel(user.mutedUntil) }}
                   </span>
                   <span
-                    v-if="user.languageWarnings"
+                    v-if="user.curseWarnings"
                     class="admin-pill"
                     :class="user.flagged ? 'danger' : 'warn'"
                     :title="
                       user.flagged
                         ? 'Past the language warning limit: review for a mute or ban'
-                        : 'Language warnings'
+                        : 'Curse warnings'
                     "
-                    data-testid="language-warnings"
+                    data-testid="curse-warnings"
                   >
-                    {{ user.languageWarnings }}
-                    {{ user.languageWarnings === 1 ? 'warning' : 'warnings' }}
+                    {{ user.curseWarnings }} {{ user.curseWarnings === 1 ? 'curse' : 'curses' }}
+                  </span>
+                  <span
+                    v-if="user.slurWarnings"
+                    class="admin-pill danger"
+                    title="Slur warnings"
+                    data-testid="slur-warnings"
+                  >
+                    {{ user.slurWarnings }} {{ user.slurWarnings === 1 ? 'slur' : 'slurs' }}
                   </span>
                   <span v-if="!user.emailVerified" class="admin-pill muted">Unverified</span>
                   <span v-if="user.isDemo" class="admin-pill muted">Demo</span>
@@ -1013,6 +1020,9 @@ type AdminUser = {
   cosmeticRoles: string[]
   /** Times their text was masked for blocked language. */
   languageWarnings: number
+  /** Of those: curses and slurs. */
+  curseWarnings: number
+  slurWarnings: number
   /** Past the warning limit; shown under the Flagged filter until banned. */
   flagged: boolean
 }

@@ -11,7 +11,8 @@
  * Blocked language is masked, not rejected: the message goes out with those words
  * starred (`f***`) and the sender gets a language warning (see
  * `languageWarningService.js`). Text the mask can't fully clean is refused, and still
- * counts as a warning.
+ * counts as a warning. When both people turned on Settings → Communication → Allow
+ * profanity, curses pass unmasked between them; slurs are always masked and warned.
  */
 
 import { query } from '../../config/postgres.js'
@@ -81,15 +82,56 @@ export function cleanMessageBody(value) {
 /**
  * Mask blocked language in a message.
  * @param {string} body - Cleaned body.
- * @returns {{ body: string, term: string | null, clean: boolean }} `term` is the first
- *   blocked term (null when the text was fine); `clean` is false when blocked language
- *   survives masking.
+ * @param {{ allowCurses?: boolean }} [options] - Both people allow profanity: leave
+ *   curses alone and mask only slurs.
+ * @returns {{ body: string, term: string | null, clean: boolean }} `term` is the most
+ *   serious blocked term (a slur over a curse; null when the text was fine); `clean`
+ *   is false when blocked language survives masking.
  */
-export function maskLanguage(body) {
-  const term = findBlockedTerm(body)
+export function maskLanguage(body, options = {}) {
+  const term = findBlockedTerm(body, options)
   if (!term) return { body, term: null, clean: true }
-  const masked = censorText(body)
-  return { body: masked, term, clean: !findBlockedTerm(masked) }
+  const masked = censorText(body, options)
+  return { body: masked, term, clean: !findBlockedTerm(masked, options) }
+}
+
+/**
+ * Whether both users turned on Allow profanity.
+ * @param {string} a
+ * @param {string} b
+ * @returns {Promise<boolean>}
+ */
+export async function bothAllowProfanity(a, b) {
+  const { rows } = await query(
+    `SELECT count(*)::int AS count FROM users WHERE id = ANY($1::uuid[]) AND allow_profanity`,
+    [[a, b]],
+  )
+  return rows[0]?.count === 2
+}
+
+/**
+ * Settings → Communication for the signed-in user.
+ * @param {string} userId
+ * @returns {Promise<{ allowProfanity: boolean }>}
+ */
+export async function getCommunicationSettings(userId) {
+  const { rows } = await query('SELECT allow_profanity FROM users WHERE id = $1', [userId])
+  return { allowProfanity: Boolean(rows[0]?.allow_profanity) }
+}
+
+/**
+ * Save Settings → Communication.
+ * @param {string} userId
+ * @param {{ allowProfanity?: unknown }} changes
+ * @returns {Promise<{ allowProfanity: boolean }>}
+ * @throws {HttpError} 400 when `allowProfanity` is not a boolean.
+ */
+export async function setCommunicationSettings(userId, { allowProfanity } = {}) {
+  if (typeof allowProfanity !== 'boolean') {
+    throw new HttpError(400, 'allowProfanity must be true or false.')
+  }
+  await query('UPDATE users SET allow_profanity = $2 WHERE id = $1', [userId, allowProfanity])
+  return { allowProfanity }
 }
 
 /**
@@ -211,6 +253,8 @@ export async function getThread(userId, otherId, { before, after } = {}) {
     user: publicUser(other),
     relationship,
     canMessage: relationship === 'friends',
+    /** Both allow profanity: curses go through unmasked in this chat. */
+    profanityAllowed: await bothAllowProfanity(userId, other.id),
     request: await pendingRequest(userId, other.id, relationship),
     messages: page.map((row) => messageEntry(row, userId)),
     hasMore,
@@ -272,7 +316,9 @@ export async function sendMessage(sender, otherId, body) {
     throw new HttpError(429, "You're sending messages too fast. Wait a moment and try again.")
   }
 
-  const language = maskLanguage(text)
+  const language = maskLanguage(text, {
+    allowCurses: await bothAllowProfanity(userId, other.id),
+  })
   const warning = language.term
     ? await recordWarning(sender, {
         surface: 'message',
@@ -319,6 +365,9 @@ export default {
   messageEntry,
   cleanMessageBody,
   maskLanguage,
+  bothAllowProfanity,
+  getCommunicationSettings,
+  setCommunicationSettings,
   listConversations,
   getThread,
   sendMessage,
