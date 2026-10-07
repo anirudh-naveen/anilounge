@@ -82,6 +82,7 @@
 </template>
 
 <script setup lang="ts">
+import { showPosterPlaceholder } from '@/utils/posters'
 import { computed, onMounted, ref } from 'vue'
 import { getPosterUrl, watchlistImportAPI } from '@/services/api'
 import { getWatchlistStatusLabel } from '@/utils/watchlist'
@@ -125,9 +126,7 @@ const describe = (
   return parts.join(' · ')
 }
 
-const onPosterError = (event: Event) => {
-  ;(event.target as HTMLImageElement).src = '/placeholder-movie.jpg'
-}
+const onPosterError = showPosterPlaceholder
 
 const load = async () => {
   try {

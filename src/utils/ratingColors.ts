@@ -73,3 +73,13 @@ export const getRatingTextStyle = (rating: number | null | undefined) => {
     borderRadius: '4px',
   }
 }
+
+/**
+ * Just the colors of a rating badge (background and contrast text), for badges that
+ * set their own size and shape.
+ * @param rating - Score on a 0–10 scale.
+ */
+export const getRatingBadgeColors = (rating: number | null | undefined) => {
+  const { backgroundColor, color } = getRatingTextStyle(rating)
+  return { backgroundColor, color }
+}

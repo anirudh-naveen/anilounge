@@ -26,24 +26,26 @@
       />
     </router-link>
     <header class="post-card-head">
-      <span class="post-kind" :class="post.kind">
+      <span class="post-badge post-kind" :class="post.kind">
         {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
       </span>
       <span
         v-if="post.score !== null"
-        class="post-score"
-        :style="getRatingTextStyle(post.score)"
+        class="post-badge post-score"
+        :style="getRatingBadgeColors(post.score)"
         title="The author's watchlist rating"
         data-testid="post-score"
         >{{ scoreLabel(post.score) }}</span
       >
-      <span v-if="post.forYou" class="post-for-you" title="From your watchlist">For you</span>
-      <span v-if="post.spoiler" class="post-spoiler-flag">Spoilers</span>
+      <span v-if="post.forYou" class="post-badge post-for-you" title="From your watchlist"
+        >For you</span
+      >
+      <span v-if="post.spoiler" class="post-badge post-spoiler-flag">Spoilers</span>
     </header>
 
     <router-link :to="postRoute(post.id)" class="post-card-title">{{ post.title }}</router-link>
 
-    <ForumTags :tags="post.tags" />
+    <ForumTags :tags="post.tags" compact />
 
     <!-- Title: Preview -->
     <template v-if="!compact && post.excerpt">
@@ -54,7 +56,9 @@
         data-testid="spoiler-cover"
         @click="revealed = true"
       >
-        Contains spoilers. Show preview
+        <ForumIcon name="eye-off" />
+        <span>Preview hidden for spoilers</span>
+        <span class="spoiler-show">Show</span>
       </button>
       <p v-else class="post-card-excerpt">{{ post.excerpt }}</p>
     </template>
@@ -62,9 +66,9 @@
     <footer class="post-card-foot">
       <router-link :to="profileRoute(post.author.username)" class="post-author">
         <UserAvatar :src="post.author.profilePicture" :name="post.author.username" :size="22" />
-        {{ post.author.username }}
+        <span class="post-author-name">{{ post.author.username }}</span>
       </router-link>
-      <span class="social-meta" :title="new Date(post.createdAt).toLocaleString()">
+      <span class="post-time" :title="new Date(post.createdAt).toLocaleString()">
         {{ timeAgo(post.createdAt) }}
       </span>
       <span class="post-stats">
@@ -78,10 +82,16 @@
           data-testid="post-like"
           @click="toggleLike"
         >
-          ♥ {{ post.likeCount }}
+          <ForumIcon name="heart" :filled="post.liked" />
+          {{ post.likeCount }}
         </button>
-        <router-link :to="postRoute(post.id)" class="post-comments" title="Comments">
-          💬 {{ post.commentCount }}
+        <router-link
+          :to="postRoute(post.id)"
+          class="post-comments"
+          :title="`${post.commentCount} ${post.commentCount === 1 ? 'comment' : 'comments'}`"
+        >
+          <ForumIcon name="comment" />
+          {{ post.commentCount }}
         </router-link>
       </span>
     </footer>
@@ -92,13 +102,14 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
+import ForumIcon from '@/components/ForumIcon.vue'
 import ForumTags from '@/components/ForumTags.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI, getPosterUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumPost } from '@/types/forum'
 import { postRoute, scoreLabel, sortTags } from '@/utils/forum'
-import { getRatingTextStyle } from '@/utils/ratingColors'
+import { getRatingBadgeColors } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
@@ -140,20 +151,20 @@ const toggleLike = async () => {
 .post-card {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding: 1.1rem 1.2rem;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .post-card-cover {
   display: block;
-  margin: -1.1rem -1.2rem 0.2rem;
+  margin: -1rem -1.1rem 0.15rem;
   height: 130px;
   overflow: hidden;
-  border-radius: 16px 16px 0 0;
   background: var(--bg-secondary);
 }
 
@@ -169,25 +180,26 @@ const toggleLike = async () => {
   padding: 0.9rem 1rem;
 }
 
+/* Badges: one size, so kind, score, and flags read as a set. */
 .post-card-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
-.post-kind,
-.post-for-you,
-.post-spoiler-flag {
+.post-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.12rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
+  height: 1.3rem;
+  padding: 0 0.45rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  line-height: 1;
   text-transform: uppercase;
+  white-space: nowrap;
   background: var(--bg-secondary);
   color: var(--text-secondary);
 }
@@ -198,8 +210,7 @@ const toggleLike = async () => {
 }
 
 .post-score {
-  padding: 0.12rem 0.5rem;
-  font-size: 0.78rem;
+  letter-spacing: 0.01em;
 }
 
 .post-for-you {
@@ -214,7 +225,7 @@ const toggleLike = async () => {
 
 .post-card-title {
   font-family: var(--font-display);
-  font-size: 1.12rem;
+  font-size: 1.1rem;
   font-weight: 650;
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -229,44 +240,81 @@ const toggleLike = async () => {
 
 .post-card-excerpt {
   margin: 0;
+  font-size: 0.92rem;
   color: var(--text-secondary);
   line-height: 1.55;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .spoiler-cover {
-  padding: 0.6rem 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.45rem 0.65rem;
   border: 1px dashed var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
   font: inherit;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   cursor: pointer;
   text-align: left;
 }
 
+.spoiler-show {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--coral-deep);
+}
+
+.spoiler-cover:hover {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
 .post-card-foot {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   margin-top: auto;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-color);
+  min-width: 0;
 }
 
 .post-author {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.85rem;
+  min-width: 0;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-primary);
   text-decoration: none;
 }
 
+.post-author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-time {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
 .post-stats {
   display: inline-flex;
-  gap: 0.4rem;
+  flex-shrink: 0;
+  gap: 0.15rem;
   margin-left: auto;
 }
 
@@ -274,25 +322,35 @@ const toggleLike = async () => {
 .post-comments {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem 0.6rem;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
+  gap: 0.3rem;
+  padding: 0.2rem 0.4rem;
+  border: 0;
+  border-radius: 6px;
   background: none;
   font: inherit;
   font-size: 0.8rem;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-muted);
   text-decoration: none;
   cursor: pointer;
 }
 
+.post-like:hover:not(:disabled),
+.post-comments:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .post-like.on {
   color: var(--coral-primary);
-  border-color: color-mix(in srgb, var(--coral-primary) 45%, transparent);
 }
 
 .post-like:disabled {
   cursor: default;
-  opacity: 0.7;
+}
+
+.post-like .forum-icon,
+.post-comments .forum-icon {
+  font-size: 1rem;
 }
 </style>
