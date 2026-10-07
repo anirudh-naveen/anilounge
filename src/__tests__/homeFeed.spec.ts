@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ActivityEntry, ReleaseUpdate } from '@/types/home'
 import {
   characterBlurb,
+  activitySubject,
   describeActivity,
   mergeActivity,
   releaseLabel,
@@ -25,6 +26,24 @@ describe('timeAgo / timeUntil', () => {
 })
 
 describe('describeActivity', () => {
+  it('conjugates for the viewer and for other people', () => {
+    const watching = {
+      action: 'updated' as const,
+      status: 'watching' as const,
+      currentEpisode: 0,
+      previousEpisode: 0,
+    }
+    expect(describeActivity({ ...watching, user: { isSelf: true } })).toBe('are watching')
+    expect(describeActivity({ ...watching, user: { isSelf: false } })).toBe('is watching')
+    expect(describeActivity(watching)).toBe('is watching')
+    expect(
+      activitySubject({ user: { isSelf: true, username: 'ani', _id: 'me', profilePicture: null } }),
+    ).toBe('You')
+    expect(
+      activitySubject({ user: { isSelf: false, username: 'kai', _id: 'k', profilePicture: null } }),
+    ).toBe('kai')
+  })
+
   const describe_ = (
     status: ActivityEntry['status'],
     currentEpisode = 0,

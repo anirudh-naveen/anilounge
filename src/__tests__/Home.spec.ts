@@ -187,6 +187,25 @@ describe('Home', () => {
     expect(wrapper.get('[data-testid="activity-item"]').text()).toContain('kai')
   })
 
+  it('says "You are" for your own updates and "is" for friends', async () => {
+    auth.isAuthenticated = true
+    auth.user = { username: 'ani' }
+    const watching = { status: 'watching', currentEpisode: 0, previousEpisode: 0 }
+    getActivity.mockResolvedValue({
+      data: {
+        data: {
+          personal: [entry('a', true, '2026-09-20T00:00:00Z', watching)],
+          friends: [entry('b', false, '2026-09-25T00:00:00Z', watching)],
+          friendCount: 1,
+        },
+      },
+    })
+    const wrapper = await mountHome()
+    const lines = wrapper.findAll('.activity-text').map((line) => line.text().replace(/\s+/g, ' '))
+    expect(lines).toContain('kai is watching Show b')
+    expect(lines).toContain('You are watching Show a')
+  })
+
   it('explains an empty friends tab', async () => {
     auth.isAuthenticated = true
     getActivity.mockResolvedValue({ data: { data: { personal: [], friends: [], friendCount: 0 } } })
@@ -255,6 +274,55 @@ describe('Home', () => {
     expect(panel.text()).toContain('Frieren is a masterpiece')
     expect(panel.text()).toContain('9.5/10')
     expect(panel.text()).toContain('For you')
+    expect(panel.find('[data-testid="post-cover"]').exists()).toBe(false)
+  })
+
+  it('covers forum cards with the highest tag that has a picture', async () => {
+    const tag = (contentId: string, kind: string, imagePath: string | null) => ({
+      contentId,
+      kind,
+      name: contentId,
+      imagePath,
+      season: null,
+      episode: null,
+    })
+    getHomeForum.mockResolvedValue({
+      data: {
+        data: {
+          personalized: false,
+          refreshesAt: '2026-10-06T12:00:00Z',
+          items: [
+            {
+              id: 'p1',
+              kind: 'discussion',
+              title: 'Himmel thread',
+              excerpt: 'Best hero.',
+              score: null,
+              subjectId: null,
+              spoiler: false,
+              createdAt: '2026-10-05T10:00:00Z',
+              editedAt: null,
+              lastActivityAt: '2026-10-05T10:00:00Z',
+              author: { id: 'u1', username: 'mika', profilePicture: null },
+              likeCount: 0,
+              commentCount: 0,
+              liked: false,
+              tags: [
+                tag('himmel', 'character', 'https://img.test/himmel.jpg'),
+                tag('frieren-franchise', 'franchise', null),
+                tag('frieren', 'series', 'https://img.test/frieren.jpg'),
+              ],
+              canEdit: false,
+              canDelete: false,
+            },
+          ],
+        },
+      },
+    })
+    const wrapper = await mountHome()
+    expect(wrapper.get('[data-testid="post-cover"]').attributes('src')).toBe(
+      'https://img.test/frieren.jpg',
+    )
   })
 
   it('invites the first forum post when there are none', async () => {

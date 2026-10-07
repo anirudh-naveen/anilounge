@@ -4,10 +4,27 @@
   Kind (review with its score, or discussion), title, author, tags, a preview
   (covered when marked as a spoiler), and like/comment counts. Liking needs
   sign-in; your own posts can't be liked. `compact` drops the preview for tight
-  spots such as title-page highlights.
+  spots such as title-page highlights. `showImage` (Home) adds a cover picture from
+  the highest tag in the hierarchy that has one: franchise, then title, then
+  character.
 -->
 <template>
   <article class="post-card" :class="{ compact }" :data-testid="`post-card-${post.id}`">
+    <router-link
+      v-if="coverTag && !coverFailed"
+      :to="postRoute(post.id)"
+      class="post-card-cover"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <img
+        :src="getPosterUrl(coverTag.imagePath || '')"
+        alt=""
+        loading="lazy"
+        data-testid="post-cover"
+        @error="coverFailed = true"
+      />
+    </router-link>
     <header class="post-card-head">
       <span class="post-kind" :class="post.kind">
         {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
@@ -72,20 +89,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import ForumTags from '@/components/ForumTags.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import { forumAPI } from '@/services/api'
+import { forumAPI, getPosterUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumPost } from '@/types/forum'
-import { postRoute, scoreLabel } from '@/utils/forum'
+import { postRoute, scoreLabel, sortTags } from '@/utils/forum'
 import { getRatingTextStyle } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
-const props = defineProps<{ post: ForumPost; compact?: boolean }>()
+const props = defineProps<{ post: ForumPost; compact?: boolean; showImage?: boolean }>()
 const emit = defineEmits<{ 'update:post': [post: ForumPost] }>()
 
 const authStore = useAuthStore()
@@ -93,6 +110,12 @@ const router = useRouter()
 const toast = useToast()
 const busy = ref(false)
 const revealed = ref(false)
+const coverFailed = ref(false)
+
+/** Highest tag in the hierarchy (franchise, title, character) that has a picture. */
+const coverTag = computed(() =>
+  props.showImage ? sortTags(props.post.tags).find((tag) => tag.imagePath) || null : null,
+)
 
 const toggleLike = async () => {
   if (!authStore.isAuthenticated) {
@@ -123,6 +146,23 @@ const toggleLike = async () => {
   border: 1px solid var(--border-color);
   border-radius: 16px;
   min-width: 0;
+}
+
+.post-card-cover {
+  display: block;
+  margin: -1.1rem -1.2rem 0.2rem;
+  height: 130px;
+  overflow: hidden;
+  border-radius: 16px 16px 0 0;
+  background: var(--bg-secondary);
+}
+
+.post-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+  display: block;
 }
 
 .post-card.compact {

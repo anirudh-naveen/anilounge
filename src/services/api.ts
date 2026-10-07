@@ -362,6 +362,8 @@ export const forumAPI = {
     sort?: string
     page?: number
     author?: string
+    /** Search: every word must match a post's title, text, or tag names. */
+    q?: string
   }) => api.get('/forum/posts', { params }),
 
   get: (postId: string) => api.get(`/forum/posts/${postId}`),

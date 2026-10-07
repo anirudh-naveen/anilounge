@@ -38,7 +38,7 @@ const write = (handler, fallback, status) =>
     status,
   )
 
-/** `GET /forum/posts` — query `tag`, `season`, `episode`, `kind`, `sort`, `page`, `author`. */
+/** `GET /forum/posts` — query `q` (search), `tag`, `season`, `episode`, `kind`, `sort`, `page`, `author`. */
 export const listPosts = handle(
   async (req) => ({ data: await forumService.listPosts(req.user || null, req.query) }),
   'Error loading posts',
