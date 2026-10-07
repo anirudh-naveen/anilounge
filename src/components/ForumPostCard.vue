@@ -11,21 +11,22 @@
     <header class="post-card-head">
       <span class="post-kind" :class="post.kind">
         {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
-        <strong v-if="post.score !== null" class="post-score">{{ scoreLabel(post.score) }}</strong>
       </span>
+      <span
+        v-if="post.score !== null"
+        class="post-score"
+        :style="getRatingTextStyle(post.score)"
+        title="The author's watchlist rating"
+        data-testid="post-score"
+        >{{ scoreLabel(post.score) }}</span
+      >
       <span v-if="post.forYou" class="post-for-you" title="From your watchlist">For you</span>
       <span v-if="post.spoiler" class="post-spoiler-flag">Spoilers</span>
     </header>
 
     <router-link :to="postRoute(post.id)" class="post-card-title">{{ post.title }}</router-link>
 
-    <ul v-if="post.tags.length" class="post-tags">
-      <li v-for="tag in post.tags" :key="`${tag.contentId}-${tag.season}-${tag.episode}`">
-        <router-link :to="forumTagRoute(tag)" class="post-tag" :title="KIND_LABELS[tag.kind]">
-          {{ tagLabel(tag) }}
-        </router-link>
-      </li>
-    </ul>
+    <ForumTags :tags="post.tags" />
 
     <!-- Title: Preview -->
     <template v-if="!compact && post.excerpt">
@@ -74,11 +75,13 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
+import ForumTags from '@/components/ForumTags.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumPost } from '@/types/forum'
-import { forumTagRoute, KIND_LABELS, postRoute, scoreLabel, tagLabel } from '@/utils/forum'
+import { postRoute, scoreLabel } from '@/utils/forum'
+import { getRatingTextStyle } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
@@ -155,8 +158,8 @@ const toggleLike = async () => {
 }
 
 .post-score {
-  text-transform: none;
-  letter-spacing: 0;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.78rem;
 }
 
 .post-for-you {
@@ -182,30 +185,6 @@ const toggleLike = async () => {
 
 .post-card-title:hover {
   color: var(--coral-deep);
-}
-
-.post-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.post-tag {
-  display: inline-block;
-  padding: 0.15rem 0.6rem;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  text-decoration: none;
-}
-
-.post-tag:hover {
-  border-color: var(--border-hover);
-  color: var(--text-primary);
 }
 
 .post-card-excerpt {

@@ -104,6 +104,12 @@
         <p class="about-text">{{ character.about || 'No biography available.' }}</p>
       </div>
 
+      <!-- Title: Forum -->
+      <ForumHighlights
+        :content-id="character._id"
+        :name="canonicalCharacterName(character.name) || character.name"
+      />
+
       <div v-if="appearanceTitles.length" class="appearances">
         <h2>Appears in</h2>
         <section
@@ -142,12 +148,6 @@
           </div>
         </section>
       </div>
-
-      <!-- Title: Forum -->
-      <ForumHighlights
-        :content-id="character._id"
-        :name="canonicalCharacterName(character.name) || character.name"
-      />
     </div>
   </div>
 </template>

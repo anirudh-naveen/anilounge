@@ -17,6 +17,20 @@ const toast = vi.hoisted(() => ({
 }))
 
 vi.mock('vue-toastification', () => ({ useToast: () => toast }))
+
+const watchlist = vi.hoisted(() => ({
+  items: new Map<string, { rating?: number }>(),
+  add: vi.fn(),
+  update: vi.fn(),
+}))
+vi.mock('@/stores/content', () => ({
+  useContentStore: () => ({
+    loadWatchlist: vi.fn(),
+    getWatchlistItem: (id: string) => watchlist.items.get(id),
+    addToWatchlist: (...args: unknown[]) => watchlist.add(...args),
+    updateWatchlistItem: (...args: unknown[]) => watchlist.update(...args),
+  }),
+}))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
 vi.mock('@/stores/badges', () => ({
   useBadgesStore: () => ({

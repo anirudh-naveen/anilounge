@@ -126,6 +126,9 @@
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Forum -->
+      <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
+
       <!-- Title: Episodes -->
       <EpisodeRow
         :episodes="episodes"
@@ -270,9 +273,6 @@
       </div>
 
       <EntityCastRow :items="characters" :content-id="show._id" :loading="charactersLoading" />
-
-      <!-- Title: Forum -->
-      <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
 
       <StudioLinks :content="show" />
     </div>

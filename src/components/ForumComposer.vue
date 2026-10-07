@@ -5,6 +5,10 @@
   special), title, body, a spoiler flag, and tags. With `post` it edits that post
   (the kind is fixed); otherwise it creates one, optionally starting from
   `presetTags` and `presetKind`. Emits `saved` with the stored post, or `cancel`.
+
+  A review's score follows the watchlist: it starts from your watchlist rating for
+  the reviewed title (its first movie/series/special tag), and saving writes the
+  score back there, adding the title as Completed when it isn't on your list.
 -->
 <template>
   <form class="composer" data-testid="forum-composer" @submit.prevent="submit">
@@ -51,7 +55,21 @@
           aria-label="Score from 1 to 10"
           data-testid="composer-score"
         />
-        <strong class="score-value">{{ scoreLabel(score) }}</strong>
+        <strong
+          class="score-value"
+          :style="{ color: getRatingColor(score) }"
+          data-testid="composer-score-value"
+          >{{ scoreLabel(score) }}</strong
+        >
+      </span>
+      <span v-if="subject" class="social-meta" data-testid="composer-score-note">
+        <template v-if="!watchlistItem">
+          {{ subject.name }} isn't on your watchlist yet. Posting adds it as Completed with this
+          score.
+        </template>
+        <template v-else>
+          This is your watchlist rating for {{ subject.name }}; saving updates it there too.
+        </template>
       </span>
     </label>
 
@@ -103,20 +121,28 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import ForumTagPicker from '@/components/ForumTagPicker.vue'
 import { forumAPI } from '@/services/api'
+import { useAuthStore } from '@/stores/auth'
+import { useContentStore } from '@/stores/content'
 import type { ForumPost, PostKind, PostTag } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
-import { BODY_MAX, scoreLabel, showLanguageWarning, TITLE_MAX } from '@/utils/forum'
+import {
+  BODY_MAX,
+  REVIEWABLE_KINDS,
+  scoreLabel,
+  showLanguageWarning,
+  TITLE_MAX,
+} from '@/utils/forum'
+import { getRatingColor } from '@/utils/ratingColors'
 import { apiErrorMessage } from '@/utils/social'
 
 const KIND_OPTIONS: { value: PostKind; label: string; hint: string }[] = [
   { value: 'discussion', label: 'Discussion', hint: 'Start a conversation' },
   { value: 'review', label: 'Review', hint: 'Score and review a title' },
 ]
-const REVIEWABLE = ['movie', 'series', 'special']
 
 const props = defineProps<{
   post?: ForumPost | null
@@ -126,6 +152,8 @@ const props = defineProps<{
 const emit = defineEmits<{ saved: [post: ForumPost]; cancel: [] }>()
 
 const toast = useToast()
+const authStore = useAuthStore()
+const contentStore = useContentStore()
 
 const kind = ref<PostKind>(props.post?.kind || props.presetKind || 'discussion')
 const title = ref(props.post?.title || '')
@@ -135,10 +163,56 @@ const spoiler = ref(props.post?.spoiler || false)
 const tags = ref<PostTag[]>(props.post ? [...props.post.tags] : [...(props.presetTags || [])])
 const saving = ref(false)
 
+/** The title a review scores: its first movie/series/special tag (as the server picks it). */
+const subject = computed(() =>
+  kind.value === 'review'
+    ? tags.value.find((tag) => REVIEWABLE_KINDS.includes(tag.kind)) || null
+    : null,
+)
+
+const watchlistItem = computed(() =>
+  subject.value ? contentStore.getWatchlistItem(subject.value.contentId) || null : null,
+)
+
+/** The user's watchlist rating for the subject, when they have one. */
+const watchlistRating = computed(() => {
+  const rating = watchlistItem.value?.rating
+  return typeof rating === 'number' && rating >= 1 ? rating : null
+})
+
+// Start from the watchlist rating whenever the reviewed title changes (or the list loads).
+watch(
+  () => [subject.value?.contentId, watchlistRating.value] as const,
+  ([, rating], previous) => {
+    const firstRun = previous === undefined
+    if (rating !== null && !(firstRun && props.post)) score.value = rating
+  },
+  { immediate: true },
+)
+
 const canSubmit = computed(() => {
   if (!title.value.trim() || !body.value.trim()) return false
-  if (kind.value === 'review') return tags.value.some((tag) => REVIEWABLE.includes(tag.kind))
+  if (kind.value === 'review') return subject.value !== null
   return true
+})
+
+/** Write the review score to the watchlist (adding the title as Completed if needed). */
+const syncWatchlistRating = async () => {
+  const target = subject.value
+  if (!target || !authStore.isAuthenticated) return
+  try {
+    if (!watchlistItem.value) {
+      await contentStore.addToWatchlist(target.contentId, 'completed', score.value)
+    } else if (watchlistRating.value !== score.value) {
+      await contentStore.updateWatchlistItem(target.contentId, { rating: score.value })
+    }
+  } catch {
+    toast.error(`Saved, but your watchlist rating for ${target.name} couldn't be updated.`)
+  }
+}
+
+onMounted(() => {
+  if (authStore.isAuthenticated) contentStore.loadWatchlist()
 })
 
 const submit = async () => {
@@ -160,8 +234,13 @@ const submit = async () => {
       ? await forumAPI.update(props.post.id, input)
       : await forumAPI.create({ ...input, kind: kind.value })
     showLanguageWarning(toast, response.data.warning as LanguageWarning | null)
+    const saved = response.data.data as ForumPost
+    if (kind.value === 'review') {
+      await syncWatchlistRating()
+      saved.score = score.value
+    }
     toast.success(props.post ? 'Post updated.' : 'Posted.')
-    emit('saved', response.data.data as ForumPost)
+    emit('saved', saved)
   } catch (error) {
     toast.error(apiErrorMessage(error, 'Could not save your post.'))
   } finally {
@@ -240,7 +319,6 @@ const submit = async () => {
 .score-value {
   min-width: 3.5rem;
   font-size: 1.1rem;
-  color: var(--coral-deep);
 }
 
 .spoiler-toggle {

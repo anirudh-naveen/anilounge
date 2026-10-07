@@ -139,6 +139,7 @@ router.get('/home/forum', optionalAuthenticate, forumController.getHomeHighlight
 router.get('/forum/posts', optionalAuthenticate, forumController.listPosts)
 router.get('/forum/posts/:id', validateObjectId, optionalAuthenticate, forumController.getPost)
 router.get('/forum/tags', forumController.searchTags)
+router.get('/forum/tags/:id/characters', validateObjectId, forumController.contentCharacters)
 router.get('/forum/highlights/:id', validateObjectId, optionalAuthenticate, forumController.getHighlights)
 
 /** Gemini-backed search and chat. Optional auth personalizes from watchlist/preferences. */

@@ -27,7 +27,13 @@
             <span class="post-kind" :class="post.kind">
               {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
             </span>
-            <span v-if="post.score !== null" class="post-score" data-testid="post-score">
+            <span
+              v-if="post.score !== null"
+              class="post-score"
+              :style="getRatingTextStyle(post.score)"
+              title="The author's watchlist rating"
+              data-testid="post-score"
+            >
               {{ scoreLabel(post.score) }}
             </span>
             <span v-if="post.spoiler" class="post-spoiler-flag">Spoilers</span>
@@ -49,14 +55,7 @@
             </span>
           </div>
 
-          <ul v-if="post.tags.length" class="post-tags">
-            <li v-for="tag in post.tags" :key="`${tag.contentId}-${tag.season}-${tag.episode}`">
-              <router-link :to="forumTagRoute(tag)" class="post-tag">
-                <span class="post-tag-kind">{{ KIND_LABELS[tag.kind] }}</span>
-                {{ tagLabel(tag) }}
-              </router-link>
-            </li>
-          </ul>
+          <ForumTags :tags="post.tags" show-kind class="post-tags" />
 
           <button
             v-if="post.spoiler && !revealed"
@@ -207,20 +206,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import ForumCommentItem from '@/components/ForumCommentItem.vue'
 import ForumComposer from '@/components/ForumComposer.vue'
+import ForumTags from '@/components/ForumTags.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumComment, ForumPost } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
-import {
-  COMMENT_MAX,
-  forumTagRoute,
-  KIND_LABELS,
-  scoreLabel,
-  showLanguageWarning,
-  tagLabel,
-} from '@/utils/forum'
+import { COMMENT_MAX, scoreLabel, showLanguageWarning } from '@/utils/forum'
+import { getRatingTextStyle } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
@@ -418,10 +412,8 @@ onMounted(load)
 }
 
 .post-score {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--coral-deep);
+  padding: 0.15rem 0.6rem;
+  font-size: 1rem;
 }
 
 .post-title {
@@ -452,36 +444,7 @@ onMounted(load)
 }
 
 .post-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  list-style: none;
-  margin: 1rem 0 0;
-  padding: 0;
-}
-
-.post-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.65rem;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  font-size: 0.84rem;
-  color: var(--text-primary);
-  text-decoration: none;
-}
-
-.post-tag:hover {
-  border-color: var(--border-hover);
-}
-
-.post-tag-kind {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  margin-top: 1rem;
 }
 
 .post-body {

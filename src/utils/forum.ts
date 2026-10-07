@@ -19,6 +19,38 @@ export const KIND_LABELS: Record<TagKind, string> = {
   character: 'Character',
 }
 
+/** Kinds a review can score. */
+export const REVIEWABLE_KINDS: TagKind[] = ['movie', 'series', 'special']
+
+/** Tag hierarchy level: franchise (0), then movies/series/specials (1), then characters (2). */
+export function tagLevel(kind: TagKind) {
+  if (kind === 'franchise') return 0
+  if (kind === 'character') return 2
+  return 1
+}
+
+/** Tags in hierarchy order; within a level by name, a series before its episodes. */
+export function sortTags<T extends Pick<PostTag, 'kind' | 'name' | 'season' | 'episode'>>(
+  tags: T[],
+) {
+  return [...tags].sort(
+    (a, b) =>
+      tagLevel(a.kind) - tagLevel(b.kind) ||
+      a.name.localeCompare(b.name) ||
+      (a.season ?? -1) - (b.season ?? -1) ||
+      (a.episode ?? -1) - (b.episode ?? -1),
+  )
+}
+
+/** Tags grouped by hierarchy level (empty levels dropped), for `franchise › title › character`. */
+export function tagLevels<T extends Pick<PostTag, 'kind' | 'name' | 'season' | 'episode'>>(
+  tags: T[],
+) {
+  const levels: T[][] = [[], [], []]
+  for (const tag of sortTags(tags)) levels[tagLevel(tag.kind)]?.push(tag)
+  return levels.filter((level) => level.length)
+}
+
 /** `S1E5` style episode label, or '' when the tag isn't an episode. */
 export function episodeLabel(tag: Pick<PostTag, 'season' | 'episode'>) {
   if (tag.season === null || tag.episode === null) return ''

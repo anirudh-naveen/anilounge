@@ -609,6 +609,13 @@ CREATE TABLE IF NOT EXISTS post_tags (
 CREATE UNIQUE INDEX IF NOT EXISTS post_tags_unique
   ON post_tags (post_id, content_id, COALESCE(season_number, -1), COALESCE(episode_number, -1));
 CREATE INDEX IF NOT EXISTS post_tags_content_idx ON post_tags (content_id, season_number, episode_number);
+-- A review's subject (posts.content_id): its first movie/series/special tag. Its score
+-- shows the author's watchlist rating for that title.
+UPDATE posts p SET content_id = (
+  SELECT t.content_id FROM post_tags t JOIN content c ON c.id = t.content_id
+  WHERE t.post_id = p.id AND c.kind IN ('movie', 'series', 'special')
+  ORDER BY t.id LIMIT 1
+) WHERE p.kind = 'review' AND p.content_id IS NULL;
 
 ALTER TABLE comments ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 -- A deleted comment that has replies is blanked (body '[deleted]') instead of removed.

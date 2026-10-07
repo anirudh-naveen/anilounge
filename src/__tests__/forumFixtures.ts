@@ -7,6 +7,7 @@ export const buildPost = (overrides: Partial<ForumPost> = {}): ForumPost => ({
   excerpt: 'That ending!',
   body: 'That ending!\n\nWhat did everyone think?',
   score: null,
+  subjectId: null,
   spoiler: false,
   createdAt: '2026-10-05T10:00:00Z',
   editedAt: null,

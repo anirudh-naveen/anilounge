@@ -26,8 +26,10 @@ export interface ForumPost {
   body?: string
   /** Preview in lists. */
   excerpt?: string
-  /** Reviews only, 1–10. */
+  /** Reviews only, 1–10: the author's current watchlist rating for `subjectId`. */
   score: number | null
+  /** Reviews only: the title being reviewed. */
+  subjectId: string | null
   spoiler: boolean
   createdAt: string
   editedAt: string | null
@@ -102,4 +104,13 @@ export interface PostInput {
   score?: number
   spoiler?: boolean
   tags?: Array<{ contentId: string; season?: number | null; episode?: number | null }>
+}
+
+/** A character offered under a title in the tag picker. */
+export interface CharacterHit {
+  contentId: string
+  kind: 'character'
+  name: string
+  imagePath: string | null
+  role: string
 }
