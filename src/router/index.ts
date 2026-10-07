@@ -45,6 +45,11 @@ const router = createRouter({
       component: () => import('@/views/Forum.vue'),
     },
     {
+      path: '/forum/post/:id',
+      name: 'forumPost',
+      component: () => import('@/views/ForumPost.vue'),
+    },
+    {
       path: '/movies',
       name: 'movies',
       component: () => import('@/views/Movies.vue'),

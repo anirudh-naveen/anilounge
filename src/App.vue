@@ -35,12 +35,7 @@
               </span>
               <span class="nav-text">Home</span>
             </router-link>
-            <router-link
-              to="/forum"
-              class="nav-link nav-link-locked"
-              aria-label="Forum (coming soon)"
-              title="Forum (coming soon)"
-            >
+            <router-link to="/forum" class="nav-link" aria-label="Forum" title="Forum">
               <span class="nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
                   <path
@@ -52,12 +47,6 @@
                 </svg>
               </span>
               <span class="nav-text">Forum</span>
-              <span class="nav-lock" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="6" y="11" width="12" height="9" rx="1.75" />
-                  <path stroke-linecap="round" d="M8.5 11V8.25a3.5 3.5 0 0 1 7 0V11" />
-                </svg>
-              </span>
             </router-link>
             <router-link
               to="/watchlist"
@@ -446,24 +435,6 @@ const handleLogout = async () => {
   box-shadow: 0 6px 16px rgba(224, 122, 95, 0.18);
 }
 
-.nav-link-locked {
-  color: rgba(232, 237, 245, 0.72);
-}
-
-.nav-lock {
-  width: 12px;
-  height: 12px;
-  display: inline-flex;
-  color: var(--tan-primary);
-  flex-shrink: 0;
-}
-
-.nav-lock svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
 .nav-icon {
   display: none;
   width: 22px;
@@ -779,19 +750,6 @@ const handleLogout = async () => {
 
   .nav-text {
     display: none;
-  }
-
-  .nav-link-locked {
-    position: relative;
-  }
-
-  .nav-lock {
-    position: absolute;
-    top: 2px;
-    right: 6px;
-    width: 10px;
-    height: 10px;
-    color: var(--coral-light);
   }
 
   .nav-actions {

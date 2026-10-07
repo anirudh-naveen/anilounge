@@ -4,7 +4,8 @@
 
   A status feed of the viewer's and friends' watchlist changes (or a sign-up
   prompt for guests), a release sidebar for watchlist titles that falls back
-  to trending releases, the character of the day, and a forum placeholder.
+  to trending releases, the character of the day, and forum highlights (picked
+  from the watchlist when signed in; the pick refreshes every few hours).
 -->
 <template>
   <div class="home-page">
@@ -234,28 +235,29 @@
 
     <!-- Forum -->
     <section class="container forum-section">
-      <div class="panel forum-panel" data-testid="forum-placeholder">
+      <div class="panel forum-panel" data-testid="forum-highlights-home">
         <header class="panel-header">
           <div>
             <h2 class="panel-title">Popular in the Forum</h2>
-            <p class="panel-sub">
-              Reviews, episode threads, and franchise talk will be highlighted here.
-            </p>
+            <p class="panel-sub">{{ forumSubtitle }}</p>
           </div>
-          <span class="soon-badge">Coming soon</span>
+          <router-link to="/forum" class="btn btn-secondary btn-small">Visit the Forum</router-link>
         </header>
-        <div class="forum-grid" aria-hidden="true">
-          <div v-for="n in 3" :key="n" class="forum-card">
-            <span class="preview-line short"></span>
-            <span class="preview-line wide"></span>
-            <span class="preview-line"></span>
-            <span class="forum-card-foot">
-              <span class="preview-dot"></span>
-              <span class="preview-line tiny"></span>
-            </span>
-          </div>
+        <div v-if="forumLoading" class="panel-loading"><div class="spinner"></div></div>
+        <div v-else-if="forum.items.length" class="forum-grid">
+          <ForumPostCard
+            v-for="(post, index) in forum.items"
+            :key="post.id"
+            :post="post"
+            @update:post="(next) => (forum.items[index] = next)"
+          />
         </div>
-        <router-link to="/forum" class="btn btn-secondary forum-link">Visit the Forum</router-link>
+        <p v-else class="panel-empty">
+          No posts yet.
+          <router-link :to="{ name: 'forum', query: { compose: '1' } }"
+            >Start the first one</router-link
+          >.
+        </p>
       </div>
     </section>
   </div>
@@ -265,7 +267,9 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import ImportReminder from '@/components/ImportReminder.vue'
-import { getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
+import ForumPostCard from '@/components/ForumPostCard.vue'
+import { forumAPI, getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
+import type { HomeForum } from '@/types/forum'
 import type { CatalogEntity, EntityAppearance } from '@/types/content'
 import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'
 import { getDisplayTitle } from '@/utils/titles'
@@ -302,6 +306,14 @@ const updatesLoading = ref(true)
 
 const character = ref<CatalogEntity | null>(null)
 const characterLoading = ref(true)
+
+const forum = ref<HomeForum>({ items: [], personalized: false, refreshesAt: '' })
+const forumLoading = ref(true)
+const forumSubtitle = computed(() =>
+  forum.value.personalized
+    ? 'Picked from your watchlist. Refreshes every few hours.'
+    : 'Reviews, episode threads, and franchise talk from the lounge.',
+)
 
 const visibleActivity = computed(() => {
   if (feedTab.value === 'you') return activity.value.personal
@@ -411,6 +423,17 @@ const loadCharacter = async () => {
   }
 }
 
+const loadForum = async () => {
+  try {
+    const response = await forumAPI.home()
+    forum.value = response.data.data as HomeForum
+  } catch (error) {
+    console.error('Error loading forum highlights:', error)
+  } finally {
+    forumLoading.value = false
+  }
+}
+
 onMounted(() => {
   window.scrollTo({ top: 0 })
   clock = setInterval(() => {
@@ -419,6 +442,7 @@ onMounted(() => {
   loadActivity()
   loadUpdates()
   loadCharacter()
+  loadForum()
 })
 
 onUnmounted(() => {
@@ -788,14 +812,6 @@ onUnmounted(() => {
   width: 85%;
 }
 
-.preview-line.short {
-  width: 35%;
-}
-
-.preview-line.tiny {
-  width: 25%;
-}
-
 .signup-copy h3 {
   font-family: var(--font-display);
   font-size: 1.35rem;
@@ -1026,50 +1042,10 @@ onUnmounted(() => {
   margin-top: 1.5rem;
 }
 
-.soon-badge {
-  flex-shrink: 0;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: var(--navbar-primary);
-  color: var(--tan-light);
-}
-
 .forum-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
-}
-
-.forum-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 1.1rem;
-  border-radius: 14px;
-  border: 1px dashed var(--border-color);
-  background: var(--bg-primary);
-}
-
-.forum-card-foot {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.4rem;
-}
-
-.preview-dot {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--bg-secondary);
-}
-
-.forum-link {
-  margin-top: 1.25rem;
 }
 
 .fade-in {

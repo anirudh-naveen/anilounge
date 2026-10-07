@@ -2,7 +2,8 @@
  * Language warnings: strikes for sending text with blocked language.
  *
  * Layer: service. Surfaces that deliver text masked instead of rejecting it (direct
- * messages today) call `recordWarning` once per offending send. The sender gets an
+ * messages, forum posts, and comments) run it through `screenText`, which masks it
+ * and calls `recordWarning` once per offending send. The sender gets an
  * inbox notification naming what they sent (masked) and how many warnings remain.
  * The first WARNING_LIMIT offenses are warnings; every later one alerts admins in
  * the admin log. Each offense is a 'curse' or a 'slur' (`termCategory`), and alerts
@@ -12,7 +13,8 @@
  */
 
 import { query } from '../../config/postgres.js'
-import { termCategory } from '../utils/moderation.js'
+import { HttpError } from '../utils/httpError.js'
+import { censorText, findBlockedTerm, termCategory } from '../utils/moderation.js'
 import { logAction, quoteValue } from './adminLog.js'
 import { sendLanguageAlertEmail } from './emailService.js'
 import { notify } from './notificationService.js'
@@ -22,7 +24,7 @@ export const EXCERPT_MAX = 300
 /** Shown as the actor on admin log lines this service writes. */
 const AUTOMOD = { username: 'automod' }
 
-const SURFACE_LABELS = { message: 'direct message' }
+const SURFACE_LABELS = { message: 'direct message', post: 'forum post', comment: 'comment' }
 export const CATEGORY_LABELS = { curse: 'Curse', slur: 'Slur' }
 
 /**
@@ -168,4 +170,71 @@ export async function recordWarning(user, { surface, term, maskedText, delivered
   }
 }
 
-export default { recordWarning, warningMessage, breakdown, maskTerm, excerpt, WARNING_LIMIT }
+/**
+ * Mask blocked language in one piece of text.
+ * @param {string} body - Cleaned text.
+ * @param {{ allowCurses?: boolean }} [options] - Leave curses alone and mask only slurs.
+ * @returns {{ body: string, term: string | null, clean: boolean }} `term` is the most
+ *   serious blocked term (a slur over a curse; null when the text was fine); `clean`
+ *   is false when blocked language survives masking.
+ */
+export function maskLanguage(body, options = {}) {
+  const term = findBlockedTerm(body, options)
+  if (!term) return { body, term: null, clean: true }
+  const masked = censorText(body, options)
+  return { body: masked, term, clean: !findBlockedTerm(masked, options) }
+}
+
+/**
+ * Mask every field of one submission and record a single warning if any had blocked
+ * language (the most serious term across fields: a slur over a curse).
+ *
+ * @template {Record<string, string>} T
+ * @param {{ _id: string, username: string }} user - The author.
+ * @param {keyof typeof SURFACE_LABELS} surface
+ * @param {T} fields - Cleaned text by field name, e.g. `{ title, body }`.
+ * @param {{ allowCurses?: boolean }} [options]
+ * @returns {Promise<{ fields: T, warning: object | null }>} Masked fields.
+ * @throws {HttpError} 400 `BLOCKED_LANGUAGE` when masking can't clean a field (still
+ *   counts as a warning).
+ */
+export async function screenText(user, surface, fields, options = {}) {
+  const masked = {}
+  let term = null
+  let clean = true
+  for (const [key, value] of Object.entries(fields)) {
+    const result = maskLanguage(value, options)
+    masked[key] = result.body
+    clean &&= result.clean
+    const upgrade = term && termCategory(term) === 'curse' && result.term
+    if (result.term && (!term || (upgrade && termCategory(result.term) === 'slur'))) {
+      term = result.term
+    }
+  }
+  if (!term) return { fields: masked, warning: null }
+  const warning = await recordWarning(user, {
+    surface,
+    term,
+    maskedText: Object.values(masked).join(' — '),
+    delivered: clean,
+  })
+  if (!clean) {
+    throw new HttpError(
+      400,
+      warning?.message || "That has language that isn't allowed on AniLounge.",
+      'BLOCKED_LANGUAGE',
+    )
+  }
+  return { fields: masked, warning }
+}
+
+export default {
+  maskLanguage,
+  screenText,
+  recordWarning,
+  warningMessage,
+  breakdown,
+  maskTerm,
+  excerpt,
+  WARNING_LIMIT,
+}

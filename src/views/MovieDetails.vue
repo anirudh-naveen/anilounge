@@ -236,6 +236,9 @@
 
       <EntityCastRow :items="characters" :content-id="movie._id" :loading="charactersLoading" />
 
+      <!-- Title: Forum -->
+      <ForumHighlights :content-id="movie._id" :name="getDisplayTitle(movie)" reviewable />
+
       <StudioLinks :content="movie" />
     </div>
   </div>
@@ -256,6 +259,7 @@ import {
 import WatchlistPanel from '@/components/WatchlistPanel.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
+import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import { useEntityStore } from '@/stores/entities'
