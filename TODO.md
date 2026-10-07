@@ -4,6 +4,7 @@
 
 1. Add method for user to upload their AniList/MAL,Tmdb watchlist ✅
    - Before this, incorporate all the stats that the sites store for user information, if not more, and properly map those to this site's database. ✅
+   - Connections page: link AniList/MAL/TMDB, import from the linked account, two-way sync (AniList, MAL) and push-only (TMDB). ✅
 2. Add nicknames for content/franchises (mostly in Japan), for example Kono Subarashi is known as KonoSuba, etc.
 
 ## Home
@@ -33,3 +34,7 @@
 ## Infrastructure
 
 1. Create more CI/CD test blockers before PRs.
+2. Watch Connections sync traffic as sign-ups grow (services/connectionSync.js).
+   - Unlike apps that sync from the user's device, every AniList call here comes from our server IP, and AniList allows 30-90 requests a minute per IP, shared with catalog jobs. Polling is budgeted (default 12/min AniList, 20/min MAL, each account at most every 2 min), so it can't get us rate-limited, but with N connected accounts each one is polled roughly every N/12 minutes on AniList (~80 min at 1,000 accounts).
+   - When that gets too slow: poll recently active users first (and idle accounts rarely), pull on watchlist page load, and/or batch several accounts into one GraphQL request with aliases.
+   - Imports aren't pushed out to other connected sites (a big import would be thousands of writes); only edits made afterwards sync. Revisit if users expect an import from one site to fill the other.

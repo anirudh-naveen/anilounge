@@ -110,11 +110,13 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/import',
-      name: 'import',
-      component: () => import('@/views/Import.vue'),
+      path: '/connections',
+      name: 'connections',
+      component: () => import('@/views/Connections.vue'),
       meta: { requiresAuth: true },
     },
+    // Old Import page; keeps bookmarks and in-flight returns working.
+    { path: '/import', redirect: (to) => ({ path: '/connections', query: to.query }) },
     {
       path: '/admin',
       name: 'admin',

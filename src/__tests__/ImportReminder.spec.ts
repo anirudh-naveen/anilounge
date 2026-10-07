@@ -40,10 +40,10 @@ describe('ImportReminder', () => {
       },
     })
 
-  it('points new users to the Import page and can be dismissed for good', async () => {
+  it('points new users to the Connections page and can be dismissed for good', async () => {
     const wrapper = mountReminder()
-    expect(wrapper.text()).toContain('Import your list')
-    expect(wrapper.get('a').attributes('href')).toBe('/import')
+    expect(wrapper.text()).toContain('Connect your account')
+    expect(wrapper.get('a').attributes('href')).toBe('/connections')
 
     await wrapper.get('.dismiss-btn').trigger('click')
     expect(wrapper.find('[data-testid="import-reminder"]').exists()).toBe(false)
