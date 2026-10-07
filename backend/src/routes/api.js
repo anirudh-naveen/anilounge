@@ -17,6 +17,7 @@ import forumController from '../controllers/forumController.js'
 import inboxController from '../controllers/inboxController.js'
 import emailPreferenceController from '../controllers/emailPreferenceController.js'
 import watchlistImportController from '../controllers/watchlistImportController.js'
+import connectionController from '../controllers/connectionController.js'
 import securityController from '../controllers/securityController.js'
 import * as authController from '../controllers/authController.js'
 import adminOnly, { contentEditorOnly, creatorOnly } from '../middleware/adminOnly.js'
@@ -276,8 +277,9 @@ router.put(
 )
 
 /**
- * Import from AniList, MyAnimeList (username or export file), and/or TMDB in one polled
- * job; titles the sources disagree on wait in /conflicts for the user to pick.
+ * Import from connected AniList / MyAnimeList / TMDB accounts, or AniList and MyAnimeList
+ * by username or export file, in one polled job; titles the sources disagree on wait in
+ * /conflicts for the user to pick.
  */
 router.get('/watchlist/import', watchlistImportController.getImport)
 router.post(
@@ -287,8 +289,8 @@ router.post(
     body('sources.*.source')
       .isIn(['anilist', 'mal', 'mal_file', 'tmdb'])
       .withMessage('Choose AniList, MyAnimeList, or TMDB'),
+    body('sources.*.connected').optional().isBoolean(),
     body('sources.*.username').optional().isString().isLength({ max: 30 }),
-    body('sources.*.requestToken').optional().isString().isLength({ max: 80 }),
     body('sources.*.file').optional().isObject(),
     body('addMissing').optional().isBoolean(),
   ],
@@ -304,11 +306,28 @@ router.post(
   ],
   watchlistImportController.resolveConflicts,
 )
+
+/**
+ * Connections: link AniList / MyAnimeList / TMDB accounts. Linked accounts receive
+ * watchlist changes, and AniList / MyAnimeList changes are pulled back.
+ */
+router.get('/connections', connectionController.list)
 router.post(
-  '/watchlist/import/tmdb/token',
-  [body('redirectTo').isString().isLength({ max: 500 })],
-  watchlistImportController.startTmdbAuthorization,
+  '/connections/:provider(anilist|mal|tmdb)/start',
+  [body('redirectTo').optional().isString().isLength({ max: 500 })],
+  connectionController.start,
 )
+router.post(
+  '/connections/:provider(anilist|mal|tmdb)/callback',
+  [
+    body('code').optional().isString().isLength({ max: 4000 }),
+    body('state').optional().isString().isLength({ max: 200 }),
+    body('requestToken').optional().isString().isLength({ max: 200 }),
+  ],
+  connectionController.callback,
+)
+router.post('/connections/:provider(anilist|mal)/sync', connectionController.sync)
+router.delete('/connections/:provider(anilist|mal|tmdb)', connectionController.remove)
 
 /** User rating writes (1–10) and the current user's stored rating. */
 router.post(

@@ -331,15 +331,25 @@ describe('planImport', () => {
 
 describe('prepareSources', () => {
   it('runs AniList, then MyAnimeList, then TMDB whatever order they were sent in', () => {
-    const prepared = prepareSources([
-      { source: 'tmdb', requestToken: 'abc123def456' },
-      { source: 'mal', username: 'someone' },
-      { source: 'anilist', username: 'someone' },
-    ])
+    const prepared = prepareSources(
+      [
+        { source: 'tmdb', connected: true },
+        { source: 'mal', username: 'someone' },
+        { source: 'anilist', connected: true },
+      ],
+      'user-1',
+    )
     assert.deepEqual(
       prepared.map((item) => item.source),
       ['anilist', 'mal', 'tmdb'],
     )
+  })
+
+  it('needs a signed-in user for connected accounts, and TMDB only works connected', () => {
+    assert.throws(() => prepareSources([{ source: 'anilist', connected: true }]), ImportError)
+    assert.throws(() => prepareSources([{ source: 'tmdb' }]), ImportError)
+    assert.doesNotThrow(() => prepareSources([{ source: 'tmdb' }], 'user-1'))
+    assert.throws(() => prepareSources([{ source: 'mal_file', connected: true }], 'user-1'), ImportError)
   })
 
   it('rejects an empty request and the same site twice', () => {

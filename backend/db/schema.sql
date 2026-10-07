@@ -492,6 +492,29 @@ CREATE TABLE IF NOT EXISTS watchlist_import_conflicts (
   PRIMARY KEY (user_id, content_id)
 );
 
+-- Linked AniList / MyAnimeList / TMDB accounts (services/connectionService.js).
+-- Tokens are encrypted (utils/secretBox.js). `sync_cursor` is the newest remote change
+-- (ms since epoch) already pulled; polling only looks at entries newer than it.
+CREATE TABLE IF NOT EXISTS account_connections (
+  user_id           UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  provider          TEXT NOT NULL CHECK (provider IN ('anilist', 'mal', 'tmdb')),
+  external_id       TEXT NOT NULL,
+  external_name     TEXT,
+  access_token      TEXT NOT NULL,
+  refresh_token     TEXT,
+  token_expires_at  TIMESTAMPTZ,
+  sync_cursor       BIGINT NOT NULL DEFAULT 0,
+  last_polled_at    TIMESTAMPTZ,
+  last_synced_at    TIMESTAMPTZ,
+  last_error        TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, provider),
+  UNIQUE (provider, external_id)
+);
+CREATE INDEX IF NOT EXISTS account_connections_poll_idx
+  ON account_connections (provider, last_polled_at NULLS FIRST);
+
 CREATE TABLE IF NOT EXISTS ratings (
   user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   content_id UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,

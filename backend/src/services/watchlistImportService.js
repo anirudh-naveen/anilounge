@@ -5,43 +5,45 @@
  * Each source is read into the same entry shape (status, progress, 1-10 score, start and
  * finish dates, rewatches, notes), matched to catalog titles by AniList, MAL, or TMDB id,
  * and written in one transaction. Anime the catalog lacks can be added through the
- * AniList importer first (capped per run). Imports run as one background job per user
+ * AniList importer first (no cap; large lists just take longer). Imports run as one
+ * background job per user
  * because large lists take longer than a request should; the job lives in memory, so a
  * restart only loses the progress report, never half-written rows.
  *
  * Sources:
- * - AniList: public list by username (GraphQL, no key).
- * - MyAnimeList: public list by username (API v2, `MAL_CLIENT_ID`), or the XML file from
- *   MAL's export page, which also works for private lists.
- * - TMDB: the user approves a request token on themoviedb.org; the session made from it
- *   reads their watchlist and ratings once and is deleted right after.
+ * - AniList: the connected account (services/connectionService.js, private lists too),
+ *   or a public list by username (GraphQL, no key).
+ * - MyAnimeList: the connected account, a public list by username (API v2,
+ *   `MAL_CLIENT_ID`), or the XML file from MAL's export page.
+ * - TMDB: the connected account's watchlist and ratings.
  */
 import { gunzipSync } from 'node:zlib'
 import { getPool, query } from '../../config/postgres.js'
+import { fetchJson } from '../utils/fetchJson.js'
 import DatabasePopulator from './contentSyncService.js'
 import { anilistRequest, fetchAnilistMediaBatch } from './anilistService.js'
 import { addAnilistTitle } from './anilistImport.js'
 import { writeImportedHistory } from './watchEvents.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 import { HttpError } from '../utils/httpError.js'
+import {
+  RECONNECT_STATUS,
+  accessTokenFor,
+  loadConnection,
+  providerLabel,
+} from './connectionService.js'
 
 export const IMPORT_SOURCES = ['anilist', 'mal', 'mal_file', 'tmdb']
 /** Order sources run in when several are imported together. */
 const SOURCE_ORDER = ['anilist', 'mal', 'mal_file', 'tmdb']
 
-/** Catalog titles one import may add; the rest are reported as not in the catalog. */
-export const MAX_CATALOG_ADDS = 60
-/** Entries read from one list (AniList and MAL both cap far below this in practice). */
-const MAX_ENTRIES = 5000
 const MAX_NOTE_LENGTH = 500
 /** Finished jobs stay readable this long, and a new import waits this long after one. */
 const JOB_TTL_MS = 60 * 60 * 1000
 const IMPORT_COOLDOWN_MS = 60 * 1000
-const FETCH_TIMEOUT_MS = 20000
 
 const MAL_API = 'https://api.myanimelist.net/v2'
 const TMDB_API = 'https://api.themoviedb.org/3'
-const TMDB_MAX_PAGES = 50
 
 /**
  * A request the user can fix (bad username, private list, unreadable file).
@@ -302,7 +304,6 @@ export function parseMalExport(xml) {
       notes: cleanNotes(field('my_comments')),
       updatedAt: null,
     })
-    if (entries.length >= MAX_ENTRIES) break
   }
   return entries
 }
@@ -375,25 +376,6 @@ export function mapTmdbLists({ watchlist, rated }) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {string} url
- * @param {RequestInit} [init]
- * @returns {Promise<{ status: number, body: any }>}
- */
-async function fetchJson(url, init = {}) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(url, { ...init, signal: controller.signal })
-    const body = await response.json().catch(() => null)
-    return { status: response.status, body }
-  } catch {
-    return { status: 0, body: null }
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-/**
  * @param {unknown} username
  * @returns {string}
  */
@@ -406,8 +388,8 @@ function cleanUsername(username) {
 }
 
 const ANILIST_LIST_QUERY = `
-query ($userName: String, $chunk: Int) {
-  MediaListCollection(userName: $userName, type: ANIME, chunk: $chunk, perChunk: 500) {
+query ($userName: String, $userId: Int, $chunk: Int) {
+  MediaListCollection(userName: $userName, userId: $userId, type: ANIME, chunk: $chunk, perChunk: 500) {
     hasNextChunk
     lists {
       isCustomList
@@ -422,21 +404,20 @@ query ($userName: String, $chunk: Int) {
 }`
 
 /**
- * A public AniList anime list. Custom lists repeat entries from the status lists, so
- * they are skipped.
- * @param {string} username
+ * Every chunk of an AniList anime list. Custom lists repeat entries from the status
+ * lists, so they are skipped.
+ * @param {{ userName?: string, userId?: number }} who
+ * @param {{ token?: string, failure: string }} options - `failure` is shown when the
+ *   first chunk can't be read.
  * @returns {Promise<ImportEntry[]>}
  */
-export async function fetchAnilistList(username) {
-  const userName = cleanUsername(username)
+async function fetchAnilistCollection(who, { token, failure }) {
   const entries = new Map()
-  for (let chunk = 1; chunk <= 20; chunk += 1) {
-    const data = await anilistRequest(ANILIST_LIST_QUERY, { userName, chunk })
+  for (let chunk = 1; ; chunk += 1) {
+    const data = await anilistRequest(ANILIST_LIST_QUERY, { ...who, chunk }, { token })
     if (!data?.MediaListCollection) {
       if (chunk > 1) break
-      throw new ImportError(
-        `Couldn't read AniList user "${userName}". Check the name, and that the list isn't private.`,
-      )
+      throw new ImportError(failure)
     }
     for (const list of data.MediaListCollection.lists || []) {
       if (list.isCustomList) continue
@@ -445,13 +426,55 @@ export async function fetchAnilistList(username) {
         if (entry) entries.set(entry.anilistId, entry)
       }
     }
-    if (!data.MediaListCollection.hasNextChunk || entries.size >= MAX_ENTRIES) break
+    if (!data.MediaListCollection.hasNextChunk) break
   }
   return [...entries.values()]
 }
 
+/**
+ * A public AniList anime list.
+ * @param {string} username
+ * @returns {Promise<ImportEntry[]>}
+ */
+export async function fetchAnilistList(username) {
+  const userName = cleanUsername(username)
+  return fetchAnilistCollection(
+    { userName },
+    {
+      failure: `Couldn't read AniList user "${userName}". Check the name, and that the list isn't private.`,
+    },
+  )
+}
+
 const MAL_LIST_FIELDS =
   'list_status{status,score,num_episodes_watched,is_rewatching,start_date,finish_date,num_times_rewatched,comments,updated_at}'
+
+/**
+ * Every page of a MyAnimeList anime list (API v2), following `paging.next`.
+ * @param {string} who - `@me` or a username.
+ * @param {Record<string, string>} headers - Client id or bearer token.
+ * @param {(status: number) => ImportError | null} explain - User-facing error for a status.
+ * @returns {Promise<ImportEntry[]>}
+ */
+async function fetchMalPages(who, headers, explain) {
+  const entries = []
+  let url =
+    `${MAL_API}/users/${encodeURIComponent(who)}/animelist` +
+    `?fields=${encodeURIComponent(MAL_LIST_FIELDS)}&limit=1000&nsfw=true`
+  while (url) {
+    const { status, body } = await fetchJson(url, { headers })
+    if (status !== 200 || !body) {
+      throw explain(status) || new ImportError("MyAnimeList didn't answer. Try again in a few minutes.", 502)
+    }
+    for (const item of body.data || []) {
+      const entry = mapMalApiEntry(item)
+      if (entry) entries.push(entry)
+    }
+    const next = body.paging?.next
+    url = typeof next === 'string' && next.startsWith(`${MAL_API}/`) ? next : null
+  }
+  return entries
+}
 
 /**
  * A public MyAnimeList anime list through the official API.
@@ -467,30 +490,15 @@ export async function fetchMalList(username) {
       503,
     )
   }
-  const entries = []
-  let url =
-    `${MAL_API}/users/${encodeURIComponent(name)}/animelist` +
-    `?fields=${encodeURIComponent(MAL_LIST_FIELDS)}&limit=1000&nsfw=true`
-  for (let page = 0; url && page < 10; page += 1) {
-    const { status, body } = await fetchJson(url, { headers: { 'X-MAL-CLIENT-ID': clientId } })
-    if (status === 404) throw new ImportError(`There's no MyAnimeList user named "${name}".`)
+  return fetchMalPages(name, { 'X-MAL-CLIENT-ID': clientId }, (status) => {
+    if (status === 404) return new ImportError(`There's no MyAnimeList user named "${name}".`)
     if (status === 403) {
-      throw new ImportError(
-        `${name}'s MyAnimeList is private. Make it public for a moment, or upload your MAL export file.`,
+      return new ImportError(
+        `${name}'s MyAnimeList is private. Connect MyAnimeList instead, or upload your MAL export file.`,
       )
     }
-    if (status !== 200 || !body) {
-      throw new ImportError("MyAnimeList didn't answer. Try again in a few minutes.", 502)
-    }
-    for (const item of body.data || []) {
-      const entry = mapMalApiEntry(item)
-      if (entry) entries.push(entry)
-    }
-    const next = body.paging?.next
-    url = typeof next === 'string' && next.startsWith(`${MAL_API}/`) ? next : null
-    if (entries.length >= MAX_ENTRIES) break
-  }
-  return entries
+    return null
+  })
 }
 
 /**
@@ -503,27 +511,6 @@ function tmdbKey() {
 }
 
 /**
- * Step 1 of the TMDB import: a request token for the user to approve on themoviedb.org.
- * @param {string} redirectTo - Where TMDB sends the user back (an allowed frontend URL).
- * @returns {Promise<{ requestToken: string, authorizeUrl: string }>}
- */
-export async function createTmdbRequestToken(redirectTo) {
-  const { status, body } = await fetchJson(
-    `${TMDB_API}/authentication/token/new?api_key=${tmdbKey()}`,
-  )
-  if (status !== 200 || !body?.request_token) {
-    throw new ImportError("TMDB didn't answer. Try again in a few minutes.", 502)
-  }
-  const token = body.request_token
-  return {
-    requestToken: token,
-    authorizeUrl:
-      `https://www.themoviedb.org/authenticate/${encodeURIComponent(token)}` +
-      `?redirect_to=${encodeURIComponent(redirectTo)}`,
-  }
-}
-
-/**
  * Every page of one TMDB account list.
  * @param {string} path - e.g. `/account/1/watchlist/movies`
  * @param {string} sessionId
@@ -531,10 +518,11 @@ export async function createTmdbRequestToken(redirectTo) {
  */
 async function fetchTmdbPages(path, sessionId) {
   const results = []
-  for (let page = 1; page <= TMDB_MAX_PAGES; page += 1) {
+  for (let page = 1; ; page += 1) {
     const { status, body } = await fetchJson(
       `${TMDB_API}${path}?api_key=${tmdbKey()}&session_id=${encodeURIComponent(sessionId)}&page=${page}`,
     )
+    if (status === 401) throw new ImportError('Your TMDB sign-in expired. Reconnect TMDB.', RECONNECT_STATUS)
     if (status !== 200 || !body)
       throw new ImportError("TMDB didn't answer. Try again in a few minutes.", 502)
     results.push(...(body.results || []))
@@ -544,49 +532,57 @@ async function fetchTmdbPages(path, sessionId) {
 }
 
 /**
- * Step 2 of the TMDB import: turn the approved token into a session, read the
- * watchlist and ratings, and delete the session.
- * @param {string} requestToken
+ * A TMDB account's watchlist and ratings.
+ * @param {string|number} accountId
+ * @param {string} sessionId
  * @returns {Promise<ImportEntry[]>}
  */
-export async function fetchTmdbLists(requestToken) {
-  if (typeof requestToken !== 'string' || !/^[A-Za-z0-9]{10,80}$/.test(requestToken)) {
-    throw new ImportError('That TMDB sign-in link is invalid. Start the TMDB import again.')
-  }
-  const session = await fetchJson(`${TMDB_API}/authentication/session/new?api_key=${tmdbKey()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ request_token: requestToken }),
+export async function fetchTmdbLists(accountId, sessionId) {
+  const base = `/account/${accountId}`
+  const [watchMovies, watchTv, ratedMovies, ratedTv] = await Promise.all([
+    fetchTmdbPages(`${base}/watchlist/movies`, sessionId),
+    fetchTmdbPages(`${base}/watchlist/tv`, sessionId),
+    fetchTmdbPages(`${base}/rated/movies`, sessionId),
+    fetchTmdbPages(`${base}/rated/tv`, sessionId),
+  ])
+  return mapTmdbLists({
+    watchlist: { movies: watchMovies, tv: watchTv },
+    rated: { movies: ratedMovies, tv: ratedTv },
   })
-  const sessionId = session.body?.session_id
-  if (!sessionId) {
-    throw new ImportError(
-      "TMDB didn't approve the import. Start it again and choose Approve on TMDB.",
-    )
-  }
+}
+
+/**
+ * The full list of the user's connected account on a site (private lists included).
+ * @param {string} userId
+ * @param {'anilist'|'mal'|'tmdb'} provider
+ * @returns {Promise<ImportEntry[]>}
+ */
+export async function fetchConnectedList(userId, provider) {
+  const label = providerLabel(provider)
+  const row = await loadConnection(userId, provider)
+  if (!row) throw new ImportError(`Connect ${label} first.`)
+  let token
   try {
-    const account = await fetchJson(
-      `${TMDB_API}/account?api_key=${tmdbKey()}&session_id=${encodeURIComponent(sessionId)}`,
-    )
-    const accountId = account.body?.id
-    if (!accountId) throw new ImportError("Couldn't read your TMDB account.", 502)
-    const base = `/account/${accountId}`
-    const [watchMovies, watchTv, ratedMovies, ratedTv] = await Promise.all([
-      fetchTmdbPages(`${base}/watchlist/movies`, sessionId),
-      fetchTmdbPages(`${base}/watchlist/tv`, sessionId),
-      fetchTmdbPages(`${base}/rated/movies`, sessionId),
-      fetchTmdbPages(`${base}/rated/tv`, sessionId),
-    ])
-    return mapTmdbLists({
-      watchlist: { movies: watchMovies, tv: watchTv },
-      rated: { movies: ratedMovies, tv: ratedTv },
-    })
-  } finally {
-    await fetchJson(`${TMDB_API}/authentication/session?api_key=${tmdbKey()}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId }),
-    })
+    token = await accessTokenFor(row)
+  } catch (error) {
+    throw new ImportError(error.message, error.status || RECONNECT_STATUS)
+  }
+  switch (provider) {
+    case 'anilist':
+      return fetchAnilistCollection(
+        { userId: Number(row.external_id) },
+        { token, failure: "Couldn't read your AniList list. Reconnect AniList and try again." },
+      )
+    case 'mal':
+      return fetchMalPages('@me', { Authorization: `Bearer ${token}` }, (status) =>
+        status === 401
+          ? new ImportError('Your MyAnimeList sign-in expired. Reconnect MyAnimeList.', RECONNECT_STATUS)
+          : null,
+      )
+    case 'tmdb':
+      return fetchTmdbLists(row.external_id, token)
+    default:
+      throw new ImportError('Choose AniList, MyAnimeList, or TMDB.')
   }
 }
 
@@ -762,14 +758,13 @@ function withTimeout(promise, ms, fallback) {
 }
 
 /**
- * Bring unmatched anime into the catalog through the AniList importer. Titles the
- * catalog already holds under another id are linked whatever their number; only
- * genuinely new titles count toward `limit`.
+ * Bring unmatched anime into the catalog through the AniList importer, linking titles
+ * the catalog already holds under another id.
  * @param {ImportEntry[]} unmatched
- * @param {{ limit: number, onProgress?: (done: number, total: number) => void }} options
+ * @param {{ onProgress?: (done: number, total: number) => void }} [options]
  * @returns {Promise<{ linked: number, added: number }>}
  */
-async function addMissingAnime(unmatched, { limit, onProgress = () => {} }) {
+async function addMissingAnime(unmatched, { onProgress = () => {} } = {}) {
   const anime = unmatched.filter((entry) => entry.anilistId || entry.malId)
   if (!anime.length) return { linked: 0, added: 0 }
   const media = await fetchAnilistMediaBatch({
@@ -781,9 +776,8 @@ async function addMissingAnime(unmatched, { limit, onProgress = () => {} }) {
   let added = 0
   for (const [index, item] of media.entries()) {
     try {
-      const create = added < limit
       const { outcome } = await withTimeout(
-        addAnilistTitle(item, populator, { create }),
+        addAnilistTitle(item, populator),
         ADD_TITLE_TIMEOUT_MS,
         { outcome: 'failed' },
       )
@@ -1107,7 +1101,6 @@ export async function importEntries(userId, entries, options = {}) {
   let catalogLinked = 0
   if (addMissing && unmatched.length) {
     const result = await addMissingAnime(unmatched, {
-      limit: MAX_CATALOG_ADDS,
       onProgress: (done, total) => onProgress('adding', done, total),
     })
     catalogAdded = result.added
@@ -1279,10 +1272,11 @@ export async function resolveImportConflicts(userId, choices) {
  * Check a request's sources and return their loaders in run order (AniList, then
  * MyAnimeList, then TMDB). Problems the user can fix (bad username, unreadable
  * file, the same site twice) throw here, before a job starts.
- * @param {Array<{ source: string, username?: string, file?: { xml?: string, gzipBase64?: string }, requestToken?: string }>} sources
+ * @param {Array<{ source: string, connected?: boolean, username?: string, file?: { xml?: string, gzipBase64?: string } }>} sources
+ * @param {string} [userId] - Needed for `connected` sources.
  * @returns {Array<{ source: string, load: () => Promise<ImportEntry[]> }>}
  */
-export function prepareSources(sources) {
+export function prepareSources(sources, userId) {
   if (!Array.isArray(sources) || !sources.length) {
     throw new ImportError('Enter at least one username to import.')
   }
@@ -1292,18 +1286,27 @@ export function prepareSources(sources) {
     const site = item?.source === 'mal_file' ? 'mal' : item?.source
     if (sites.has(site)) throw new ImportError('Each site can only be imported once at a time.')
     sites.add(site)
-    prepared.push({ source: item.source, load: prepareImport(item.source, item) })
+    prepared.push({ source: item.source, load: prepareImport(item.source, item, userId) })
   }
   return prepared.sort((a, b) => SOURCE_ORDER.indexOf(a.source) - SOURCE_ORDER.indexOf(b.source))
 }
 
 /**
- * The loader for one source.
+ * The loader for one source. `connected` reads the user's connected account on that
+ * site instead of a public list; TMDB can only be read that way.
  * @param {string} source
- * @param {{ username?: string, file?: { xml?: string, gzipBase64?: string }, requestToken?: string }} body
+ * @param {{ connected?: boolean, username?: string, file?: { xml?: string, gzipBase64?: string } }} body
+ * @param {string} [userId]
  * @returns {() => Promise<ImportEntry[]>}
  */
-export function prepareImport(source, body = {}) {
+export function prepareImport(source, body = {}, userId) {
+  if (body.connected === true || source === 'tmdb') {
+    if (!['anilist', 'mal', 'tmdb'].includes(source)) {
+      throw new ImportError('Choose AniList, MyAnimeList, or TMDB.')
+    }
+    if (!userId) throw new ImportError(`Connect ${providerLabel(source)} first.`)
+    return () => fetchConnectedList(String(userId), source)
+  }
   switch (source) {
     case 'anilist': {
       const username = cleanUsername(body.username)
@@ -1316,10 +1319,6 @@ export function prepareImport(source, body = {}) {
     case 'mal_file': {
       const entries = parseMalExport(readMalExportFile(body.file))
       return async () => entries
-    }
-    case 'tmdb': {
-      const { requestToken } = body
-      return () => fetchTmdbLists(requestToken)
     }
     default:
       throw new ImportError('Choose AniList, MyAnimeList, or TMDB.')
