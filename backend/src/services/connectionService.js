@@ -52,6 +52,16 @@ export const RECONNECT_STATUS = 424
 const pending = new Map()
 
 /**
+ * An env value without the stray spaces or newlines a dashboard paste can leave.
+ * @param {string} name
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function envValue(name, env = process.env) {
+  return String(env[name] ?? '').trim()
+}
+
+/**
  * A problem the user can act on (site not set up, sign-in expired, account taken).
  */
 export class ConnectionError extends HttpError {
@@ -89,14 +99,14 @@ export function providerSync(provider) {
  * @returns {boolean}
  */
 export function isProviderConfigured(provider, env = process.env) {
-  if (!env.CONNECTIONS_SECRET) return false
+  if (!envValue('CONNECTIONS_SECRET', env)) return false
   switch (provider) {
     case 'anilist':
-      return Boolean(env.ANILIST_CLIENT_ID && env.ANILIST_CLIENT_SECRET)
+      return Boolean(envValue('ANILIST_CLIENT_ID', env) && envValue('ANILIST_CLIENT_SECRET', env))
     case 'mal':
-      return Boolean(env.MAL_CLIENT_ID)
+      return Boolean(envValue('MAL_CLIENT_ID', env))
     case 'tmdb':
-      return Boolean(env.TMDB_API_KEY)
+      return Boolean(envValue('TMDB_API_KEY', env))
     default:
       return false
   }
@@ -151,7 +161,7 @@ function takePending(key, userId, provider) {
 
 /** @returns {string} */
 function tmdbKey() {
-  return encodeURIComponent(process.env.TMDB_API_KEY || '')
+  return encodeURIComponent(envValue('TMDB_API_KEY'))
 }
 
 // ---------------------------------------------------------------------------
@@ -193,13 +203,13 @@ export async function startConnection(userId, provider, { redirectTo } = {}) {
     state,
   })
   if (provider === 'anilist') {
-    params.set('client_id', process.env.ANILIST_CLIENT_ID)
+    params.set('client_id', envValue('ANILIST_CLIENT_ID'))
     pending.set(state, { userId: String(userId), provider, expires })
     return { authorizeUrl: `${ANILIST_OAUTH}/authorize?${params}` }
   }
   // MAL only supports the `plain` PKCE method.
   const verifier = crypto.randomBytes(48).toString('base64url')
-  params.set('client_id', process.env.MAL_CLIENT_ID)
+  params.set('client_id', envValue('MAL_CLIENT_ID'))
   params.set('code_challenge', verifier)
   params.set('code_challenge_method', 'plain')
   pending.set(state, { userId: String(userId), provider, verifier, expires })
@@ -212,8 +222,8 @@ export async function startConnection(userId, provider, { redirectTo } = {}) {
  * @returns {Promise<{ accessToken: string, refreshToken: string | null, expiresAt: Date | null } | null>}
  */
 async function malTokenRequest(fields) {
-  const form = new URLSearchParams({ client_id: process.env.MAL_CLIENT_ID, ...fields })
-  if (process.env.MAL_CLIENT_SECRET) form.set('client_secret', process.env.MAL_CLIENT_SECRET)
+  const form = new URLSearchParams({ client_id: envValue('MAL_CLIENT_ID'), ...fields })
+  if (envValue('MAL_CLIENT_SECRET')) form.set('client_secret', envValue('MAL_CLIENT_SECRET'))
   const { status, body } = await fetchJson(`${MAL_OAUTH}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -268,8 +278,8 @@ export async function finishConnection(userId, provider, body = {}) {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
         grant_type: 'authorization_code',
-        client_id: process.env.ANILIST_CLIENT_ID,
-        client_secret: process.env.ANILIST_CLIENT_SECRET,
+        client_id: envValue('ANILIST_CLIENT_ID'),
+        client_secret: envValue('ANILIST_CLIENT_SECRET'),
         redirect_uri: connectionsRedirectUri(),
         code,
       }),
@@ -424,7 +434,7 @@ export async function disconnect(userId, provider) {
     [userId, provider],
   )
   const row = rows[0]
-  if (row && provider === 'tmdb' && process.env.TMDB_API_KEY) {
+  if (row && provider === 'tmdb' && envValue('TMDB_API_KEY')) {
     const sessionId = unseal(row.access_token)
     if (sessionId) {
       await fetchJson(`${TMDB_API}/authentication/session?api_key=${tmdbKey()}`, {

@@ -23,15 +23,23 @@ import type {
 import type { ProfileSettings } from '@/types/profile'
 import { getDisplayTitle } from '@/utils/titles'
 
-const STALE_RAILWAY_HOST = 'find-animation-production.up.railway.app'
-
-function resolveApiBaseUrl(): string {
+/**
+ * Base URL for API calls.
+ * @param configured - `VITE_API_URL` at build time.
+ * @param dev - Vite dev server.
+ * @returns `/api`, or the configured backend when it isn't on Railway.
+ */
+export function resolveApiBaseUrl(
+  configured = import.meta.env.VITE_API_URL as string | undefined,
+  dev = import.meta.env.DEV,
+): string {
   // Development: vite.config.ts proxies `/api` to the local backend, so the session
   // cookie is same-origin (a cross-origin localhost:5001 cookie is dropped by Safari).
-  if (import.meta.env.DEV) return '/api'
+  if (dev) return '/api'
 
-  const configured = import.meta.env.VITE_API_URL as string | undefined
-  const usable = configured && !configured.includes(STALE_RAILWAY_HOST) ? configured : undefined
+  // Railway is reached through vercel.json's same-origin `/api` proxy. Calling it directly
+  // makes the session cookie third-party; browsers drop it and every reload signs out.
+  const usable = configured && !/\.railway\.app\b/i.test(configured) ? configured : undefined
   // Routes are mounted under `/api`; accept a bare origin like `https://api.example.com`.
   if (usable) return /\/api\/?$/.test(usable) ? usable : `${usable.replace(/\/+$/, '')}/api`
   // Same-origin `/api` is proxied to Railway by vercel.json, so the session cookie is
