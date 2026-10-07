@@ -343,6 +343,16 @@ export const messagesAPI = {
   send: (userId: string, body: string) => api.post(`/messages/${userId}`, { body }),
 }
 
+export const inboxAPI = {
+  /** A page of the inbox; `before` is the last item's `createdAt`. */
+  list: (before?: string) => api.get('/inbox', { params: before ? { before } : {} }),
+
+  unread: () => api.get('/inbox/unread'),
+
+  /** Mark the given items read, or everything when `ids` is omitted. */
+  markRead: (ids?: string[]) => api.post('/inbox/read', ids ? { ids } : {}),
+}
+
 export const forumAPI = {
   list: (params: {
     tag?: string
