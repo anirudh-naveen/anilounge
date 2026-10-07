@@ -12,6 +12,7 @@ import entityController from '../controllers/entityController.js'
 import homeController from '../controllers/homeController.js'
 import profileController from '../controllers/profileController.js'
 import friendController from '../controllers/friendController.js'
+import messageController from '../controllers/messageController.js'
 import emailPreferenceController from '../controllers/emailPreferenceController.js'
 import watchlistImportController from '../controllers/watchlistImportController.js'
 import securityController from '../controllers/securityController.js'
@@ -371,6 +372,12 @@ router.get('/friends/search', friendController.searchUsers)
 router.post('/friends/requests', blockWhenMuted(), friendController.sendRequest)
 router.post('/friends/requests/:id/accept', validateObjectId, friendController.acceptRequest)
 router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
+
+/** Direct messages between friends. `:id` is the other user's id. */
+router.get('/messages', messageController.getConversations)
+router.get('/messages/unread', messageController.getUnreadCount)
+router.get('/messages/:id', validateObjectId, messageController.getThread)
+router.post('/messages/:id', validateObjectId, blockWhenMuted(), messageController.sendMessage)
 
 /**
  * Admin page. Catalog content (edit rows, links, cast order): admins and developers.

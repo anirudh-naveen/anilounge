@@ -318,6 +318,18 @@ export const friendsAPI = {
   remove: (userId: string) => api.delete(`/friends/${userId}`),
 }
 
+export const messagesAPI = {
+  list: () => api.get('/messages'),
+
+  unread: () => api.get('/messages/unread'),
+
+  /** A page of one conversation; `before`/`after` are message ids. Marks it read. */
+  thread: (userId: string, cursor: { before?: string; after?: string } = {}) =>
+    api.get(`/messages/${userId}`, { params: cursor }),
+
+  send: (userId: string, body: string) => api.post(`/messages/${userId}`, { body }),
+}
+
 export const adminAPI = {
   searchContent: (params: { q?: string; type?: string; page?: number }) =>
     api.get('/admin/content', { params }),

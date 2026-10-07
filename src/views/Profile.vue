@@ -117,6 +117,14 @@
                 :relationship="profile.relationship"
                 @update:relationship="(value) => profile && (profile.relationship = value)"
               />
+              <router-link
+                v-if="profile.relationship === 'friends'"
+                :to="{ name: 'messages', query: { user: profile.user.id } }"
+                class="btn btn-secondary"
+                data-testid="message-friend"
+              >
+                Message
+              </router-link>
               <button
                 v-if="profile.isOwner"
                 type="button"
