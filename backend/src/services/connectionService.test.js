@@ -39,6 +39,17 @@ describe('connection setup', () => {
     assert.equal(isProviderConfigured('kitsu', { ...secret, TMDB_API_KEY: 'k' }), false)
   })
 
+  it('ignores spaces and newlines pasted around the keys', async () => {
+    Object.assign(process.env, {
+      CONNECTIONS_SECRET: 'k',
+      ANILIST_CLIENT_ID: ' 53012\n',
+      ANILIST_CLIENT_SECRET: 's ',
+    })
+    const url = new URL((await startConnection('u1', 'anilist')).authorizeUrl)
+    assert.equal(url.searchParams.get('client_id'), '53012')
+    assert.equal(isProviderConfigured('anilist', { CONNECTIONS_SECRET: ' ', ANILIST_CLIENT_ID: '1', ANILIST_CLIENT_SECRET: 's' }), false)
+  })
+
   it('offers no site until CONNECTIONS_SECRET is set', () => {
     assert.equal(isProviderConfigured('mal', { MAL_CLIENT_ID: 'x' }), false)
     assert.equal(isProviderConfigured('tmdb', { TMDB_API_KEY: 'k' }), false)
