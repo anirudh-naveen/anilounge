@@ -100,6 +100,12 @@
                     data-testid="nav-avatar"
                   />
                   <span class="user-name">{{ authStore.user?.username }}</span>
+                  <span
+                    v-if="messagesStore.total"
+                    class="unread-dot"
+                    data-testid="nav-unread-dot"
+                    aria-label="Unread messages"
+                  ></span>
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
                 </button>
 
@@ -134,6 +140,35 @@
                         <circle cx="9" cy="8.5" r="3" />
                         <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
                         <path d="M15.5 5.75a3 3 0 0 1 0 5.5M17 14a5.5 5.5 0 0 1 3.5 5" />
+                      </svg>
+                    </span>
+                  </router-link>
+                  <router-link
+                    to="/messages"
+                    class="dropdown-item"
+                    data-testid="nav-messages"
+                    @click="closeDropdown"
+                  >
+                    <span class="item-text">Messages</span>
+                    <span
+                      v-if="messagesStore.total"
+                      class="item-count"
+                      :aria-label="`${messagesStore.total} unread`"
+                      >{{ messagesStore.total > 99 ? '99+' : messagesStore.total }}</span
+                    >
+                    <span class="item-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a1 1 0 0 1-1-1v-9Z"
+                        />
+                        <path d="M8.5 9h7M8.5 12h4.5" />
                       </svg>
                     </span>
                   </router-link>
@@ -242,10 +277,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted } from 'vue'
+import { onMounted, ref, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
+import { useMessagesStore } from '@/stores/messages'
 import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
@@ -257,6 +293,11 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 const showDropdown = ref(false)
+const messagesStore = useMessagesStore()
+
+/** How often the profile-menu badge rechecks unread messages and requests. */
+const UNREAD_POLL_MS = 60_000
+let unreadTimer: ReturnType<typeof setInterval> | undefined
 // Theme is chosen in Settings; calling this here keeps it applied (and following the OS) site-wide.
 useTheme()
 
@@ -264,10 +305,24 @@ onMounted(() => {
   authStore.restoreSession()
   // Close dropdown when clicking outside
   document.addEventListener('click', handleClickOutside)
+  unreadTimer = setInterval(() => {
+    if (authStore.isAuthenticated && !document.hidden) messagesStore.refresh()
+  }, UNREAD_POLL_MS)
 })
+
+// Refresh the badge on sign-in and page changes; clear it on sign-out.
+watch(
+  () => [authStore.isAuthenticated, route.path] as const,
+  ([signedIn]) => {
+    if (signedIn) messagesStore.refresh()
+    else messagesStore.reset()
+  },
+  { immediate: true },
+)
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  clearInterval(unreadTimer)
 })
 
 const toggleDropdown = () => {
@@ -583,6 +638,29 @@ const handleLogout = async () => {
 .item-text {
   flex: 1;
   font-weight: 500;
+}
+
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--coral-light);
+  box-shadow: 0 0 0 2px rgba(21, 34, 56, 0.9);
+  flex-shrink: 0;
+}
+
+.item-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--coral-primary);
+  color: var(--text-on-accent);
 }
 
 .dropdown-divider {

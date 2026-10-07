@@ -585,6 +585,16 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Direct messages (services/messageService.js). Only friends can send; history stays
+-- readable after an unfriend. `read_at` is set when the recipient opens the thread.
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_body_length_check;
+ALTER TABLE messages ADD CONSTRAINT messages_body_length_check
+  CHECK (char_length(body) BETWEEN 1 AND 2000);
+CREATE INDEX IF NOT EXISTS messages_pair_idx
+  ON messages (LEAST(sender_id, recipient_id), GREATEST(sender_id, recipient_id), created_at DESC);
+CREATE INDEX IF NOT EXISTS messages_unread_idx
+  ON messages (recipient_id, sender_id) WHERE read_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS notifications (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
