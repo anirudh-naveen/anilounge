@@ -274,11 +274,21 @@ describe('Home', () => {
             appearances: [
               {
                 role: 'Main',
-                content: { _id: 'op', title: 'One Piece', contentType: 'tv', franchise: 'One Piece' },
+                content: {
+                  _id: 'op',
+                  title: 'One Piece',
+                  contentType: 'tv',
+                  franchise: 'One Piece',
+                },
               },
               {
                 role: 'Main',
-                content: { _id: 'red', title: 'One Piece Film Red', contentType: 'movie', franchise: 'One Piece' },
+                content: {
+                  _id: 'red',
+                  title: 'One Piece Film Red',
+                  contentType: 'movie',
+                  franchise: 'One Piece',
+                },
               },
             ],
           },

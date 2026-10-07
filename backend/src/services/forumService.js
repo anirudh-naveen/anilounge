@@ -16,11 +16,13 @@
 
 import { query, startSession } from '../../config/postgres.js'
 import { isUuid } from '../db/ids.js'
+import Content from '../models/Content.js'
 import { isAdminUser } from '../middleware/adminOnly.js'
 import { HttpError } from '../utils/httpError.js'
 import { cleanUserText } from '../utils/userText.js'
 import { logAction, quoteValue } from './adminLog.js'
 import { escapeLike, publicUser } from './friendService.js'
+import { getSeasonGuide } from './seasonService.js'
 import { screenText } from './languageWarningService.js'
 import { notify } from './notificationService.js'
 
@@ -170,12 +172,43 @@ function commentEntry(row, viewer) {
 }
 
 /**
- * Validate the tag list of a new or edited post.
- * @param {unknown} input - `[{ contentId, season?, episode? }]`.
- * @returns {Promise<Array<{ contentId: string, kind: string, season: number | null, episode: number | null }>>}
- * @throws {HttpError} 400 on bad shape, too many, unknown content, or an episode on a non-series.
+ * `S<season>E<episode>` keys for every episode of a series, from the same season guide
+ * the series page shows. Empty when no list is available (no TMDB/MAL data, or the
+ * lookup failed).
+ * @param {string} seriesId
+ * @returns {Promise<Set<string>>}
  */
-export async function validateTags(input) {
+export async function loadEpisodeKeys(seriesId) {
+  try {
+    const content = await Content.findById(seriesId)
+    if (!content) return new Set()
+    const guide = await getSeasonGuide(content)
+    return new Set(
+      (guide.episodes || []).map((ep) => episodeKey(ep.seasonNumber, ep.episodeNumber)),
+    )
+  } catch (error) {
+    console.error('Episode list for forum tag failed:', error.message)
+    return new Set()
+  }
+}
+
+/**
+ * @param {number} season
+ * @param {number} episode
+ * @returns {string} e.g. `S1E5`.
+ */
+export const episodeKey = (season, episode) => `S${Number(season)}E${Number(episode)}`
+
+/**
+ * Validate the tag list of a new or edited post. Episode tags must be a real episode
+ * of the series (checked against its episode list).
+ * @param {unknown} input - `[{ contentId, season?, episode? }]`.
+ * @param {{ loadEpisodes?: (seriesId: string) => Promise<Set<string>> }} [options] - For tests.
+ * @returns {Promise<Array<{ contentId: string, kind: string, season: number | null, episode: number | null }>>}
+ * @throws {HttpError} 400 on bad shape, too many, unknown content, an episode on a
+ *   non-series, or an episode the series doesn't have.
+ */
+export async function validateTags(input, { loadEpisodes = loadEpisodeKeys } = {}) {
   if (input === undefined || input === null) return []
   if (!Array.isArray(input)) throw new HttpError(400, 'Tags must be a list.')
   const seen = new Set()
@@ -200,19 +233,40 @@ export async function validateTags(input) {
   if (tags.length > TAGS_MAX) throw new HttpError(400, `Posts can have up to ${TAGS_MAX} tags.`)
   if (!tags.length) return []
 
-  const { rows } = await query(`SELECT id, kind FROM content WHERE id = ANY($1::uuid[])`, [
+  const { rows } = await query(`SELECT id, kind, name FROM content WHERE id = ANY($1::uuid[])`, [
     [...new Set(tags.map((tag) => tag.contentId))],
   ])
-  const kinds = new Map(rows.map((row) => [String(row.id), row.kind]))
-  return tags.map((tag) => {
-    const kind = kinds.get(tag.contentId)
-    if (!kind || !TAG_KINDS.includes(kind))
+  const found = new Map(rows.map((row) => [String(row.id), row]))
+  const episodeLists = new Map()
+  const out = []
+  for (const tag of tags) {
+    const row = found.get(tag.contentId)
+    if (!row || !TAG_KINDS.includes(row.kind)) {
       throw new HttpError(400, 'One of the tags no longer exists.')
-    if (tag.season !== null && kind !== 'series') {
-      throw new HttpError(400, 'Only series can be tagged with an episode.')
     }
-    return { ...tag, kind }
-  })
+    if (tag.season !== null) {
+      if (row.kind !== 'series')
+        throw new HttpError(400, 'Only series can be tagged with an episode.')
+      if (!episodeLists.has(tag.contentId)) {
+        episodeLists.set(tag.contentId, await loadEpisodes(tag.contentId))
+      }
+      const episodes = episodeLists.get(tag.contentId)
+      if (!episodes.size) {
+        throw new HttpError(
+          400,
+          `There's no episode list for ${row.name} right now, so tag the whole series instead.`,
+        )
+      }
+      if (!episodes.has(episodeKey(tag.season, tag.episode))) {
+        throw new HttpError(
+          400,
+          `${row.name} has no episode ${episodeKey(tag.season, tag.episode)}.`,
+        )
+      }
+    }
+    out.push({ ...tag, kind: row.kind })
+  }
+  return out
 }
 
 /**
@@ -878,23 +932,20 @@ export function homeWindowEnd(now = Date.now()) {
   return new Date(Math.floor(now / span) * span + span)
 }
 
-/** viewer id (or 'guest') → { expires, data }. Kept per process; it only saves queries. */
+/**
+ * viewer id (or 'guest') → { expires, pick }. Only which posts were picked is cached
+ * (per process); their counts and the viewer's likes are re-read on every request.
+ */
 const homeCache = new Map()
 
 /**
- * Forum highlights for Home. Signed in: hot posts tagged with titles on the viewer's
- * watchlist (or their franchises), topped up with hot posts from everyone. Guests:
- * hot posts from everyone. The pick is frozen until the window ends, so it refreshes
- * every few hours rather than on every visit; like counts are as of the pick.
+ * Pick the Home posts for one window: signed in, hot posts tagged with titles on the
+ * viewer's watchlist (or their franchises), topped up with hot posts from everyone;
+ * guests, hot posts from everyone.
  * @param {object | null} viewer
- * @returns {Promise<{ items: object[], personalized: boolean, refreshesAt: Date }>}
+ * @returns {Promise<{ ids: string[], forYou: Set<string> }>} Ids in display order.
  */
-export async function getHomeHighlights(viewer) {
-  const key = viewer?._id ? String(viewer._id) : 'guest'
-  const cached = homeCache.get(key)
-  if (cached && cached.expires > Date.now()) return cached.data
-
-  const refreshesAt = homeWindowEnd()
+async function pickHomePosts(viewer) {
   const recent = `p.created_at > now() - interval '60 days'`
   let personal = []
   if (viewer?._id) {
@@ -904,38 +955,69 @@ export async function getHomeHighlights(viewer) {
          UNION SELECT fm.franchise_id FROM watchlist w
            JOIN franchise_members fm ON fm.member_id = w.content_id WHERE w.user_id = $1
        )
-       SELECT ${postColumns()} FROM posts p JOIN users u ON u.id = p.user_id
+       SELECT p.id FROM posts p JOIN users u ON u.id = p.user_id
        WHERE u.banned_at IS NULL AND ${recent} AND p.user_id <> $1
          AND EXISTS (SELECT 1 FROM post_tags t WHERE t.post_id = p.id AND t.content_id IN (SELECT id FROM mine))
        ORDER BY ${hotScoreSql('p')} DESC
        LIMIT ${HOME_LIMIT}`,
       [viewer._id],
     )
-    personal = rows
+    personal = rows.map((row) => String(row.id))
   }
-  const taken = personal.map((row) => row.id)
   let general = []
   if (personal.length < HOME_LIMIT) {
     const { rows } = await query(
-      `SELECT ${postColumns()} FROM posts p JOIN users u ON u.id = p.user_id
-       WHERE u.banned_at IS NULL AND ${recent} AND NOT (p.id = ANY($2::uuid[]))
+      `SELECT p.id FROM posts p JOIN users u ON u.id = p.user_id
+       WHERE u.banned_at IS NULL AND ${recent} AND NOT (p.id = ANY($1::uuid[]))
        ORDER BY ${hotScoreSql('p')} DESC
        LIMIT ${HOME_LIMIT - personal.length}`,
-      [viewer?._id || null, taken],
+      [personal],
     )
-    general = rows
+    general = rows.map((row) => String(row.id))
   }
-  const data = {
-    items: [
-      ...personal.map((row) => ({ ...postEntry(row, { viewer }), forYou: true })),
-      ...general.map((row) => ({ ...postEntry(row, { viewer }), forYou: false })),
-    ],
-    personalized: personal.length > 0,
-    refreshesAt,
+  return { ids: [...personal, ...general], forYou: new Set(personal) }
+}
+
+/**
+ * Forum highlights for Home. Which posts show is picked once per window and frozen
+ * until it ends, so the selection refreshes every few hours rather than on every
+ * visit. Like and comment counts and the viewer's own likes are always current;
+ * posts deleted (or whose author was banned) since the pick drop out.
+ * @param {object | null} viewer
+ * @returns {Promise<{ items: object[], personalized: boolean, refreshesAt: Date }>}
+ */
+export async function getHomeHighlights(viewer) {
+  const key = viewer?._id ? String(viewer._id) : 'guest'
+  let cached = homeCache.get(key)
+  if (!cached || cached.expires <= Date.now()) {
+    const refreshesAt = homeWindowEnd()
+    cached = { expires: refreshesAt.getTime(), refreshesAt, pick: await pickHomePosts(viewer) }
+    if (homeCache.size >= 5000) homeCache.clear()
+    homeCache.set(key, cached)
   }
-  homeCache.set(key, { expires: refreshesAt.getTime(), data })
-  if (homeCache.size > 5000) homeCache.clear()
-  return data
+
+  const { ids, forYou } = cached.pick
+  const { rows } = ids.length
+    ? await query(
+        `SELECT ${postColumns()} FROM posts p JOIN users u ON u.id = p.user_id
+         WHERE u.banned_at IS NULL AND p.id = ANY($2::uuid[])`,
+        [viewer?._id || null, ids],
+      )
+    : { rows: [] }
+  const byId = new Map(rows.map((row) => [String(row.id), row]))
+  const items = ids
+    .filter((id) => byId.has(id))
+    .map((id) => ({ ...postEntry(byId.get(id), { viewer }), forYou: forYou.has(id) }))
+  return {
+    items,
+    personalized: items.some((item) => item.forYou),
+    refreshesAt: cached.refreshesAt,
+  }
+}
+
+/** Forget cached Home picks (tests). */
+export function clearHomeCache() {
+  homeCache.clear()
 }
 
 export default {

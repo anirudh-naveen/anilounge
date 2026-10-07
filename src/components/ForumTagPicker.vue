@@ -2,14 +2,15 @@
   ForumTagPicker.vue — choose what a forum post is about (component).
 
   Search movies, series, specials, franchises, and characters by name and add up
-  to TAGS_MAX tags. A series tag can be narrowed to one episode (season and
-  episode number) to make an episode thread. v-model is the selected tag list.
+  to TAGS_MAX tags. A series tag can be narrowed to one episode, picked from the
+  series' episode list (the same one its page shows), to make an episode thread.
+  v-model is the selected tag list.
 -->
 <template>
   <div class="tag-picker">
     <!-- Title: Selected -->
     <ul v-if="modelValue.length" class="tag-chips" data-testid="selected-tags">
-      <li v-for="(tag, index) in modelValue" :key="tagKey(tag)" class="tag-chip">
+      <li v-for="(tag, index) in modelValue" :key="`${tag.contentId}-${index}`" class="tag-chip">
         <span class="tag-chip-main">
           <span class="tag-kind">{{ KIND_LABELS[tag.kind] }}</span>
           {{ tagLabel(tag) }}
@@ -28,39 +29,49 @@
             <button
               type="button"
               class="tag-episode-add"
+              :disabled="guides[tag.contentId] === 'loading'"
               :data-testid="`episode-add-${index}`"
-              @click="setEpisode(index, 1, 1)"
+              @click="pickEpisode(index)"
             >
-              + Episode
+              {{ guides[tag.contentId] === 'loading' ? 'Loading episodes…' : '+ Episode' }}
             </button>
+            <span
+              v-if="guides[tag.contentId] === 'none'"
+              class="social-meta"
+              :data-testid="`episode-none-${index}`"
+            >
+              No episode list for this series.
+            </span>
           </template>
           <template v-else>
-            <label>
-              S
-              <input
-                type="number"
-                min="0"
-                max="999"
-                class="input tag-number"
-                :value="tag.season"
-                aria-label="Season number"
-                :data-testid="`episode-season-${index}`"
-                @input="setEpisode(index, numberFrom($event), tag.episode)"
-              />
-            </label>
-            <label>
-              E
-              <input
-                type="number"
-                min="1"
-                max="9999"
-                class="input tag-number"
-                :value="tag.episode"
-                aria-label="Episode number"
-                :data-testid="`episode-number-${index}`"
-                @input="setEpisode(index, tag.season, numberFrom($event))"
-              />
-            </label>
+            <select
+              class="input tag-select"
+              :value="tag.season"
+              aria-label="Season"
+              :data-testid="`episode-season-${index}`"
+              @change="changeSeason(index, Number(($event.target as HTMLSelectElement).value))"
+            >
+              <option v-for="season in seasonsOf(tag.contentId)" :key="season" :value="season">
+                {{ season === 0 ? 'Specials' : `Season ${season}` }}
+              </option>
+            </select>
+            <select
+              class="input tag-select episode-select"
+              :value="tag.episode"
+              aria-label="Episode"
+              :data-testid="`episode-number-${index}`"
+              @change="
+                setEpisode(index, tag.season, Number(($event.target as HTMLSelectElement).value))
+              "
+            >
+              <option
+                v-for="ep in episodesOf(tag.contentId, tag.season)"
+                :key="ep.episodeNumber"
+                :value="ep.episodeNumber"
+              >
+                E{{ ep.episodeNumber }}<template v-if="ep.title"> · {{ ep.title }}</template>
+              </option>
+            </select>
             <button type="button" class="tag-episode-add" @click="setEpisode(index, null, null)">
               Whole series
             </button>
@@ -108,8 +119,9 @@
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
-import { forumAPI, getPosterUrl } from '@/services/api'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { contentAPI, forumAPI, getPosterUrl } from '@/services/api'
+import type { Episode } from '@/types/content'
 import type { PostTag, TagSearchHit } from '@/types/forum'
 import { KIND_LABELS, TAGS_MAX, tagLabel } from '@/utils/forum'
 
@@ -125,11 +137,49 @@ const searched = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 let seq = 0
 
-const tagKey = (tag: PostTag) => `${tag.contentId}-${tag.season}-${tag.episode}`
+/** Series id → its episodes, 'loading', or 'none' when it has no episode list. */
+const guides = reactive<Record<string, Episode[] | 'loading' | 'none'>>({})
 
-const numberFrom = (event: Event) => {
-  const value = (event.target as HTMLInputElement).valueAsNumber
-  return Number.isFinite(value) ? value : null
+/** Fetch a series' episode list once. */
+const loadGuide = async (seriesId: string) => {
+  if (guides[seriesId]) return
+  guides[seriesId] = 'loading'
+  try {
+    const response = await contentAPI.getContentEpisodes(seriesId)
+    const episodes = (response.data.data?.episodes || []) as Episode[]
+    guides[seriesId] = episodes.length ? episodes : 'none'
+  } catch {
+    guides[seriesId] = 'none'
+  }
+}
+
+const episodeList = (seriesId: string) => {
+  const guide = guides[seriesId]
+  return Array.isArray(guide) ? guide : []
+}
+
+const seasonsOf = (seriesId: string) =>
+  [...new Set(episodeList(seriesId).map((ep) => ep.seasonNumber))].sort((a, b) => a - b)
+
+const episodesOf = (seriesId: string, season: number | null) =>
+  episodeList(seriesId)
+    .filter((ep) => ep.seasonNumber === season)
+    .sort((a, b) => a.episodeNumber - b.episodeNumber)
+
+/** Narrow a series tag to its first episode (loading the list first). */
+const pickEpisode = async (index: number) => {
+  const tag = props.modelValue[index]
+  if (!tag) return
+  await loadGuide(tag.contentId)
+  const season = seasonsOf(tag.contentId).find((n) => n > 0) ?? seasonsOf(tag.contentId)[0]
+  if (season === undefined) return
+  setEpisode(index, season, episodesOf(tag.contentId, season)[0]?.episodeNumber ?? null)
+}
+
+const changeSeason = (index: number, season: number) => {
+  const tag = props.modelValue[index]
+  if (!tag) return
+  setEpisode(index, season, episodesOf(tag.contentId, season)[0]?.episodeNumber ?? null)
 }
 
 const update = (tags: PostTag[]) => emit('update:modelValue', tags)
@@ -188,6 +238,13 @@ watch(term, (value) => {
       }
     }
   }, SEARCH_DELAY_MS)
+})
+
+// Editing a post that already has episode tags: load their lists for the dropdowns.
+onMounted(() => {
+  for (const tag of props.modelValue) {
+    if (tag.kind === 'series' && tag.season !== null) loadGuide(tag.contentId)
+  }
 })
 
 onUnmounted(() => clearTimeout(timer))
@@ -255,21 +312,21 @@ onUnmounted(() => clearTimeout(timer))
 
 .tag-episode {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
   font-size: 0.85rem;
   color: var(--text-secondary);
 }
 
-.tag-episode label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
+.tag-select {
+  width: auto;
+  max-width: 100%;
+  padding: 0.25rem 0.4rem;
 }
 
-.tag-number {
-  width: 4.5rem;
-  padding: 0.25rem 0.4rem;
+.episode-select {
+  max-width: 16rem;
 }
 
 .tag-episode-add {
