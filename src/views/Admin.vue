@@ -753,6 +753,27 @@
                   <span v-if="user.mutedUntil" class="admin-pill warn">
                     Muted {{ muteLabel(user.mutedUntil) }}
                   </span>
+                  <span
+                    v-if="user.curseWarnings"
+                    class="admin-pill"
+                    :class="user.flagged ? 'danger' : 'warn'"
+                    :title="
+                      user.flagged
+                        ? 'Past the language warning limit: review for a mute or ban'
+                        : 'Curse warnings'
+                    "
+                    data-testid="curse-warnings"
+                  >
+                    {{ user.curseWarnings }} {{ user.curseWarnings === 1 ? 'curse' : 'curses' }}
+                  </span>
+                  <span
+                    v-if="user.slurWarnings"
+                    class="admin-pill danger"
+                    title="Slur warnings"
+                    data-testid="slur-warnings"
+                  >
+                    {{ user.slurWarnings }} {{ user.slurWarnings === 1 ? 'slur' : 'slurs' }}
+                  </span>
                   <span v-if="!user.emailVerified" class="admin-pill muted">Unverified</span>
                   <span v-if="user.isDemo" class="admin-pill muted">Demo</span>
                 </div>
@@ -997,6 +1018,13 @@ type AdminUser = {
   banReason: string | null
   /** Granted badges (Developer, Artist, Influencer). */
   cosmeticRoles: string[]
+  /** Times their text was masked for blocked language. */
+  languageWarnings: number
+  /** Of those: curses and slurs. */
+  curseWarnings: number
+  slurWarnings: number
+  /** Past the warning limit; shown under the Flagged filter until banned. */
+  flagged: boolean
 }
 
 const TABS = [
@@ -1044,6 +1072,7 @@ const USER_FILTERS = [
   { id: 'staff', label: 'Staff' },
   { id: 'muted', label: 'Muted' },
   { id: 'banned', label: 'Banned' },
+  { id: 'flagged', label: 'Flagged' },
 ] as const
 const MUTE_OPTIONS = [
   { id: '1h', label: '1 hour' },

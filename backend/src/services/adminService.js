@@ -38,6 +38,7 @@ import { revokeAllSessions } from './sessionService.js'
 import { GRANTABLE_BADGES } from '../utils/badges.js'
 import { loadManagedLinks } from './adminLinks.js'
 import { describeRow, logAction, quoteValue } from './adminLog.js'
+import { WARNING_LIMIT } from './languageWarningService.js'
 import {
   LIVE_NOTICE_SQL,
   NOTICE_TTL_DAYS,
@@ -49,7 +50,8 @@ import {
 const PAGE_SIZE = 25
 /** Roles the creator can hand out from the admin page ('creator' is set by script only). */
 export const ASSIGNABLE_ROLES = ['user', 'admin']
-export const USER_FILTERS = ['all', 'staff', 'muted', 'banned']
+/** 'flagged': past the language warning limit and not banned. */
+export const USER_FILTERS = ['all', 'staff', 'muted', 'banned', 'flagged']
 
 /**
  * @param {unknown} value
@@ -504,7 +506,10 @@ export async function resolveSyncChanges(actor, ids, action) {
 
 const USER_COLUMNS = `u.id, u.username, u.email, u.profile_picture, u.role, u.is_demo,
   u.email_verified_at, u.created_at, u.last_active_at, u.muted_until, u.mute_reason,
-  u.banned_at, u.ban_reason, u.cosmetic_roles`
+  u.banned_at, u.ban_reason, u.cosmetic_roles,
+  (SELECT count(*)::int FROM language_warnings w WHERE w.user_id = u.id) AS language_warnings,
+  (SELECT count(*)::int FROM language_warnings w
+   WHERE w.user_id = u.id AND w.category = 'slur') AS slur_warnings`
 
 /**
  * @param {object} row - users row.
@@ -537,6 +542,10 @@ function adminUserView(row, owners) {
     bannedAt: row.banned_at || null,
     banReason: row.ban_reason || null,
     cosmeticRoles: row.cosmetic_roles || [],
+    languageWarnings: row.language_warnings || 0,
+    curseWarnings: (row.language_warnings || 0) - (row.slur_warnings || 0),
+    slurWarnings: row.slur_warnings || 0,
+    flagged: (row.language_warnings || 0) > WARNING_LIMIT,
   }
 }
 
@@ -564,15 +573,25 @@ export async function listUsers({ q, filter, page } = {}) {
     clauses.push('u.muted_until > now()')
   } else if (filter === 'banned') {
     clauses.push('u.banned_at IS NOT NULL')
+  } else if (filter === 'flagged') {
+    params.push(WARNING_LIMIT)
+    clauses.push(
+      `u.banned_at IS NULL AND (SELECT count(*) FROM language_warnings w WHERE w.user_id = u.id) > $${params.length}`,
+    )
   }
   const where = clauses.join(' AND ')
+  // Flagged users: most slurs first, then most warnings.
+  const order =
+    filter === 'flagged'
+      ? 'slur_warnings DESC, language_warnings DESC, lower(u.username)'
+      : "CASE u.role WHEN 'creator' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, lower(u.username)"
 
   const [{ rows }, count] = await Promise.all([
     query(
       `SELECT ${USER_COLUMNS}
        FROM users u
        WHERE ${where}
-       ORDER BY CASE u.role WHEN 'creator' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, lower(u.username)
+       ORDER BY ${order}
        LIMIT ${PAGE_SIZE} OFFSET ${(current - 1) * PAGE_SIZE}`,
       params,
     ),

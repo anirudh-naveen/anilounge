@@ -126,6 +126,9 @@
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Forum -->
+      <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
+
       <!-- Title: Episodes -->
       <EpisodeRow
         :episodes="episodes"
@@ -292,6 +295,7 @@ import WatchlistPanel from '@/components/WatchlistPanel.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EpisodeRow from '@/components/EpisodeRow.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
+import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import type {
   CatalogEntity,

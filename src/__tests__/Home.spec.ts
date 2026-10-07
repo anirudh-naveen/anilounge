@@ -6,6 +6,7 @@ import Home from '@/views/Home.vue'
 const getActivity = vi.fn()
 const getUpdates = vi.fn()
 const getCharacterOfTheDay = vi.fn()
+const getHomeForum = vi.fn()
 const auth = { isAuthenticated: false, user: null as { username: string } | null }
 
 vi.mock('@/services/api', async (importOriginal) => {
@@ -17,6 +18,7 @@ vi.mock('@/services/api', async (importOriginal) => {
       getUpdates: () => getUpdates(),
       getCharacterOfTheDay: () => getCharacterOfTheDay(),
     },
+    forumAPI: { ...actual.forumAPI, home: () => getHomeForum() },
   }
 })
 
@@ -123,7 +125,9 @@ const mountHome = async () => {
       { path: '/register', component: stub },
       { path: '/login', component: stub },
       { path: '/search', component: stub },
-      { path: '/forum', component: stub },
+      { path: '/forum', name: 'forum', component: stub },
+      { path: '/forum/post/:id', name: 'forumPost', component: stub },
+      { path: '/u/:username', name: 'publicProfile', component: stub },
     ],
   })
   await router.push('/')
@@ -139,6 +143,10 @@ describe('Home', () => {
     getActivity.mockReset()
     getUpdates.mockReset()
     getCharacterOfTheDay.mockReset()
+    getHomeForum.mockReset()
+    getHomeForum.mockResolvedValue({
+      data: { data: { items: [], personalized: false, refreshesAt: '2026-10-06T12:00:00Z' } },
+    })
     getUpdates.mockResolvedValue({ data: { data: updatesPayload('trending') } })
     getCharacterOfTheDay.mockResolvedValue({ data: { data: characterPayload } })
     auth.isAuthenticated = false
@@ -201,15 +209,59 @@ describe('Home', () => {
     expect(panel.text()).toContain('Related to Frieren')
   })
 
-  it('features the character of the day and the forum placeholder', async () => {
+  it('features the character of the day', async () => {
     const wrapper = await mountHome()
     const bar = wrapper.get('[data-testid="character-of-the-day"]')
     expect(bar.text()).toContain('Narumi Momose')
     expect(bar.text()).toContain('Manga and cosplay are up her alley.')
     expect(bar.text()).not.toContain('Height')
     expect(bar.findAll('.title-chip')).toHaveLength(1)
-    expect(wrapper.get('[data-testid="forum-placeholder"]').text()).toContain('Coming soon')
     expect(wrapper.find('[data-testid="character-of-the-day-franchises"]').exists()).toBe(false)
+  })
+
+  it('shows forum highlights, marking watchlist picks', async () => {
+    getHomeForum.mockResolvedValue({
+      data: {
+        data: {
+          personalized: true,
+          refreshesAt: '2026-10-06T12:00:00Z',
+          items: [
+            {
+              id: 'p1',
+              kind: 'review',
+              title: 'Frieren is a masterpiece',
+              excerpt: 'Slow, warm, and devastating.',
+              score: 9.5,
+              spoiler: false,
+              createdAt: '2026-10-05T10:00:00Z',
+              editedAt: null,
+              lastActivityAt: '2026-10-05T10:00:00Z',
+              author: { id: 'u1', username: 'mika', profilePicture: null },
+              likeCount: 4,
+              commentCount: 2,
+              liked: false,
+              tags: [],
+              canEdit: false,
+              canDelete: false,
+              forYou: true,
+            },
+          ],
+        },
+      },
+    })
+    const wrapper = await mountHome()
+    const panel = wrapper.get('[data-testid="forum-highlights-home"]')
+    expect(panel.text()).toContain('Picked from your watchlist')
+    expect(panel.text()).toContain('Frieren is a masterpiece')
+    expect(panel.text()).toContain('9.5/10')
+    expect(panel.text()).toContain('For you')
+  })
+
+  it('invites the first forum post when there are none', async () => {
+    const wrapper = await mountHome()
+    expect(wrapper.get('[data-testid="forum-highlights-home"]').text()).toContain(
+      'Start the first one',
+    )
   })
 
   it('shows the character of the day franchise before their titles', async () => {
@@ -222,11 +274,21 @@ describe('Home', () => {
             appearances: [
               {
                 role: 'Main',
-                content: { _id: 'op', title: 'One Piece', contentType: 'tv', franchise: 'One Piece' },
+                content: {
+                  _id: 'op',
+                  title: 'One Piece',
+                  contentType: 'tv',
+                  franchise: 'One Piece',
+                },
               },
               {
                 role: 'Main',
-                content: { _id: 'red', title: 'One Piece Film Red', contentType: 'movie', franchise: 'One Piece' },
+                content: {
+                  _id: 'red',
+                  title: 'One Piece Film Red',
+                  contentType: 'movie',
+                  franchise: 'One Piece',
+                },
               },
             ],
           },

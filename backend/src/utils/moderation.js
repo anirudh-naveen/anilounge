@@ -5,8 +5,14 @@
  * Layer: utils. Pure functions. Text is normalized before matching so common
  * evasions still hit: accents, letter repeats (`fuuuck`), leetspeak (`sh1t`),
  * punctuation inside words (`f.u.c.k`), and spaced-out letters (`f u c k`).
- * Surfaces: `findBlockedTerm`, `containsBlockedLanguage`, `censorText`,
- * `assertCleanLanguage` (express-validator), and `BLOCKED_LANGUAGE_MESSAGE`.
+ * Surfaces: `findBlockedTerm`, `classifyLanguage`, `containsBlockedLanguage`,
+ * `censorText`, `termCategory`, `assertCleanLanguage` (express-validator), and
+ * `BLOCKED_LANGUAGE_MESSAGE`.
+ *
+ * Every term is a 'curse' or a 'slur' (SLUR_TERMS: racial, ethnic, homophobic,
+ * transphobic, and ableist slurs). Private messages between two users who both turned
+ * on Settings → Communication → Allow profanity pass `{ allowCurses: true }`, which
+ * skips curses; slurs are always blocked.
  */
 
 export const BLOCKED_LANGUAGE_MESSAGE = "contains language that isn't allowed on AniLounge."
@@ -101,6 +107,38 @@ const WORD_TERMS = [
   'kys',
 ]
 
+/** Terms in the 'slur' category; every other term is a 'curse'. */
+const SLUR_TERMS = new Set([
+  'nigger',
+  'nigga',
+  'faggot',
+  'fagot',
+  'fag',
+  'dyke',
+  'tranny',
+  'retard',
+  'wetback',
+  'towelhead',
+  'raghead',
+  'beaner',
+  'kike',
+  'spic',
+  'chink',
+  'gook',
+  'coon',
+  'paki',
+  'kkk',
+])
+
+/**
+ * Which category a list term belongs to.
+ * @param {string} term - A term from the lists (as returned by `findBlockedTerm`).
+ * @returns {'slur' | 'curse'}
+ */
+export function termCategory(term) {
+  return SLUR_TERMS.has(term) ? 'slur' : 'curse'
+}
+
 const WORD_SUFFIX = '(?:s|es|er|ers|ing|ed|head|heads)?'
 
 /** Leetspeak and look-alike symbols, applied only inside chunks that contain a letter. */
@@ -145,10 +183,7 @@ const WORD_PATTERNS = WORD_TERMS.map((term) => ({
  * @returns {string}
  */
 function normalizeChunk(chunk) {
-  const plain = chunk
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
+  const plain = chunk.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
   const decoded = /[a-z]/.test(plain)
     ? [...plain].map((char) => LEET[char] ?? char).join('')
     : plain
@@ -179,32 +214,48 @@ function candidateWords(text) {
 }
 
 /**
- * Blocked term in one normalized word, if any.
+ * Blocked term in one normalized word, if any. Slurs are checked first so a word
+ * matching both reports the slur.
  * @param {string} word
+ * @param {{ allowCurses?: boolean }} [options] - Skip 'curse' terms.
  * @returns {string | null}
  */
-function matchWord(word) {
-  for (const { term, pattern } of SUBSTRING_PATTERNS) {
-    if (pattern.test(word)) return term
+function matchWord(word, { allowCurses = false } = {}) {
+  let curse = null
+  for (const { term, pattern } of [...SUBSTRING_PATTERNS, ...WORD_PATTERNS]) {
+    if (!pattern.test(word)) continue
+    if (SLUR_TERMS.has(term)) return term
+    curse ??= term
   }
-  for (const { term, pattern } of WORD_PATTERNS) {
-    if (pattern.test(word)) return term
-  }
-  return null
+  return allowCurses ? null : curse
 }
 
 /**
  * First blocked term found in `text`.
  * @param {unknown} text
+ * @param {{ allowCurses?: boolean }} [options] - Ignore 'curse' terms.
  * @returns {string | null} The matched list term, or null when the text is clean.
  */
-export function findBlockedTerm(text) {
+export function findBlockedTerm(text, options) {
+  return classifyLanguage(text, options)?.term ?? null
+}
+
+/**
+ * The most serious blocked term in `text`: the first slur, else the first curse.
+ * @param {unknown} text
+ * @param {{ allowCurses?: boolean }} [options] - Ignore 'curse' terms.
+ * @returns {{ term: string, category: 'slur' | 'curse' } | null}
+ */
+export function classifyLanguage(text, options) {
   if (typeof text !== 'string' || !text.trim()) return null
+  let curse = null
   for (const word of candidateWords(text)) {
-    const term = matchWord(word)
-    if (term) return term
+    const term = matchWord(word, options)
+    if (!term) continue
+    if (SLUR_TERMS.has(term)) return { term, category: 'slur' }
+    curse ??= term
   }
-  return null
+  return curse ? { term: curse, category: 'curse' } : null
 }
 
 /**
@@ -216,24 +267,52 @@ export function containsBlockedLanguage(text) {
 }
 
 /**
- * Mask blocked words, keeping the first letter (`shit` → `s***`). Used on text we
- * display but did not let the user write, such as chatbot replies.
+ * Mask blocked words, keeping the first letter (`shit` → `s***`), including
+ * spelled-out runs (`f u c k` → `f * * *`). Used on chatbot replies and on direct
+ * messages, which are delivered masked with a warning to the sender.
  * @param {string} text
+ * @param {{ allowCurses?: boolean }} [options] - Leave curses, mask only slurs.
  * @returns {string}
  */
-export function censorText(text) {
+export function censorText(text, options) {
   if (typeof text !== 'string' || !text) return text
-  return text.replace(/\S+/g, (chunk) => {
-    const word = normalizeChunk(chunk)
-    if (!word || !matchWord(word)) return chunk
-    let kept = false
-    return chunk.replace(/[\p{L}\p{N}@$!|+€]/gu, (char) => {
-      if (!kept) {
-        kept = true
-        return char
+  const parts = text.split(/(\s+)/)
+  // Words are at even indexes, whitespace at odd ones.
+  for (let i = 0; i < parts.length; i += 2) {
+    if (normalizeChunk(parts[i]).length === 1) {
+      // Spelled-out run (`f u c k`): check the letters joined back together.
+      let end = i
+      let spelled = ''
+      while (end < parts.length && normalizeChunk(parts[end]).length === 1) {
+        spelled += normalizeChunk(parts[end])
+        end += 2
       }
-      return '*'
-    })
+      if (spelled.length > 1 && matchWord(spelled, options)) {
+        for (let j = i; j < end; j += 2) parts[j] = maskChunk(parts[j], j === i)
+      }
+      i = end - 2
+      continue
+    }
+    const word = normalizeChunk(parts[i])
+    if (word && matchWord(word, options)) parts[i] = maskChunk(parts[i], true)
+  }
+  return parts.join('')
+}
+
+/**
+ * Star out a chunk's letters and digits, optionally keeping the first.
+ * @param {string} chunk
+ * @param {boolean} keepFirst
+ * @returns {string}
+ */
+function maskChunk(chunk, keepFirst) {
+  let kept = !keepFirst
+  return chunk.replace(/[\p{L}\p{N}@$!|+€]/gu, (char) => {
+    if (!kept) {
+      kept = true
+      return char
+    }
+    return '*'
   })
 }
 
@@ -264,6 +343,8 @@ export function moderationMessage(fields) {
 
 export default {
   findBlockedTerm,
+  classifyLanguage,
+  termCategory,
   containsBlockedLanguage,
   censorText,
   assertCleanLanguage,

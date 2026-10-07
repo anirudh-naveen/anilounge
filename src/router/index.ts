@@ -45,6 +45,11 @@ const router = createRouter({
       component: () => import('@/views/Forum.vue'),
     },
     {
+      path: '/forum/post/:id',
+      name: 'forumPost',
+      component: () => import('@/views/ForumPost.vue'),
+    },
+    {
       path: '/movies',
       name: 'movies',
       component: () => import('@/views/Movies.vue'),
@@ -81,6 +86,11 @@ const router = createRouter({
       name: 'friends',
       component: () => import('@/views/Friends.vue'),
       meta: { requiresAuth: true },
+    },
+    {
+      // Messages live in the Friends page's Messages tab.
+      path: '/messages',
+      redirect: (to) => ({ name: 'friends', query: to.query }),
     },
     {
       path: '/u/:username',

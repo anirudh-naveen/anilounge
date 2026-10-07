@@ -104,6 +104,12 @@
         <p class="about-text">{{ character.about || 'No biography available.' }}</p>
       </div>
 
+      <!-- Title: Forum -->
+      <ForumHighlights
+        :content-id="character._id"
+        :name="canonicalCharacterName(character.name) || character.name"
+      />
+
       <div v-if="appearanceTitles.length" class="appearances">
         <h2>Appears in</h2>
         <section
@@ -162,6 +168,7 @@ import {
 } from '@/utils/entities'
 import type { CatalogEntity, EntityVoiceCredit } from '@/types/content'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import ForumHighlights from '@/components/ForumHighlights.vue'
 
 const route = useRoute()
 const router = useRouter()
