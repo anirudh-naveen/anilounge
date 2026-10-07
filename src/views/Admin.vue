@@ -753,6 +753,20 @@
                   <span v-if="user.mutedUntil" class="admin-pill warn">
                     Muted {{ muteLabel(user.mutedUntil) }}
                   </span>
+                  <span
+                    v-if="user.languageWarnings"
+                    class="admin-pill"
+                    :class="user.flagged ? 'danger' : 'warn'"
+                    :title="
+                      user.flagged
+                        ? 'Past the language warning limit: review for a mute or ban'
+                        : 'Language warnings'
+                    "
+                    data-testid="language-warnings"
+                  >
+                    {{ user.languageWarnings }}
+                    {{ user.languageWarnings === 1 ? 'warning' : 'warnings' }}
+                  </span>
                   <span v-if="!user.emailVerified" class="admin-pill muted">Unverified</span>
                   <span v-if="user.isDemo" class="admin-pill muted">Demo</span>
                 </div>
@@ -997,6 +1011,10 @@ type AdminUser = {
   banReason: string | null
   /** Granted badges (Developer, Artist, Influencer). */
   cosmeticRoles: string[]
+  /** Times their text was masked for blocked language. */
+  languageWarnings: number
+  /** Past the warning limit; shown under the Flagged filter until banned. */
+  flagged: boolean
 }
 
 const TABS = [
@@ -1044,6 +1062,7 @@ const USER_FILTERS = [
   { id: 'staff', label: 'Staff' },
   { id: 'muted', label: 'Muted' },
   { id: 'banned', label: 'Banned' },
+  { id: 'flagged', label: 'Flagged' },
 ] as const
 const MUTE_OPTIONS = [
   { id: '1h', label: '1 hour' },

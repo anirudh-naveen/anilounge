@@ -145,10 +145,7 @@ const WORD_PATTERNS = WORD_TERMS.map((term) => ({
  * @returns {string}
  */
 function normalizeChunk(chunk) {
-  const plain = chunk
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
+  const plain = chunk.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
   const decoded = /[a-z]/.test(plain)
     ? [...plain].map((char) => LEET[char] ?? char).join('')
     : plain
@@ -216,24 +213,51 @@ export function containsBlockedLanguage(text) {
 }
 
 /**
- * Mask blocked words, keeping the first letter (`shit` → `s***`). Used on text we
- * display but did not let the user write, such as chatbot replies.
+ * Mask blocked words, keeping the first letter (`shit` → `s***`), including
+ * spelled-out runs (`f u c k` → `f * * *`). Used on chatbot replies and on direct
+ * messages, which are delivered masked with a warning to the sender.
  * @param {string} text
  * @returns {string}
  */
 export function censorText(text) {
   if (typeof text !== 'string' || !text) return text
-  return text.replace(/\S+/g, (chunk) => {
-    const word = normalizeChunk(chunk)
-    if (!word || !matchWord(word)) return chunk
-    let kept = false
-    return chunk.replace(/[\p{L}\p{N}@$!|+€]/gu, (char) => {
-      if (!kept) {
-        kept = true
-        return char
+  const parts = text.split(/(\s+)/)
+  // Words are at even indexes, whitespace at odd ones.
+  for (let i = 0; i < parts.length; i += 2) {
+    if (normalizeChunk(parts[i]).length === 1) {
+      // Spelled-out run (`f u c k`): check the letters joined back together.
+      let end = i
+      let spelled = ''
+      while (end < parts.length && normalizeChunk(parts[end]).length === 1) {
+        spelled += normalizeChunk(parts[end])
+        end += 2
       }
-      return '*'
-    })
+      if (spelled.length > 1 && matchWord(spelled)) {
+        for (let j = i; j < end; j += 2) parts[j] = maskChunk(parts[j], j === i)
+      }
+      i = end - 2
+      continue
+    }
+    const word = normalizeChunk(parts[i])
+    if (word && matchWord(word)) parts[i] = maskChunk(parts[i], true)
+  }
+  return parts.join('')
+}
+
+/**
+ * Star out a chunk's letters and digits, optionally keeping the first.
+ * @param {string} chunk
+ * @param {boolean} keepFirst
+ * @returns {string}
+ */
+function maskChunk(chunk, keepFirst) {
+  let kept = !keepFirst
+  return chunk.replace(/[\p{L}\p{N}@$!|+€]/gu, (char) => {
+    if (!kept) {
+      kept = true
+      return char
+    }
+    return '*'
   })
 }
 

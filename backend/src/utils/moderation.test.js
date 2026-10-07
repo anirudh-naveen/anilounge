@@ -50,6 +50,10 @@ test('findBlockedTerm reports the list term', () => {
 test('censorText masks blocked words and keeps the rest', () => {
   assert.equal(censorText('this is shit, honestly'), 'this is s***, honestly')
   assert.equal(censorText('a classic scene'), 'a classic scene')
+  assert.equal(censorText('f u c k you'), 'f * * * you')
+  assert.equal(censorText('ok f.u.c.k off'), 'ok f.*.*.* off')
+  assert.equal(censorText('a b c fine'), 'a b c fine')
+  assert.equal(censorText('line one\nshit\n\nend'), 'line one\ns***\n\nend')
 })
 
 test('assertCleanLanguage throws for express-validator', () => {

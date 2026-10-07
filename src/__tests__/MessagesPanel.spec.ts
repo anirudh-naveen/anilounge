@@ -9,8 +9,15 @@ const thread = vi.fn()
 const send = vi.fn()
 const refresh = vi.fn()
 
+const toast = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+}))
+
 vi.mock('vue-toastification', () => ({
-  useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
+  useToast: () => toast,
 }))
 
 vi.mock('@/services/api', async (importOriginal) => {
@@ -139,6 +146,27 @@ describe('MessagesPanel', () => {
     await flushPromises()
     expect(send).toHaveBeenCalledWith('u2', 'On my way')
     expect(wrapper.get('[data-testid="thread-messages"]').text()).toContain('On my way')
+  })
+
+  it('warns the sender when blocked language was masked', async () => {
+    send.mockResolvedValue({
+      data: {
+        data: {
+          id: 'm3',
+          body: 'what the f***',
+          at: '2026-10-05T10:01:00Z',
+          fromMe: true,
+          readAt: null,
+        },
+        warning: { count: 1, limit: 3, alerted: false, message: 'Warning 1 of 3.' },
+      },
+    })
+    const { wrapper } = await mountAt('/friends?user=u2')
+    await wrapper.get('[data-testid="message-composer"] textarea').setValue('what the fuck')
+    await wrapper.get('[data-testid="message-composer"]').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="thread-messages"]').text()).toContain('what the f***')
+    expect(toast.warning).toHaveBeenCalledWith('Warning 1 of 3.', expect.anything())
   })
 
   it('shows the request note and locks the composer until accepted', async () => {

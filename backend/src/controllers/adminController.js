@@ -191,7 +191,7 @@ export const resolveSyncChanges = async (req, res) => {
 /**
  * List users with their roles and moderation state.
  *
- * @param {import('express').Request} req - `query.q`, `query.filter` (all|staff|muted|banned), `query.page`.
+ * @param {import('express').Request} req - `query.q`, `query.filter` (all|staff|muted|banned|flagged), `query.page`.
  * @param {import('express').Response} res - 200 `{ data: { items, page, pageSize, total } }` or 500.
  * @returns {Promise<void>}
  */

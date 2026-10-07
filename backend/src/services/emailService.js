@@ -403,6 +403,36 @@ export function sendFriendRequestEmail(recipient, requester, note, expiresAt, un
 }
 
 /**
+ * Tell the support inbox a user has gone past the language-warning limit, so an
+ * admin can review them for a mute or ban. The excerpt is already masked.
+ * @param {{ id: string, username: string }} user
+ * @param {{ count: number, limit: number, surface: string, term: string, excerpt: string }} warning
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendLanguageAlertEmail(user, warning) {
+  const link = `${appUrl()}/admin`
+  const summary = `${user.username} has ${warning.count} language warnings (limit ${warning.limit}). Latest: a ${warning.surface} matching "${warning.term}".`
+  return sendEmail({
+    to: supportEmail(),
+    subject: `[AniLounge moderation] ${user.username} passed the language warning limit`,
+    text: `${summary}
+
+What they sent (masked): "${warning.excerpt}"
+
+Review them under Admin → Users → Flagged: ${link}
+User ID: ${user.id}`,
+    html: layout(
+      'Language warning limit reached',
+      `<p>${escapeHtml(summary)}</p>
+<p style="margin:16px 0;padding:12px 16px;background:#f4f5f7;border-radius:8px;white-space:pre-wrap">${escapeHtml(warning.excerpt)}</p>
+<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Review in Admin</a></p>
+<p style="color:#5b6578;font-size:14px">Admin → Users → Flagged. User ID: ${escapeHtml(user.id)}</p>`,
+      'AniLounge · Sent by the language filter.',
+    ),
+  })
+}
+
+/**
  * Forward a beta feedback submission to the support inbox. Everything in `feedback`
  * comes from the public form, so it is escaped and the subject is flattened.
  * @param {{ id: string, type: string, message: string, email: string, timestamp: string, userAgent: string, url: string }} feedback

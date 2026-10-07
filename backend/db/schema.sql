@@ -608,6 +608,22 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- Inbox (services/notificationService.js): the comment a post_comment/comment_reply
 -- notification points at.
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS comment_id UUID REFERENCES comments (id) ON DELETE CASCADE;
+-- Extra fields for kinds that need them (e.g. a language warning's masked excerpt).
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS detail JSONB;
+
+-- Language warnings (services/languageWarningService.js). One row each time a user
+-- sends text with blocked language; the text goes out masked. Past the warning limit
+-- every offense alerts admins (admin log, plus one email to SUPPORT_EMAIL).
+-- `excerpt` is the masked text; `term` is the matched list term, for admins.
+CREATE TABLE IF NOT EXISTS language_warnings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  surface     TEXT NOT NULL,
+  term        TEXT NOT NULL,
+  excerpt     TEXT NOT NULL CHECK (char_length(excerpt) <= 300),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS language_warnings_user_idx ON language_warnings (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (

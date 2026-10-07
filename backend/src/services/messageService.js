@@ -7,12 +7,17 @@
  * as read. Pending friend requests appear in the Messages tab so a request's note
  * reads like an opening message; accepting turns that note into the first message
  * (see `friendService.acceptFriendRequest`). Throws `HttpError` for user-facing failures.
+ *
+ * Blocked language is masked, not rejected: the message goes out with those words
+ * starred (`f***`) and the sender gets a language warning (see
+ * `languageWarningService.js`). Text the mask can't fully clean is refused, and still
+ * counts as a warning.
  */
 
 import { query } from '../../config/postgres.js'
 import { isUuid } from '../db/ids.js'
 import { HttpError } from '../utils/httpError.js'
-import { moderationMessage } from '../utils/moderation.js'
+import { censorText, findBlockedTerm } from '../utils/moderation.js'
 import { cleanUserText } from '../utils/userText.js'
 import {
   liveLinkSql,
@@ -21,6 +26,7 @@ import {
   relationshipBetween,
   requestExpiresAt,
 } from './friendService.js'
+import { recordWarning } from './languageWarningService.js'
 
 export const MESSAGE_MAX = 2000
 export const THREAD_PAGE_SIZE = 50
@@ -58,10 +64,10 @@ export function messageEntry(row, viewerId) {
 }
 
 /**
- * Validate and clean a message body.
+ * Validate and clean a message body. Language is checked separately (`maskLanguage`).
  * @param {unknown} value
  * @returns {string}
- * @throws {HttpError} 400 when empty, too long, or blocked language.
+ * @throws {HttpError} 400 when empty or too long.
  */
 export function cleanMessageBody(value) {
   const body = cleanUserText(value)
@@ -69,9 +75,21 @@ export function cleanMessageBody(value) {
   if (body.length > MESSAGE_MAX) {
     throw new HttpError(400, `Messages must be ${MESSAGE_MAX} characters or fewer.`)
   }
-  const blocked = moderationMessage({ 'Your message': body })
-  if (blocked) throw new HttpError(400, blocked)
   return body
+}
+
+/**
+ * Mask blocked language in a message.
+ * @param {string} body - Cleaned body.
+ * @returns {{ body: string, term: string | null, clean: boolean }} `term` is the first
+ *   blocked term (null when the text was fine); `clean` is false when blocked language
+ *   survives masking.
+ */
+export function maskLanguage(body) {
+  const term = findBlockedTerm(body)
+  if (!term) return { body, term: null, clean: true }
+  const masked = censorText(body)
+  return { body: masked, term, clean: !findBlockedTerm(masked) }
 }
 
 /**
@@ -224,15 +242,19 @@ async function pendingRequest(userId, otherId, relationship) {
 }
 
 /**
- * Send a direct message to a friend.
+ * Send a direct message to a friend. Blocked language is masked and earns the
+ * sender a language warning.
  *
- * @param {string} userId - Sender.
+ * @param {{ _id: string, username: string }} sender
  * @param {string} otherId - Recipient.
  * @param {unknown} body
- * @returns {Promise<{ id: string, body: string, at: Date, fromMe: true, readAt: null }>}
- * @throws {HttpError} 400 bad body or self, 403 not friends, 404 unknown user, 429 burst.
+ * @returns {Promise<{ message: { id: string, body: string, at: Date, fromMe: true, readAt: null }, warning: object | null }>}
+ *   `warning` is set when the message was masked (see `recordWarning`).
+ * @throws {HttpError} 400 bad body, unmaskable language, or self; 403 not friends;
+ *   404 unknown user; 429 burst.
  */
-export async function sendMessage(userId, otherId, body) {
+export async function sendMessage(sender, otherId, body) {
+  const userId = sender._id
   if (String(userId) === String(otherId)) {
     throw new HttpError(400, "You can't message yourself.")
   }
@@ -249,13 +271,31 @@ export async function sendMessage(userId, otherId, body) {
   if ((recent[0]?.count || 0) >= SEND_BURST_MAX) {
     throw new HttpError(429, "You're sending messages too fast. Wait a moment and try again.")
   }
+
+  const language = maskLanguage(text)
+  const warning = language.term
+    ? await recordWarning(sender, {
+        surface: 'message',
+        term: language.term,
+        maskedText: language.body,
+        delivered: language.clean,
+      })
+    : null
+  if (!language.clean) {
+    throw new HttpError(
+      400,
+      warning?.message || "Your message has language that isn't allowed on AniLounge.",
+      'BLOCKED_LANGUAGE',
+    )
+  }
+
   const { rows } = await query(
     `INSERT INTO messages (sender_id, recipient_id, body)
      VALUES ($1, $2, $3)
      RETURNING id, sender_id, body, created_at, read_at`,
-    [userId, other.id, text],
+    [userId, other.id, language.body],
   )
-  return messageEntry(rows[0], userId)
+  return { message: messageEntry(rows[0], userId), warning }
 }
 
 /**
@@ -278,6 +318,7 @@ export default {
   pairSql,
   messageEntry,
   cleanMessageBody,
+  maskLanguage,
   listConversations,
   getThread,
   sendMessage,
