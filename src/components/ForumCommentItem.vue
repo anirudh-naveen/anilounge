@@ -8,7 +8,7 @@
   outright rather than blanked).
 -->
 <template>
-  <div class="comment" :data-testid="`comment-${comment.id}`">
+  <div :id="`comment-${comment.id}`" class="comment" :data-testid="`comment-${comment.id}`">
     <p v-if="comment.deleted" class="comment-deleted">[deleted]</p>
     <template v-else>
       <div class="comment-head">
@@ -182,6 +182,15 @@ const remove = async () => {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  scroll-margin-top: 120px;
+  border-radius: 10px;
+  transition: background-color 1.2s ease;
+}
+
+/* Opened from an inbox link (#comment-<id>). */
+.comment.linked {
+  background: color-mix(in srgb, var(--coral-primary) 12%, transparent);
+  box-shadow: 0 0 0 0.5rem color-mix(in srgb, var(--coral-primary) 12%, transparent);
 }
 
 .comment-head {

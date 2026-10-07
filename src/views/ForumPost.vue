@@ -265,6 +265,18 @@ const load = async () => {
   } finally {
     loading.value = false
   }
+  if (post.value) revealLinkedComment()
+}
+
+/** Scroll to and briefly highlight `#comment-<id>` (inbox links). */
+const revealLinkedComment = async () => {
+  if (!route.hash.startsWith('#comment-')) return
+  await nextTick()
+  const el = document.getElementById(route.hash.slice(1))
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('linked')
+  setTimeout(() => el.classList.remove('linked'), 2500)
 }
 
 const togglePostLike = async () => {

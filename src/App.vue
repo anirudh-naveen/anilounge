@@ -90,10 +90,10 @@
                   />
                   <span class="user-name">{{ authStore.user?.username }}</span>
                   <span
-                    v-if="messagesStore.total"
+                    v-if="messagesStore.total || inboxStore.counts.total"
                     class="unread-dot"
                     data-testid="nav-unread-dot"
-                    aria-label="Unread messages"
+                    aria-label="Unread messages or notifications"
                   ></span>
                   <span class="dropdown-arrow" :class="{ rotated: showDropdown }">▼</span>
                 </button>
@@ -140,6 +140,35 @@
                         <circle cx="9" cy="8.5" r="3" />
                         <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
                         <path d="M15.5 5.75a3 3 0 0 1 0 5.5M17 14a5.5 5.5 0 0 1 3.5 5" />
+                      </svg>
+                    </span>
+                  </router-link>
+                  <router-link
+                    to="/inbox"
+                    class="dropdown-item"
+                    data-testid="nav-inbox"
+                    @click="closeDropdown"
+                  >
+                    <span class="item-text">Inbox</span>
+                    <span
+                      v-if="inboxStore.counts.total"
+                      class="item-count"
+                      :aria-label="`${inboxStore.counts.total} new`"
+                      >{{ inboxStore.counts.total > 99 ? '99+' : inboxStore.counts.total }}</span
+                    >
+                    <span class="item-icon" aria-hidden="true">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M4 13.5 6.2 6A2 2 0 0 1 8.1 4.5h7.8A2 2 0 0 1 17.8 6l2.2 7.5" />
+                        <path
+                          d="M4 13.5h4.5l1 2h5l1-2H20V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18v-4.5Z"
+                        />
                       </svg>
                     </span>
                   </router-link>
@@ -253,6 +282,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useMessagesStore } from '@/stores/messages'
+import { useInboxStore } from '@/stores/inbox'
 import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
@@ -265,8 +295,9 @@ const toast = useToast()
 
 const showDropdown = ref(false)
 const messagesStore = useMessagesStore()
+const inboxStore = useInboxStore()
 
-/** How often the profile-menu badge rechecks unread messages and requests. */
+/** How often the profile-menu badges recheck unread messages, requests, and the inbox. */
 const UNREAD_POLL_MS = 60_000
 let unreadTimer: ReturnType<typeof setInterval> | undefined
 // Theme is chosen in Settings; calling this here keeps it applied (and following the OS) site-wide.
@@ -277,7 +308,10 @@ onMounted(() => {
   // Close dropdown when clicking outside
   document.addEventListener('click', handleClickOutside)
   unreadTimer = setInterval(() => {
-    if (authStore.isAuthenticated && !document.hidden) messagesStore.refresh()
+    if (authStore.isAuthenticated && !document.hidden) {
+      messagesStore.refresh()
+      inboxStore.refresh()
+    }
   }, UNREAD_POLL_MS)
 })
 
@@ -285,8 +319,13 @@ onMounted(() => {
 watch(
   () => [authStore.isAuthenticated, route.path] as const,
   ([signedIn]) => {
-    if (signedIn) messagesStore.refresh()
-    else messagesStore.reset()
+    if (signedIn) {
+      messagesStore.refresh()
+      inboxStore.refresh()
+    } else {
+      messagesStore.reset()
+      inboxStore.reset()
+    }
   },
   { immediate: true },
 )

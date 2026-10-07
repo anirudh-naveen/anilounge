@@ -673,6 +673,24 @@ CREATE TABLE IF NOT EXISTS notifications (
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS comment_id UUID REFERENCES comments (id) ON DELETE CASCADE;
 -- Extra fields for kinds that need them (e.g. a language warning's masked excerpt).
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS detail JSONB;
+CREATE INDEX IF NOT EXISTS notifications_unread_idx ON notifications (user_id) WHERE read_at IS NULL;
+
+-- Site news shown in every inbox (services/inboxService.js), posted by
+-- scripts/sendAnnouncement.js. News from before an account existed starts out read.
+CREATE TABLE IF NOT EXISTS announcements (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title       TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 200),
+  body        TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 20000),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS announcements_created_idx ON announcements (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS announcement_reads (
+  announcement_id  UUID NOT NULL REFERENCES announcements (id) ON DELETE CASCADE,
+  user_id          UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  read_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (announcement_id, user_id)
+);
 
 -- Language warnings (services/languageWarningService.js). One row each time a user
 -- sends text with blocked language; the text goes out masked. Past the warning limit
