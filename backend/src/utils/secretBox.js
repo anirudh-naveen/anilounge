@@ -1,9 +1,9 @@
 /**
  * Encrypt short secrets (linked-account OAuth tokens) for storage.
  *
- * AES-256-GCM with a key derived from CONNECTIONS_SECRET, falling back to JWT_SECRET.
- * Set CONNECTIONS_SECRET in production so rotating JWT_SECRET doesn't disconnect
- * every linked account. Sealed values look like `v1.<iv>.<tag>.<data>` (base64url).
+ * AES-256-GCM with a key derived from CONNECTIONS_SECRET. Every server sharing a database
+ * must use the same value, and changing it disconnects every linked account. Sealed
+ * values look like `v1.<iv>.<tag>.<data>` (base64url).
  */
 import crypto from 'node:crypto'
 
@@ -12,8 +12,8 @@ import crypto from 'node:crypto'
  * @returns {Buffer}
  */
 function key(env = process.env) {
-  const secret = env.CONNECTIONS_SECRET || env.JWT_SECRET
-  if (!secret) throw new Error('CONNECTIONS_SECRET (or JWT_SECRET) must be set to store tokens')
+  const secret = env.CONNECTIONS_SECRET
+  if (!secret) throw new Error('CONNECTIONS_SECRET must be set to store tokens')
   return crypto.createHash('sha256').update(`anilounge-connections:${secret}`).digest()
 }
 

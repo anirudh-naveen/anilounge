@@ -9,7 +9,13 @@ import {
   startConnection,
 } from './connectionService.js'
 
-const ENV_KEYS = ['ANILIST_CLIENT_ID', 'ANILIST_CLIENT_SECRET', 'MAL_CLIENT_ID', 'CONNECTIONS_REDIRECT_URL']
+const ENV_KEYS = [
+  'ANILIST_CLIENT_ID',
+  'ANILIST_CLIENT_SECRET',
+  'MAL_CLIENT_ID',
+  'CONNECTIONS_REDIRECT_URL',
+  'CONNECTIONS_SECRET',
+]
 const saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
 
 afterEach(() => {
@@ -22,11 +28,20 @@ afterEach(() => {
 
 describe('connection setup', () => {
   it('knows which sites the server has keys for', () => {
-    assert.equal(isProviderConfigured('anilist', { ANILIST_CLIENT_ID: '1' }), false)
-    assert.equal(isProviderConfigured('anilist', { ANILIST_CLIENT_ID: '1', ANILIST_CLIENT_SECRET: 's' }), true)
-    assert.equal(isProviderConfigured('mal', { MAL_CLIENT_ID: 'x' }), true)
-    assert.equal(isProviderConfigured('tmdb', {}), false)
-    assert.equal(isProviderConfigured('kitsu', { TMDB_API_KEY: 'k' }), false)
+    const secret = { CONNECTIONS_SECRET: 'k' }
+    assert.equal(isProviderConfigured('anilist', { ...secret, ANILIST_CLIENT_ID: '1' }), false)
+    assert.equal(
+      isProviderConfigured('anilist', { ...secret, ANILIST_CLIENT_ID: '1', ANILIST_CLIENT_SECRET: 's' }),
+      true,
+    )
+    assert.equal(isProviderConfigured('mal', { ...secret, MAL_CLIENT_ID: 'x' }), true)
+    assert.equal(isProviderConfigured('tmdb', secret), false)
+    assert.equal(isProviderConfigured('kitsu', { ...secret, TMDB_API_KEY: 'k' }), false)
+  })
+
+  it('offers no site until CONNECTIONS_SECRET is set', () => {
+    assert.equal(isProviderConfigured('mal', { MAL_CLIENT_ID: 'x' }), false)
+    assert.equal(isProviderConfigured('tmdb', { TMDB_API_KEY: 'k' }), false)
   })
 
   it('sends sites back to the Connections page', () => {
@@ -39,6 +54,7 @@ describe('connection setup', () => {
 describe('sign-in flow', () => {
   it('builds AniList and MyAnimeList authorize links with a provider-tagged state', async () => {
     Object.assign(process.env, {
+      CONNECTIONS_SECRET: 'k',
       ANILIST_CLIENT_ID: '42',
       ANILIST_CLIENT_SECRET: 's',
       MAL_CLIENT_ID: 'mal-id',
@@ -57,7 +73,7 @@ describe('sign-in flow', () => {
   })
 
   it("refuses a state another user started, or that doesn't exist", async () => {
-    Object.assign(process.env, { ANILIST_CLIENT_ID: '42', ANILIST_CLIENT_SECRET: 's' })
+    Object.assign(process.env, { CONNECTIONS_SECRET: 'k', ANILIST_CLIENT_ID: '42', ANILIST_CLIENT_SECRET: 's' })
     const state = new URL((await startConnection('u1', 'anilist')).authorizeUrl).searchParams.get('state')
     await assert.rejects(finishConnection('u2', 'anilist', { code: 'c', state }), ConnectionError)
     await assert.rejects(finishConnection('u1', 'anilist', { code: 'c', state: 'anilist.nope' }), ConnectionError)
