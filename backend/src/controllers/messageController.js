@@ -64,14 +64,19 @@ export const getThread = async (req, res) => {
  * Send a message to a friend.
  *
  * @param {import('express').Request} req - `params.id` is the recipient; `body.body` is the text.
- * @param {import('express').Response} res - 201 `{ data: message }`, 400, 403, 404, 429, or 500.
+ * @param {import('express').Response} res - 201 `{ data: message, warning }` (`warning` is set
+ *   when blocked language was masked), 400, 403, 404, 429, or 500.
  * @returns {Promise<void>}
  */
 export const sendMessage = async (req, res) => {
   try {
     assertNotDemo(req.user)
-    const data = await messageService.sendMessage(req.user._id, req.params.id, req.body?.body)
-    res.status(201).json({ success: true, data })
+    const { message, warning } = await messageService.sendMessage(
+      req.user,
+      req.params.id,
+      req.body?.body,
+    )
+    res.status(201).json({ success: true, data: message, warning })
   } catch (error) {
     sendError(res, error, 'Error sending message')
   }

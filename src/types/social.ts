@@ -73,3 +73,14 @@ export interface UnreadCounts {
   messages: number
   requests: number
 }
+
+/** Returned when blocked language in what you sent was masked (or refused). */
+export interface LanguageWarning {
+  /** Warnings so far, including this one. */
+  count: number
+  /** Warnings before admins are alerted. */
+  limit: number
+  /** True once past the limit and admins were notified. */
+  alerted: boolean
+  message: string
+}

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { cleanMessageBody, MESSAGE_MAX, messageEntry, pairSql } from './messageService.js'
+import {
+  cleanMessageBody,
+  maskLanguage,
+  MESSAGE_MAX,
+  messageEntry,
+  pairSql,
+} from './messageService.js'
 
 describe('pairSql', () => {
   it('matches the pair in either direction', () => {
@@ -46,7 +52,30 @@ describe('cleanMessageBody', () => {
     assert.throws(() => cleanMessageBody('a'.repeat(MESSAGE_MAX + 1)), { status: 400 })
   })
 
-  it('rejects blocked language', () => {
-    assert.throws(() => cleanMessageBody('what the fuck'), { status: 400 })
+  it('leaves language to maskLanguage', () => {
+    assert.equal(cleanMessageBody('what the fuck'), 'what the fuck')
+  })
+})
+
+describe('maskLanguage', () => {
+  it('passes clean text through', () => {
+    assert.deepEqual(maskLanguage('see you at the screening'), {
+      body: 'see you at the screening',
+      term: null,
+      clean: true,
+    })
+  })
+
+  it('masks blocked words and reports the term', () => {
+    assert.deepEqual(maskLanguage('what the fuck'), {
+      body: 'what the f***',
+      term: 'fuck',
+      clean: true,
+    })
+  })
+
+  it('masks spelled-out words', () => {
+    assert.equal(maskLanguage('f u c k this').body, 'f * * * this')
+    assert.equal(maskLanguage('f u c k this').clean, true)
   })
 })

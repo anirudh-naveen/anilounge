@@ -276,6 +276,7 @@ import type {
   ConversationsPayload,
   DirectMessage,
   FriendEntry,
+  LanguageWarning,
   MessageThread,
   Relationship,
 } from '@/types/social'
@@ -473,6 +474,9 @@ const send = async () => {
   try {
     const response = await messagesAPI.send(userId, body)
     mergeNewer([response.data.data as DirectMessage])
+    // Blocked language was masked; tell the sender why and how many warnings remain.
+    const warning = response.data.warning as LanguageWarning | null | undefined
+    if (warning) toast.warning(warning.message, { timeout: 12000 })
     draft.value = ''
     await scrollToBottom()
     loadList()
