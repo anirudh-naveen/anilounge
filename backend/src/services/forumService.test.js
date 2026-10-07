@@ -5,6 +5,7 @@ import {
   excerptOf,
   homeWindowEnd,
   reviewSubject,
+  searchWords,
   TAGS_MAX,
   TITLE_MAX,
   validatePostInput,
@@ -108,5 +109,16 @@ describe('reviewSubject', () => {
     ]
     assert.equal(reviewSubject(tags), 's')
     assert.equal(reviewSubject([{ contentId: 'c', kind: 'character' }]), null)
+  })
+})
+
+describe('searchWords', () => {
+  it('splits, lowercases, dedupes, and drops one-letter words', () => {
+    assert.deepEqual(searchWords('  Frieren  a EPISODE frieren 5 '), ['frieren', 'episode'])
+    assert.deepEqual(searchWords(undefined), [])
+  })
+
+  it('caps the number of words', () => {
+    assert.equal(searchWords('aa bb cc dd ee ff gg hh').length, 6)
   })
 })

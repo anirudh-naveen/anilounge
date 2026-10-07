@@ -102,7 +102,7 @@
               <div class="activity-body">
                 <p class="activity-text">
                   <span class="activity-user">
-                    {{ entry.user.isSelf ? 'You' : entry.user.username }}
+                    {{ activitySubject(entry) }}
                   </span>
                   {{ describeActivity(entry) }}
                   <router-link :to="titleRoute(entry.content)" class="activity-title">
@@ -249,6 +249,7 @@
             v-for="(post, index) in forum.items"
             :key="post.id"
             :post="post"
+            show-image
             @update:post="(next) => (forum.items[index] = next)"
           />
         </div>
@@ -277,6 +278,7 @@ import { getWatchlistStatusLabel } from '@/utils/watchlist'
 import { characterFranchises } from '@/utils/entities'
 import {
   characterBlurb,
+  activitySubject,
   describeActivity,
   mergeActivity,
   releaseLabel,
