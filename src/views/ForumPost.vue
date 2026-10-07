@@ -24,19 +24,19 @@
         <!-- Title: Post -->
         <article v-else class="social-panel post-article" data-testid="forum-post">
           <header class="post-head">
-            <span class="post-kind" :class="post.kind">
+            <span class="post-badge post-kind" :class="post.kind">
               {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
             </span>
             <span
               v-if="post.score !== null"
-              class="post-score"
-              :style="getRatingTextStyle(post.score)"
+              class="post-badge post-score"
+              :style="getRatingBadgeColors(post.score)"
               title="The author's watchlist rating"
               data-testid="post-score"
             >
               {{ scoreLabel(post.score) }}
             </span>
-            <span v-if="post.spoiler" class="post-spoiler-flag">Spoilers</span>
+            <span v-if="post.spoiler" class="post-badge post-spoiler-flag">Spoilers</span>
           </header>
           <h1 class="post-title">{{ post.title }}</h1>
           <div class="post-byline">
@@ -64,6 +64,7 @@
             data-testid="post-spoiler-cover"
             @click="revealed = true"
           >
+            <ForumIcon name="eye-off" class="spoiler-icon" />
             This post contains spoilers. Show it
           </button>
           <div v-else class="post-body" data-testid="post-body">{{ post.body }}</div>
@@ -79,9 +80,11 @@
               data-testid="post-like"
               @click="togglePostLike"
             >
-              ♥ {{ post.likeCount }}
+              <ForumIcon name="heart" :filled="post.liked" />
+              {{ post.likeCount }}
             </button>
-            <span class="social-meta">
+            <span class="post-comment-count">
+              <ForumIcon name="comment" />
               {{ post.commentCount }} {{ post.commentCount === 1 ? 'comment' : 'comments' }}
             </span>
             <span class="post-owner-actions">
@@ -206,6 +209,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import ForumCommentItem from '@/components/ForumCommentItem.vue'
 import ForumComposer from '@/components/ForumComposer.vue'
+import ForumIcon from '@/components/ForumIcon.vue'
 import ForumTags from '@/components/ForumTags.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
@@ -214,7 +218,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { ForumComment, ForumPost } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
 import { COMMENT_MAX, scoreLabel, showLanguageWarning } from '@/utils/forum'
-import { getRatingTextStyle } from '@/utils/ratingColors'
+import { getRatingBadgeColors } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
@@ -265,6 +269,18 @@ const load = async () => {
   } finally {
     loading.value = false
   }
+  if (post.value) revealLinkedComment()
+}
+
+/** Scroll to and briefly highlight `#comment-<id>` (inbox links). */
+const revealLinkedComment = async () => {
+  if (!route.hash.startsWith('#comment-')) return
+  await nextTick()
+  const el = document.getElementById(route.hash.slice(1))
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('linked')
+  setTimeout(() => el.classList.remove('linked'), 2500)
 }
 
 const togglePostLike = async () => {
@@ -389,14 +405,18 @@ onMounted(load)
   gap: 0.45rem;
 }
 
-.post-kind,
-.post-spoiler-flag {
-  padding: 0.12rem 0.55rem;
-  border-radius: 999px;
+.post-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 1.5rem;
+  padding: 0 0.55rem;
+  border-radius: 6px;
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  line-height: 1;
   text-transform: uppercase;
+  white-space: nowrap;
   background: var(--bg-secondary);
   color: var(--text-secondary);
 }
@@ -412,8 +432,8 @@ onMounted(load)
 }
 
 .post-score {
-  padding: 0.15rem 0.6rem;
-  font-size: 1rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
 }
 
 .post-title {
@@ -481,15 +501,30 @@ onMounted(load)
 .post-like {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.3rem 0.8rem;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
   border: 1px solid var(--border-color);
-  border-radius: 999px;
+  border-radius: 8px;
   background: none;
   font: inherit;
   font-size: 0.88rem;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
+}
+
+.post-comment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.spoiler-icon {
+  display: inline-block;
+  vertical-align: -0.15em;
+  margin-right: 0.3rem;
 }
 
 .post-like.on {

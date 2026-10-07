@@ -102,7 +102,7 @@
               <div class="activity-body">
                 <p class="activity-text">
                   <span class="activity-user">
-                    {{ entry.user.isSelf ? 'You' : entry.user.username }}
+                    {{ activitySubject(entry) }}
                   </span>
                   {{ describeActivity(entry) }}
                   <router-link :to="titleRoute(entry.content)" class="activity-title">
@@ -249,6 +249,7 @@
             v-for="(post, index) in forum.items"
             :key="post.id"
             :post="post"
+            show-image
             @update:post="(next) => (forum.items[index] = next)"
           />
         </div>
@@ -264,6 +265,7 @@
 </template>
 
 <script setup lang="ts">
+import { showPosterPlaceholder } from '@/utils/posters'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import ImportReminder from '@/components/ImportReminder.vue'
@@ -277,6 +279,7 @@ import { getWatchlistStatusLabel } from '@/utils/watchlist'
 import { characterFranchises } from '@/utils/entities'
 import {
   characterBlurb,
+  activitySubject,
   describeActivity,
   mergeActivity,
   releaseLabel,
@@ -379,10 +382,7 @@ const titleRoute = (content: { _id: string; contentType?: string }) => ({
   query: { from: '/' },
 })
 
-const handlePosterError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  if (!img.src.endsWith('/placeholder-movie.jpg')) img.src = '/placeholder-movie.jpg'
-}
+const handlePosterError = showPosterPlaceholder
 
 const handlePortraitError = (event: Event) => {
   ;(event.target as HTMLImageElement).style.visibility = 'hidden'

@@ -8,7 +8,7 @@
   outright rather than blanked).
 -->
 <template>
-  <div class="comment" :data-testid="`comment-${comment.id}`">
+  <div :id="`comment-${comment.id}`" class="comment" :data-testid="`comment-${comment.id}`">
     <p v-if="comment.deleted" class="comment-deleted">[deleted]</p>
     <template v-else>
       <div class="comment-head">
@@ -66,7 +66,8 @@
           data-testid="comment-like"
           @click="toggleLike"
         >
-          ♥ {{ comment.likeCount }}
+          <ForumIcon name="heart" :filled="comment.liked" />
+          {{ comment.likeCount }}
         </button>
         <button
           type="button"
@@ -103,6 +104,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
+import ForumIcon from '@/components/ForumIcon.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI } from '@/services/api'
@@ -182,6 +184,15 @@ const remove = async () => {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  scroll-margin-top: 120px;
+  border-radius: 10px;
+  transition: background-color 1.2s ease;
+}
+
+/* Opened from an inbox link (#comment-<id>). */
+.comment.linked {
+  background: color-mix(in srgb, var(--coral-primary) 12%, transparent);
+  box-shadow: 0 0 0 0.5rem color-mix(in srgb, var(--coral-primary) 12%, transparent);
 }
 
 .comment-head {
@@ -222,6 +233,9 @@ const remove = async () => {
 }
 
 .comment-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   padding: 0.15rem 0.5rem;
   border: 0;
   border-radius: 999px;

@@ -66,7 +66,10 @@
             </router-link>
             on
             <router-link :to="postRoute(comment.postId)">{{ comment.postTitle }}</router-link>
-            · ♥ {{ comment.likeCount }}
+            ·
+            <span class="highlight-likes"
+              ><ForumIcon name="heart" filled />{{ comment.likeCount }}</span
+            >
           </p>
         </li>
       </ul>
@@ -85,6 +88,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import ForumIcon from '@/components/ForumIcon.vue'
 import ForumPostCard from '@/components/ForumPostCard.vue'
 import { forumAPI } from '@/services/api'
 import type { ForumHighlights } from '@/types/forum'
@@ -211,6 +215,14 @@ watch(
 .highlight-comment a {
   color: var(--text-secondary);
   font-weight: 600;
+}
+
+.highlight-likes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--coral-primary);
+  vertical-align: middle;
 }
 
 .highlights-more {

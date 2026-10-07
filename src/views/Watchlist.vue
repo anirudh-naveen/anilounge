@@ -408,6 +408,7 @@
 </template>
 
 <script setup lang="ts">
+import { showPosterPlaceholder } from '@/utils/posters'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
@@ -845,10 +846,7 @@ const viewContentDetails = (item: WatchlistItem) => {
   })
 }
 
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.src = '/placeholder-movie.jpg'
-}
+const handleImageError = showPosterPlaceholder
 
 // Watch for authentication state changes
 watch(

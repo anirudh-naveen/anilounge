@@ -9,6 +9,7 @@
 
 import axios from 'axios'
 import type { PostInput } from '@/types/forum'
+import { POSTER_PLACEHOLDER } from '@/utils/posters'
 import type {
   LoginCredentials,
   RegisterData,
@@ -343,6 +344,16 @@ export const messagesAPI = {
   send: (userId: string, body: string) => api.post(`/messages/${userId}`, { body }),
 }
 
+export const inboxAPI = {
+  /** A page of the inbox; `before` is the last item's `createdAt`. */
+  list: (before?: string) => api.get('/inbox', { params: before ? { before } : {} }),
+
+  unread: () => api.get('/inbox/unread'),
+
+  /** Mark the given items read, or everything when `ids` is omitted. */
+  markRead: (ids?: string[]) => api.post('/inbox/read', ids ? { ids } : {}),
+}
+
 export const forumAPI = {
   list: (params: {
     tag?: string
@@ -352,6 +363,8 @@ export const forumAPI = {
     sort?: string
     page?: number
     author?: string
+    /** Search: every word must match a post's title, text, or tag names. */
+    q?: string
   }) => api.get('/forum/posts', { params }),
 
   get: (postId: string) => api.get(`/forum/posts/${postId}`),
@@ -484,7 +497,7 @@ export const watchlistImportAPI = {
  * @returns Image URL, or the local placeholder when `path` is empty.
  */
 export const getImageUrl = (path: string, size = 'w500') => {
-  if (!path) return '/placeholder-movie.jpg'
+  if (!path) return POSTER_PLACEHOLDER
   if (path.startsWith('//')) return `https:${path}`
   if (path.startsWith('http://') && /myanimelist\.net/i.test(path)) {
     return `https://${path.slice('http://'.length)}`

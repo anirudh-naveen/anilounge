@@ -3,7 +3,8 @@
 
   Edit username, email, profile picture, favorite genres/studios, and
   password; choose optional emails and whether to allow profanity in private
-  messages (Communication). The shared demo account cannot change its password.
+  messages (Communication). Appearance, Email, and Communication changes are
+  staged and only applied with each section's Save button. The shared demo account cannot change its password.
   Profile-picture crop happens in a modal overlay.
 -->
 <template>
@@ -103,10 +104,10 @@
                     type="button"
                     role="radio"
                     class="theme-option"
-                    :class="{ selected: themePreference === option.value }"
-                    :aria-checked="themePreference === option.value"
+                    :class="{ selected: themeDraft === option.value }"
+                    :aria-checked="themeDraft === option.value"
                     :data-testid="`theme-${option.value}`"
-                    @click="setThemePreference(option.value)"
+                    @click="themeDraft = option.value"
                   >
                     {{ option.label }}
                   </button>
@@ -114,6 +115,12 @@
               </div>
             </div>
           </div>
+          <SettingsSaveBar
+            :dirty="themeDirty"
+            testid="save-appearance"
+            @save="saveTheme"
+            @discard="themeDraft = themePreference"
+          />
         </div>
 
         <!-- Email -->
@@ -129,13 +136,12 @@
               <div class="setting-control">
                 <label class="email-toggle">
                   <input
+                    v-model="emailDraft[option.key]"
                     type="checkbox"
-                    :checked="emailPreferences?.[option.key] ?? true"
                     :disabled="!emailPreferences || emailSaving"
                     :data-testid="`email-pref-${option.key}`"
-                    @change="saveEmailPreference(option.key, $event)"
                   />
-                  <span>{{ emailPreferences?.[option.key] === false ? 'Off' : 'On' }}</span>
+                  <span>{{ emailDraft[option.key] ? 'On' : 'Off' }}</span>
                 </label>
               </div>
             </div>
@@ -154,6 +160,13 @@
               </div>
             </div>
           </div>
+          <SettingsSaveBar
+            :dirty="emailDirty"
+            :saving="emailSaving"
+            testid="save-email"
+            @save="saveEmailPreferences"
+            @discard="resetEmailDraft"
+          />
         </div>
 
         <!-- Communication -->
@@ -172,17 +185,23 @@
               <div class="setting-control">
                 <label class="email-toggle">
                   <input
+                    v-model="allowProfanityDraft"
                     type="checkbox"
-                    :checked="communication?.allowProfanity ?? false"
                     :disabled="!communication || communicationSaving || authStore.isDemoUser"
                     data-testid="allow-profanity"
-                    @change="saveAllowProfanity"
                   />
-                  <span>{{ communication?.allowProfanity ? 'On' : 'Off' }}</span>
+                  <span>{{ allowProfanityDraft ? 'On' : 'Off' }}</span>
                 </label>
               </div>
             </div>
           </div>
+          <SettingsSaveBar
+            :dirty="communicationDirty"
+            :saving="communicationSaving"
+            testid="save-communication"
+            @save="saveCommunication"
+            @discard="allowProfanityDraft = communication?.allowProfanity ?? false"
+          />
         </div>
 
         <!-- Privacy -->
@@ -471,6 +490,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
 import { useTheme, type ThemePreference } from '@/composables/useTheme'
+import SettingsSaveBar from '@/components/SettingsSaveBar.vue'
 
 // Component name for Vue devtools
 defineOptions({
@@ -495,6 +515,14 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },
 ]
 const { preference: themePreference, setPreference: setThemePreference } = useTheme()
+/** Theme as picked; applied when the Appearance section is saved. */
+const themeDraft = ref<ThemePreference>(themePreference.value)
+const themeDirty = computed(() => themeDraft.value !== themePreference.value)
+
+const saveTheme = () => {
+  setThemePreference(themeDraft.value)
+  toast.success('Theme saved.')
+}
 
 // Computed properties
 const canChangePassword = computed(() => {
@@ -713,26 +741,47 @@ const EMAIL_OPTIONS: { key: keyof EmailPreferences; title: string; description: 
   },
 ]
 const emailPreferences = ref<EmailPreferences | null>(null)
+/** Toggles as edited; sent together when the section is saved. */
+const emailDraft = ref<EmailPreferences>({ announcements: true, friend_requests: true })
 const emailSaving = ref(false)
+
+const resetEmailDraft = () => {
+  if (emailPreferences.value) emailDraft.value = { ...emailPreferences.value }
+}
+
+const emailDirty = computed(
+  () =>
+    !!emailPreferences.value &&
+    EMAIL_OPTIONS.some(
+      (option) => emailDraft.value[option.key] !== (emailPreferences.value?.[option.key] ?? true),
+    ),
+)
 
 const loadEmailPreferences = async () => {
   try {
     const response = await emailPreferencesAPI.get()
     emailPreferences.value = response.data.data as EmailPreferences
+    resetEmailDraft()
   } catch (err) {
     toast.error(apiMessage(err, 'Could not load email preferences.'))
   }
 }
 
-const saveEmailPreference = async (key: keyof EmailPreferences, event: Event) => {
-  const enabled = (event.target as HTMLInputElement).checked
+const saveEmailPreferences = async () => {
+  if (!emailPreferences.value || !emailDirty.value) return
+  const changes: Partial<EmailPreferences> = {}
+  for (const option of EMAIL_OPTIONS) {
+    if (emailDraft.value[option.key] !== emailPreferences.value[option.key]) {
+      changes[option.key] = emailDraft.value[option.key]
+    }
+  }
   emailSaving.value = true
   try {
-    const response = await emailPreferencesAPI.update({ [key]: enabled })
+    const response = await emailPreferencesAPI.update(changes)
     emailPreferences.value = response.data.data as EmailPreferences
-    toast.success(enabled ? 'Emails turned on.' : 'Emails turned off.')
+    resetEmailDraft()
+    toast.success('Email preferences saved.')
   } catch (err) {
-    ;(event.target as HTMLInputElement).checked = !enabled
     toast.error(apiMessage(err, 'Could not save email preferences.'))
   } finally {
     emailSaving.value = false
@@ -740,30 +789,37 @@ const saveEmailPreference = async (key: keyof EmailPreferences, event: Event) =>
 }
 
 const communication = ref<CommunicationSettings | null>(null)
+const allowProfanityDraft = ref(false)
 const communicationSaving = ref(false)
+
+const communicationDirty = computed(
+  () => !!communication.value && allowProfanityDraft.value !== communication.value.allowProfanity,
+)
 
 const loadCommunication = async () => {
   try {
     const response = await communicationAPI.get()
     communication.value = response.data.data as CommunicationSettings
+    allowProfanityDraft.value = communication.value.allowProfanity
   } catch (err) {
     toast.error(apiMessage(err, 'Could not load communication settings.'))
   }
 }
 
-const saveAllowProfanity = async (event: Event) => {
-  const allowProfanity = (event.target as HTMLInputElement).checked
+const saveCommunication = async () => {
+  if (!communicationDirty.value) return
+  const allowProfanity = allowProfanityDraft.value
   communicationSaving.value = true
   try {
     const response = await communicationAPI.update({ allowProfanity })
     communication.value = response.data.data as CommunicationSettings
+    allowProfanityDraft.value = communication.value.allowProfanity
     toast.success(
       allowProfanity
         ? 'Profanity allowed in private messages with friends who also allow it.'
         : 'Profanity filtered in your private messages.',
     )
   } catch (err) {
-    ;(event.target as HTMLInputElement).checked = !allowProfanity
     toast.error(apiMessage(err, 'Could not save communication settings.'))
   } finally {
     communicationSaving.value = false
