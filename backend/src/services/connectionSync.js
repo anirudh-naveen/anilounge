@@ -19,6 +19,10 @@
  * none more often than CONNECTIONS_POLL_INTERVAL_SECONDS. A quiet poll is one request.
  * With many connections each one is polled less often; "Sync now" on the Connections
  * page pulls one account straight away.
+ *
+ * CONNECTIONS_SYNC_ENABLED=false turns off sending and polling on this server (sign-in
+ * and imports still work). Set it on a dev machine that uses the production database so
+ * it doesn't sync real users' accounts alongside the live server.
  */
 import { query, startSession } from '../../config/postgres.js'
 import Content from '../models/Content.js'
@@ -408,7 +412,7 @@ function enqueue(provider, task) {
  */
 export function mirrorWatchlistChange(user, content, item, { except } = {}) {
   const userId = String(user?._id || user?.id || '')
-  if (!userId || !content) return
+  if (!userId || !content || !syncEnabled()) return
   const row = snapshot(item)
   const targets = CONNECTION_PROVIDERS.filter(
     (provider) => provider !== except && ADAPTERS[provider].remoteId(content),
@@ -565,6 +569,7 @@ export async function pullConnection(row) {
  * @returns {Promise<{ applied: number, checked: number }>}
  */
 export async function syncNow(userId, provider) {
+  if (!syncEnabled()) throw new ConnectionError('Syncing is turned off on this server.', 503)
   const row = await loadConnection(userId, provider)
   if (!row) throw new ConnectionError(`${providerLabel(provider)} isn't connected.`, 404)
   if (!providerPulls(provider)) {
@@ -587,6 +592,15 @@ export async function syncNow(userId, provider) {
 // ---------------------------------------------------------------------------
 // Scheduler
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether this server sends and polls (on unless CONNECTIONS_SYNC_ENABLED is false/0/off/no).
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {boolean}
+ */
+export function syncEnabled(env = process.env) {
+  return !/^(false|0|off|no)$/i.test(String(env.CONNECTIONS_SYNC_ENABLED ?? '').trim())
+}
 
 /**
  * @param {NodeJS.ProcessEnv} [env]
@@ -645,9 +659,13 @@ async function pollProvider(provider) {
 
 /**
  * Start polling the two-way sites (AniList, MyAnimeList).
- * @returns {NodeJS.Timeout}
+ * @returns {NodeJS.Timeout | null} null when CONNECTIONS_SYNC_ENABLED is off.
  */
 export function startConnectionSync() {
+  if (!syncEnabled()) {
+    console.log('Connections sync disabled (CONNECTIONS_SYNC_ENABLED=false)')
+    return null
+  }
   if (scheduler.timer) return scheduler.timer
   const run = () => {
     for (const provider of CONNECTION_PROVIDERS.filter(providerPulls)) {
