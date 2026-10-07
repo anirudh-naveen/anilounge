@@ -331,6 +331,7 @@
 </template>
 
 <script setup lang="ts">
+import { showPosterPlaceholder } from '@/utils/posters'
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
@@ -594,10 +595,7 @@ const ratingFillStyle = computed(() => {
   }
 })
 
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.src = '/placeholder-movie.jpg'
-}
+const handleImageError = showPosterPlaceholder
 
 const viewContentDetails = (item: UnifiedContent) => {
   // Save current scroll position for search page

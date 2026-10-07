@@ -604,6 +604,7 @@
 </template>
 
 <script setup lang="ts">
+import { showPosterPlaceholder } from '@/utils/posters'
 import { computed, defineOptions, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
@@ -1076,13 +1077,7 @@ const formatDate = (dateString: string | undefined) => {
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-/** Swap in the placeholder once; a failing placeholder must not retrigger `error` forever. */
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  if (img.dataset.fallback) return
-  img.dataset.fallback = 'true'
-  img.src = '/placeholder-movie.jpg'
-}
+const handleImageError = showPosterPlaceholder
 </script>
 
 <style scoped>

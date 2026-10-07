@@ -9,6 +9,7 @@
 
 import axios from 'axios'
 import type { PostInput } from '@/types/forum'
+import { POSTER_PLACEHOLDER } from '@/utils/posters'
 import type {
   LoginCredentials,
   RegisterData,
@@ -496,7 +497,7 @@ export const watchlistImportAPI = {
  * @returns Image URL, or the local placeholder when `path` is empty.
  */
 export const getImageUrl = (path: string, size = 'w500') => {
-  if (!path) return '/placeholder-movie.jpg'
+  if (!path) return POSTER_PLACEHOLDER
   if (path.startsWith('//')) return `https:${path}`
   if (path.startsWith('http://') && /myanimelist\.net/i.test(path)) {
     return `https://${path.slice('http://'.length)}`

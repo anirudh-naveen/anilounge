@@ -6,7 +6,7 @@ const api = vi.hoisted(() => ({ conflicts: vi.fn(), resolveConflicts: vi.fn() })
 
 vi.mock('@/services/api', () => ({
   watchlistImportAPI: api,
-  getPosterUrl: (path: string) => path || '/placeholder-movie.jpg',
+  getPosterUrl: (path: string) => path || '/placeholder-poster.svg',
 }))
 
 const option = (key: string, status: string, currentEpisode: number, score: number | null) => ({

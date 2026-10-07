@@ -56,6 +56,7 @@
 </template>
 
 <script setup lang="ts">
+import { showPosterPlaceholder } from '@/utils/posters'
 import { getPosterUrl, getCardContentTypeDisplay, getContentTypeBadgeClass } from '@/services/api'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
@@ -86,10 +87,7 @@ const emit = defineEmits<{
   select: [item: UnifiedContent]
 }>()
 
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.src = '/placeholder-movie.jpg'
-}
+const handleImageError = showPosterPlaceholder
 </script>
 
 <style scoped>

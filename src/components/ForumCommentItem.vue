@@ -66,7 +66,8 @@
           data-testid="comment-like"
           @click="toggleLike"
         >
-          ♥ {{ comment.likeCount }}
+          <ForumIcon name="heart" :filled="comment.liked" />
+          {{ comment.likeCount }}
         </button>
         <button
           type="button"
@@ -103,6 +104,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
+import ForumIcon from '@/components/ForumIcon.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI } from '@/services/api'
@@ -231,6 +233,9 @@ const remove = async () => {
 }
 
 .comment-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   padding: 0.15rem 0.5rem;
   border: 0;
   border-radius: 999px;
