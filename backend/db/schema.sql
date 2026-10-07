@@ -576,6 +576,62 @@ CREATE TABLE IF NOT EXISTS comments (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Forum (services/forumService.js). A post is a discussion or a review (reviews carry
+-- a 1–10 score); `content_id` is unused, tags live in post_tags. Text is masked for
+-- blocked language like direct messages, with language warnings to the author.
+-- `last_activity_at` moves on new comments so active threads sort up.
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS score NUMERIC(3, 1) CHECK (score BETWEEN 1 AND 10);
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS spoiler BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_title_length_check;
+ALTER TABLE posts ADD CONSTRAINT posts_title_length_check
+  CHECK (char_length(title) BETWEEN 1 AND 150);
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_body_length_check;
+ALTER TABLE posts ADD CONSTRAINT posts_body_length_check
+  CHECK (char_length(body) BETWEEN 1 AND 10000);
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_review_score_check;
+ALTER TABLE posts ADD CONSTRAINT posts_review_score_check
+  CHECK ((kind = 'review') = (score IS NOT NULL));
+CREATE INDEX IF NOT EXISTS posts_activity_idx ON posts (last_activity_at DESC);
+CREATE INDEX IF NOT EXISTS posts_user_idx ON posts (user_id, created_at DESC);
+
+-- What a post is about: a movie, series, special, franchise, or character, or one
+-- episode of a series (season_number + episode_number set; both or neither).
+CREATE TABLE IF NOT EXISTS post_tags (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id         UUID NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+  content_id      UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  season_number   INTEGER CHECK (season_number BETWEEN 0 AND 999),
+  episode_number  INTEGER CHECK (episode_number BETWEEN 1 AND 9999),
+  CHECK ((season_number IS NULL) = (episode_number IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS post_tags_unique
+  ON post_tags (post_id, content_id, COALESCE(season_number, -1), COALESCE(episode_number, -1));
+CREATE INDEX IF NOT EXISTS post_tags_content_idx ON post_tags (content_id, season_number, episode_number);
+
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+-- A deleted comment that has replies is blanked (body '[deleted]') instead of removed.
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE comments DROP CONSTRAINT IF EXISTS comments_body_length_check;
+ALTER TABLE comments ADD CONSTRAINT comments_body_length_check
+  CHECK (char_length(body) BETWEEN 1 AND 4000);
+CREATE INDEX IF NOT EXISTS comments_post_idx ON comments (post_id, created_at);
+
+-- Likes. "Leading" posts and "highlighted" comments are ranked by these.
+CREATE TABLE IF NOT EXISTS post_likes (
+  post_id     UUID NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS comment_likes (
+  comment_id  UUID NOT NULL REFERENCES comments (id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (comment_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS messages (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sender_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,

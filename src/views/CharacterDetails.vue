@@ -142,6 +142,12 @@
           </div>
         </section>
       </div>
+
+      <!-- Title: Forum -->
+      <ForumHighlights
+        :content-id="character._id"
+        :name="canonicalCharacterName(character.name) || character.name"
+      />
     </div>
   </div>
 </template>
@@ -162,6 +168,7 @@ import {
 } from '@/utils/entities'
 import type { CatalogEntity, EntityVoiceCredit } from '@/types/content'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import ForumHighlights from '@/components/ForumHighlights.vue'
 
 const route = useRoute()
 const router = useRouter()
