@@ -7,6 +7,7 @@ import { buildPost } from './forumFixtures'
 const create = vi.fn()
 const update = vi.fn()
 const searchTags = vi.fn()
+const getContentEpisodes = vi.fn()
 const toast = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
@@ -25,6 +26,10 @@ vi.mock('@/services/api', async (importOriginal) => {
       update: (...args: unknown[]) => update(...args),
       searchTags: (...args: unknown[]) => searchTags(...args),
     },
+    contentAPI: {
+      ...actual.contentAPI,
+      getContentEpisodes: (...args: unknown[]) => getContentEpisodes(...args),
+    },
   }
 })
 
@@ -42,6 +47,36 @@ describe('ForumComposer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useRealTimers()
+    getContentEpisodes.mockResolvedValue({
+      data: {
+        data: {
+          episodes: [
+            { seasonNumber: 0, episodeNumber: 1, title: 'Recap' },
+            ...[1, 2, 3, 4, 5].map((n) => ({
+              seasonNumber: 1,
+              episodeNumber: n,
+              title: `Ep ${n}`,
+            })),
+            { seasonNumber: 2, episodeNumber: 1, title: 'Journey' },
+          ],
+        },
+      },
+    })
+  })
+
+  it('says when a series has no episode list', async () => {
+    getContentEpisodes.mockResolvedValue({ data: { data: { episodes: [] } } })
+    const wrapper = mount(ForumComposer, { props: { presetTags: [series] } })
+    await wrapper.get('[data-testid="episode-add-0"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="episode-season-0"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="episode-none-0"]').text()).toContain('No episode list')
+  })
+
+  it('loads the episode list when editing a post with an episode tag', async () => {
+    mount(ForumComposer, { props: { post: buildPost({ canEdit: true }) } })
+    await flushPromises()
+    expect(getContentEpisodes).toHaveBeenCalledWith('s1')
   })
 
   it('posts a discussion with an episode tag', async () => {
@@ -50,7 +85,17 @@ describe('ForumComposer', () => {
     await wrapper.get('[data-testid="composer-title"]').setValue('  Episode 5  ')
     await wrapper.get('[data-testid="composer-body"]').setValue('That ending!')
     await wrapper.get('[data-testid="episode-add-0"]').trigger('click')
+    await flushPromises()
+    expect(getContentEpisodes).toHaveBeenCalledWith('s1')
+    // Starts on the first regular season's first episode; specials come first in the list.
+    expect(
+      (wrapper.get('[data-testid="episode-season-0"]').element as HTMLSelectElement).value,
+    ).toBe('1')
+    await wrapper.get('[data-testid="episode-season-0"]').setValue('2')
+    expect(wrapper.get('[data-testid="episode-number-0"]').text()).toContain('E1 · Journey')
+    await wrapper.get('[data-testid="episode-season-0"]').setValue('1')
     await wrapper.get('[data-testid="episode-number-0"]').setValue('5')
+    expect(wrapper.get('[data-testid="selected-tags"]').text()).toContain('Frieren · S1E5')
     await wrapper.get('[data-testid="composer-spoiler"]').setValue(true)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
