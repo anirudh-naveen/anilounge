@@ -4,7 +4,8 @@
   Franchise › movies/series/specials (episodes after their series) › characters,
   each chip linking to the forum filtered by it. Chips stay on one line and
   truncate long names (the full name is the tooltip). `showKind` adds the kind
-  label to every chip (post page); `compact` uses smaller chips (cards).
+  label to every chip (post page); `compact` uses smaller chips (cards). The
+  author's top tag is highlighted with a star.
 -->
 <template>
   <ol v-if="levels.length" class="forum-tags" :class="{ compact }" data-testid="forum-tags">
@@ -15,9 +16,11 @@
         :key="`${tag.contentId}-${tag.season}-${tag.episode}`"
         :to="forumTagRoute(tag)"
         class="forum-tag"
-        :class="tag.kind"
-        :title="`${KIND_LABELS[tag.kind]}: ${tagLabel(tag)}`"
+        :class="[tag.kind, { top: tag.top }]"
+        :title="`${tag.top ? 'Top tag · ' : ''}${KIND_LABELS[tag.kind]}: ${tagLabel(tag)}`"
+        :data-testid="tag.top ? 'top-tag' : undefined"
       >
+        <ForumIcon v-if="tag.top" name="star" filled class="forum-tag-star" />
         <span v-if="showKind" class="forum-tag-kind">{{ KIND_LABELS[tag.kind] }}</span>
         <span class="forum-tag-name">{{ tagLabel(tag) }}</span>
       </router-link>
@@ -27,6 +30,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import ForumIcon from '@/components/ForumIcon.vue'
 import type { PostTag } from '@/types/forum'
 import { forumTagRoute, KIND_LABELS, tagLabel, tagLevels } from '@/utils/forum'
 
@@ -96,6 +100,18 @@ const levels = computed(() => tagLevels(props.tags))
 .forum-tag:not(.character) {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.forum-tag.top {
+  border-color: color-mix(in srgb, var(--coral-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--coral-primary) 12%, transparent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.forum-tag-star {
+  color: var(--coral-primary);
+  font-size: 0.95em;
 }
 
 .forum-tag-kind {

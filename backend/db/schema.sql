@@ -644,6 +644,10 @@ CREATE TABLE IF NOT EXISTS post_tags (
 CREATE UNIQUE INDEX IF NOT EXISTS post_tags_unique
   ON post_tags (post_id, content_id, COALESCE(season_number, -1), COALESCE(episode_number, -1));
 CREATE INDEX IF NOT EXISTS post_tags_content_idx ON post_tags (content_id, season_number, episode_number);
+-- The author's "top tag": highlighted on the post, and its picture is the post's image.
+-- At most one per post; posts without one fall back to the highest tag with a picture.
+ALTER TABLE post_tags ADD COLUMN IF NOT EXISTS is_top BOOLEAN NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS post_tags_one_top ON post_tags (post_id) WHERE is_top;
 -- A review's subject (posts.content_id): its first movie/series/special tag. Its score
 -- shows the author's watchlist rating for that title.
 UPDATE posts p SET content_id = (

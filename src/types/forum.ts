@@ -16,6 +16,8 @@ export interface PostTag {
   imagePath: string | null
   season: number | null
   episode: number | null
+  /** The author's top tag: highlighted, and its picture is the post's image. */
+  top?: boolean
 }
 
 export interface ForumPost {
@@ -103,7 +105,12 @@ export interface PostInput {
   body?: string
   score?: number
   spoiler?: boolean
-  tags?: Array<{ contentId: string; season?: number | null; episode?: number | null }>
+  tags?: Array<{
+    contentId: string
+    season?: number | null
+    episode?: number | null
+    top?: boolean
+  }>
 }
 
 /** A character offered under a title in the tag picker. */

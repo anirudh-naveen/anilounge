@@ -51,6 +51,18 @@ export function tagLevels<T extends Pick<PostTag, 'kind' | 'name' | 'season' | '
   return levels.filter((level) => level.length)
 }
 
+/**
+ * The tag whose picture represents a post: the top tag when it has one, else the
+ * highest tag in the hierarchy with a picture (franchise, then title, then character).
+ */
+export function coverTag<
+  T extends Pick<PostTag, 'kind' | 'name' | 'season' | 'episode' | 'imagePath' | 'top'>,
+>(tags: T[]) {
+  const top = tags.find((tag) => tag.top)
+  if (top?.imagePath) return top
+  return sortTags(tags).find((tag) => tag.imagePath) || null
+}
+
 /** `S1E5` style episode label, or '' when the tag isn't an episode. */
 export function episodeLabel(tag: Pick<PostTag, 'season' | 'episode'>) {
   if (tag.season === null || tag.episode === null) return ''

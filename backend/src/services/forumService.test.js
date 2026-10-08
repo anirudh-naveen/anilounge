@@ -93,6 +93,17 @@ describe('validateTags', () => {
     await assert.rejects(validateTags(many), { message: /up to/ })
   })
 
+  it('allows only one top tag', async () => {
+    const other = '22222222-2222-4222-8222-222222222222'
+    await assert.rejects(
+      validateTags([
+        { contentId: id, top: true },
+        { contentId: other, top: true },
+      ]),
+      { message: /one top tag/ },
+    )
+  })
+
   it('treats missing tags as none', async () => {
     assert.deepEqual(await validateTags(undefined), [])
     assert.deepEqual(await validateTags([]), [])
