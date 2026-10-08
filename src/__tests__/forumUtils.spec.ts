@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { episodeLabel, forumTagRoute, scoreLabel, tagLabel, tagRoute } from '@/utils/forum'
+import {
+  coverTag,
+  episodeLabel,
+  forumTagRoute,
+  scoreLabel,
+  tagLabel,
+  tagRoute,
+} from '@/utils/forum'
 
 describe('forum utils', () => {
   it('labels episode tags', () => {
@@ -36,5 +43,37 @@ describe('forum utils', () => {
     expect(scoreLabel(9)).toBe('9/10')
     expect(scoreLabel(8.5)).toBe('8.5/10')
     expect(scoreLabel(null)).toBe('')
+  })
+})
+
+describe('coverTag', () => {
+  const tag = (
+    contentId: string,
+    kind: 'franchise' | 'series' | 'character',
+    imagePath: string | null,
+    top = false,
+  ) => ({
+    contentId,
+    kind,
+    name: contentId,
+    imagePath,
+    season: null,
+    episode: null,
+    top,
+  })
+
+  it('prefers the top tag when it has a picture', () => {
+    const tags = [tag('show', 'series', 'show.jpg'), tag('himmel', 'character', 'himmel.jpg', true)]
+    expect(coverTag(tags)?.contentId).toBe('himmel')
+  })
+
+  it('falls back to the highest tag with a picture', () => {
+    const tags = [
+      tag('himmel', 'character', 'himmel.jpg'),
+      tag('franchise', 'franchise', null, true),
+      tag('show', 'series', 'show.jpg'),
+    ]
+    expect(coverTag(tags)?.contentId).toBe('show')
+    expect(coverTag([tag('franchise', 'franchise', null)])).toBeNull()
   })
 })

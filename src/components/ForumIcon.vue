@@ -2,7 +2,7 @@
   ForumIcon.vue — line icons for forum actions (component).
 
   Same style as the site's nav and menu icons (24px grid, 1.75 stroke,
-  currentColor). `filled` fills the heart for a liked state.
+  currentColor). `filled` fills the shape (a liked heart, a chosen top-tag star).
 -->
 <template>
   <svg
@@ -25,6 +25,10 @@
       />
       <path d="M9 9.5h6M9 12.5h4" />
     </template>
+    <path
+      v-else-if="name === 'star'"
+      d="m12 4 2.47 5 5.53.8-4 3.9.94 5.5L12 16.6l-4.94 2.6.94-5.5-4-3.9 5.53-.8L12 4Z"
+    />
     <template v-else-if="name === 'eye-off'">
       <path d="M3.5 12S6.5 6 12 6s8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6Z" />
       <circle cx="12" cy="12" r="2.5" />
@@ -34,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ name: 'heart' | 'comment' | 'eye-off'; filled?: boolean }>()
+defineProps<{ name: 'heart' | 'comment' | 'eye-off' | 'star'; filled?: boolean }>()
 </script>
 
 <style scoped>

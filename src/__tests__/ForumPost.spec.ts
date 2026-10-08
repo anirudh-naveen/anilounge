@@ -90,6 +90,42 @@ describe('ForumPost', () => {
     expect(thread.get('.reply-list').text()).toContain('Agreed!')
   })
 
+  it('shows the top tag highlighted and its picture beside the post', async () => {
+    get.mockResolvedValue({
+      data: {
+        data: {
+          post: buildPost({
+            tags: [
+              {
+                contentId: 's1',
+                kind: 'series',
+                name: 'Frieren',
+                imagePath: 'https://img.test/frieren.jpg',
+                season: null,
+                episode: null,
+              },
+              {
+                contentId: 'c1',
+                kind: 'character',
+                name: 'Himmel',
+                imagePath: 'https://img.test/himmel.jpg',
+                season: null,
+                episode: null,
+                top: true,
+              },
+            ],
+          }),
+          comments: [],
+        },
+      },
+    })
+    const wrapper = await mountPost()
+    expect(wrapper.get('[data-testid="top-tag"]').text()).toContain('Himmel')
+    const poster = wrapper.get('[data-testid="post-poster"]')
+    expect(poster.get('img').attributes('src')).toBe('https://img.test/himmel.jpg')
+    expect(poster.attributes('href')).toBe('/character/c1')
+  })
+
   it('covers spoiler posts until opened', async () => {
     get.mockResolvedValue({
       data: { data: { post: buildPost({ spoiler: true }), comments: [] } },

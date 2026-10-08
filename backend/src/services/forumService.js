@@ -156,7 +156,8 @@ function postColumns() {
     COALESCE((
       SELECT json_agg(json_build_object(
         'contentId', t.content_id, 'kind', tc.kind, 'name', tc.name,
-        'imagePath', tc.image_path, 'season', t.season_number, 'episode', t.episode_number
+        'imagePath', tc.image_path, 'season', t.season_number, 'episode', t.episode_number,
+        'top', t.is_top
       ) ORDER BY ${TAG_LEVEL_SQL}, tc.name, t.season_number NULLS FIRST, t.episode_number)
       FROM post_tags t JOIN content tc ON tc.id = t.content_id
       WHERE t.post_id = p.id
@@ -214,6 +215,7 @@ export function postEntry(row, { full = false, viewer = null } = {}) {
       imagePath: tag.imagePath || null,
       season: tag.season ?? null,
       episode: tag.episode ?? null,
+      top: Boolean(tag.top),
     })),
     canEdit: mine,
     canDelete: mine || Boolean(viewer && isAdminUser(viewer)),
@@ -284,9 +286,10 @@ export const episodeKey = (season, episode) => `S${Number(season)}E${Number(epis
  * of the series (checked against its episode list).
  * @param {unknown} input - `[{ contentId, season?, episode? }]`.
  * @param {{ loadEpisodes?: (seriesId: string) => Promise<Set<string>> }} [options] - For tests.
- * @returns {Promise<Array<{ contentId: string, kind: string, season: number | null, episode: number | null }>>}
- * @throws {HttpError} 400 on bad shape, too many, unknown content, an episode on a
- *   non-series, or an episode the series doesn't have.
+ * @returns {Promise<Array<{ contentId: string, kind: string, season: number | null, episode: number | null, top: boolean }>>}
+ *   `top` marks the post's one top tag (`{ top: true }` in the input).
+ * @throws {HttpError} 400 on bad shape, too many, more than one top tag, unknown content,
+ *   an episode on a non-series, or an episode the series doesn't have.
  */
 export async function validateTags(input, { loadEpisodes = loadEpisodeKeys } = {}) {
   if (input === undefined || input === null) return []
@@ -305,12 +308,19 @@ export async function validateTags(input, { loadEpisodes = loadEpisodeKeys } = {
     if (hasEpisode && !(Number.isInteger(episode) && episode >= 1 && episode <= 9999)) {
       throw new HttpError(400, 'Episode tags need an episode number (1 or more).')
     }
+    const top = raw?.top === true
     const key = `${contentId}:${season ?? ''}:${episode ?? ''}`
-    if (seen.has(key)) continue
+    if (seen.has(key)) {
+      if (top) tags.find((tag) => tag.key === key).top = true
+      continue
+    }
     seen.add(key)
-    tags.push({ contentId, season, episode })
+    tags.push({ key, contentId, season, episode, top })
   }
   if (tags.length > TAGS_MAX) throw new HttpError(400, `Posts can have up to ${TAGS_MAX} tags.`)
+  if (tags.filter((tag) => tag.top).length > 1) {
+    throw new HttpError(400, 'Pick just one top tag.')
+  }
   if (!tags.length) return []
 
   const { rows } = await query(`SELECT id, kind, name FROM content WHERE id = ANY($1::uuid[])`, [
@@ -344,7 +354,13 @@ export async function validateTags(input, { loadEpisodes = loadEpisodeKeys } = {
         )
       }
     }
-    out.push({ ...tag, kind: row.kind })
+    out.push({
+      contentId: tag.contentId,
+      season: tag.season,
+      episode: tag.episode,
+      top: tag.top,
+      kind: row.kind,
+    })
   }
   return out
 }
@@ -429,14 +445,16 @@ async function assertBurst(table, userId, burst) {
 async function insertTags(postId, tags) {
   if (!tags.length) return
   await query(
-    `INSERT INTO post_tags (post_id, content_id, season_number, episode_number)
-     SELECT $1, t.content_id, t.season, t.episode
-     FROM unnest($2::uuid[], $3::int[], $4::int[]) AS t(content_id, season, episode)`,
+    `INSERT INTO post_tags (post_id, content_id, season_number, episode_number, is_top)
+     SELECT $1, t.content_id, t.season, t.episode, t.top
+     FROM unnest($2::uuid[], $3::int[], $4::int[], $5::boolean[])
+       AS t(content_id, season, episode, top)`,
     [
       postId,
       tags.map((tag) => tag.contentId),
       tags.map((tag) => tag.season),
       tags.map((tag) => tag.episode),
+      tags.map((tag) => tag.top === true),
     ],
   )
 }

@@ -4,21 +4,21 @@
   Kind (review with its score, or discussion), title, author, tags, a preview
   (covered when marked as a spoiler), and like/comment counts. Liking needs
   sign-in; your own posts can't be liked. `compact` drops the preview for tight
-  spots such as title-page highlights. `showImage` (Home) adds a cover picture from
-  the highest tag in the hierarchy that has one: franchise, then title, then
-  character.
+  spots such as title-page highlights. `showImage` (Home) adds a cover picture: the
+  author's top tag's, else the highest tag in the hierarchy that has one
+  (franchise, then title, then character).
 -->
 <template>
   <article class="post-card" :class="{ compact }" :data-testid="`post-card-${post.id}`">
     <router-link
-      v-if="coverTag && !coverFailed"
+      v-if="cover && !coverFailed"
       :to="postRoute(post.id)"
       class="post-card-cover"
       tabindex="-1"
       aria-hidden="true"
     >
       <img
-        :src="getPosterUrl(coverTag.imagePath || '')"
+        :src="getPosterUrl(cover.imagePath || '')"
         alt=""
         loading="lazy"
         data-testid="post-cover"
@@ -108,7 +108,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI, getPosterUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumPost } from '@/types/forum'
-import { postRoute, scoreLabel, sortTags } from '@/utils/forum'
+import { coverTag, postRoute, scoreLabel } from '@/utils/forum'
 import { getRatingBadgeColors } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
@@ -123,10 +123,8 @@ const busy = ref(false)
 const revealed = ref(false)
 const coverFailed = ref(false)
 
-/** Highest tag in the hierarchy (franchise, title, character) that has a picture. */
-const coverTag = computed(() =>
-  props.showImage ? sortTags(props.post.tags).find((tag) => tag.imagePath) || null : null,
-)
+/** The top tag's picture, else the highest tag with one (see `coverTag`). */
+const cover = computed(() => (props.showImage ? coverTag(props.post.tags) : null))
 
 const toggleLike = async () => {
   if (!authStore.isAuthenticated) {
