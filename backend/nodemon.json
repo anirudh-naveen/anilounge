@@ -1,5 +1,0 @@
-{
-  "watch": ["src", "config", ".env"],
-  "ext": "js,mjs,cjs,json,env",
-  "ignore": ["logs/", ".tmp/", "uploads/", "*.test.js"]
-}

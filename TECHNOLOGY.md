@@ -38,7 +38,7 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | [sanitize-html](https://github.com/apostrophecms/sanitize-html) / [xss](https://github.com/leizongmin/js-xss) | Input sanitization |
 | [cookie](https://github.com/jshttp/cookie) | Reading the httpOnly session cookie |
 | [dotenv](https://github.com/motdotla/dotenv) | Environment configuration |
-| [nodemon](https://nodemon.io) | Auto-restart in development |
+| [Node watch mode](https://nodejs.org/api/cli.html#--watch) | Auto-restart in development (`npm run dev`) |
 
 ## External APIs and data sources
 
