@@ -1,5 +1,6 @@
 /**
- * Security event logging to daily files under `logs/` plus request-body monitors.
+ * Security event logging (stdout, plus daily files when SECURITY_LOG_DIR is set) and
+ * request-body monitors.
  *
  * Layer: middleware. `securityLogger` / `securityMonitor` wrap every request;
  * the `log*` helpers are called from auth and upload controllers.
@@ -65,25 +66,35 @@ const getSeverityLevel = (event) => {
   return 'LOW'
 }
 
+/** Open append stream for the current day's file, when file logging is on. */
+let logStream = null
+let logStreamDay = null
+
 /**
- * Append one JSON line to `logs/security-YYYY-MM-DD.log` and echo to the console.
+ * Write one security event: a JSON line on stdout (what Railway keeps), plus a daily file
+ * under SECURITY_LOG_DIR when that is set. Never blocks the request: the old
+ * appendFileSync ran on every 4xx, including each expired-token 401, and a container
+ * filesystem is wiped on redeploy anyway.
  *
  * @param {object} logEntry - Output of `createSecurityLogEntry`.
  * @returns {void}
  */
 const writeSecurityLog = (logEntry) => {
   try {
-    const logDir = path.join(process.cwd(), 'logs')
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true })
+    const line = JSON.stringify(logEntry)
+    console.log(`SECURITY [${logEntry.severity}] ${line}`)
+
+    const dir = process.env.SECURITY_LOG_DIR
+    if (!dir) return
+    const day = logEntry.timestamp.slice(0, 10)
+    if (!logStream || logStreamDay !== day) {
+      logStream?.end()
+      fs.mkdirSync(dir, { recursive: true })
+      logStream = fs.createWriteStream(path.join(dir, `security-${day}.log`), { flags: 'a' })
+      logStream.on('error', (error) => console.error('Security log file error:', error.message))
+      logStreamDay = day
     }
-
-    const logFile = path.join(logDir, `security-${new Date().toISOString().split('T')[0]}.log`)
-    const logLine = JSON.stringify(logEntry) + '\n'
-
-    fs.appendFileSync(logFile, logLine)
-
-    console.log(`🔒 SECURITY [${logEntry.severity}]: ${logEntry.event}`, logEntry.details)
+    logStream.write(line + '\n')
   } catch (error) {
     console.error('Failed to write security log:', error)
   }

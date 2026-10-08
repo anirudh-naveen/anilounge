@@ -15,6 +15,7 @@ import { touchUserActivity } from '../services/inactiveAccountService.js'
 import { deleteAvatar, detectImageType, saveAvatar } from '../services/avatarService.js'
 import { validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
+import { comparePassword, hashPassword } from '../utils/passwordHash.js'
 import path from 'path'
 import fs from 'fs'
 import {
@@ -252,7 +253,7 @@ export const login = async (req, res) => {
     if (!user) {
       // Spend the same bcrypt time as a real check so response timing does not reveal
       // which emails have accounts.
-      await bcrypt.compare(String(password || ''), TIMING_DUMMY_HASH)
+      await comparePassword(String(password || ''), TIMING_DUMMY_HASH)
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials.',
@@ -645,7 +646,7 @@ export const changePassword = async (req, res) => {
       })
     }
 
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password)
+    const isCurrentPasswordValid = await comparePassword(currentPassword, user.password)
     if (!isCurrentPasswordValid) {
       return res.status(400).json({
         success: false,
@@ -653,7 +654,7 @@ export const changePassword = async (req, res) => {
       })
     }
 
-    const hashedNewPassword = await bcrypt.hash(newPassword, 12)
+    const hashedNewPassword = await hashPassword(newPassword)
 
     await User.findByIdAndUpdate(req.user._id, { password: hashedNewPassword })
 

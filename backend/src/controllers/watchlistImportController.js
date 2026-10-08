@@ -35,7 +35,7 @@ export const startImport = async (req, res) => {
     const { sources, addMissing = true } = req.body
     const prepared = prepareSources(sources, String(req.user._id))
     await assertImportSchema()
-    const job = startImportJob(req.user._id, prepared, { addMissing: addMissing !== false })
+    const job = await startImportJob(req.user._id, prepared, { addMissing: addMissing !== false })
     res.status(202).json({ success: true, data: job })
   } catch (error) {
     sendError(res, error, 'Error starting the import')
@@ -50,7 +50,7 @@ export const startImport = async (req, res) => {
  * @returns {Promise<void>}
  */
 export const getImport = async (req, res) => {
-  res.json({ success: true, data: getImportJob(req.user._id) })
+  res.json({ success: true, data: await getImportJob(req.user._id) })
 }
 
 /**
