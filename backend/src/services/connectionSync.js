@@ -49,6 +49,7 @@ import { recordWatch } from './watchEvents.js'
 import {
   applyContentRatingChange,
   getEffectiveUserRating,
+  progressLimits,
   setWatchedEpisode,
   stampListDates,
   syncLegacyUserRating,
@@ -465,8 +466,7 @@ async function applyEntry(userId, entry, provider) {
       await session.abortTransaction()
       return null
     }
-    const maxEpisodes =
-      content.episodeCount || content.malEpisodes || (content.contentType === 'movie' ? 1 : 0)
+    const { maxEpisodes, maxSeasons } = progressLimits(content)
     const progress = maxEpisodes ? Math.min(entry.progress, maxEpisodes) : entry.progress
     let item = user.watchlist.find((row) => row.content.toString() === contentId)
     const stale = item && new Date(item.updatedAt).getTime() >= updatedAt
@@ -485,7 +485,7 @@ async function applyEntry(userId, entry, provider) {
         previousEpisode: 0,
         currentSeason: 1,
         totalEpisodes: maxEpisodes,
-        totalSeasons: content.seasonCount || 1,
+        totalSeasons: maxSeasons,
         notes: '',
         rewatchCount: 0,
         addedAt: new Date(),
@@ -509,7 +509,6 @@ async function applyEntry(userId, entry, provider) {
       content,
       previousRating,
       getEffectiveUserRating(user, contentId),
-      session,
     )
     await user.save({ session })
     await recordWatch(userId, contentId, watchUnits({ ...item, content }) - unitsBefore)

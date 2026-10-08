@@ -30,7 +30,7 @@
             :src="getPosterUrl(character.imagePath)"
             :alt="character.name"
             referrerpolicy="no-referrer"
-            @error="handleImageError"
+            @error="hideBrokenImage"
           />
           <div v-else class="no-poster">
             <i class="fas fa-user"></i>
@@ -88,7 +88,7 @@
               :src="getPosterUrl(credit.imagePath)"
               :alt="displayPersonName(credit.name)"
               referrerpolicy="no-referrer"
-              @error="handleImageError"
+              @error="hideBrokenImage"
             />
             <div v-else class="no-poster small">
               <i class="fas fa-microphone"></i>
@@ -135,7 +135,7 @@
                 v-if="row.posterPath"
                 :src="getPosterUrl(row.posterPath)"
                 :alt="row.title"
-                @error="handleImageError"
+                @error="hideBrokenImage"
               />
               <div v-else class="no-poster small">
                 <i class="fas fa-film"></i>
@@ -154,6 +154,7 @@
 
 <script setup lang="ts">
 import { goBackOr } from '@/utils/navigation'
+import { hideBrokenImage } from '@/utils/posters'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -255,22 +256,8 @@ const openTitle = (row: { id: string; contentType?: string }) => {
   })
 }
 
-const goBack = () => goBackOr(router, goBackFallback)
-
-/** Where Back goes when the page was opened directly (no in-app history). */
-const goBackFallback = () => {
-  const previous = route.query.from as string
-  if (previous) {
-    router.push(previous)
-    return
-  }
-  router.push('/search')
-}
-
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-}
+/** Back to the previous page, or the `from` page (else Search) when opened directly. */
+const goBack = () => goBackOr(router, () => router.push((route.query.from as string) || '/search'))
 
 watch(
   () => route.params.id,

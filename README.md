@@ -28,6 +28,8 @@ APIs & Integrations --
  - MyAnimeList API - Anime-specific content and metadata
  - Google Gemini API - AI-powered features and recommendations
 
+Local development -- see [DEVELOPMENT.md](DEVELOPMENT.md)
+
 Deployment --
  - Frontend: Vercel
  - Backend: Railway

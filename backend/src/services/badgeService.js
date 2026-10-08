@@ -9,7 +9,7 @@
 
 import { query } from '../../config/postgres.js'
 import { parseAdminEmails } from '../middleware/adminOnly.js'
-import { badgesForUser, featuredEmblem, isValidEmblemChoice, NO_EMBLEM } from '../utils/badges.js'
+import { badgesForUser, featuredEmblem, isValidEmblemChoice } from '../utils/badges.js'
 import { HttpError } from '../utils/httpError.js'
 
 /**
@@ -69,5 +69,3 @@ export async function setFeaturedBadge(user, choice) {
   await query('UPDATE users SET featured_badge = $2 WHERE id = $1', [user._id, normalized])
   return { badges, featured: featuredEmblem(badges, normalized), choice: normalized }
 }
-
-export default { listBadgeHolders, setFeaturedBadge, NO_EMBLEM }

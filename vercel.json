@@ -1,4 +1,5 @@
 {
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)backend' ':(exclude)*.md' ':(exclude).github' ':(exclude).claude' ':(exclude).vscode' ':(exclude)docker-compose.yml'",
   "headers": [
     {
       "source": "/(.*)",

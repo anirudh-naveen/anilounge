@@ -38,7 +38,7 @@
             v-if="show.posterPath"
             :src="getPosterUrl(show.posterPath)"
             :alt="getDisplayTitle(show)"
-            @error="handleImageError"
+            @error="hideBrokenImage"
           />
           <div v-else class="no-poster">
             <i class="fas fa-tv"></i>
@@ -181,7 +181,7 @@
                 v-if="sequel.posterPath"
                 :src="getPosterUrl(sequel.posterPath)"
                 :alt="getDisplayTitle(sequel)"
-                @error="handleImageError"
+                @error="hideBrokenImage"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
@@ -216,7 +216,7 @@
                 v-if="prequel.posterPath"
                 :src="getPosterUrl(prequel.posterPath)"
                 :alt="getDisplayTitle(prequel)"
-                @error="handleImageError"
+                @error="hideBrokenImage"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
@@ -251,7 +251,7 @@
                 v-if="related.posterPath"
                 :src="getPosterUrl(related.posterPath)"
                 :alt="getDisplayTitle(related)"
-                @error="handleImageError"
+                @error="hideBrokenImage"
               />
               <div v-else class="no-poster">
                 <i class="fas fa-film"></i>
@@ -280,8 +280,8 @@
 </template>
 
 <script setup lang="ts">
-import { goBackOr } from '@/utils/navigation'
-import { ref, computed, watch, nextTick } from 'vue'
+import { goBackOr, returnToListing } from '@/utils/navigation'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
@@ -309,12 +309,7 @@ import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airing'
 import { findRouteSeason, formatSeasonLabel, seasonContent } from '@/utils/episodes'
-import {
-  isMovieCatalogPath,
-  isTvCatalogPath,
-  movieCatalogLocationFromUrl,
-  tvCatalogLocationFromUrl,
-} from '@/utils/catalogTabs'
+import { hideBrokenImage } from '@/utils/posters'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const route = useRoute()
@@ -472,87 +467,8 @@ const selectSeason = (seasonNumber: number) => {
   void router.replace({ name: 'TVShowDetails', params: { id }, query })
 }
 
-const goBack = () => goBackOr(router, goBackFallback)
-
-/** Where Back goes when the page was opened directly (no in-app history). */
-const goBackFallback = () => {
-  // Check if we have a previous page in the route state
-  const previousPage = route.query.from as string
-  if (previousPage) {
-    // Parse the previous page URL to determine the source
-    const url = new URL(previousPage, window.location.origin)
-    const pathname = url.pathname
-
-    if (isMovieCatalogPath(pathname)) {
-      const location = movieCatalogLocationFromUrl(url)
-      const restored = contentStore.restoreScrollPosition(location.scrollKey)
-
-      router.push({ path: location.path, query: location.query })
-
-      if (!restored) {
-        nextTick(() => {
-          contentStore.scrollToTop()
-        })
-      }
-    } else if (isTvCatalogPath(pathname)) {
-      const location = tvCatalogLocationFromUrl(url)
-      const restored = contentStore.restoreScrollPosition(location.scrollKey)
-
-      router.push({ path: location.path, query: location.query })
-
-      if (!restored) {
-        nextTick(() => {
-          contentStore.scrollToTop()
-        })
-      }
-    } else if (pathname === '/search') {
-      // Coming from search page - handle pagination and browse type
-      const page = url.searchParams.get('page') || '1'
-      const type = url.searchParams.get('type')
-      const scrollKey = `search-page-${page}`
-      const restored = contentStore.restoreScrollPosition(scrollKey)
-      const query: Record<string, string> = { page }
-      if (type) query.type = type
-
-      router.push({ path: '/search', query })
-
-      if (!restored) {
-        nextTick(() => {
-          contentStore.scrollToTop()
-        })
-      }
-    } else if (pathname === '/') {
-      // Coming from home page
-      const scrollKey = 'home-page'
-      const restored = contentStore.restoreScrollPosition(scrollKey)
-
-      router.push('/')
-
-      if (!restored) {
-        nextTick(() => {
-          contentStore.scrollToTop()
-        })
-      }
-    } else if (pathname.startsWith('/movie/') || pathname.startsWith('/tv-show/')) {
-      router.push(previousPage)
-      nextTick(() => {
-        contentStore.scrollToTop()
-      })
-    } else {
-      // Unknown source - go to home page
-      router.push('/')
-      nextTick(() => {
-        contentStore.scrollToTop()
-      })
-    }
-  } else {
-    // Default fallback to home page
-    router.push('/')
-    nextTick(() => {
-      contentStore.scrollToTop()
-    })
-  }
-}
+const goBack = () =>
+  goBackOr(router, () => returnToListing(router, route.query.from as string, contentStore))
 
 const shareShow = () => {
   if (navigator.share && show.value) {
@@ -705,11 +621,6 @@ watch(
   },
   { immediate: true },
 )
-
-const handleImageError = (event: Event) => {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-}
 </script>
 
 <style scoped>

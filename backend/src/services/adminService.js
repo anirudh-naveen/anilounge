@@ -11,8 +11,9 @@
  * removes admins and bans users (checked again here, not only in the routes).
  */
 
-import { query, startSession } from '../../config/postgres.js'
+import { query, withTransaction } from '../../config/postgres.js'
 import { isCatalogId, isUuid } from '../db/ids.js'
+import { escapeLike } from '../db/mongoFilter.js'
 import { contentTypeFromKind } from '../db/kinds.js'
 import Content, { loadAdminOverrides } from '../models/Content.js'
 import {
@@ -33,7 +34,6 @@ import {
 } from '../utils/adminContent.js'
 import { isMuted, muteEndsAt, MUTE_DURATIONS } from '../utils/accountStatus.js'
 import { HttpError } from '../utils/httpError.js'
-import { escapeLike } from './friendService.js'
 import { revokeAllSessions } from './sessionService.js'
 import { GRANTABLE_BADGES } from '../utils/badges.js'
 import { loadManagedLinks } from './adminLinks.js'
@@ -51,7 +51,6 @@ const PAGE_SIZE = 25
 /** Roles the creator can hand out from the admin page ('creator' is set by script only). */
 export const ASSIGNABLE_ROLES = ['user', 'admin']
 /** 'flagged': past the language warning limit and not banned. */
-export const USER_FILTERS = ['all', 'staff', 'muted', 'banned', 'flagged']
 
 /**
  * @param {unknown} value
@@ -60,27 +59,6 @@ export const USER_FILTERS = ['all', 'staff', 'muted', 'banned', 'flagged']
 function pageNumber(value) {
   const page = Number.parseInt(String(value ?? ''), 10)
   return Number.isInteger(page) && page > 0 ? Math.min(page, 10000) : 1
-}
-
-/**
- * Run `fn` in a transaction; its `query` calls (including model saves) join it.
- * @template T
- * @param {() => Promise<T>} fn
- * @returns {Promise<T>}
- */
-async function inTransaction(fn) {
-  const session = await startSession()
-  try {
-    await session.startTransaction()
-    const result = await fn()
-    await session.commitTransaction()
-    return result
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
-  }
 }
 
 /**
@@ -295,7 +273,7 @@ export async function updateContent(
   const before = await getEditableContent(id)
   let logLine = ''
 
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     const { rows } = await query(
       'SELECT id, kind, name, admin_overrides FROM content WHERE id = $1 FOR UPDATE',
       [id],
@@ -484,7 +462,7 @@ export async function resolveSyncChanges(actor, ids, action) {
         { logPrefix: 'Reverted a sync change and locked' },
       )
     } else {
-      await inTransaction(() =>
+      await withTransaction(() =>
         applySyncValue(notice.content_id, notice.kind, notice.field, notice.new_value),
       )
       await query('DELETE FROM content_sync_changes WHERE id = $1', [id])
@@ -733,7 +711,7 @@ export async function setBan(actor, targetId, { banned, reason } = {}) {
   }
 
   if (banned) {
-    await inTransaction(async () => {
+    await withTransaction(async () => {
       await query(
         `UPDATE users SET banned_at = now(), ban_reason = $2,
            role = CASE WHEN role = 'admin' THEN 'user' ELSE role END
@@ -793,18 +771,4 @@ export async function setCosmeticRoles(actor, targetId, roles) {
     )
   }
   return reloadUser(target.id, parseAdminEmails())
-}
-
-export default {
-  searchContent,
-  getEditableContent,
-  updateContent,
-  listSyncChanges,
-  countSyncChanges,
-  resolveSyncChanges,
-  listUsers,
-  setUserRole,
-  muteUser,
-  setBan,
-  setCosmeticRoles,
 }

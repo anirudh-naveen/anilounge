@@ -7,6 +7,8 @@
  * (`/api/avatars/:userId?v=...`) that is served with long-lived caching.
  */
 
+import fs from 'fs'
+import path from 'path'
 import { query } from '../../config/postgres.js'
 
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024
@@ -70,6 +72,18 @@ export async function getAvatar(userId) {
   )
   if (!rows[0]) return null
   return { contentType: rows[0].content_type, data: rows[0].data, updatedAt: rows[0].updated_at }
+}
+
+/**
+ * Delete a legacy on-disk profile picture (`/uploads/profiles/...`); database-stored
+ * avatars and remote URLs are left alone. Never throws.
+ * @param {string | null | undefined} profilePicture - Stored `users.profile_picture`.
+ * @returns {void}
+ */
+export function deleteLegacyAvatarFile(profilePicture) {
+  if (!profilePicture?.startsWith('/uploads/')) return
+  const file = path.join(process.cwd(), 'uploads', 'profiles', path.basename(profilePicture))
+  fs.promises.unlink(file).catch(() => {})
 }
 
 /**

@@ -22,7 +22,7 @@ const schemaPath = path.resolve(__dirname, '../../db/schema.sql')
  * @param {string} sql
  * @returns {string[]}
  */
-export function splitStatements(sql) {
+function splitStatements(sql) {
   const statements = []
   let current = ''
   let inString = false

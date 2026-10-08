@@ -6,8 +6,6 @@
  * The endpoint is admin-only: set ADMIN_ACCESS_TOKEN to an access token for an account
  * listed in the server's ADMIN_EMAILS.
  */
-import fetch from 'node-fetch'
-
 const API_BASE_URL = process.env.API_URL || 'http://localhost:5001/api'
 
 /**

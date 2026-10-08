@@ -41,5 +41,3 @@ export function cleanUserText(value) {
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
-
-export default { decodeEntities, cleanUserText }

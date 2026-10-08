@@ -6,7 +6,7 @@
  * studio credits that point at mis-named studio rows, drops link rows that
  * violate the subtype rules in `db/schema.sql`, and prunes orphaned people.
  */
-import { query, startSession } from '../../config/postgres.js'
+import { query, withTransaction } from '../../config/postgres.js'
 import { titleKeySql } from '../db/mongoFilter.js'
 import Content from '../models/Content.js'
 import { foldEntityName, studioNameKey } from '../utils/entities.js'
@@ -56,27 +56,6 @@ async function tableExists(name) {
 }
 
 /**
- * Run `fn` inside one transaction on the shared `query` helper.
- * @template T
- * @param {() => Promise<T>} fn
- * @returns {Promise<T>}
- */
-export async function inTransaction(fn) {
-  const session = await startSession()
-  try {
-    await session.startTransaction()
-    const result = await fn()
-    await session.commitTransaction()
-    return result
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
-  }
-}
-
-/**
  * Copy catalog and user-link tables into a fresh `backup_<stamp>` schema.
  * @param {Date} [now]
  * @returns {Promise<string>} Schema name.
@@ -84,7 +63,7 @@ export async function inTransaction(fn) {
 export async function backupCatalog(now = new Date()) {
   const stamp = now.toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 13)
   const schema = `backup_${stamp}`
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     await query(`CREATE SCHEMA ${schema}`)
     for (const table of BACKUP_TABLES) {
       await query(`CREATE TABLE ${schema}.${table} AS TABLE public.${table}`)
@@ -185,7 +164,7 @@ async function carryExternalIds(toId, source) {
  */
 export async function mergeDuplicateWork(fromId, toId) {
   if (!fromId || !toId || String(fromId) === String(toId)) return
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     const { rows } = await query(
       `SELECT mal_id, tmdb_id, anilist_id FROM content
        WHERE id = $1 AND kind IN ${WATCHABLE}`,
@@ -270,7 +249,7 @@ export async function mergeDuplicateTitles(isSame) {
  */
 export async function mergeStudioInto(fromId, toId) {
   if (!fromId || !toId || String(fromId) === String(toId)) return
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     const { rows: source } = await query(
       `SELECT mal_id, tmdb_id, anilist_id, image_path, about FROM content
        WHERE id = $1 AND kind = 'studio'`,
@@ -446,7 +425,7 @@ export async function repairClobberedContent() {
     tableExists('legacy_franchises'),
   ])
 
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     const ids = clobbered.map((row) => row.id)
     await query('DELETE FROM characters WHERE content_id = ANY($1::uuid[])', [ids])
     await query('DELETE FROM voices WHERE content_id = ANY($1::uuid[])', [ids])
@@ -503,7 +482,7 @@ export async function repairMisnamedStudios() {
   const summary = { found: studios.length, works: 0, names: studios.map((row) => row.name) }
   if (!studios.length) return summary
 
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     const ids = studios.map((row) => row.id)
     const { rows: works } = await query(
       `SELECT DISTINCT work_id::text AS id FROM studio_credits WHERE studio_id = ANY($1::uuid[])`,
@@ -560,7 +539,7 @@ export async function enforceSchemaLinks() {
     const result = await query(sql)
     removed[label] = result.rowCount || 0
   }
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     await run(
       'content_genres_on_non_watchable',
       `DELETE FROM content_genres cg USING content c
@@ -722,7 +701,7 @@ export async function dedupeVoiceCredits() {
  */
 async function mergeVoiceInto(fromId, toId) {
   if (!fromId || !toId || String(fromId) === String(toId)) return
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     const { rows: source } = await query(
       `SELECT mal_id, tmdb_id, anilist_id, native_name, image_path, about FROM content
        WHERE id = $1 AND kind = 'voice'`,

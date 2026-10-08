@@ -58,14 +58,6 @@ export function appearanceForContent(
 }
 
 /**
- * Japanese credit first, then any remaining voice actor.
- */
-export function primaryVoiceCredit(appearance?: EntityAppearance): EntityVoiceCredit | undefined {
-  const credits = appearance?.voiceActors || []
-  return credits.find((credit) => /japanese/i.test(credit.language || '')) || credits[0]
-}
-
-/**
  * MAL people names are often `"Last, First"`.
  */
 export function displayPersonName(name?: string) {

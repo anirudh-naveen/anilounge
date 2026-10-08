@@ -50,7 +50,11 @@ export const startImport = async (req, res) => {
  * @returns {Promise<void>}
  */
 export const getImport = async (req, res) => {
-  res.json({ success: true, data: await getImportJob(req.user._id) })
+  try {
+    res.json({ success: true, data: await getImportJob(req.user._id) })
+  } catch (error) {
+    sendError(res, error, 'Error loading the import')
+  }
 }
 
 /**

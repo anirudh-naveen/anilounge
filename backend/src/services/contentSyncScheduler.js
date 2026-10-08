@@ -169,9 +169,3 @@ export function startContentSyncScheduler() {
 
   return scheduledTask
 }
-
-export default {
-  startContentSyncScheduler,
-  runContentSync,
-  getContentSyncStatus,
-}

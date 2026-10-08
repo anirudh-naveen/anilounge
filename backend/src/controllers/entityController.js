@@ -5,10 +5,8 @@
  * search/detail, and toggles per-user favorites.
  */
 
-import { isCatalogId } from '../db/ids.js'
 import Content from '../models/Content.js'
 import Entity from '../models/Entity.js'
-import User from '../models/User.js'
 import { query } from '../../config/postgres.js'
 import {
   ensureCharacterAbout,
@@ -17,7 +15,6 @@ import {
   ensureVoiceActorAbout,
   ensureVoiceActorCredits,
   ensureVoiceActorsForCharacter,
-  ensureVoiceActorsForContent,
   searchEntities,
   serializeEntity,
   serializeEntityDetails,
@@ -60,30 +57,6 @@ export const getContentCharacters = async (req, res) => {
   } catch (error) {
     console.error('Error fetching content characters:', error)
     res.status(500).json({ success: false, message: 'Error fetching characters' })
-  }
-}
-
-/**
- * Voice actors (cast) for a catalog title. Ingests with the character list.
- *
- * @param {import('express').Request} req - Reads `params.id`.
- * @param {import('express').Response} res
- * @returns {Promise<void>}
- */
-export const getContentVoiceActors = async (req, res) => {
-  try {
-    const content = await Content.findById(req.params.id)
-    if (!content) {
-      return res.status(404).json({ success: false, message: 'Content not found' })
-    }
-    const docs = await ensureVoiceActorsForContent(content)
-    res.json({
-      success: true,
-      data: docs.map((doc) => serializeEntity(doc)),
-    })
-  } catch (error) {
-    console.error('Error fetching content voice actors:', error)
-    res.status(500).json({ success: false, message: 'Error fetching voice actors' })
   }
 }
 
@@ -158,16 +131,13 @@ export const favoriteEntity = async (req, res) => {
     if (!entity) {
       return res.status(404).json({ success: false, message: 'Entity not found' })
     }
-    const user = await User.findById(req.user._id)
-    if (user.favoriteEntities.some((row) => String(row.entity) === String(entity._id))) {
-      return res.json({
-        success: true,
-        data: await serializeEntityDetails(entity, { isFavorited: true }),
-      })
-    }
-    user.favoriteEntities.push({ entity: entity._id, addedAt: new Date() })
-    entity.favoritesCount = (entity.favoritesCount || 0) + 1
-    await Promise.all([user.save(), entity.save()])
+    // favoritesCount is counted from `favorites` when read; only the response needs bumping.
+    const { rowCount } = await query(
+      `INSERT INTO favorites (user_id, content_id) VALUES ($1, $2)
+       ON CONFLICT (user_id, content_id) DO NOTHING`,
+      [req.user._id, entity._id],
+    )
+    if (rowCount) entity.favoritesCount = (entity.favoritesCount || 0) + 1
     res.json({
       success: true,
       data: await serializeEntityDetails(entity, { isFavorited: true }),
@@ -187,23 +157,15 @@ export const favoriteEntity = async (req, res) => {
  */
 export const unfavoriteEntity = async (req, res) => {
   try {
-    const entityId = req.params.id
-    if (!isCatalogId(entityId)) {
-      return res.status(400).json({ success: false, message: 'Invalid ID format' })
-    }
-    const entity = await Entity.findById(entityId)
+    const entity = await Entity.findById(req.params.id)
     if (!entity) {
       return res.status(404).json({ success: false, message: 'Entity not found' })
     }
-    const user = await User.findById(req.user._id)
-    const before = user.favoriteEntities.length
-    user.favoriteEntities = user.favoriteEntities.filter(
-      (row) => String(row.entity) !== String(entityId),
+    const { rowCount } = await query(
+      'DELETE FROM favorites WHERE user_id = $1 AND content_id = $2',
+      [req.user._id, entity._id],
     )
-    if (user.favoriteEntities.length !== before) {
-      entity.favoritesCount = Math.max(0, (entity.favoritesCount || 0) - 1)
-      await Promise.all([user.save(), entity.save()])
-    }
+    if (rowCount) entity.favoritesCount = Math.max(0, (entity.favoritesCount || 0) - 1)
     res.json({
       success: true,
       data: await serializeEntityDetails(entity, { isFavorited: false }),
@@ -214,36 +176,10 @@ export const unfavoriteEntity = async (req, res) => {
   }
 }
 
-/**
- * Signed-in user's favorited entities, newest first.
- *
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {Promise<void>}
- */
-export const getFavoriteEntities = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id).populate({
-      path: 'favoriteEntities.entity',
-    })
-    // Title favorites share the table but are not populated as entities.
-    const favorites = (user?.favoriteEntities || [])
-      .filter((row) => row.entity && typeof row.entity === 'object')
-      .sort((left, right) => new Date(right.addedAt) - new Date(left.addedAt))
-      .map((row) => serializeEntity(row.entity, { isFavorited: true }))
-    res.json({ success: true, data: favorites })
-  } catch (error) {
-    console.error('Error fetching favorites:', error)
-    res.status(500).json({ success: false, message: 'Error fetching favorites' })
-  }
-}
-
 export default {
   getContentCharacters,
-  getContentVoiceActors,
   searchCatalogEntities,
   getEntityById,
   favoriteEntity,
   unfavoriteEntity,
-  getFavoriteEntities,
 }

@@ -48,7 +48,7 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | [MyAnimeList API](https://myanimelist.net/apiconfig/references/api/v2) | Anime metadata and scores; public anime list import |
 | [Jikan](https://jikan.moe) | Unofficial MyAnimeList API (characters, voice actors, studios) |
 | [AniList GraphQL API](https://docs.anilist.co) | Additional anime metadata and linking; public anime list import |
-| [Google Gemini](https://ai.google.dev) (`gemini-2.5-flash`) | AI search and the chatbot |
+| [Google Gemini](https://ai.google.dev) (`gemini-2.5-flash`) | The AI chatbot |
 
 ## Email
 
@@ -74,8 +74,3 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | Node test runner (`node:test`) | Backend unit tests |
 | [vue-tsc](https://github.com/vuejs/language-tools) | Type-checking |
 | [ESLint](https://eslint.org) + [Prettier](https://prettier.io) | Linting and formatting |
-
-## Installed but not currently used
-
-- `@vercel/analytics` (frontend): installed, not initialized anywhere.
-- `mongodb` / `mongoose`: only used by `backend/src/scripts/migrateMongoToPostgres.js`, left over from the MongoDB-to-Postgres migration.

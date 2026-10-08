@@ -142,7 +142,7 @@ async function loadUser(userId) {
  * @returns {Promise<{ conversations: object[], requests: object[] }>}
  */
 export async function listConversations(userId) {
-  const { rows } = await query(
+  const conversations = query(
     `WITH mine AS (
        SELECT id, sender_id, body, created_at,
               CASE WHEN sender_id = $1 THEN recipient_id ELSE sender_id END AS other_id
@@ -173,7 +173,7 @@ export async function listConversations(userId) {
      LIMIT ${CONVERSATION_LIMIT}`,
     [userId],
   )
-  const { incoming } = await listFriends(userId)
+  const [{ rows }, { incoming }] = await Promise.all([conversations, listFriends(userId)])
   return {
     conversations: rows.map((row) => ({
       user: publicUser(row),
@@ -227,19 +227,21 @@ export async function getThread(userId, otherId, { before, after } = {}) {
   const page = rows.slice(0, THREAD_PAGE_SIZE)
   if (!after) page.reverse()
 
-  await query(
-    `UPDATE messages SET read_at = now()
-     WHERE recipient_id = $1 AND sender_id = $2 AND read_at IS NULL`,
-    [userId, other.id],
-  )
-
-  const relationship = await relationshipBetween(userId, other.id)
+  const [, relationship, profanityAllowed] = await Promise.all([
+    query(
+      `UPDATE messages SET read_at = now()
+       WHERE recipient_id = $1 AND sender_id = $2 AND read_at IS NULL`,
+      [userId, other.id],
+    ),
+    relationshipBetween(userId, other.id),
+    bothAllowProfanity(userId, other.id),
+  ])
   return {
     user: publicUser(other),
     relationship,
     canMessage: relationship === 'friends',
     /** Both allow profanity: curses go through unmasked in this chat. */
-    profanityAllowed: await bothAllowProfanity(userId, other.id),
+    profanityAllowed,
     request: await pendingRequest(userId, other.id, relationship),
     messages: page.map((row) => messageEntry(row, userId)),
     hasMore,
