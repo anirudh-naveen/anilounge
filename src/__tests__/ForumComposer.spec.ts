@@ -122,7 +122,7 @@ describe('ForumComposer', () => {
       title: 'Episode 5',
       body: 'That ending!',
       spoiler: true,
-      tags: [{ contentId: 's1', season: 1, episode: 5 }],
+      tags: [{ contentId: 's1', season: 1, episode: 5, top: false }],
     })
     expect(wrapper.emitted('saved')).toHaveLength(1)
   })
@@ -173,6 +173,27 @@ describe('ForumComposer', () => {
     expect(watchlist.update).toHaveBeenCalledWith('s1', { rating: 7.5 })
     expect(watchlist.add).not.toHaveBeenCalled()
     expect(wrapper.emitted('saved')?.[0]?.[0]).toMatchObject({ score: 7.5 })
+  })
+
+  it('marks one top tag', async () => {
+    create.mockResolvedValue({ data: { data: buildPost(), warning: null } })
+    const wrapper = mount(ForumComposer, { props: { presetTags: [series, character] } })
+    await wrapper.get('[data-testid="tag-top-1"]').trigger('click')
+    await wrapper.get('[data-testid="tag-top-0"]').trigger('click')
+    expect(wrapper.get('[data-testid="tag-top-0"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="tag-top-1"]').attributes('aria-pressed')).toBe('false')
+    await wrapper.get('[data-testid="composer-title"]').setValue('Thread')
+    await wrapper.get('[data-testid="composer-body"]').setValue('Body')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tags: [
+          { contentId: 's1', season: null, episode: null, top: true },
+          { contentId: 'c1', season: null, episode: null, top: false },
+        ],
+      }),
+    )
   })
 
   it('keeps tags in hierarchy order', async () => {
