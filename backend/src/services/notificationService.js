@@ -41,5 +41,3 @@ export async function notify(
     console.error(`Notification (${kind}) failed:`, error.message)
   }
 }
-
-export default { notify, NOTIFICATION_KINDS }

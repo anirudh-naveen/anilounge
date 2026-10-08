@@ -114,5 +114,3 @@ export async function readLogMonth(month, category) {
     createdAt: row.created_at,
   }))
 }
-
-export default { logAction, listLogMonths, readLogMonth, quoteValue, describeRow, LOG_CATEGORIES }

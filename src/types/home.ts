@@ -2,7 +2,6 @@
  * home.ts — homepage feed payloads (`/home/*`).
  */
 
-import type { CatalogEntity } from '@/types/content'
 import type { WatchlistStatus } from '@/utils/watchlist'
 
 export interface ActivityEntry {
@@ -66,9 +65,4 @@ export interface ReleaseUpdate {
 export interface ReleaseUpdates {
   source: 'watchlist' | 'trending'
   items: ReleaseUpdate[]
-}
-
-export interface CharacterOfTheDay {
-  day: string
-  character: CatalogEntity
 }

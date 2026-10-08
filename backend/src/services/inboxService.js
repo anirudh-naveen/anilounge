@@ -86,7 +86,7 @@ export async function listInbox(userId, { before } = {}) {
     beforeAt = new Date(String(before))
     if (Number.isNaN(beforeAt.getTime())) throw new HttpError(400, 'Invalid cursor.')
   }
-  const { rows } = await query(
+  const listing = query(
     `SELECT * FROM (
        SELECT 'notification' AS source, n.id, n.kind, n.created_at, n.read_at, n.detail,
               n.actor_id, au.username AS actor_username, au.profile_picture AS actor_picture,
@@ -129,10 +129,14 @@ export async function listInbox(userId, { before } = {}) {
      LIMIT ${PAGE_SIZE + 1}`,
     [userId, beforeAt],
   )
+  const [{ rows }, importClashes] = await Promise.all([
+    listing,
+    before ? 0 : countImportClashes(userId),
+  ])
   return {
     items: rows.slice(0, PAGE_SIZE).map(inboxEntry),
     hasMore: rows.length > PAGE_SIZE,
-    importClashes: before ? 0 : await countImportClashes(userId),
+    importClashes,
   }
 }
 
@@ -142,7 +146,7 @@ export async function listInbox(userId, { before } = {}) {
  * @returns {Promise<{ notifications: number, news: number, importClashes: number, total: number }>}
  */
 export async function countUnread(userId) {
-  const { rows } = await query(
+  const counts = query(
     `SELECT
        (SELECT count(*)::int FROM notifications WHERE user_id = $1 AND read_at IS NULL)
          AS notifications,
@@ -153,9 +157,9 @@ export async function countUnread(userId) {
           )) AS news`,
     [userId],
   )
+  const [{ rows }, importClashes] = await Promise.all([counts, countImportClashes(userId)])
   const notifications = rows[0]?.notifications || 0
   const news = rows[0]?.news || 0
-  const importClashes = await countImportClashes(userId)
   return { notifications, news, importClashes, total: notifications + news + importClashes }
 }
 

@@ -1,7 +1,7 @@
 /**
  * Read-only diagnostic script: print likely duplicate Content rows.
- * Run before mergeDuplicates.js. Logs known pairs (Ne Zha, A Silent Voice) plus groups that
- * share any English/native/original/alternative name. Does not mutate the database.
+ * Run before mergeDuplicates.js. Logs groups that share any English/native/original/
+ * alternative name. Does not mutate the database.
  */
 import dotenv from 'dotenv'
 import { connectPostgres, closePostgres } from '../../config/postgres.js'
@@ -77,34 +77,6 @@ async function findDuplicates() {
   try {
     await connectPostgres()
     console.log('Database connected')
-
-    const nezhaItems = await Content.find({
-      $or: [{ title: { $regex: /nezha/i } }, { title: { $regex: /ne zha/i } }],
-    }).lean()
-
-    console.log('\nNe Zha items:')
-    nezhaItems.forEach((item) => {
-      const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'
-      console.log(
-        `- ${item.title} (${year}) - ${item.contentType} - Genres: ${(item.genres || []).map((g) => g.name || g).join(', ')} - ID: ${item._id}`,
-      )
-    })
-
-    const silentVoiceItems = await Content.find({
-      $or: [
-        { title: { $regex: /silent voice/i } },
-        { title: { $regex: /koe no katachi/i } },
-        { title: { $regex: /a silent voice/i } },
-      ],
-    }).lean()
-
-    console.log('\nA Silent Voice items:')
-    silentVoiceItems.forEach((item) => {
-      const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : 'N/A'
-      console.log(
-        `- ${item.title} (${year}) - ${item.contentType} - Genres: ${(item.genres || []).map((g) => g.name || g).join(', ')} - ID: ${item._id}`,
-      )
-    })
 
     console.log('\nSearching for potential duplicates across all content...')
     const allContent = await Content.find({}).lean()

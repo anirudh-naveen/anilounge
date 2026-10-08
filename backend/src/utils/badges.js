@@ -59,12 +59,3 @@ export function isValidEmblemChoice(badges, choice) {
   if (choice === null || choice === NO_EMBLEM) return true
   return typeof choice === 'string' && badges.includes(choice) && Boolean(BY_ID.get(choice)?.emblem)
 }
-
-export default {
-  BADGES,
-  GRANTABLE_BADGES,
-  NO_EMBLEM,
-  badgesForUser,
-  featuredEmblem,
-  isValidEmblemChoice,
-}

@@ -2,7 +2,9 @@
  * Map API catalog fields onto content.kind / airing_status.
  */
 export const WATCHABLE_KINDS = ['movie', 'series', 'special']
-export const PERSON_KINDS = ['character', 'voice', 'studio']
+
+/** Subtype table holding each watchable kind's columns. */
+export const WATCHABLE_TABLES = { movie: 'movies', series: 'series', special: 'specials' }
 
 /**
  * @param {unknown} contentType
@@ -64,17 +66,6 @@ export function entityTypeFromKind(kind) {
   if (kind === 'voice') return 'voice_actor'
   if (kind === 'studio') return 'studio'
   return 'character'
-}
-
-/**
- * @param {unknown} value
- * @returns {string}
- */
-export function mapContentTypeFilterValue(value) {
-  if (value === 'tv' || value === 'series') return 'series'
-  if (value === 'movie') return 'movie'
-  if (value === 'special') return 'special'
-  return String(value)
 }
 
 /**

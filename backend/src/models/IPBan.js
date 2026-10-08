@@ -4,6 +4,28 @@
 import crypto from 'crypto'
 import { query } from '../../config/postgres.js'
 
+/**
+ * The form bans are stored under: IPv4 clients reach a dual-stack socket as
+ * `::ffff:1.2.3.4`, so that prefix is dropped.
+ * @param {string} ip
+ * @returns {string}
+ */
+export function normalizeIp(ip) {
+  return String(ip || '')
+    .trim()
+    .replace(/^::ffff:/i, '')
+}
+
+/**
+ * Stored forms to match for `ip`: rows written before normalization kept the prefix.
+ * @param {string} ip
+ * @returns {string[]}
+ */
+function storedForms(ip) {
+  const normalized = normalizeIp(ip)
+  return normalized.includes(':') ? [normalized] : [normalized, `::ffff:${normalized}`]
+}
+
 function mapRow(row) {
   if (!row) return null
   return {
@@ -23,8 +45,8 @@ const IPBan = {
   async banIP(ip, reason, duration = 24 * 60 * 60 * 1000, userAgent = null) {
     const expiresAt = new Date(Date.now() + duration)
     const existing = await query(
-      'SELECT * FROM ip_bans WHERE ip = $1 AND is_active = true LIMIT 1',
-      [ip],
+      'SELECT * FROM ip_bans WHERE ip = ANY($1) AND is_active = true LIMIT 1',
+      [storedForms(ip)],
     )
     if (existing.rows[0]) {
       const { rows } = await query(
@@ -47,7 +69,7 @@ const IPBan = {
          is_active = true,
          last_seen = now()
        RETURNING *`,
-      [crypto.randomUUID(), ip, reason, expiresAt, userAgent],
+      [crypto.randomUUID(), normalizeIp(ip), reason, expiresAt, userAgent],
     )
     return mapRow(rows[0])
   },
@@ -55,15 +77,22 @@ const IPBan = {
   async isIPBanned(ip) {
     const { rows } = await query(
       `SELECT * FROM ip_bans
-       WHERE ip = $1 AND is_active = true AND expires_at > now()
+       WHERE ip = ANY($1) AND is_active = true AND expires_at > now()
        LIMIT 1`,
-      [ip],
+      [storedForms(ip)],
     )
     return mapRow(rows[0])
   },
 
+  /** Record that a banned address came back. */
+  async markSeen(id) {
+    await query('UPDATE ip_bans SET last_seen = now() WHERE id = $1', [id])
+  },
+
   async unbanIP(ip) {
-    const result = await query('UPDATE ip_bans SET is_active = false WHERE ip = $1', [ip])
+    const result = await query('UPDATE ip_bans SET is_active = false WHERE ip = ANY($1)', [
+      storedForms(ip),
+    ])
     return { modifiedCount: result.rowCount || 0 }
   },
 
@@ -93,12 +122,6 @@ const IPBan = {
       params,
     )
     return rows.map(mapRow)
-  },
-
-  async findOne(filter = {}) {
-    const rows = await IPBan.find(filter)
-    if (filter.ip) return rows.find((row) => row.ip === filter.ip) || null
-    return rows[0] || null
   },
 }
 

@@ -12,12 +12,14 @@ import jwt from 'jsonwebtoken'
 import User, { DEMO_USER_EMAIL } from '../models/User.js'
 import { endSession, revokeAllSessions, startSession } from '../services/sessionService.js'
 import { touchUserActivity } from '../services/inactiveAccountService.js'
-import { deleteAvatar, detectImageType, saveAvatar } from '../services/avatarService.js'
+import {
+  deleteAvatar,
+  deleteLegacyAvatarFile,
+  detectImageType,
+  saveAvatar,
+} from '../services/avatarService.js'
 import { validationResult } from 'express-validator'
-import bcrypt from 'bcryptjs'
 import { comparePassword, hashPassword } from '../utils/passwordHash.js'
-import path from 'path'
-import fs from 'fs'
 import {
   logLoginAttempt,
   logAccountLockout,
@@ -27,7 +29,7 @@ import {
 import { query } from '../../config/postgres.js'
 import { banIPForBruteForce, liftBruteForceBan } from '../middleware/ipBan.js'
 import { resetAuthRateLimits } from '../middleware/authRateLimit.js'
-import { canEditContent, isAdminUser } from '../middleware/adminOnly.js'
+import { sessionUserPayload } from '../middleware/auth.js'
 import { BANNED_MESSAGE, isBanned } from '../utils/accountStatus.js'
 import {
   consumeEmailCode,
@@ -45,8 +47,10 @@ import {
 const MAX_FAILED_LOGINS = 5
 const LOCK_DURATION_MS = 30 * 60 * 1000
 const TWO_FACTOR_CHALLENGE_TTL = '5m'
-/** bcrypt hash (cost 12) of a random throwaway string; compared against for unknown emails. */
-const TIMING_DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 12)
+/** bcrypt hash of a random throwaway string, compared against for unknown emails. */
+let timingDummyHash = null
+const getTimingDummyHash = () =>
+  (timingDummyHash ??= hashPassword(crypto.randomBytes(16).toString('hex')))
 
 /**
  * 400 response for express-validator failures, or null when the body is valid.
@@ -127,31 +131,12 @@ async function completeLogin(user, req, res, message) {
     success: true,
     message,
     data: {
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        isDemoAccount: user.isDemo(),
-        isAdmin: isAdminUser(user),
-        canEditContent: canEditContent(user),
-        role: user.role,
-        profilePicture: user.profilePicture,
-        createdAt: user.createdAt,
-        watchlistImportedAt: user.watchlistImportedAt,
-        watchlist: user.watchlist,
-        preferences: user.preferences,
-      },
+      user: { ...sessionUserPayload(user), watchlist: user.watchlist },
       accessToken,
     },
   })
 }
 
-/**
- * 423 response for a locked account, or null when it is not locked.
- * @param {object} user
- * @param {import('express').Response} res
- * @returns {import('express').Response | null}
- */
 /**
  * Send 403 `ACCOUNT_BANNED` for a banned account.
  * @param {object} user
@@ -163,6 +148,12 @@ function rejectBanned(user, res) {
   return res.status(403).json({ success: false, code: 'ACCOUNT_BANNED', message: BANNED_MESSAGE })
 }
 
+/**
+ * 423 response for a locked account, or null when it is not locked.
+ * @param {object} user
+ * @param {import('express').Response} res
+ * @returns {import('express').Response | null}
+ */
 function rejectLocked(user, res) {
   if (user.isDemo() || !user.lockUntil || user.lockUntil <= Date.now()) return null
   const minutes = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60))
@@ -189,11 +180,7 @@ export const register = async (req, res) => {
     const { username, email, password } = req.body
     const normalizedEmail = normalizeEmail(email)
 
-    const existingUser = await User.findOne({
-      $or: [{ email: normalizedEmail }, { username }],
-    })
-
-    if (existingUser) {
+    if (await User.exists({ $or: [{ email: normalizedEmail }, { username }] })) {
       return res.status(400).json({
         success: false,
         message: 'User with this email or username already exists.',
@@ -253,7 +240,7 @@ export const login = async (req, res) => {
     if (!user) {
       // Spend the same bcrypt time as a real check so response timing does not reveal
       // which emails have accounts.
-      await comparePassword(String(password || ''), TIMING_DUMMY_HASH)
+      await comparePassword(String(password || ''), await getTimingDummyHash())
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials.',
@@ -460,58 +447,24 @@ export const unlockAccount = async (req, res) => {
 }
 
 /**
- * Return the authenticated user's profile, populated watchlist, ratings, and preferences.
+ * Return the authenticated user's account fields, bio, and profile settings.
  *
- * @param {import('express').Request} req - Reads `req.user._id` from auth middleware.
- * @param {import('express').Response} res - 200 `{ data: { user } }` or 500.
- * @returns {Promise<void>}
+ * @param {import('express').Request} req - `req.user` from auth middleware.
+ * @param {import('express').Response} res - 200 `{ data: { user } }`.
+ * @returns {void}
  */
-export const getProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id)
-      .populate({
-        path: 'watchlist.content',
-        model: 'Content',
-      })
-      .populate('ratings.content')
-
-    res.json({
-      success: true,
-      data: {
-        user: {
-          id: user._id,
-          username: user.username,
-          email: user.email,
-          isDemoAccount: user.isDemo(),
-          isAdmin: isAdminUser(user),
-          canEditContent: canEditContent(user),
-          role: user.role,
-          profilePicture: user.profilePicture,
-          createdAt: user.createdAt,
-          watchlistImportedAt: user.watchlistImportedAt,
-          bio: user.bio || '',
-          watchlist: user.watchlist,
-          ratings: user.ratings,
-          preferences: user.preferences,
-          profileSettings: user.profileSettings,
-        },
+export const getProfile = (req, res) => {
+  const user = req.user
+  res.json({
+    success: true,
+    data: {
+      user: {
+        ...sessionUserPayload(user),
+        bio: user.bio || '',
+        profileSettings: user.profileSettings,
       },
-    })
-
-    console.log('Sent user data:', {
-      id: user._id,
-      username: user.username,
-      email: user.email,
-      createdAt: user.createdAt,
-      profilePicture: user.profilePicture,
-    })
-  } catch (error) {
-    console.error('Get profile error:', error)
-    res.status(500).json({
-      success: false,
-      message: 'Server error fetching profile.',
-    })
-  }
+    },
+  })
 }
 
 /**
@@ -552,7 +505,7 @@ export const updateProfile = async (req, res) => {
     }
 
     if (changesUsername || changesEmail) {
-      const existingUser = await User.findOne({
+      const taken = await User.exists({
         _id: { $ne: req.user._id },
         $or: [
           ...(changesUsername ? [{ username }] : []),
@@ -560,7 +513,7 @@ export const updateProfile = async (req, res) => {
         ],
       })
 
-      if (existingUser) {
+      if (taken) {
         return res.status(400).json({
           success: false,
           message: 'Username or email already exists.',
@@ -638,25 +591,17 @@ export const changePassword = async (req, res) => {
       })
     }
 
-    const user = await User.findById(req.user._id)
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found.',
-      })
-    }
-
-    const isCurrentPasswordValid = await comparePassword(currentPassword, user.password)
-    if (!isCurrentPasswordValid) {
+    if (!(await comparePassword(currentPassword, req.user.password))) {
       return res.status(400).json({
         success: false,
         message: 'Current password is incorrect.',
       })
     }
 
-    const hashedNewPassword = await hashPassword(newPassword)
-
-    await User.findByIdAndUpdate(req.user._id, { password: hashedNewPassword })
+    await query('UPDATE users SET password_hash = $2 WHERE id = $1', [
+      req.user._id,
+      await hashPassword(newPassword),
+    ])
 
     // Sign out every other browser; keep this one signed in with a fresh session.
     await revokeAllSessions(req.user._id)
@@ -702,20 +647,7 @@ export const deleteAccount = async (req, res) => {
       })
     }
 
-    const user = await User.findById(req.user._id)
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found.',
-      })
-    }
-    if (user.isDemo()) {
-      return res.status(403).json({
-        success: false,
-        message: 'The demo account cannot be deleted.',
-      })
-    }
-
+    const user = req.user
     const isPasswordValid = await user.comparePassword(password)
     if (!isPasswordValid) {
       return res.status(400).json({
@@ -728,7 +660,7 @@ export const deleteAccount = async (req, res) => {
     await query('DELETE FROM users WHERE id = $1 AND is_demo = false', [user._id])
 
     // The stored avatar row is removed by ON DELETE CASCADE.
-    deleteProfilePictureFile(user.profilePicture)
+    deleteLegacyAvatarFile(user.profilePicture)
 
     logAccountDeletion(user._id, req.ip, req.get('User-Agent'))
 
@@ -746,18 +678,6 @@ export const deleteAccount = async (req, res) => {
 }
 
 /**
- * Delete a legacy on-disk profile picture (`/uploads/profiles/...`); database-stored
- * avatars and remote URLs are left alone.
- * @param {string | null | undefined} profilePicture - Stored path.
- * @returns {void}
- */
-function deleteProfilePictureFile(profilePicture) {
-  if (!profilePicture?.startsWith('/uploads/')) return
-  const picturePath = path.join(process.cwd(), 'uploads', 'profiles', path.basename(profilePicture))
-  fs.promises.unlink(picturePath).catch(() => {})
-}
-
-/**
  * Remove the authenticated user's profile picture. The demo account's is read-only.
  *
  * @param {import('express').Request} req
@@ -772,11 +692,10 @@ export const removeProfilePicture = async (req, res) => {
         message: "The demo account's profile picture cannot be changed.",
       })
     }
-    const user = await User.findById(req.user._id)
-    deleteProfilePictureFile(user.profilePicture)
+    const user = req.user
+    deleteLegacyAvatarFile(user.profilePicture)
     await deleteAvatar(user._id)
-    user.profilePicture = null
-    await user.save()
+    await query('UPDATE users SET profile_picture = NULL WHERE id = $1', [user._id])
     res.json({
       success: true,
       message: 'Profile picture removed.',
@@ -820,13 +739,7 @@ export const uploadProfilePicture = async (req, res) => {
       })
     }
 
-    const user = await User.findById(req.user._id)
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found.',
-      })
-    }
+    const user = req.user
 
     // Trust the bytes, not the declared type: a renamed script is not an image.
     const contentType = detectImageType(req.file.buffer)
@@ -837,9 +750,12 @@ export const uploadProfilePicture = async (req, res) => {
       })
     }
 
-    deleteProfilePictureFile(user.profilePicture)
+    deleteLegacyAvatarFile(user.profilePicture)
     user.profilePicture = await saveAvatar(user._id, req.file.buffer, contentType)
-    await user.save()
+    await query('UPDATE users SET profile_picture = $2 WHERE id = $1', [
+      user._id,
+      user.profilePicture,
+    ])
 
     logFileUpload(req.file.originalname, user._id, req.ip, true)
 

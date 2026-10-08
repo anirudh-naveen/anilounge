@@ -2,7 +2,7 @@
  * catalogTabs.ts — movie and TV catalog tab helpers.
  *
  * Tab ids, labels, `/movies` `/tv` query/path builders, and Search browse
- * rails used by catalog pages and detail-view back navigation. Currently Trending
+ * rails used by the catalog page and detail-view back navigation. Currently Trending
  * (popular) is a single page.
  */
 
@@ -56,10 +56,27 @@ export const MOVIE_CATALOG_TABS = [
 
 export type TvCatalogTab = (typeof TV_CATALOG_TABS)[number]['id']
 export type MovieCatalogTab = (typeof MOVIE_CATALOG_TABS)[number]['id']
-export type CatalogTab = TvCatalogTab | MovieCatalogTab
 
-const TV_TAB_IDS = new Set<string>(TV_CATALOG_TABS.map((tab) => tab.id))
-const MOVIE_TAB_IDS = new Set<string>(MOVIE_CATALOG_TABS.map((tab) => tab.id))
+/** Which catalog: animated movies (specials included) or series. */
+export type BrowseContentType = 'movie' | 'tv'
+
+type CatalogTabFor<K extends BrowseContentType> = K extends 'movie' ? MovieCatalogTab : TvCatalogTab
+
+interface CatalogTabMeta {
+  id: string
+  label: string
+  subtitle: string
+  emptyTitle: string
+  emptyBody: string
+}
+
+const CATALOGS: Record<
+  BrowseContentType,
+  { tabs: readonly CatalogTabMeta[]; path: string; scrollPrefix: string }
+> = {
+  movie: { tabs: MOVIE_CATALOG_TABS, path: '/movies', scrollPrefix: 'movies-page' },
+  tv: { tabs: TV_CATALOG_TABS, path: '/tv', scrollPrefix: 'tv-page' },
+}
 
 /**
  * Currently Trending is a single highlight page; other tabs paginate.
@@ -70,29 +87,17 @@ export function catalogTabHasPagination(tab: string) {
 }
 
 /**
- * Coerce an unknown query value to a TV catalog tab id.
+ * Coerce an unknown query value to one of the catalog's tab ids (`popular` if unknown).
+ * @param kind - `movie` or `tv`.
  * @param value - Raw `tab` query string (or array from Vue Router).
- * @returns `popular`, `airing`, or `upcoming`.
  */
-export function normalizeTvCatalogTab(value: unknown): TvCatalogTab {
+export function normalizeCatalogTab<K extends BrowseContentType>(
+  kind: K,
+  value: unknown,
+): CatalogTabFor<K> {
   const raw = Array.isArray(value) ? value[0] : value
-  if (typeof raw === 'string' && TV_TAB_IDS.has(raw) && raw !== 'popular') {
-    return raw as TvCatalogTab
-  }
-  return 'popular'
-}
-
-/**
- * Coerce an unknown query value to a movie catalog tab id.
- * @param value - Raw `tab` query string (or array from Vue Router).
- * @returns `popular`, `theatres`, or `upcoming`.
- */
-export function normalizeMovieCatalogTab(value: unknown): MovieCatalogTab {
-  const raw = Array.isArray(value) ? value[0] : value
-  if (typeof raw === 'string' && MOVIE_TAB_IDS.has(raw) && raw !== 'popular') {
-    return raw as MovieCatalogTab
-  }
-  return 'popular'
+  const known = typeof raw === 'string' && CATALOGS[kind].tabs.some((tab) => tab.id === raw)
+  return (known ? raw : 'popular') as CatalogTabFor<K>
 }
 
 /**
@@ -108,37 +113,13 @@ export function parseCatalogPage(value: unknown, tab?: string): number {
 }
 
 /**
- * Coerce a page query value to a 1-based page index for the TV catalog.
- * @param value - Raw `page` query string (or array from Vue Router).
- * @param tab - Active TV tab; popular ignores page.
- */
-export function parseTvCatalogPage(value: unknown, tab?: TvCatalogTab): number {
-  return parseCatalogPage(value, tab)
-}
-
-/**
- * Coerce a page query value to a 1-based page index for the movie catalog.
- * @param value - Raw `page` query string (or array from Vue Router).
- * @param tab - Active movie tab; popular ignores page.
- */
-export function parseMovieCatalogPage(value: unknown, tab?: MovieCatalogTab): number {
-  return parseCatalogPage(value, tab)
-}
-
-/**
- * Look up copy for a TV catalog tab.
+ * Look up copy (label, subtitle, empty state) for a catalog tab.
+ * @param kind - `movie` or `tv`.
  * @param tab - Normalized tab id.
  */
-export function getTvCatalogTab(tab: TvCatalogTab) {
-  return TV_CATALOG_TABS.find((item) => item.id === tab) ?? TV_CATALOG_TABS[0]
-}
-
-/**
- * Look up copy for a movie catalog tab.
- * @param tab - Normalized tab id.
- */
-export function getMovieCatalogTab(tab: MovieCatalogTab) {
-  return MOVIE_CATALOG_TABS.find((item) => item.id === tab) ?? MOVIE_CATALOG_TABS[0]
+export function getCatalogTab(kind: BrowseContentType, tab: string): CatalogTabMeta {
+  const { tabs } = CATALOGS[kind]
+  return tabs.find((item) => item.id === tab) ?? tabs[0]!
 }
 
 /**
@@ -155,59 +136,25 @@ export function catalogRouteQuery(tab: string, page: number): Record<string, str
 }
 
 /**
- * Vue Router query for the TV catalog, omitting default popular/page-1 params.
+ * Path plus query used as the `from` param when opening a title from the catalog.
+ * @param kind - `movie` or `tv`.
  * @param tab - Active tab.
  * @param page - 1-based page index.
  */
-export function tvCatalogRouteQuery(tab: TvCatalogTab, page: number): Record<string, string> {
-  return catalogRouteQuery(tab, page)
+export function catalogPath(kind: BrowseContentType, tab: string, page: number) {
+  const search = new URLSearchParams(catalogRouteQuery(tab, page)).toString()
+  const { path } = CATALOGS[kind]
+  return search ? `${path}?${search}` : path
 }
 
 /**
- * Vue Router query for the movie catalog, omitting default popular/page-1 params.
+ * Scroll-restoration key for a catalog tab page.
+ * @param kind - `movie` or `tv`.
  * @param tab - Active tab.
  * @param page - 1-based page index.
  */
-export function movieCatalogRouteQuery(tab: MovieCatalogTab, page: number): Record<string, string> {
-  return catalogRouteQuery(tab, page)
-}
-
-/**
- * Path plus query used as the `from` param when opening a series from the catalog.
- * @param tab - Active tab.
- * @param page - 1-based page index.
- */
-export function tvCatalogPath(tab: TvCatalogTab, page: number) {
-  const search = new URLSearchParams(tvCatalogRouteQuery(tab, page)).toString()
-  return search ? `/tv?${search}` : '/tv'
-}
-
-/**
- * Path plus query used as the `from` param when opening a movie from the catalog.
- * @param tab - Active tab.
- * @param page - 1-based page index.
- */
-export function movieCatalogPath(tab: MovieCatalogTab, page: number) {
-  const search = new URLSearchParams(movieCatalogRouteQuery(tab, page)).toString()
-  return search ? `/movies?${search}` : '/movies'
-}
-
-/**
- * Scroll-restoration key for a TV catalog tab page.
- * @param tab - Active tab.
- * @param page - 1-based page index.
- */
-export function tvCatalogScrollKey(tab: TvCatalogTab, page: number) {
-  return `tv-page-${tab}-${page}`
-}
-
-/**
- * Scroll-restoration key for a movie catalog tab page.
- * @param tab - Active tab.
- * @param page - 1-based page index.
- */
-export function movieCatalogScrollKey(tab: MovieCatalogTab, page: number) {
-  return `movies-page-${tab}-${page}`
+export function catalogScrollKey(kind: BrowseContentType, tab: string, page: number) {
+  return `${CATALOGS[kind].scrollPrefix}-${tab}-${page}`
 }
 
 /**
@@ -227,54 +174,37 @@ export function isMovieCatalogPath(pathname: string) {
 }
 
 /**
- * Tab, page, router location, and scroll key parsed from a TV catalog URL.
+ * Tab, page, router location, and scroll key parsed from a catalog URL.
+ * @param kind - `movie` or `tv`.
  * @param url - Absolute or site-relative catalog URL.
  */
-export function tvCatalogLocationFromUrl(url: URL) {
-  const tab = normalizeTvCatalogTab(url.searchParams.get('tab'))
-  const page = parseTvCatalogPage(url.searchParams.get('page'), tab)
+export function catalogLocationFromUrl(kind: BrowseContentType, url: URL) {
+  const tab = normalizeCatalogTab(kind, url.searchParams.get('tab'))
+  const page = parseCatalogPage(url.searchParams.get('page'), tab)
   return {
     tab,
     page,
-    path: '/tv' as const,
-    query: tvCatalogRouteQuery(tab, page),
-    scrollKey: tvCatalogScrollKey(tab, page),
+    path: CATALOGS[kind].path,
+    query: catalogRouteQuery(tab, page),
+    scrollKey: catalogScrollKey(kind, tab, page),
   }
 }
-
-/**
- * Tab, page, router location, and scroll key parsed from a movie catalog URL.
- * @param url - Absolute or site-relative catalog URL.
- */
-export function movieCatalogLocationFromUrl(url: URL) {
-  const tab = normalizeMovieCatalogTab(url.searchParams.get('tab'))
-  const page = parseMovieCatalogPage(url.searchParams.get('page'), tab)
-  return {
-    tab,
-    page,
-    path: '/movies' as const,
-    query: movieCatalogRouteQuery(tab, page),
-    scrollKey: movieCatalogScrollKey(tab, page),
-  }
-}
-
-export type BrowseContentType = 'movie' | 'tv'
 
 export const MOVIE_BROWSE_RAILS = [
   {
     id: 'popular' as const,
     title: 'Currently Trending',
-    viewAll: movieCatalogPath('popular', 1),
+    viewAll: catalogPath('movie', 'popular', 1),
   },
   {
     id: 'theatres' as const,
     title: 'In Theatres Now',
-    viewAll: movieCatalogPath('theatres', 1),
+    viewAll: catalogPath('movie', 'theatres', 1),
   },
   {
     id: 'upcoming' as const,
     title: 'Upcoming Highlights',
-    viewAll: movieCatalogPath('upcoming', 1),
+    viewAll: catalogPath('movie', 'upcoming', 1),
   },
 ]
 
@@ -282,17 +212,17 @@ export const TV_BROWSE_RAILS = [
   {
     id: 'popular' as const,
     title: 'Currently Trending',
-    viewAll: tvCatalogPath('popular', 1),
+    viewAll: catalogPath('tv', 'popular', 1),
   },
   {
     id: 'airing' as const,
     title: 'Airing Right Now',
-    viewAll: tvCatalogPath('airing', 1),
+    viewAll: catalogPath('tv', 'airing', 1),
   },
   {
     id: 'upcoming' as const,
     title: 'Upcoming Highlights',
-    viewAll: tvCatalogPath('upcoming', 1),
+    viewAll: catalogPath('tv', 'upcoming', 1),
   },
 ]
 

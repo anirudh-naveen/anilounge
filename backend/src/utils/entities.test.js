@@ -22,7 +22,6 @@ import {
   mapJikanProducer,
   mapTmdbCharacterCredits,
   mapVoiceActorFromCredit,
-  matchCharacterByName,
   pickJikanProducer,
   pickPrimaryCharacter,
   pickTmdbCompany,
@@ -38,20 +37,6 @@ describe('entity name matching', () => {
     assert.equal(entityNamesEqual('Monkey D. Luffy', 'monkey d luffy'), true)
     assert.equal(entityNamesEqual('Nami', 'Nico Robin'), false)
     assert.deepEqual(uniqueEntityNames('Luffy', 'luffy', '  Nami  '), ['Luffy', 'Nami'])
-  })
-
-  it('matches a TMDB character name onto a persisted entity', () => {
-    const characters = [
-      { _id: '1', name: 'Monkey D. Luffy', alternativeNames: ['Luffy'] },
-      { _id: '2', name: 'Roronoa Zoro' },
-    ]
-    assert.equal(matchCharacterByName('Luffy', characters)?._id, '1')
-    assert.equal(matchCharacterByName('Roronoa Zoro', characters)?._id, '2')
-    assert.equal(matchCharacterByName('Sanji', characters), null)
-    assert.equal(
-      matchCharacterByName('Natsuki, Subaru', [{ _id: 's', name: 'Subaru Natsuki' }])?._id,
-      's',
-    )
   })
 })
 

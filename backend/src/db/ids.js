@@ -40,13 +40,3 @@ export function isCatalogId(value) {
   const text = String(value || '')
   return isUuid(text) || isMongoId(text)
 }
-
-/**
- * SQL predicate matching a UUID primary key.
- * @param {string} alias
- * @param {string} param
- * @returns {string}
- */
-export function idEqualsSql(alias, param) {
-  return `${alias}.id::text = ${param}`
-}

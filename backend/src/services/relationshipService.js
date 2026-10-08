@@ -1,11 +1,10 @@
 /**
  * Sequel/prequel/related lookup for catalog titles.
- * Domain service: MAL related_anime ingest, franchise inheritance, title-pattern matching,
- * and genre-similar fallback. Results are cached in memory for 10 minutes.
+ * Domain service: MAL related_anime ingest, franchise inheritance, and the related-titles
+ * lookup for detail pages. Lookups are cached in memory for 10 minutes.
  */
 import Content from '../models/Content.js'
 import { query } from '../../config/postgres.js'
-import { contentTitleMatchOr } from '../utils/titles.js'
 import { UNLINKED_RELATION_KINDS } from './franchiseBuilder.js'
 
 const MAL_KIND = {
@@ -19,19 +18,12 @@ const MAL_KIND = {
   full_story: 'full_story',
 }
 
+const CACHE_TTL_MS = 10 * 60 * 1000
+const CACHE_MAX = 1000
+
 class RelationshipService {
   constructor() {
     this.cache = new Map()
-    this.cacheTimeout = 10 * 60 * 1000
-
-    this.relationshipPatterns = {
-      numbered: /(.*?)\s*(\d+)$/,
-      roman: /(.*?)\s*([IVX]+)$/,
-      part: /(.*?)\s*[:\-]\s*(part|chapter|episode)\s*(\d+)$/i,
-      subtitle: /(.*?)\s*[:\-]\s*(.*)$/,
-      movie: /(.*?)\s*movie\s*(\d*)$/i,
-      season: /(.*?)\s*season\s*(\d+)$/i,
-    }
   }
 
   /**
@@ -41,9 +33,9 @@ class RelationshipService {
    */
   async findRelatedContent(contentId) {
     try {
-      const cacheKey = `rel_${contentId}`
+      const cacheKey = String(contentId)
       const cached = this.cache.get(cacheKey)
-      if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
         return cached.data
       }
 
@@ -54,12 +46,9 @@ class RelationshipService {
 
       const result = await this.findSmartRelationships(content)
 
-      this.cache.set(cacheKey, {
-        data: result,
-        timestamp: Date.now(),
-      })
-
-      console.log(`Cached result for content ${contentId}`)
+      this.cache.delete(cacheKey)
+      this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
+      if (this.cache.size > CACHE_MAX) this.cache.delete(this.cache.keys().next().value)
       return result
     } catch (error) {
       console.error('Error finding related content:', error)
@@ -107,65 +96,6 @@ class RelationshipService {
   }
 
   /**
-   * Same type, overlapping genres, runtime ±30 min or episodes ±10, ranked by unifiedScore.
-   * @param {object} content
-   * @param {number} [limit=5]
-   * @returns {Promise<object[]>}
-   */
-  async getGenreBasedRecommendations(content, limit = 5) {
-    try {
-      if (!content.genres || content.genres.length === 0) {
-        return []
-      }
-
-      const genreNames = content.genres
-        .map((genre) => (typeof genre === 'string' ? genre : genre.name))
-        .filter(Boolean)
-
-      if (genreNames.length === 0) return []
-
-      const runtimeRange = content.runtime
-        ? {
-            $gte: Math.max(0, content.runtime - 30),
-            $lte: content.runtime + 30,
-          }
-        : null
-
-      const episodeRange = content.episodeCount
-        ? {
-            $gte: Math.max(0, content.episodeCount - 10),
-            $lte: content.episodeCount + 10,
-          }
-        : null
-
-      const recommendations = await Content.find({
-        _id: { $ne: content._id },
-        contentType: content.contentType,
-        $or: [{ 'genres.name': { $in: genreNames } }, { genres: { $in: genreNames } }],
-        ...(runtimeRange && { runtime: runtimeRange }),
-        ...(episodeRange && { episodeCount: episodeRange }),
-      })
-        .lean()
-        .sort({ unifiedScore: -1, popularity: -1 })
-        .limit(limit)
-
-      return recommendations
-    } catch (error) {
-      console.error('Error getting genre-based recommendations:', error)
-      return []
-    }
-  }
-
-  /**
-   * Drop the in-memory related-content cache.
-   * @returns {void}
-   */
-  clearCache() {
-    this.cache.clear()
-    console.log('Relationship service cache cleared')
-  }
-
-  /**
    * Load MAL related_anime and write typed content_relations rows.
    * sequel/prequel stay dedicated; other MAL relation_type values keep their kind.
    * @param {object} content
@@ -197,52 +127,53 @@ class RelationshipService {
         return content
       }
 
-      const relationships = {
-        sequels: [],
-        prequels: [],
-        related: [],
+      // One lookup for every related MAL id (the best-scored title when a MAL id
+      // appears on more than one row, as Content.findOne would pick).
+      const malIds = [
+        ...new Set(malData.related_anime.map((relation) => Number(relation.node?.id)).filter(Boolean)),
+      ]
+      const { rows } = malIds.length
+        ? await query(
+            `SELECT DISTINCT ON (mal_id) id::text AS id, mal_id FROM works
+             WHERE mal_id = ANY($1::int[])
+             ORDER BY mal_id, unified_score DESC NULLS LAST`,
+            [malIds],
+          )
+        : { rows: [] }
+      const idByMal = new Map(rows.map((row) => [Number(row.mal_id), row.id]))
+
+      const relationships = { sequels: [], prequels: [], related: [] }
+      const edges = []
+      const seen = new Set()
+      for (const relation of malData.related_anime) {
+        const kind = MAL_KIND[String(relation.relation_type || '').toLowerCase()] || 'other'
+        const toId = idByMal.get(Number(relation.node?.id))
+        if (!toId || toId === String(content._id)) continue
+
+        const key = `${toId}:${kind}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        edges.push({ toId, kind })
+
+        if (kind === 'sequel') relationships.sequels.push(toId)
+        else if (kind === 'prequel') relationships.prequels.push(toId)
+        else relationships.related.push(toId)
       }
 
       await query(`DELETE FROM content_relations WHERE from_id = $1 AND source = 'mal'`, [
         content._id,
       ])
-
-      const seen = new Set()
-      for (const relation of malData.related_anime) {
-        const kind = MAL_KIND[String(relation.relation_type || '').toLowerCase()] || 'other'
-        const relatedMalId = relation.node?.id
-        if (!relatedMalId) continue
-
-        const relatedContent = await Content.findOne({ malId: relatedMalId })
-        if (!relatedContent || String(relatedContent._id) === String(content._id)) continue
-
-        const key = `${relatedContent._id}:${kind}`
-        if (seen.has(key)) continue
-        seen.add(key)
-
+      if (edges.length) {
         await query(
           `INSERT INTO content_relations (from_id, to_id, kind, source)
-           VALUES ($1, $2, $3, 'mal')
+           SELECT $1, t.to_id, t.kind, 'mal'
+           FROM unnest($2::uuid[], $3::text[]) AS t(to_id, kind)
            ON CONFLICT (from_id, to_id, kind) DO NOTHING`,
-          [content._id, relatedContent._id, kind],
+          [content._id, edges.map((edge) => edge.toId), edges.map((edge) => edge.kind)],
         )
-
-        if (kind === 'sequel') relationships.sequels.push(relatedContent._id)
-        else if (kind === 'prequel') relationships.prequels.push(relatedContent._id)
-        else relationships.related.push(relatedContent._id)
       }
 
-      if (!content.relationships) {
-        content.relationships = {
-          sequels: [],
-          prequels: [],
-          related: [],
-        }
-      }
-
-      content.relationships.sequels = relationships.sequels
-      content.relationships.prequels = relationships.prequels
-      content.relationships.related = relationships.related
+      content.relationships = { ...content.relationships, ...relationships }
 
       const inherited = await this.inheritFranchiseFromRelations(content._id)
       if (inherited) {
@@ -283,79 +214,6 @@ class RelationshipService {
       [rows[0].franchise_id, contentId],
     )
     return rows[0].name
-  }
-
-  /**
-   * Same contentType whose title starts with the extracted base title.
-   * @param {object} content
-   * @returns {Promise<object[]>}
-   */
-  async findByPatterns(content) {
-    const related = []
-    const baseTitle = this.extractBaseTitle(content.englishTitle || content.title)
-
-    if (!baseTitle) return related
-
-    const similarContent = await Content.find({
-      _id: { $ne: content._id },
-      contentType: content.contentType,
-      $or: contentTitleMatchOr({ $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' }),
-    })
-      .lean()
-      .limit(10)
-
-    return similarContent
-  }
-
-
-
-
-  /**
-   * Existing catalog rows whose title starts with `baseTitle`.
-   * @param {string} baseTitle
-   * @returns {Promise<object[]>}
-   */
-  async findRelatedByTitlePattern(baseTitle) {
-    const similarContent = await Content.find({
-      $or: contentTitleMatchOr({ $regex: `^${this.escapeRegex(baseTitle)}`, $options: 'i' }),
-    }).limit(5)
-
-    return similarContent
-  }
-
-
-  /**
-   * Strip numbered/roman/part/movie/season suffixes to get a series root title.
-   * @param {string} title
-   * @returns {string | null}
-   */
-  extractBaseTitle(title) {
-    if (!title) return null
-
-    for (const [, pattern] of Object.entries(this.relationshipPatterns)) {
-      const match = title.match(pattern)
-      if (match) {
-        return match[1].trim()
-      }
-    }
-
-    return title.trim()
-  }
-
-
-  /**
-   * Unique related documents by `_id`.
-   * @param {object[]} relatedContent
-   * @returns {object[]}
-   */
-  deduplicateRelated(relatedContent) {
-    const seen = new Set()
-    return relatedContent.filter((content) => {
-      const key = content._id.toString()
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
   }
 
   /**
@@ -419,15 +277,6 @@ class RelationshipService {
     if (!releaseDate) return null
     const date = new Date(releaseDate)
     return date.getFullYear()
-  }
-
-  /**
-   * Escape a string for use inside a RegExp.
-   * @param {string} string
-   * @returns {string}
-   */
-  escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 }
 

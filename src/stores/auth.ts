@@ -193,23 +193,12 @@ export const useAuthStore = defineStore('auth', () => {
    * @param data - Partial profile payload (username, email, picture, preferences).
    * @returns The update API payload.
    */
-  const updateProfile = async (data: UpdateProfileData) => {
-    try {
-      isLoading.value = true
-      error.value = null
-
+  const updateProfile = (data: UpdateProfileData) =>
+    run('Profile update failed', async () => {
       const response = await authAPI.updateProfile(data)
       user.value = response.data.data.user
-
       return response.data
-    } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } }
-      error.value = apiError.response?.data?.message || 'Profile update failed'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
+    })
 
   /**
    * Changes the signed-in user's password. Rejected for the shared demo account.
@@ -222,19 +211,10 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error(error.value)
     }
 
-    try {
-      isLoading.value = true
-      error.value = null
-
+    return run('Password change failed', async () => {
       const response = await authAPI.changePassword(data)
       return response.data
-    } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } }
-      error.value = apiError.response?.data?.message || 'Password change failed'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -248,19 +228,10 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error(error.value)
     }
 
-    try {
-      isLoading.value = true
-      error.value = null
-
+    return run('Account deletion failed', async () => {
       await authAPI.deleteAccount(password)
       clearSession()
-    } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } }
-      error.value = apiError.response?.data?.message || 'Account deletion failed'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -268,24 +239,13 @@ export const useAuthStore = defineStore('auth', () => {
    * @param formData - Multipart body containing the image file.
    * @returns The upload API payload.
    */
-  const uploadProfilePicture = async (formData: FormData) => {
-    try {
-      isLoading.value = true
-      error.value = null
-
+  const uploadProfilePicture = (formData: FormData) =>
+    run('Profile picture upload failed', async () => {
       const response = await authAPI.uploadProfilePicture(formData)
       // The upload response is a partial user; keep fields like isDemoAccount.
       user.value = { ...user.value, ...response.data.data.user }
-
       return response.data
-    } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } }
-      error.value = apiError.response?.data?.message || 'Profile picture upload failed'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
+    })
 
   /**
    * Removes the profile picture. Rejected by the server for the demo account.

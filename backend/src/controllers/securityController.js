@@ -6,7 +6,6 @@
  * be locked behind a code.
  */
 
-import User from '../models/User.js'
 import { endSession, revokeAllSessions } from '../services/sessionService.js'
 import {
   beginTwoFactorSetup,
@@ -40,7 +39,7 @@ function rejectDemo(req, res) {
  */
 export const getSecurityStatus = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id)
+    const user = req.user
     res.json({
       success: true,
       data: {
@@ -65,7 +64,7 @@ export const getSecurityStatus = async (req, res) => {
 export const startTwoFactorSetup = async (req, res) => {
   try {
     if (rejectDemo(req, res)) return
-    const user = await User.findById(req.user._id)
+    const user = req.user
     if (user.twoFactorEnabled) {
       return res.status(400).json({ success: false, message: 'Two-factor is already on.' })
     }
@@ -109,7 +108,7 @@ export const enableTwoFactor = async (req, res) => {
  */
 export const turnOffTwoFactor = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id)
+    const user = req.user
     const { password, code } = req.body || {}
     if (typeof password !== 'string' || !(await user.comparePassword(password))) {
       return res.status(400).json({ success: false, message: 'Password is incorrect.' })

@@ -38,25 +38,6 @@ export function catalogTabIsSinglePage(tab) {
 }
 
 /**
- * Extra `$addFields` used so missing air/release dates sort last on dated tabs.
- * @param {string} tab
- * @returns {object}
- */
-export function catalogTabDateFields(tab) {
-  if (tab === 'airing') {
-    return {
-      hasScheduleDate: { $cond: [{ $ifNull: ['$nextEpisodeAirDate', false] }, 1, 0] },
-    }
-  }
-  if (tab === 'upcoming' || tab === 'theatres') {
-    return {
-      hasScheduleDate: { $cond: [{ $ifNull: ['$releaseDate', false] }, 1, 0] },
-    }
-  }
-  return {}
-}
-
-/**
  * Aggregation `$sort` for a catalog tab.
  * Popular uses the hidden score. Airing prefers the next episode.
  * Theatres prefers newest release. Upcoming prefers premiere date.
@@ -75,9 +56,6 @@ export function sortForCatalogTab(tab) {
   }
   return { hiddenSortScore: -1, _id: -1 }
 }
-
-/** @deprecated Use `sortForCatalogTab`. */
-export const sortForTvCatalogTab = sortForCatalogTab
 
 /**
  * Upcoming titles: MAL `not_yet_aired`, or a future release with no finished/airing status.

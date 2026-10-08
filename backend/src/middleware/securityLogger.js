@@ -15,13 +15,28 @@ const SECURITY_EVENTS = {
   ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
   SUSPICIOUS_ACTIVITY: 'SUSPICIOUS_ACTIVITY',
   FILE_UPLOAD: 'FILE_UPLOAD',
-  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
-  INVALID_TOKEN: 'INVALID_TOKEN',
   UNAUTHORIZED_ACCESS: 'UNAUTHORIZED_ACCESS',
-  SQL_INJECTION_ATTEMPT: 'SQL_INJECTION_ATTEMPT',
-  XSS_ATTEMPT: 'XSS_ATTEMPT',
   ACCOUNT_DELETED: 'ACCOUNT_DELETED',
 }
+
+const HIGH_SEVERITY = new Set([
+  SECURITY_EVENTS.ACCOUNT_LOCKED,
+  SECURITY_EVENTS.SUSPICIOUS_ACTIVITY,
+  SECURITY_EVENTS.UNAUTHORIZED_ACCESS,
+])
+const MEDIUM_SEVERITY = new Set([SECURITY_EVENTS.LOGIN_FAILED, SECURITY_EVENTS.ACCOUNT_DELETED])
+
+/** Script and SQL shapes worth logging (never blocked here; see antiBot.js). */
+const SUSPICIOUS_INPUT = [
+  /<script/i,
+  /javascript:/i,
+  /on\w+\s*=/i,
+  /union\s+select/i,
+  /drop\s+table/i,
+  /insert\s+into/i,
+  /delete\s+from/i,
+  /update\s+set/i,
+]
 
 /**
  * Build a timestamped log object with a severity derived from `event`.
@@ -46,23 +61,8 @@ const createSecurityLogEntry = (event, details) => {
  * @returns {'HIGH'|'MEDIUM'|'LOW'}
  */
 const getSeverityLevel = (event) => {
-  const highSeverity = [
-    SECURITY_EVENTS.ACCOUNT_LOCKED,
-    SECURITY_EVENTS.SUSPICIOUS_ACTIVITY,
-    SECURITY_EVENTS.SQL_INJECTION_ATTEMPT,
-    SECURITY_EVENTS.XSS_ATTEMPT,
-    SECURITY_EVENTS.UNAUTHORIZED_ACCESS,
-  ]
-
-  const mediumSeverity = [
-    SECURITY_EVENTS.LOGIN_FAILED,
-    SECURITY_EVENTS.RATE_LIMIT_EXCEEDED,
-    SECURITY_EVENTS.INVALID_TOKEN,
-    SECURITY_EVENTS.ACCOUNT_DELETED,
-  ]
-
-  if (highSeverity.includes(event)) return 'HIGH'
-  if (mediumSeverity.includes(event)) return 'MEDIUM'
+  if (HIGH_SEVERITY.has(event)) return 'HIGH'
+  if (MEDIUM_SEVERITY.has(event)) return 'MEDIUM'
   return 'LOW'
 }
 
@@ -221,40 +221,6 @@ export const logFileUpload = (filename, userId, ip, success, error = null) => {
 }
 
 /**
- * Record that an IP exceeded a rate limit on `endpoint`.
- *
- * @param {string} ip - Client address.
- * @param {string} endpoint - Path or route that was limited.
- * @param {string} userAgent - Request User-Agent.
- * @returns {void}
- */
-export const logRateLimitExceeded = (ip, endpoint, userAgent) => {
-  logSecurityEvent(SECURITY_EVENTS.RATE_LIMIT_EXCEEDED, {
-    ip,
-    endpoint,
-    userAgent,
-    timestamp: new Date().toISOString(),
-  })
-}
-
-/**
- * Record a rejected or malformed token.
- *
- * @param {string} ip - Client address.
- * @param {string} userAgent - Request User-Agent.
- * @param {string} [tokenType='access'] - `access` or `refresh`.
- * @returns {void}
- */
-export const logInvalidToken = (ip, userAgent, tokenType = 'access') => {
-  logSecurityEvent(SECURITY_EVENTS.INVALID_TOKEN, {
-    ip,
-    userAgent,
-    tokenType,
-    timestamp: new Date().toISOString(),
-  })
-}
-
-/**
  * Record a free-form suspicious-activity event.
  *
  * @param {string} activity - Short label for the activity.
@@ -270,25 +236,6 @@ export const logSuspiciousActivity = (activity, details) => {
 }
 
 /**
- * If sanitization changed a field, log it as an XSS_ATTEMPT.
- *
- * @param {string} input - Original value.
- * @param {string} sanitizedInput - Value after HTML/XSS filters.
- * @param {string} field - Field name for the log.
- * @returns {void}
- */
-export const logInputValidation = (input, sanitizedInput, field) => {
-  if (input !== sanitizedInput) {
-    logSecurityEvent(SECURITY_EVENTS.XSS_ATTEMPT, {
-      field,
-      originalInput: input,
-      sanitizedInput,
-      timestamp: new Date().toISOString(),
-    })
-  }
-}
-
-/**
  * Scan JSON body and query for script/SQL-ish patterns and log without blocking.
  *
  * @param {import('express').Request} req - Inspects `body` and `query`.
@@ -297,63 +244,20 @@ export const logInputValidation = (input, sanitizedInput, field) => {
  * @returns {void}
  */
 export const securityMonitor = (req, res, next) => {
-  const suspiciousPatterns = [
-    /<script/i,
-    /javascript:/i,
-    /on\w+\s*=/i,
-    /union\s+select/i,
-    /drop\s+table/i,
-    /insert\s+into/i,
-    /delete\s+from/i,
-    /update\s+set/i,
-  ]
-
-  if (req.body) {
-    const bodyString = JSON.stringify(req.body)
-    for (const pattern of suspiciousPatterns) {
-      if (pattern.test(bodyString)) {
-        logSuspiciousActivity('Suspicious input detected', {
-          pattern: pattern.toString(),
-          input: bodyString,
-          ip: req.ip,
-          userAgent: req.get('User-Agent'),
-          userId: req.user?._id,
-        })
-        break
-      }
-    }
+  const scan = (value, label, key) => {
+    if (!value) return
+    const text = JSON.stringify(value)
+    const pattern = SUSPICIOUS_INPUT.find((candidate) => candidate.test(text))
+    if (!pattern) return
+    logSuspiciousActivity(`Suspicious ${label} detected`, {
+      pattern: pattern.toString(),
+      [key]: text,
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      userId: req.user?._id,
+    })
   }
-
-  if (req.query) {
-    const queryString = JSON.stringify(req.query)
-    for (const pattern of suspiciousPatterns) {
-      if (pattern.test(queryString)) {
-        logSuspiciousActivity('Suspicious query detected', {
-          pattern: pattern.toString(),
-          query: queryString,
-          ip: req.ip,
-          userAgent: req.get('User-Agent'),
-          userId: req.user?._id,
-        })
-        break
-      }
-    }
-  }
-
+  scan(req.body, 'input', 'input')
+  scan(req.query, 'query', 'query')
   next()
-}
-
-export { SECURITY_EVENTS }
-export default {
-  securityLogger,
-  logSecurityEvent,
-  logLoginAttempt,
-  logAccountLockout,
-  logAccountDeletion,
-  logFileUpload,
-  logRateLimitExceeded,
-  logInvalidToken,
-  logSuspiciousActivity,
-  logInputValidation,
-  securityMonitor,
 }

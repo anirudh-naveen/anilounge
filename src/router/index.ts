@@ -52,12 +52,14 @@ const router = createRouter({
     {
       path: '/movies',
       name: 'movies',
-      component: () => import('@/views/Movies.vue'),
+      component: () => import('@/views/CatalogPage.vue'),
+      props: { kind: 'movie' },
     },
     {
       path: '/tv',
       name: 'tv',
-      component: () => import('@/views/TVShows.vue'),
+      component: () => import('@/views/CatalogPage.vue'),
+      props: { kind: 'tv' },
     },
     {
       path: '/search',

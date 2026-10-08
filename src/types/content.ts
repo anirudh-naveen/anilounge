@@ -124,10 +124,6 @@ export interface SeasonGuide {
   seriesId?: string
 }
 
-export interface UnifiedContentWithScore extends UnifiedContent {
-  unifiedScore: number
-}
-
 export interface EntityVoiceCredit {
   name: string
   language?: string

@@ -7,6 +7,7 @@
  * Domain service used by `contentController.getContentEpisodes`.
  */
 import { query } from '../../config/postgres.js'
+import { escapeLike } from '../db/mongoFilter.js'
 import Content from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import { collectContentTitles, contentSeason, normalizeTitle } from '../utils/titles.js'
@@ -146,7 +147,7 @@ async function seasonCandidates(anchor) {
   const prefixes = [...new Set(collectContentTitles(anchor).map(prefixKey))].filter(
     (prefix) => prefix.length >= MIN_PREFIX_LENGTH,
   )
-  const patterns = prefixes.map((prefix) => `${prefix.replace(/[\\%_]/g, '\\$&')}%`)
+  const patterns = prefixes.map((prefix) => `${escapeLike(prefix)}%`)
   const { rows } = await query(
     `WITH RECURSIVE chain AS (
        SELECT $1::uuid AS id

@@ -120,7 +120,7 @@ export function isProviderConfigured(provider, env = process.env) {
 export function connectionsRedirectUri(env = process.env) {
   if (env.CONNECTIONS_REDIRECT_URL) return env.CONNECTIONS_REDIRECT_URL.trim()
   const base =
-    env.PUBLIC_APP_URL || String(env.FRONTEND_URL || '').split(',')[0] || 'http://localhost:5173'
+    env.PUBLIC_APP_URL || String(env.FRONTEND_URL || '').split(',')[0] || 'http://localhost:5174'
   return `${base.trim().replace(/\/+$/, '')}/connections`
 }
 
@@ -485,6 +485,7 @@ export async function accessTokenFor(row, { force = false } = {}) {
       ? await malTokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken })
       : null
     if (!tokens) throw new ConnectionError(`Your ${label} sign-in expired. Reconnect ${label}.`, RECONNECT_STATUS)
+    const sealedToken = seal(tokens.accessToken)
     await query(
       `UPDATE account_connections SET access_token = $3, refresh_token = COALESCE($4, refresh_token),
          token_expires_at = $5, updated_at = now()
@@ -492,12 +493,12 @@ export async function accessTokenFor(row, { force = false } = {}) {
       [
         row.user_id,
         row.provider,
-        seal(tokens.accessToken),
+        sealedToken,
         tokens.refreshToken ? seal(tokens.refreshToken) : null,
         tokens.expiresAt,
       ],
     )
-    row.access_token = seal(tokens.accessToken)
+    row.access_token = sealedToken
     row.token_expires_at = tokens.expiresAt
     return tokens.accessToken
   }

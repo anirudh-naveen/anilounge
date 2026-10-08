@@ -19,6 +19,26 @@ import { isDemoEmail } from '../models/User.js'
  * @type {Map<string, number[]>}
  */
 const requestTimestamps = new Map()
+
+const LOCAL_IPS = new Set(['::1', '127.0.0.1', 'localhost'])
+const SUSPICIOUS_USER_AGENT = /bot|crawler|spider|scraper|headless|phantom|selenium|puppeteer/i
+/** Mongo operators and script URLs, rejected in every field. */
+const OPERATOR_PATTERN = /\$(?:where|ne|gt|lt|regex|exists|in|nin|or|and)|javascript:/i
+/** Code-ish words, rejected outside prose fields (see FREE_TEXT_FIELDS). */
+const CODE_WORD_PATTERN = /this\.|function|eval/i
+
+/**
+ * Local and development requests skip the bot and referer checks.
+ * @param {import('express').Request} req
+ * @returns {boolean}
+ */
+function isLocalRequest(req) {
+  return (
+    process.env.NODE_ENV === 'development' ||
+    LOCAL_IPS.has(req.ip) ||
+    Boolean(req.hostname?.includes('localhost'))
+  )
+}
 const sweepTimer = setInterval(() => {
   const cutoff = Date.now() - 1000
   for (const [key, times] of requestTimestamps) {
@@ -28,8 +48,8 @@ const sweepTimer = setInterval(() => {
 sweepTimer.unref?.()
 
 /**
- * Block suspicious/minimal User-Agents and more than 10 requests per second per IP+UA.
- * Skipped for localhost and development.
+ * Block suspicious/minimal User-Agents (and ban the IP) and refuse more than 10 requests
+ * per second per IP+UA. Skipped for localhost and development.
  *
  * @param {import('express').Request} req - Uses `req.ip`, hostname, and User-Agent.
  * @param {import('express').Response} res - 429 on rapid fire, 403 on bot UA.
@@ -37,34 +57,11 @@ sweepTimer.unref?.()
  * @returns {void}
  */
 export const antiBotProtection = (req, res, next) => {
+  if (isLocalRequest(req)) return next()
+
   const userAgent = req.get('User-Agent') || ''
   const ip = req.ip
-
-  // Skip anti-bot protection for localhost/development
-  if (
-    ip === '::1' ||
-    ip === '127.0.0.1' ||
-    ip === 'localhost' ||
-    process.env.NODE_ENV === 'development' ||
-    req.hostname === 'localhost' ||
-    req.hostname?.includes('localhost')
-  ) {
-    return next()
-  }
-
-  const suspiciousPatterns = [
-    /bot/i,
-    /crawler/i,
-    /spider/i,
-    /scraper/i,
-    /headless/i,
-    /phantom/i,
-    /selenium/i,
-    /puppeteer/i,
-  ]
-
-  const isSuspiciousUA = suspiciousPatterns.some((pattern) => pattern.test(userAgent))
-
+  const isSuspiciousUA = SUSPICIOUS_USER_AGENT.test(userAgent)
   const isMinimalUA = userAgent.length < 5
 
   const now = Date.now()
@@ -72,9 +69,9 @@ export const antiBotProtection = (req, res, next) => {
   const timestamps = requestTimestamps.get(key) || []
   const recentRequests = timestamps.filter((t) => now - t < 1000) // Last 1 second
 
+  // Refused but not banned: one page can load many avatars at once, and people behind
+  // a shared address can burst together. Sustained abuse hits the rate limiters.
   if (recentRequests.length > 10) {
-    banIPForSuspiciousActivity(ip, userAgent, 'rapid_requests').catch(console.error)
-
     return res.status(429).json({
       success: false,
       message: 'Too many requests detected. Please slow down.',
@@ -181,8 +178,9 @@ const FREE_TEXT_FIELDS = new Set([
 ])
 
 /**
- * Recursively scan body/query/params strings for Mongo operator / eval patterns.
- * On a hit, bans the IP and returns 400 without throwing to Express.
+ * Recursively scan body/query/params strings for Mongo operator / eval patterns and
+ * return 400 on a hit. Operator patterns also ban the IP; code-ish words alone do not,
+ * since ordinary names and emails can contain them ("medieval", "this.name@...").
  *
  * @param {import('express').Request} req - Inspects `body`, `query`, and `params`.
  * @param {import('express').Response} res - 400 `{ message: 'Invalid request format detected.' }` on injection.
@@ -190,55 +188,37 @@ const FREE_TEXT_FIELDS = new Set([
  * @returns {void}
  */
 export const databaseProtection = (req, res, next) => {
-  const operatorPatterns = [
-    /\$where/i,
-    /\$ne/i,
-    /\$gt/i,
-    /\$lt/i,
-    /\$regex/i,
-    /\$exists/i,
-    /\$in/i,
-    /\$nin/i,
-    /\$or/i,
-    /\$and/i,
-    /javascript:/i,
-  ]
-  const dangerousPatterns = [...operatorPatterns, /this\./i, /function/i, /eval/i]
-
   /**
-   * Walk a JSON-like value and throw if a string matches a dangerous pattern.
-   * Prose fields skip the word patterns, so "I loved this." or "evaluate" in a post
-   * is not treated as an injection attempt.
+   * Walk a JSON-like value for dangerous patterns. Prose fields skip the word patterns,
+   * so "I loved this." or "evaluate" in a post is not treated as an injection attempt.
    *
    * @param {unknown} obj - Current node (string, object, or other).
-   * @param {string} [path=''] - Dotted path used in the thrown message.
-   * @returns {void}
+   * @param {string} [path=''] - Dotted path; its last segment picks the field rules.
+   * @returns {'operator' | 'word' | null} The worst hit (an operator wins over a word).
    */
   const checkForInjection = (obj, path = '') => {
     if (typeof obj === 'string') {
       const field = path.slice(path.lastIndexOf('.') + 1)
-      const patterns = FREE_TEXT_FIELDS.has(field) ? operatorPatterns : dangerousPatterns
-      for (const pattern of patterns) {
-        if (pattern.test(obj)) {
-          throw new Error(`Potential NoSQL injection detected in ${path}`)
-        }
-      }
-    } else if (typeof obj === 'object' && obj !== null) {
-      for (const [key, value] of Object.entries(obj)) {
-        checkForInjection(value, `${path}.${key}`)
-      }
+      if (OPERATOR_PATTERN.test(obj)) return 'operator'
+      return !FREE_TEXT_FIELDS.has(field) && CODE_WORD_PATTERN.test(obj) ? 'word' : null
     }
+    if (typeof obj !== 'object' || obj === null) return null
+    let worst = null
+    for (const [key, value] of Object.entries(obj)) {
+      const hit = checkForInjection(value, `${path}.${key}`)
+      if (hit === 'operator') return hit
+      worst ||= hit
+    }
+    return worst
   }
 
-  try {
-    if (req.body) checkForInjection(req.body, 'body')
-    if (req.query) checkForInjection(req.query, 'query')
-    if (req.params) checkForInjection(req.params, 'params')
-  } catch {
-    banIPForSuspiciousActivity(req.ip, req.get('User-Agent'), 'injection_attempt').catch(
-      console.error,
-    )
-
+  const hit = checkForInjection({ body: req.body, query: req.query, params: req.params })
+  if (hit) {
+    if (hit === 'operator') {
+      banIPForSuspiciousActivity(req.ip, req.get('User-Agent'), 'injection_attempt').catch(
+        console.error,
+      )
+    }
     return res.status(400).json({
       success: false,
       message: 'Invalid request format detected.',
@@ -260,17 +240,7 @@ export const databaseProtection = (req, res, next) => {
 export const apiProtection = (req, res, next) => {
   const origin = req.get('origin')
   const referer = req.get('referer') || req.get('referrer')
-
-  // Skip API protection for localhost origins (development)
-  if (
-    origin?.includes('localhost') ||
-    referer?.includes('localhost') ||
-    req.hostname === 'localhost' ||
-    req.hostname?.includes('localhost') ||
-    req.ip === '::1' ||
-    req.ip === '127.0.0.1' ||
-    process.env.NODE_ENV === 'development'
-  ) {
+  if (isLocalRequest(req) || origin?.includes('localhost') || referer?.includes('localhost')) {
     return next()
   }
 
@@ -293,12 +263,4 @@ export const apiProtection = (req, res, next) => {
   }
 
   next()
-}
-
-export default {
-  antiBotProtection,
-  progressiveSlowdown,
-  bruteForceProtection,
-  databaseProtection,
-  apiProtection,
 }

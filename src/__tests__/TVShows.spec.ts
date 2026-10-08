@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import TVShows from '@/views/TVShows.vue'
+import CatalogPage from '@/views/CatalogPage.vue'
 
 const getContent = vi.fn().mockResolvedValue({})
 const loadWatchlist = vi.fn().mockResolvedValue({})
@@ -33,14 +33,15 @@ const mountPage = async (path = '/tv') => {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/tv', name: 'tv', component: TVShows },
+      { path: '/tv', name: 'tv', component: CatalogPage, props: { kind: 'tv' } },
       { path: '/tv-show/:id', name: 'TVShowDetails', component: { template: '<div />' } },
     ],
   })
   await router.push(path)
   await router.isReady()
 
-  const wrapper = mount(TVShows, {
+  const wrapper = mount(CatalogPage, {
+    props: { kind: 'tv' },
     global: { plugins: [router] },
   })
   await flushPromises()

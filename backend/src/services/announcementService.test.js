@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, it } from 'node:test'
+import { sendAnnouncement } from './announcementService.js'
 import {
-  sendAnnouncement,
   unsubscribeToken,
   unsubscribeUrl,
   verifyUnsubscribeToken,
-} from './announcementService.js'
+} from './emailPreferenceService.js'
 
 const USER_ID = '6f1c2a4e-8b3d-4c5e-9f70-1a2b3c4d5e6f'
 const OTHER_ID = '0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d'

@@ -57,5 +57,3 @@ export function assertNotDemo(user) {
     )
   }
 }
-
-export default { HttpError, sendError, assertNotDemo }

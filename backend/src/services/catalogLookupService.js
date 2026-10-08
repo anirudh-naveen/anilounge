@@ -19,44 +19,6 @@ const DEFAULT_LIMIT = 8
 const MAX_LIMIT = 20
 const MAX_CANDIDATES = 40
 
-const CATALOG_PROJECTION = {
-  title: 1,
-  englishTitle: 1,
-  nativeTitle: 1,
-  originalTitle: 1,
-  overview: 1,
-  contentType: 1,
-  posterPath: 1,
-  backdropPath: 1,
-  releaseDate: 1,
-  genres: 1,
-  studios: 1,
-  productionCompanies: 1,
-  originCountries: 1,
-  unifiedScore: 1,
-  popularity: 1,
-  voteAverage: 1,
-  voteCount: 1,
-  malScore: 1,
-  malScoredBy: 1,
-  userRatingAverage: 1,
-  userRatingCount: 1,
-  malStatus: 1,
-  runtime: 1,
-  episodeCount: 1,
-  malEpisodes: 1,
-  seasonCount: 1,
-  startSeasonYear: 1,
-  startSeason: 1,
-  lastAirDate: 1,
-  nextEpisodeAirDate: 1,
-  nextEpisodeNumber: 1,
-  franchise: 1,
-  tmdbId: 1,
-  malId: 1,
-  alternativeTitles: 1,
-}
-
 /**
  * JSON-safe catalog row for the chat UI (same fields Search cards already read).
  * @param {object|null} doc
@@ -150,7 +112,6 @@ export async function findByTitle(title) {
   if (!needle) return null
   const matcher = { $regex: escapeRegex(needle), $options: 'i' }
   return Content.findOne({ $or: contentTitleMatchOr(matcher) })
-    .select(CATALOG_PROJECTION)
     .sort({ unifiedScore: -1, popularity: -1 })
     .lean()
 }
@@ -222,7 +183,6 @@ export async function searchCatalog(filters = {}) {
   }
 
   const docs = await Content.find(mergeMatch(parts))
-    .select(CATALOG_PROJECTION)
     .sort({ unifiedScore: -1, popularity: -1 })
     .limit(candidateLimit(limit))
     .lean()

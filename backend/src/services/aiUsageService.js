@@ -1,5 +1,5 @@
 /**
- * Daily cap on Gemini calls (AI search and chat) per account, or per IP when signed out.
+ * Daily cap on Gemini chat calls per account, or per IP when signed out.
  *
  * Layer: services. Each call is paid and slow, and the general rate limit alone would
  * let one client spend hundreds an hour. Counts live in `ai_usage`, so the cap holds

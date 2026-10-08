@@ -1,221 +1,135 @@
 /**
  * IP ban enforcement, duration policy, and admin ban helpers.
  *
- * Layer: middleware. `checkIPBan` runs early in the HTTP chain; other exports
- * are called from auth/anti-bot controllers and the admin router.
+ * Layer: middleware. `checkIPBan` runs early in the HTTP chain; the ban helpers are
+ * called from the anti-bot middleware, the auth controller, and the admin router.
  */
 
-import IPBan from '../models/IPBan.js'
+import IPBan, { normalizeIp } from '../models/IPBan.js'
 
 // Ban windows by reason (milliseconds)
 const BAN_DURATIONS = {
   bot_detection: 24 * 60 * 60 * 1000, // 24 hours
   brute_force: 7 * 24 * 60 * 60 * 1000, // 7 days
   suspicious_activity: 2 * 60 * 60 * 1000, // 2 hours
-  rate_limit_exceeded: 60 * 60 * 1000, // 1 hour
   manual: 30 * 24 * 60 * 60 * 1000, // 30 days
 }
 
+/** Loopback and private (RFC1918) addresses are never checked: a ban on a proxy's
+ * internal address would block everyone behind it. */
+const UNCHECKED_IP = /^(?:::1|127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/
+
 /**
- * Reject banned client IPs with 403. Skips localhost, RFC1918, and development.
+ * Reject banned client IPs with 403. Skips loopback/private addresses and development.
  * On lookup failure the request still continues (fail-open) so DB outages do not lock out users.
  *
- * @param {import('express').Request} req - IP from `req.ip`, socket, or `X-Forwarded-For` / `X-Real-IP`.
+ * @param {import('express').Request} req - Client address from `req.ip` (honours `trust proxy`).
  * @param {import('express').Response} res - 403 JSON with `banReason` and `expiresAt` when banned.
  * @param {import('express').NextFunction} next - Continues when not banned or when the check is skipped.
  * @returns {Promise<void>}
  */
 export const checkIPBan = async (req, res, next) => {
+  const ip = normalizeIp(req.ip || req.socket?.remoteAddress)
+  // The emailed unlock code proves account ownership, so a locked-out user can
+  // always reach the unlock endpoint even from the IP their failed attempts banned.
+  const isUnlock = req.method === 'POST' && req.originalUrl.split('?')[0] === '/api/auth/unlock'
+  if (!ip || isUnlock || UNCHECKED_IP.test(ip) || process.env.NODE_ENV === 'development') {
+    return next()
+  }
+
   try {
-    let ip = req.ip || 
-             req.connection?.remoteAddress || 
-             req.socket?.remoteAddress ||
-             (req.headers['x-forwarded-for'] && req.headers['x-forwarded-for'].split(',')[0].trim()) ||
-             req.headers['x-real-ip'] ||
-             'unknown'
-
-    if (ip.startsWith('::ffff:')) {
-      ip = ip.replace('::ffff:', '')
-    }
-
-    // The emailed unlock code proves account ownership, so a locked-out user can
-    // always reach the unlock endpoint even from the IP their failed attempts banned.
-    if (req.method === 'POST' && req.originalUrl.split('?')[0] === '/api/auth/unlock') {
-      return next()
-    }
-
-    // Skip IP ban check for localhost/development
-    if (
-      ip === '::1' ||
-      ip === '127.0.0.1' ||
-      ip === 'localhost' ||
-      ip === 'unknown' ||
-      ip.startsWith('127.') ||
-      ip.startsWith('192.168.') ||
-      ip.startsWith('10.') ||
-      req.hostname === 'localhost' ||
-      req.hostname?.includes('localhost') ||
-      process.env.NODE_ENV === 'development'
-    ) {
-      return next()
-    }
-
-    if (ip && ip !== 'unknown') {
-      const ban = await IPBan.isIPBanned(ip)
-
-      if (ban) {
-        ban.lastSeen = new Date()
-        await ban.save()
-
-        return res.status(403).json({
-          success: false,
-          message: 'Your IP address has been banned due to suspicious activity.',
-          banReason: ban.reason,
-          expiresAt: ban.expiresAt,
-          attempts: ban.attempts,
-        })
-      }
-    }
-
-    next()
+    const ban = await IPBan.isIPBanned(ip)
+    if (!ban) return next()
+    IPBan.markSeen(ban._id).catch((error) => console.error('Error updating IP ban:', error))
+    return res.status(403).json({
+      success: false,
+      message: 'Your IP address has been banned due to suspicious activity.',
+      banReason: ban.reason,
+      expiresAt: ban.expiresAt,
+      attempts: ban.attempts,
+    })
   } catch (error) {
+    // Fail open so a ban-table outage cannot block legitimate users.
     console.error('Error checking IP ban:', error)
-    // In development, allow requests through even if check fails
-    if (process.env.NODE_ENV === 'development') {
-      return next()
-    }
-    // Production still fail-opens so a ban-collection outage cannot block legitimate users.
-    console.error('IP ban check failed in production:', error.message)
     return next()
   }
 }
 
 /**
- * Persist a bot-detection ban using `BAN_DURATIONS[reason]` (default 24h).
+ * Store a ban and log it; failures are logged and rethrown.
  *
  * @param {string} ip - Client address to ban.
- * @param {string} userAgent - Stored on the ban row for later review.
+ * @param {string} reason - Stored on the ban row.
+ * @param {number} duration - Ban length in milliseconds.
+ * @param {string | null} userAgent - Stored on the ban row for later review.
+ * @param {string} [note=reason] - What triggered the ban, for the log line.
+ * @returns {Promise<object>} Saved ban row.
+ */
+async function recordBan(ip, reason, duration, userAgent, note = reason) {
+  try {
+    const ban = await IPBan.banIP(ip, reason, duration, userAgent)
+    console.log(`IP ${ip} banned for ${note}. Expires: ${ban.expiresAt}`)
+    return ban
+  } catch (error) {
+    console.error(`Error banning IP for ${note}:`, error)
+    throw error
+  }
+}
+
+/**
+ * Bot-detection ban, `BAN_DURATIONS[reason]` long.
+ * @param {string} ip
+ * @param {string} userAgent
  * @param {string} [reason='bot_detection'] - Key into `BAN_DURATIONS`.
- * @returns {Promise<object>} Saved ban document.
+ * @returns {Promise<object>}
  */
-export const banIPForBot = async (ip, userAgent, reason = 'bot_detection') => {
-  try {
-    const ban = await IPBan.banIP(ip, reason, BAN_DURATIONS[reason], userAgent)
-
-    console.log(`IP ${ip} banned for ${reason}. Expires: ${ban.expiresAt}`)
-    return ban
-  } catch (error) {
-    console.error('Error banning IP for bot:', error)
-    throw error
-  }
-}
+export const banIPForBot = (ip, userAgent, reason = 'bot_detection') =>
+  recordBan(ip, reason, BAN_DURATIONS[reason], userAgent)
 
 /**
- * Persist a 7-day brute-force ban.
- *
- * @param {string} ip - Client address to ban.
- * @param {string} userAgent - Stored on the ban row.
- * @returns {Promise<object>} Saved ban document.
+ * 7-day brute-force ban.
+ * @param {string} ip
+ * @param {string} userAgent
+ * @returns {Promise<object>}
  */
-export const banIPForBruteForce = async (ip, userAgent) => {
-  try {
-    const ban = await IPBan.banIP(ip, 'brute_force', BAN_DURATIONS.brute_force, userAgent)
-
-    console.log(`IP ${ip} banned for brute force. Expires: ${ban.expiresAt}`)
-    return ban
-  } catch (error) {
-    console.error('Error banning IP for brute force:', error)
-    throw error
-  }
-}
+export const banIPForBruteForce = (ip, userAgent) =>
+  recordBan(ip, 'brute_force', BAN_DURATIONS.brute_force, userAgent, 'brute force')
 
 /**
- * Persist a 2-hour suspicious-activity ban; `activity` is only logged, not stored as the reason key.
- *
- * @param {string} ip - Client address to ban.
- * @param {string} userAgent - Stored on the ban row.
+ * 2-hour suspicious-activity ban; `activity` is only logged, not stored as the reason.
+ * @param {string} ip
+ * @param {string} userAgent
  * @param {string} activity - Human-readable trigger (e.g. `rapid_requests`).
- * @returns {Promise<object>} Saved ban document.
+ * @returns {Promise<object>}
  */
-export const banIPForSuspiciousActivity = async (ip, userAgent, activity) => {
-  try {
-    const ban = await IPBan.banIP(
-      ip,
-      'suspicious_activity',
-      BAN_DURATIONS.suspicious_activity,
-      userAgent,
-    )
-
-    console.log(
-      `IP ${ip} banned for suspicious activity: ${activity}. Expires: ${ban.expiresAt}`,
-    )
-    return ban
-  } catch (error) {
-    console.error('Error banning IP for suspicious activity:', error)
-    throw error
-  }
-}
+export const banIPForSuspiciousActivity = (ip, userAgent, activity) =>
+  recordBan(
+    ip,
+    'suspicious_activity',
+    BAN_DURATIONS.suspicious_activity,
+    userAgent,
+    `suspicious activity: ${activity}`,
+  )
 
 /**
- * Persist a 1-hour rate-limit ban.
- *
- * @param {string} ip - Client address to ban.
- * @param {string} userAgent - Stored on the ban row.
- * @returns {Promise<object>} Saved ban document.
- */
-export const banIPForRateLimit = async (ip, userAgent) => {
-  try {
-    const ban = await IPBan.banIP(
-      ip,
-      'rate_limit_exceeded',
-      BAN_DURATIONS.rate_limit_exceeded,
-      userAgent,
-    )
-
-    console.log(`IP ${ip} banned for rate limit exceeded. Expires: ${ban.expiresAt}`)
-    return ban
-  } catch (error) {
-    console.error('Error banning IP for rate limit:', error)
-    throw error
-  }
-}
-
-/**
- * Admin-initiated ban. Default duration is 30 days when `duration` is omitted.
- *
- * @param {string} ip - Client address to ban.
+ * Admin-initiated ban, 30 days unless `duration` is given.
+ * @param {string} ip
  * @param {string} [reason='manual'] - Reason stored on the row.
  * @param {number} [duration=BAN_DURATIONS.manual] - Ban length in milliseconds.
- * @returns {Promise<object>} Saved ban document.
+ * @returns {Promise<object>}
  */
-export const manuallyBanIP = async (ip, reason = 'manual', duration = BAN_DURATIONS.manual) => {
-  try {
-    const ban = await IPBan.banIP(ip, reason, duration)
-
-    console.log(`IP ${ip} manually banned. Expires: ${ban.expiresAt}`)
-    return ban
-  } catch (error) {
-    console.error('Error manually banning IP:', error)
-    throw error
-  }
-}
+export const manuallyBanIP = (ip, reason = 'manual', duration = BAN_DURATIONS.manual) =>
+  recordBan(ip, reason, duration, null, `${reason} (manual)`)
 
 /**
- * Clear an IP ban via the IPBan model.
- *
- * @param {string} ip - Address to unban.
- * @returns {Promise<*>} Model `unbanIP` result.
+ * Clear an IP ban.
+ * @param {string} ip
+ * @returns {Promise<{ modifiedCount: number }>}
  */
 export const unbanIP = async (ip) => {
-  try {
-    const result = await IPBan.unbanIP(ip)
-
-    console.log(`IP ${ip} unbanned`)
-    return result
-  } catch (error) {
-    console.error('Error unbanning IP:', error)
-    throw error
-  }
+  const result = await IPBan.unbanIP(ip)
+  console.log(`IP ${ip} unbanned`)
+  return result
 }
 
 /**
@@ -226,99 +140,21 @@ export const unbanIP = async (ip) => {
  * @returns {Promise<boolean>} True when a ban was lifted.
  */
 export const liftBruteForceBan = async (ip) => {
-  const raw = String(ip || '')
-  if (!raw) return false
-  // Bans are written with the raw `req.ip` but checked normalized; clear both forms.
-  let lifted = false
-  for (const address of new Set([raw, raw.replace(/^::ffff:/, '')])) {
-    const ban = await IPBan.isIPBanned(address)
-    if (ban?.reason !== 'brute_force') continue
-    await IPBan.unbanIP(address)
-    lifted = true
-  }
-  return lifted
+  if (!normalizeIp(ip)) return false
+  const ban = await IPBan.isIPBanned(ip)
+  if (ban?.reason !== 'brute_force') return false
+  await IPBan.unbanIP(ip)
+  return true
 }
 
 /**
- * Aggregate ban counts from the IPBan collection.
- *
- * @returns {Promise<object>} Stats object from `IPBan.getBanStats()`.
+ * Active-ban counts and attempts per reason.
+ * @returns {Promise<object[]>}
  */
-export const getBanStats = async () => {
-  try {
-    const stats = await IPBan.getBanStats()
-    return stats
-  } catch (error) {
-    console.error('Error getting ban stats:', error)
-    throw error
-  }
-}
+export const getBanStats = () => IPBan.getBanStats()
 
 /**
- * List active bans that have not yet expired, newest first.
- *
- * @returns {Promise<object[]>} Ban documents.
+ * Active bans that have not expired, newest first.
+ * @returns {Promise<object[]>}
  */
-export const getActiveBans = async () => {
-  try {
-    // IPBan.find already orders by banned_at DESC.
-    const bans = await IPBan.find({
-      isActive: true,
-      expiresAt: { $gt: new Date() },
-    })
-
-    return bans
-  } catch (error) {
-    console.error('Error getting active bans:', error)
-    throw error
-  }
-}
-
-/**
- * Extend an existing active ban (up to 5× base duration) or create a first-offense ban.
- *
- * @param {string} ip - Client address.
- * @param {string} reason - Key into `BAN_DURATIONS`.
- * @param {string} userAgent - Stored on a new ban row.
- * @returns {Promise<object>} Updated or newly created ban document.
- */
-export const progressiveBan = async (ip, reason, userAgent) => {
-  try {
-    const existingBan = await IPBan.findOne({ ip, isActive: true })
-
-    if (existingBan) {
-      let multiplier = Math.min(existingBan.attempts, 5) // Max 5x multiplier
-      const baseDuration = BAN_DURATIONS[reason]
-      const escalatedDuration = baseDuration * multiplier
-
-      existingBan.attempts += 1
-      existingBan.expiresAt = new Date(Date.now() + escalatedDuration)
-      existingBan.lastSeen = new Date()
-      await existingBan.save()
-
-      console.log(
-        `🚫 IP ${ip} ban escalated (attempt ${existingBan.attempts}). New duration: ${escalatedDuration}ms`,
-      )
-      return existingBan
-    } else {
-      return await IPBan.banIP(ip, reason, BAN_DURATIONS[reason], userAgent)
-    }
-  } catch (error) {
-    console.error('Error in progressive ban:', error)
-    throw error
-  }
-}
-
-export default {
-  checkIPBan,
-  banIPForBot,
-  banIPForBruteForce,
-  liftBruteForceBan,
-  banIPForSuspiciousActivity,
-  banIPForRateLimit,
-  manuallyBanIP,
-  unbanIP,
-  getBanStats,
-  getActiveBans,
-  progressiveBan,
-}
+export const getActiveBans = () => IPBan.find({ isActive: true, expiresAt: { $gt: new Date() } })

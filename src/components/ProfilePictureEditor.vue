@@ -90,7 +90,7 @@
 import { ref } from 'vue'
 import { useToast } from 'vue-toastification'
 import VueCropper from 'vue-cropperjs'
-import 'vue-cropperjs/node_modules/cropperjs/dist/cropper.css'
+import 'cropperjs/dist/cropper.css'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { useAuthStore } from '@/stores/auth'
 
