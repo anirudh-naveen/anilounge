@@ -39,6 +39,20 @@ const router = express.Router()
 
 const WATCHLIST_STATUSES = ['plan_to_watch', 'watching', 'completed', 'on_hold', 'dropped']
 
+/** Optional watchlist fields accepted when adding or editing an entry. */
+const watchlistFieldRules = () => [
+    body('status').optional().isIn(WATCHLIST_STATUSES),
+    body('rating').optional().isFloat({ min: 0, max: 10 }),
+    body('currentEpisode').optional().isInt({ min: 0 }),
+    body('currentSeason').optional().isInt({ min: 1 }),
+    body('totalEpisodes').optional().isInt({ min: 0 }),
+    body('totalSeasons').optional().isInt({ min: 1 }),
+    body('notes').optional().isString(),
+    body('startedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
+    body('completedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
+    body('rewatchCount').optional().isInt({ min: 0, max: 999 }),
+]
+
 /** 3-20 characters; letters, numbers, dot, dash, underscore (matches the DB length check). */
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,20}$/
 
@@ -111,15 +125,11 @@ router.post(
 router.post('/auth/refresh', refreshAccessToken)
 router.post('/auth/revoke', revokeRefreshToken)
 
-/** Catalog reads: list, search, stats, episodes, and relationship lookups. */
+/** Catalog reads: list, detail, episodes, characters, entities, and relationship lookups. */
 router.get('/content', contentController.getContent)
-router.get('/popular', contentController.getPopularContent)
-router.get('/search', contentController.searchContent)
-router.get('/stats', contentController.getDatabaseStats)
 router.get('/content/:id', validateObjectId, contentController.getContentById)
 router.get('/content/:id/episodes', validateObjectId, contentController.getContentEpisodes)
 router.get('/content/:id/characters', validateObjectId, entityController.getContentCharacters)
-router.get('/content/:id/voice-actors', validateObjectId, entityController.getContentVoiceActors)
 router.get('/entities', entityController.searchCatalogEntities)
 router.get(
   '/entities/:id',
@@ -127,10 +137,7 @@ router.get(
   optionalAuthenticate,
   entityController.getEntityById,
 )
-router.get('/content/external/:id', contentController.getContentByExternalId)
-router.get('/content/:id/similar', validateObjectId, contentController.getSimilarContent)
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
-router.get('/franchise/:franchiseName', contentController.getFranchiseContent)
 
 /** Homepage sections. Release updates use the watchlist when a token is present. */
 router.get('/home/updates', optionalAuthenticate, homeController.getUpdates)
@@ -144,21 +151,7 @@ router.get('/forum/tags', forumController.searchTags)
 router.get('/forum/tags/:id/characters', validateObjectId, forumController.contentCharacters)
 router.get('/forum/highlights/:id', validateObjectId, optionalAuthenticate, forumController.getHighlights)
 
-/** Gemini-backed search and chat. Optional auth personalizes from watchlist/preferences. */
-router.post(
-  '/ai-search',
-  optionalAuthenticate,
-  [
-    body('query')
-      .notEmpty()
-      .withMessage('Search query is required')
-      .bail()
-      .custom(assertCleanLanguage)
-      .withMessage("Search contains language that isn't allowed on AniLounge."),
-  ],
-  contentController.aiSearch,
-)
-
+/** Gemini-backed catalog chat. Optional auth personalizes from watchlist/preferences. */
 router.post(
   '/ai/chat',
   optionalAuthenticate,
@@ -242,16 +235,7 @@ router.post(
     body('contentId')
       .custom((value) => isCatalogId(value))
       .withMessage('Valid content ID is required'),
-    body('status').optional().isIn(WATCHLIST_STATUSES),
-    body('rating').optional().isFloat({ min: 0, max: 10 }),
-    body('currentEpisode').optional().isInt({ min: 0 }),
-    body('currentSeason').optional().isInt({ min: 1 }),
-    body('totalEpisodes').optional().isInt({ min: 0 }),
-    body('totalSeasons').optional().isInt({ min: 1 }),
-    body('notes').optional().isString(),
-    body('startedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
-    body('completedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
-    body('rewatchCount').optional().isInt({ min: 0, max: 999 }),
+    ...watchlistFieldRules(),
   ],
   contentController.addToWatchlist,
 )
@@ -262,16 +246,7 @@ router.put(
   '/watchlist/:contentId',
   [
     validateObjectId,
-    body('status').optional().isIn(WATCHLIST_STATUSES),
-    body('rating').optional().isFloat({ min: 0, max: 10 }),
-    body('currentEpisode').optional().isInt({ min: 0 }),
-    body('currentSeason').optional().isInt({ min: 1 }),
-    body('totalEpisodes').optional().isInt({ min: 0 }),
-    body('totalSeasons').optional().isInt({ min: 1 }),
-    body('notes').optional().isString(),
-    body('startedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
-    body('completedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
-    body('rewatchCount').optional().isInt({ min: 0, max: 999 }),
+    ...watchlistFieldRules(),
   ],
   contentController.updateWatchlistItem,
 )
@@ -344,7 +319,6 @@ router.post(
 router.get('/content/:contentId/my-rating', validateObjectId, contentController.getMyRating)
 
 /** Entity favorites (characters, voice actors, and studios). */
-router.get('/favorites', entityController.getFavoriteEntities)
 router.post('/entities/:id/favorite', validateObjectId, entityController.favoriteEntity)
 router.delete('/entities/:id/favorite', validateObjectId, entityController.unfavoriteEntity)
 

@@ -2,7 +2,24 @@
  * Watchlist row mutations shared by the watchlist endpoints and AniList sync:
  * episode moves, list dates, and keeping ratings and title aggregates in step.
  */
+import { kindFromContentType } from '../db/kinds.js'
+import { saveUnifiedScores } from '../models/Content.js'
 import { applyUserRatingDelta, isValidUserRating } from '../utils/ratings.js'
+
+/**
+ * Highest episode and season a watchlist row can record for a title. Movies without an
+ * episode count are a single episode.
+ *
+ * @param {object} content - Content document.
+ * @returns {{ maxEpisodes: number, maxSeasons: number }}
+ */
+export function progressLimits(content) {
+  return {
+    maxEpisodes:
+      content.episodeCount || content.malEpisodes || (content.contentType === 'movie' ? 1 : 0),
+    maxSeasons: content.seasonCount || 1,
+  }
+}
 
 /**
  * Copy the optional start/finish dates and rewatch count from a request body
@@ -97,18 +114,23 @@ export function syncLegacyUserRating(user, contentId, rating) {
 }
 
 /**
- * Apply a rating delta to the content aggregate scores and persist inside the open session.
- * No-op when the rating is unchanged: `content.save` rewrites the whole title
- * (genres, studios, franchise, relations), which is slow and lock-heavy.
+ * Apply a rating delta to the title's aggregates and store its new unified score (inside
+ * the caller's open transaction, if any). The rating totals themselves are kept by
+ * triggers on `ratings`, so only the score is written, not the whole title.
  *
- * @param {object} content - Content document to mutate and save.
+ * @param {object} content - Content document, mutated.
  * @param {number|null} oldRating - Previous effective rating.
  * @param {number|null} newRating - New effective rating.
- * @param {import('mongoose').ClientSession} session - Transaction session.
  * @returns {Promise<void>}
  */
-export async function applyContentRatingChange(content, oldRating, newRating, session) {
+export async function applyContentRatingChange(content, oldRating, newRating) {
   if (oldRating === newRating) return
   applyUserRatingDelta(content, oldRating, newRating)
-  await content.save({ session })
+  await saveUnifiedScores([
+    {
+      id: String(content._id),
+      kind: kindFromContentType(content.contentType),
+      score: content.unifiedScore ?? null,
+    },
+  ])
 }

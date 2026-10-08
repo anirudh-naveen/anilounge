@@ -5,12 +5,13 @@ import crypto from 'crypto'
 import { query } from '../../config/postgres.js'
 import { asId } from '../db/ids.js'
 import {
+  WATCHABLE_TABLES,
   airingFromMalStatus,
   contentTypeFromKind,
   kindFromContentType,
   malStatusFromAiring,
 } from '../db/kinds.js'
-import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
+import { compileMongoFilter, compileSort, escapeLike } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { applyAdminOverrides, readEditableFields } from '../utils/adminContent.js'
 import { planSyncChanges } from '../utils/syncReview.js'
@@ -72,7 +73,13 @@ export function mapContentRow(row) {
   }
 }
 
-function groupBy(rows, key) {
+/**
+ * Rows grouped by `String(row[key])`.
+ * @param {object[]} rows
+ * @param {string} key
+ * @returns {Map<string, object[]>}
+ */
+export function groupBy(rows, key) {
   const map = new Map()
   for (const row of rows) {
     const id = String(row[key])
@@ -80,6 +87,21 @@ function groupBy(rows, key) {
     map.get(id).push(row)
   }
   return map
+}
+
+/**
+ * `doc` cut down to the space-separated `select` fields (plus its id), as a populate
+ * `select` asks; the whole doc when there is no selection.
+ * @param {object | null | undefined} doc
+ * @param {string | null | undefined} select
+ * @returns {object | null}
+ */
+export function pick(doc, select) {
+  if (!doc) return null
+  if (!select || typeof select !== 'string') return doc
+  const out = { _id: doc._id || doc.id, id: doc._id || doc.id }
+  for (const field of select.split(/\s+/).filter(Boolean)) out[field] = doc[field]
+  return out
 }
 
 /**
@@ -150,6 +172,18 @@ export async function attachContentRelations(docs) {
   return docs
 }
 
+/**
+ * Watchables by id, with genres, studios, and relations attached.
+ * @param {string[]} ids
+ * @returns {Promise<Map<string, object>>} id -> plain content object
+ */
+export async function loadWorksById(ids) {
+  if (!ids.length) return new Map()
+  const { rows } = await query('SELECT * FROM works WHERE id = ANY($1::uuid[])', [ids])
+  const contents = await attachContentRelations(rows.map(mapContentRow))
+  return new Map(contents.map((item) => [String(item._id), item]))
+}
+
 async function fetchContent(filter, options = {}) {
   const compiled = compileMongoFilter(filter, 'content')
   const order = compileSort(options.sort, 'content')
@@ -188,19 +222,6 @@ function Content(data = {}, options = {}) {
   this.$isNew = options.fromDb ? false : true
 }
 
-Content.prototype.isComplete = function isComplete() {
-  return Boolean(this.title && this.overview && (this.posterPath || this.backdropPath))
-}
-
-Content.prototype.getUnifiedGenres = function getUnifiedGenres() {
-  const map = new Map()
-  for (const genre of this.genres || []) {
-    const name = typeof genre === 'string' ? genre : genre?.name
-    if (name) map.set(name.toLowerCase(), typeof genre === 'string' ? { name } : genre)
-  }
-  return [...map.values()]
-}
-
 Content.prototype.toJSON = function toJSON() {
   const { $isNew, password, ...rest } = this
   return { ...rest, _id: this._id, id: this._id }
@@ -224,6 +245,45 @@ export async function loadAdminOverrides(id) {
     if (error.code === '42703') return {}
     throw error
   }
+}
+
+/**
+ * Store recomputed unified scores alone, without the full rewrite `save` does (after a
+ * community rating changes, say). Triggers on the subtype tables keep
+ * `content.catalog_score` in step.
+ * @param {Array<{ id: string, kind: string, score: number | null }>} rows
+ * @returns {Promise<void>}
+ */
+export async function saveUnifiedScores(rows) {
+  for (const [kind, table] of Object.entries(WATCHABLE_TABLES)) {
+    const list = rows.filter((row) => row.kind === kind)
+    if (!list.length) continue
+    await query(
+      `UPDATE ${table} t SET unified_score = u.score
+       FROM unnest($1::uuid[], $2::float8[]) AS u(id, score)
+       WHERE t.content_id = u.id`,
+      [list.map((row) => row.id), list.map((row) => row.score ?? null)],
+    )
+  }
+}
+
+/**
+ * Catalog totals by source and type, in one scan.
+ * @returns {Promise<{ totalContent: number, tmdbOnlyContent: number, malOnlyContent: number,
+ *   mergedContent: number, movies: number, tvShows: number, specials: number }>}
+ */
+export async function catalogStats() {
+  const { rows } = await query(
+    `SELECT count(*)::int AS "totalContent",
+            count(*) FILTER (WHERE tmdb_id IS NOT NULL AND mal_id IS NULL)::int AS "tmdbOnlyContent",
+            count(*) FILTER (WHERE mal_id IS NOT NULL AND tmdb_id IS NULL)::int AS "malOnlyContent",
+            count(*) FILTER (WHERE tmdb_id IS NOT NULL AND mal_id IS NOT NULL)::int AS "mergedContent",
+            count(*) FILTER (WHERE kind = 'movie')::int AS movies,
+            count(*) FILTER (WHERE kind = 'series')::int AS "tvShows",
+            count(*) FILTER (WHERE kind = 'special')::int AS specials
+     FROM content WHERE kind IN ('movie', 'series', 'special')`,
+  )
+  return rows[0]
 }
 
 /**
@@ -292,9 +352,12 @@ Content.prototype.save = async function save() {
     throw new Error(`Refusing to save ${kind} ${id}: id belongs to a non-watchable content row`)
   }
 
-  await query('DELETE FROM movies WHERE content_id = $1', [id])
-  await query('DELETE FROM series WHERE content_id = $1', [id])
-  await query('DELETE FROM specials WHERE content_id = $1', [id])
+  await query(
+    `WITH dm AS (DELETE FROM movies WHERE content_id = $1),
+          ds AS (DELETE FROM series WHERE content_id = $1)
+     DELETE FROM specials WHERE content_id = $1`,
+    [id],
+  )
 
   const origin = (this.originCountries || []).map(String).find((code) => code.length === 2) || null
   const shared = {
@@ -312,33 +375,9 @@ Content.prototype.save = async function save() {
     airing_status: airingFromMalStatus(this.malStatus),
   }
 
-  if (kind === 'movie') {
+  if (kind === 'movie' || kind === 'special') {
     await query(
-      `INSERT INTO movies (
-         content_id, original_title, tagline, backdrop_path, release_date, origin_country,
-         runtime_minutes, tmdb_score, tmdb_votes, mal_score, mal_votes, popularity, unified_score,
-         airing_status
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-      [
-        id,
-        shared.original_title,
-        shared.tagline,
-        shared.backdrop_path,
-        shared.release_date,
-        shared.origin_country,
-        this.runtime ?? null,
-        shared.tmdb_score,
-        shared.tmdb_votes,
-        shared.mal_score,
-        shared.mal_votes,
-        shared.popularity,
-        shared.unified_score,
-        shared.airing_status,
-      ],
-    )
-  } else if (kind === 'special') {
-    await query(
-      `INSERT INTO specials (
+      `INSERT INTO ${WATCHABLE_TABLES[kind]} (
          content_id, original_title, tagline, backdrop_path, release_date, origin_country,
          runtime_minutes, tmdb_score, tmdb_votes, mal_score, mal_votes, popularity, unified_score,
          airing_status
@@ -655,7 +694,7 @@ Content.findById = function findById(id) {
 Content.searchIds = async function searchIds(text, { limit = 2000 } = {}) {
   const needle = String(text || '').trim()
   if (!needle) return []
-  const pattern = `%${needle.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
+  const pattern = `%${escapeLike(needle)}%`
   const { rows } = await query(
     `SELECT id FROM (
        SELECT id FROM content
@@ -721,24 +760,6 @@ Content.updateMany = async function updateMany(filter = {}, update = {}) {
   return { matchedCount: docs.length, modifiedCount: docs.length }
 }
 
-Content.findByExternalId = function findByExternalId(id, source = 'tmdb') {
-  const parsed = Number(id)
-  if (source === 'mal') return Content.findOne({ malId: parsed })
-  return Content.findOne({ tmdbId: parsed })
-}
-
-Content.findSimilar = async function findSimilar(content, limit = 10) {
-  const names = (content.genres || []).map((genre) => genre.name || genre).filter(Boolean)
-  if (!names.length) return []
-  return Content.find({
-    _id: { $ne: content._id },
-    contentType: content.contentType,
-    'genres.name': { $in: names },
-  })
-    .sort({ popularity: -1 })
-    .limit(limit)
-}
-
 Content.aggregate = async function aggregate(pipeline = []) {
   const match = pipeline.find((stage) => stage.$match)?.$match || {}
   const sort = pipeline.find((stage) => stage.$sort)?.$sort
@@ -746,10 +767,6 @@ Content.aggregate = async function aggregate(pipeline = []) {
   const limit = pipeline.find((stage) => stage.$limit)?.$limit
   const docs = await fetchContent(match, { sort, skip, limit })
   return docs.map((doc) => doc.toJSON())
-}
-
-Content.collection = {
-  dropIndex: async () => {},
 }
 
 Content.create = async function create(data) {

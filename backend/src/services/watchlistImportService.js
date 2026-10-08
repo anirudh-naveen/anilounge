@@ -27,11 +27,14 @@ import { writeImportedHistory } from './watchEvents.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 import { HttpError } from '../utils/httpError.js'
 import {
+  MAL_API,
   RECONNECT_STATUS,
+  TMDB_API,
   accessTokenFor,
   loadConnection,
   providerLabel,
 } from './connectionService.js'
+import { saveUnifiedScores } from '../models/Content.js'
 
 export const IMPORT_SOURCES = ['anilist', 'mal', 'mal_file', 'tmdb']
 /** Order sources run in when several are imported together. */
@@ -42,8 +45,6 @@ const MAX_NOTE_LENGTH = 500
 const JOB_TTL_MS = 60 * 60 * 1000
 const IMPORT_COOLDOWN_MS = 60 * 1000
 
-const MAL_API = 'https://api.myanimelist.net/v2'
-const TMDB_API = 'https://api.themoviedb.org/3'
 
 /**
  * A request the user can fix (bad username, private list, unreadable file).
@@ -1052,8 +1053,6 @@ async function loadExisting(userId, contentIds) {
   )
 }
 
-const SCORE_TABLES = { movie: 'movies', series: 'series', special: 'specials' }
-
 /**
  * Recompute the blended score of titles whose user ratings changed (the same math
  * the rating endpoint applies one vote at a time).
@@ -1068,19 +1067,20 @@ async function refreshScores(contentIds) {
      FROM works WHERE id = ANY($1::uuid[])`,
     [contentIds],
   )
-  for (const row of rows) {
-    const table = SCORE_TABLES[row.kind]
-    if (!table) continue
-    const score = calculateUnifiedScore(
-      row.vote_average,
-      row.vote_count,
-      row.mal_score,
-      row.mal_votes,
-      row.user_rating_average != null ? Number(row.user_rating_average) : null,
-      Number(row.user_rating_count || 0),
-    )
-    await query(`UPDATE ${table} SET unified_score = $2 WHERE content_id = $1`, [row.id, score])
-  }
+  await saveUnifiedScores(
+    rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      score: calculateUnifiedScore(
+        row.vote_average,
+        row.vote_count,
+        row.mal_score,
+        row.mal_votes,
+        row.user_rating_average != null ? Number(row.user_rating_average) : null,
+        Number(row.user_rating_count || 0),
+      ),
+    })),
+  )
 }
 
 /**

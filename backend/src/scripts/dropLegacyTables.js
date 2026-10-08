@@ -1,5 +1,5 @@
 /**
- * Drop the legacy_* tables left behind by `npm run db:migrate-legacy`.
+ * Drop the legacy_* tables left behind by the old Postgres layout migration.
  * Layer: CLI script. Dry run by default: lists each legacy table with its row
  * count and changes nothing. Pass --confirm to drop them in one transaction.
  *

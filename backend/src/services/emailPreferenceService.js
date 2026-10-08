@@ -122,14 +122,3 @@ export async function unsubscribe(userId, scope) {
   const changes = Object.fromEntries(keys.filter(isEmailCategory).map((key) => [key, false]))
   return Boolean(await setEmailPreferences(userId, changes))
 }
-
-export default {
-  EMAIL_CATEGORIES,
-  isEmailCategory,
-  unsubscribeToken,
-  verifyUnsubscribeToken,
-  unsubscribeUrl,
-  getEmailPreferences,
-  setEmailPreferences,
-  unsubscribe,
-}

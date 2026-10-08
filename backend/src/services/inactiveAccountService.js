@@ -10,12 +10,11 @@
  * ACCOUNT_CLEANUP_CRON (default 09:00 UTC daily).
  */
 
-import fs from 'fs'
-import path from 'path'
 import cron from 'node-cron'
 import { query } from '../../config/postgres.js'
 import { withJobLock } from '../utils/jobLock.js'
 import { sendInactiveAccountDeleted, sendInactivityWarning } from './emailService.js'
+import { deleteLegacyAvatarFile } from './avatarService.js'
 
 export const INACTIVITY_LIMIT_DAYS = 365
 /** Warning points, in days before deletion, largest first. */
@@ -26,12 +25,25 @@ const DEFAULT_CRON = '0 9 * * *'
 let activityColumnsMissing = false
 
 /**
+ * The UPDATE below only writes once an hour per user, but every authenticated request
+ * calls it; skip the round trip for users this process touched recently.
+ */
+const TOUCH_INTERVAL_MS = 15 * 60 * 1000
+const TOUCHED_MAX = 10_000
+const touchedAt = new Map()
+
+/**
  * Mark a user active (at most one write per hour) and clear any pending warning.
  * @param {string} userId
  * @returns {Promise<void>}
  */
 export async function touchUserActivity(userId) {
   if (activityColumnsMissing) return
+  const key = String(userId)
+  const now = Date.now()
+  if (now - (touchedAt.get(key) || 0) < TOUCH_INTERVAL_MS) return
+  if (touchedAt.size >= TOUCHED_MAX) touchedAt.clear()
+  touchedAt.set(key, now)
   try {
     await query(
       `UPDATE users SET last_active_at = now(), inactivity_warning_days = NULL
@@ -78,10 +90,7 @@ async function deleteInactiveAccount(row) {
        AND last_active_at < now() - make_interval(days => $2)`,
     [row.id, INACTIVITY_LIMIT_DAYS],
   )
-  if (result.rowCount && row.profile_picture && !row.profile_picture.startsWith('http')) {
-    const file = path.join(process.cwd(), 'uploads', 'profiles', path.basename(row.profile_picture))
-    fs.promises.unlink(file).catch(() => {})
-  }
+  if (result.rowCount) deleteLegacyAvatarFile(row.profile_picture)
   return Boolean(result.rowCount)
 }
 

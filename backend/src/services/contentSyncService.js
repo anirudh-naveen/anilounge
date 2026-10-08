@@ -5,7 +5,7 @@
  * without clobbering user ratings; unifiedScore is vote-weighted across sources.
  */
 import { connectPostgres, closePostgres } from '../../config/postgres.js'
-import Content from '../models/Content.js'
+import Content, { catalogStats } from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import relationshipService from './relationshipService.js'
 import { runCatalogMaintenance } from './catalogMaintenance.js'
@@ -98,53 +98,6 @@ class DatabasePopulator {
     } catch (error) {
       console.error('Database disconnection error:', error)
     }
-  }
-
-  /**
-   * Vote-count weighted average of TMDB, MAL, and Find Animation ratings.
-   * @param {number | null} tmdbScore
-   * @param {number | null} tmdbVotes
-   * @param {number | null} malScore
-   * @param {number | null} malVotes
-   * @param {number | null} userRatingAverage
-   * @param {number} userRatingCount
-   * @returns {number | null}
-   */
-  calculateUnifiedScoreWithUserRatings(
-    tmdbScore,
-    tmdbVotes,
-    malScore,
-    malVotes,
-    userRatingAverage,
-    userRatingCount,
-  ) {
-    return calculateUnifiedScore(
-      tmdbScore,
-      tmdbVotes,
-      malScore,
-      malVotes,
-      userRatingAverage,
-      userRatingCount,
-    )
-  }
-
-  /**
-   * Legacy TMDB+MAL-only wrapper (user ratings treated as empty).
-   * @param {number | null} tmdbScore
-   * @param {number | null} tmdbVotes
-   * @param {number | null} malScore
-   * @param {number | null} malVotes
-   * @returns {number | null}
-   */
-  calculateWeightedScore(tmdbScore, tmdbVotes, malScore, malVotes) {
-    return this.calculateUnifiedScoreWithUserRatings(
-      tmdbScore,
-      tmdbVotes,
-      malScore,
-      malVotes,
-      null,
-      0,
-    )
   }
 
   /**
@@ -389,7 +342,7 @@ class DatabasePopulator {
         return
       }
 
-      contentData.unifiedScore = this.calculateUnifiedScoreWithUserRatings(
+      contentData.unifiedScore = calculateUnifiedScore(
         contentData.voteAverage,
         contentData.voteCount,
         null,
@@ -445,7 +398,6 @@ class DatabasePopulator {
     })
 
     for (const candidate of candidates) {
-      if (duplicates.some((d) => d.content._id.equals(candidate._id))) continue
       if (this.isLikelySameContent(contentData, candidate)) {
         duplicates.push({ content: candidate, reason: 'title_match' })
       }
@@ -584,7 +536,7 @@ class DatabasePopulator {
           const contentWithRelationships = {
             ...contentData,
             unifiedScore:
-              this.calculateUnifiedScoreWithUserRatings(
+              calculateUnifiedScore(
                 null,
                 null,
                 contentData.malScore,
@@ -722,29 +674,18 @@ class DatabasePopulator {
       ...(tmdbData.genres || []),
     ])
 
-    if (existingContent.malScore && tmdbData.voteAverage) {
-      existingContent.unifiedScore = this.calculateUnifiedScoreWithUserRatings(
+    existingContent.unifiedScore =
+      calculateUnifiedScore(
         tmdbData.voteAverage,
         tmdbData.voteCount,
         existingContent.malScore,
         existingContent.malScoredBy,
         existingContent.userRatingAverage,
         existingContent.userRatingCount,
-      )
-    } else {
-      existingContent.unifiedScore =
-        this.calculateUnifiedScoreWithUserRatings(
-          tmdbData.voteAverage,
-          tmdbData.voteCount,
-          existingContent.malScore,
-          existingContent.malScoredBy,
-          existingContent.userRatingAverage,
-          existingContent.userRatingCount,
-        ) ||
-        tmdbData.voteAverage ||
-        existingContent.malScore ||
-        0
-    }
+      ) ||
+      tmdbData.voteAverage ||
+      existingContent.malScore ||
+      0
 
     if (!existingContent.dataSources) {
       existingContent.dataSources = {}
@@ -827,7 +768,7 @@ class DatabasePopulator {
     ])
 
     existingContent.unifiedScore =
-      this.calculateUnifiedScoreWithUserRatings(
+      calculateUnifiedScore(
         existingContent.voteAverage,
         existingContent.voteCount,
         malData.malScore,
@@ -945,29 +886,14 @@ class DatabasePopulator {
     console.log(`   Errors: ${this.stats.errors}`)
     console.log(`   Skipped: ${this.stats.skipped}`)
 
-    const totalContent = await Content.countDocuments()
-    const tmdbOnlyContent = await Content.countDocuments({
-      tmdbId: { $exists: true },
-      malId: { $exists: false },
-    })
-    const malOnlyContent = await Content.countDocuments({
-      malId: { $exists: true },
-      tmdbId: { $exists: false },
-    })
-    const mergedContent = await Content.countDocuments({
-      tmdbId: { $exists: true },
-      malId: { $exists: true },
-    })
+    const { totalContent, tmdbOnlyContent, malOnlyContent, mergedContent, movies, tvShows, specials } =
+      await catalogStats()
 
     console.log('\nDatabase Statistics:')
     console.log(`   Total content: ${totalContent}`)
     console.log(`   TMDB-only content: ${tmdbOnlyContent}`)
     console.log(`   MAL-only content: ${malOnlyContent}`)
     console.log(`   Merged content: ${mergedContent}`)
-
-    const movies = await Content.countDocuments({ contentType: 'movie' })
-    const tvShows = await Content.countDocuments({ contentType: 'tv' })
-    const specials = await Content.countDocuments({ contentType: 'special' })
 
     console.log('\nContent Type Breakdown:')
     console.log(`   Movies: ${movies}`)
@@ -1019,17 +945,6 @@ export async function ingestMalRankingByTypes(rankingType, limit = 50, allowedTy
   }
 
   return inserted
-}
-
-/**
- * Upsert MAL ranking TV rows (upcoming/airing) so catalog tabs have titles
- * that overall popularity sync does not ingest.
- * @param {string} rankingType - MAL `ranking_type` (`upcoming` or `airing`).
- * @param {number} [limit=50]
- * @returns {Promise<number>} Newly inserted TV documents.
- */
-export async function ingestMalRankingTv(rankingType, limit = 50) {
-  return ingestMalRankingByTypes(rankingType, limit, ['tv'])
 }
 
 /**

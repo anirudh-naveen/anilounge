@@ -46,7 +46,7 @@ Then edit `backend/.env`:
 | `JWT_SECRET` | Sign-in | Any random string of 32+ characters (`openssl rand -base64 48`) |
 | `TMDB_API_KEY` | Catalog, search | Free key at https://www.themoviedb.org/settings/api |
 | `MAL_CLIENT_ID` | Catalog, search | Create a client at https://myanimelist.net/apiconfig |
-| `GEMINI_API_KEY` | AI chat and AI search | https://aistudio.google.com/apikey (optional) |
+| `GEMINI_API_KEY` | AI chat | https://aistudio.google.com/apikey (optional) |
 | `CONNECTIONS_SECRET` | Linking AniList/MAL/TMDB accounts | Optional; `openssl rand -base64 48` |
 
 Everything else can stay blank. Without email keys, verification codes and other

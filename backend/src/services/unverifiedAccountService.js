@@ -10,13 +10,12 @@
  * override the schedule with UNVERIFIED_CLEANUP_CRON.
  */
 
-import fs from 'fs'
-import path from 'path'
 import cron from 'node-cron'
 import { query } from '../../config/postgres.js'
 import { withJobLock } from '../utils/jobLock.js'
 import { issueEmailCode } from './accountSecurityService.js'
 import { sendVerificationReminder } from './emailService.js'
+import { deleteLegacyAvatarFile } from './avatarService.js'
 
 const HOUR_MS = 60 * 60 * 1000
 export const UNVERIFIED_SIGNUP_TTL_MS = 72 * HOUR_MS
@@ -94,15 +93,7 @@ async function runPass(summary, now) {
         )
         if (result.rowCount) {
           summary.deleted += 1
-          if (row.profile_picture && !row.profile_picture.startsWith('http')) {
-            const file = path.join(
-              process.cwd(),
-              'uploads',
-              'profiles',
-              path.basename(row.profile_picture),
-            )
-            fs.promises.unlink(file).catch(() => {})
-          }
+          deleteLegacyAvatarFile(row.profile_picture)
         }
       }
     } catch (error) {

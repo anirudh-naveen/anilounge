@@ -1,8 +1,8 @@
 /**
- * Input sanitization, ObjectId checks, in-memory rate limits, and upload validation.
+ * Input sanitization and id checks.
  *
- * Layer: middleware. HTML/XSS filters run globally; ObjectId and file checks
- * are stacked on individual routes.
+ * Layer: middleware. HTML/XSS filters run globally; the id check is stacked on
+ * individual routes.
  */
 
 import sanitizeHtml from 'sanitize-html'
@@ -91,49 +91,4 @@ export const validateObjectId = (req, res, next) => {
   }
 
   next()
-}
-
-/**
- * Reject uploaded files over 5MB, non-image MIME types, or executable-like names.
- *
- * @param {import('express').Request} req - Optional `req.file` from multer.
- * @param {import('express').Response} res - 400 when size, type, or filename fails.
- * @param {import('express').NextFunction} next - Continues when there is no file or it passes.
- * @returns {void}
- */
-export const validateFileUpload = (req, res, next) => {
-  if (req.file) {
-    // 5MB upload cap
-    if (req.file.size > 5 * 1024 * 1024) {
-      return res.status(400).json({
-        success: false,
-        message: 'File size too large. Maximum 5MB allowed.',
-      })
-    }
-
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-    if (!allowedTypes.includes(req.file.mimetype)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid file type. Only images are allowed.',
-      })
-    }
-
-    const suspiciousPatterns = /[<>:"/\\|?*]|\.(exe|bat|cmd|scr|pif|vbs|js|jar|php|asp|aspx)$/i
-    if (suspiciousPatterns.test(req.file.originalname)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid filename.',
-      })
-    }
-  }
-
-  next()
-}
-
-export default {
-  sanitizeHtmlInput,
-  sanitizeXSS,
-  validateObjectId,
-  validateFileUpload,
 }

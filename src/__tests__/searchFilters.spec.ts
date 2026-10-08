@@ -7,19 +7,9 @@ import {
   matchesSeasonFilter,
   matchesStatusFilter,
   matchesYearFilter,
-  seasonFromMonth,
 } from '@/utils/searchFilters'
 
 const from = new Date('2026-09-16T12:00:00.000Z')
-
-describe('seasonFromMonth', () => {
-  it('maps months onto anime seasons', () => {
-    expect(seasonFromMonth(0)).toBe('winter')
-    expect(seasonFromMonth(3)).toBe('spring')
-    expect(seasonFromMonth(8)).toBe('summer')
-    expect(seasonFromMonth(9)).toBe('fall')
-  })
-})
 
 describe('buildYearFilterOptions', () => {
   it('lists any year and every year from first to last content year', () => {

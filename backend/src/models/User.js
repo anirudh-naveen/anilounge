@@ -3,14 +3,12 @@
  */
 import crypto from 'crypto'
 import { comparePassword as checkPassword, hashPassword } from '../utils/passwordHash.js'
-import { query, startSession } from '../../config/postgres.js'
+import { query, withTransaction } from '../../config/postgres.js'
 import { compileMongoFilter } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
-import { asId } from '../db/ids.js'
-import { attachContentRelations, mapContentRow } from './Content.js'
+import { asId, isUuid } from '../db/ids.js'
+import { loadWorksById, pick } from './Content.js'
 import { normalizePreferences, normalizeProfileSettings } from '../utils/profileSettings.js'
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const DEMO_USER_EMAIL = 'demo@findanimation.com'
 
@@ -154,48 +152,11 @@ async function loadUserChildren(doc) {
 }
 
 async function populateWatchlistContent(doc, select) {
-  const ids = doc.watchlist.map((item) => item.content).filter(Boolean)
-  if (!ids.length) return
-  const { rows } = await query('SELECT * FROM works WHERE id = ANY($1::uuid[])', [ids])
-  const contents = await attachContentRelations(rows.map(mapContentRow))
-  const byId = new Map(contents.map((item) => [String(item._id), item]))
+  const byId = await loadWorksById(doc.watchlist.map((item) => item.content).filter(Boolean))
   doc.watchlist = doc.watchlist.map((item) => ({
     ...item,
     content: pick(byId.get(String(item.content)), select) || item.content,
   }))
-}
-
-async function populateRatingContent(doc) {
-  const ids = doc.ratings.map((item) => item.content).filter(Boolean)
-  if (!ids.length) return
-  const { rows } = await query('SELECT * FROM works WHERE id = ANY($1::uuid[])', [ids])
-  const contents = await attachContentRelations(rows.map(mapContentRow))
-  const byId = new Map(contents.map((item) => [String(item._id), item]))
-  doc.ratings = doc.ratings.map((item) => ({
-    ...item,
-    content: byId.get(String(item.content)) || item.content,
-  }))
-}
-
-async function populateFavoriteEntities(doc) {
-  const ids = doc.favoriteEntities.map((item) => item.entity).filter(Boolean)
-  if (!ids.length) return
-  const { default: Entity } = await import('./Entity.js')
-  const entities = await Entity.find({ _id: { $in: ids } })
-  const byId = new Map(entities.map((item) => [String(item._id), item]))
-  doc.favoriteEntities = doc.favoriteEntities.map((item) => ({
-    ...item,
-    entity: byId.get(String(item.entity)) || item.entity,
-  }))
-}
-
-function pick(doc, select) {
-  if (!doc) return null
-  if (!select || typeof select !== 'string') return doc
-  const fields = select.split(/\s+/).filter(Boolean)
-  const out = { _id: doc._id, id: doc._id }
-  for (const field of fields) out[field] = doc[field]
-  return out
 }
 
 function isBcrypt(value) {
@@ -222,6 +183,18 @@ function User(data = {}, options = {}) {
   if (data.ratings) this.ratings = data.ratings
   if (data.favoriteEntities) this.favoriteEntities = data.favoriteEntities
   this.$isNew = !options.fromDb
+}
+
+/**
+ * A user document for a `users` row as loaded (no child lists yet).
+ * @param {object} row
+ * @returns {User}
+ */
+function userFromRow(row) {
+  const doc = Object.create(User.prototype)
+  Object.assign(doc, mapUserRow(row))
+  doc.$isNew = false
+  return doc
 }
 
 User.prototype.isDemo = function isDemo() {
@@ -251,20 +224,9 @@ User.prototype.toObject = function toObject() {
  * @param {{ session?: object }} [options] - A caller's open transaction to join.
  * @returns {Promise<User>}
  */
-User.prototype.save = async function save(options = {}) {
+User.prototype.save = function save(options = {}) {
   if (options.session) return writeUser(this)
-  const session = await startSession()
-  try {
-    await session.startTransaction()
-    await writeUser(this)
-    await session.commitTransaction()
-    return this
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
-  }
+  return withTransaction(() => writeUser(this))
 }
 
 /** Hidden marker on a user document: its child rows as loaded (or last saved). */
@@ -367,7 +329,7 @@ function childRows(user) {
  * @returns {Promise<void>}
  */
 async function writeChildren(userId, rows, previous) {
-  const valid = (list) => list.filter((row) => UUID_RE.test(String(row.content_id || '')))
+  const valid = (list) => list.filter((row) => isUuid(row.content_id))
   const plan = (name) =>
     previous
       ? diffRows(valid(previous[name]), valid(rows[name]))
@@ -455,7 +417,7 @@ async function writeUser(user) {
     user.password = passwordHash
   }
   const lockUntil =
-    user.lockUntil == null || user.lockUntil === undefined
+    user.lockUntil == null
       ? null
       : user.lockUntil instanceof Date
         ? user.lockUntil
@@ -530,22 +492,12 @@ async function execUserFind(filter, q) {
     compiled.params,
   )
   if (!rows[0]) return null
-  const doc = new User(mapUserRow(rows[0]), { fromDb: true })
-  Object.assign(doc, mapUserRow(rows[0]))
+  const doc = userFromRow(rows[0])
   await loadUserChildren(doc)
-  if (q._select === '-password') {
-    // still keep hash internally for compare; strip on toJSON
-  }
   for (const spec of q._populate) {
     const path = typeof spec === 'string' ? spec : spec.path
     if (path === 'watchlist.content' || path?.includes('watchlist')) {
       await populateWatchlistContent(doc, typeof spec === 'object' ? spec.select : null)
-    }
-    if (path === 'ratings.content' || path === 'ratings') {
-      await populateRatingContent(doc)
-    }
-    if (path === 'favoriteEntities.entity' || path?.includes('favoriteEntities')) {
-      await populateFavoriteEntities(doc)
     }
   }
   return q._lean ? doc.toJSON() : doc
@@ -568,27 +520,23 @@ User.findById = function findById(id) {
  * @returns {Promise<User|null>}
  */
 User.findAuthUser = async function findAuthUser(id) {
-  if (!UUID_RE.test(String(id || ''))) return null
+  if (!isUuid(id)) return null
   const { rows } = await query('SELECT * FROM users WHERE id = $1::uuid', [String(id)])
-  if (!rows[0]) return null
-  const doc = new User(mapUserRow(rows[0]), { fromDb: true })
-  Object.assign(doc, mapUserRow(rows[0]))
-  return doc
+  return rows[0] ? userFromRow(rows[0]) : null
 }
 
-User.find = function find(filter = {}) {
-  return new DocQuery(async (q) => {
-    const compiled = compileMongoFilter(filter, 'users')
-    const { rows } = await query(`SELECT u.* FROM users u WHERE ${compiled.sql}`, compiled.params)
-    const docs = []
-    for (const row of rows) {
-      const doc = new User(mapUserRow(row), { fromDb: true })
-      Object.assign(doc, mapUserRow(row))
-      await loadUserChildren(doc)
-      docs.push(q._lean ? doc.toJSON() : doc)
-    }
-    return docs
-  })
+/**
+ * Whether any user matches `filter`, without loading their lists.
+ * @param {object} filter - Mongo-style filter (see db/mongoFilter.js).
+ * @returns {Promise<boolean>}
+ */
+User.exists = async function exists(filter = {}) {
+  const compiled = compileMongoFilter(filter, 'users')
+  const { rows } = await query(
+    `SELECT 1 FROM users u WHERE ${compiled.sql} LIMIT 1`,
+    compiled.params,
+  )
+  return rows.length > 0
 }
 
 User.distinct = async function distinct(path) {
@@ -601,19 +549,6 @@ User.distinct = async function distinct(path) {
     return rows.map((row) => row.content_id)
   }
   return []
-}
-
-User.findByIdAndUpdate = async function findByIdAndUpdate(id, update = {}, options = {}) {
-  const doc = await User.findById(id)
-  if (!doc) return null
-  if (update.preferences) {
-    doc.preferences = { ...doc.preferences, ...update.preferences }
-    delete update.preferences
-  }
-  Object.assign(doc, update)
-  await doc.save()
-  if (options.new === false) return doc
-  return options.select === '-password' || true ? doc : doc
 }
 
 export default User

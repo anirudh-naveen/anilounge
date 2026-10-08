@@ -419,10 +419,10 @@ import {
   getDetailsRouteName,
   tracksEpisodes,
 } from '@/services/api'
-import { getRatingColorHSL } from '@/utils/ratingColors'
+import { getRatingColor } from '@/utils/ratingColors'
 import { getTotalVoteCount, getWeightedAverage, toUserRating } from '@/utils/ratings'
 import { useToast } from 'vue-toastification'
-import type { WatchlistItem, TVShow } from '@/types'
+import type { WatchlistItem } from '@/types'
 import SortByControls from '@/components/SortByControls.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
@@ -489,7 +489,7 @@ const getContentId = (item: WatchlistItem) => {
 }
 
 const getRatingStyle = (rating: number | undefined) => {
-  const color = getRatingColorHSL(rating)
+  const color = getRatingColor(rating)
   return {
     color: color,
     fontWeight: 'bold',
@@ -560,9 +560,7 @@ const getContentSeasons = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 'Unknown'
   const content = item.content
   if (!content) return 'Unknown'
-  return content.contentType === 'tv'
-    ? content.seasonCount || (content as unknown as TVShow).numberOfSeasons || 'Unknown'
-    : 'N/A'
+  return content.contentType === 'tv' ? content.seasonCount || 'Unknown' : 'N/A'
 }
 
 const getContentRating = (item: WatchlistItem) => {
@@ -584,13 +582,7 @@ const getTotalEpisodes = (item: WatchlistItem) => {
   if (!content) return 0
   // The API sends `episodeCount` / `malEpisodes`; `totalEpisodes` is never stored, and
   // 0 means the episode count isn't known yet (e.g. a show still airing).
-  return (
-    content.episodeCount ||
-    content.malEpisodes ||
-    (content as unknown as TVShow).numberOfEpisodes ||
-    item.totalEpisodes ||
-    0
-  )
+  return content.episodeCount || content.malEpisodes || item.totalEpisodes || 0
 }
 
 const getTotalSeasons = (item: WatchlistItem) => {
@@ -598,12 +590,7 @@ const getTotalSeasons = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 1
   const content = item.content
   if (!content) return 1
-  return content.contentType === 'tv'
-    ? content.seasonCount ||
-        (content as unknown as TVShow).numberOfSeasons ||
-        item.totalSeasons ||
-        1
-    : 1
+  return content.contentType === 'tv' ? content.seasonCount || item.totalSeasons || 1 : 1
 }
 
 /** Episodes out so far: up to the next scheduled one while airing, else the total. */

@@ -1,12 +1,3 @@
-/**
- * entities.js — character / voice-actor / studio name helpers.
- *
- * Utils layer: normalizes names, maps Jikan/TMDB payloads onto catalog entity
- * shapes, and matches episode cast names onto persisted characters. Mongo and
- * HTTP stay in the entity service.
- */
-
-export const ENTITY_TYPES = ['character', 'voice_actor', 'studio']
 export const HIGHLIGHTED_CHARACTERS_PER_TITLE = 10
 
 const ROLE_ORDER = { Main: 0, Supporting: 1, Background: 2 }
@@ -535,18 +526,9 @@ export function characterUpsertFilter(payload) {
 }
 
 /**
- * Mongo filter used to upsert a voice actor.
- * @param {{ malId?: number, name?: string }} payload
- * @returns {object}
- */
-export function voiceActorUpsertFilter(payload) {
-  return entityUpsertFilter('voice_actor', payload)
-}
-
-/**
  * Map one Jikan `/anime/{id}/characters` row onto an upsert payload.
  * @param {object} [row]
- * @param {string|import('mongoose').Types.ObjectId} contentId
+ * @param {string} contentId
  * @returns {{ malId: number, name: string, nativeName: string, alternativeNames: string[], imagePath: string, appearance: object } | null}
  */
 export function mapJikanCharacterRow(row, contentId) {
@@ -595,7 +577,7 @@ export function mapJikanCharacterRow(row, contentId) {
  * Map TMDB credit rows onto character upsert payloads (no MAL id).
  * Uses the `character` field as the entity name and the actor as a voice credit.
  * @param {object[]} [credits]
- * @param {string|import('mongoose').Types.ObjectId} contentId
+ * @param {string} contentId
  * @returns {Array<{ name: string, tmdbId?: number, imagePath: string, appearance: object }>}
  */
 export function mapTmdbCharacterCredits(credits, contentId) {
@@ -706,58 +688,6 @@ export function mapJikanPersonVoiceRow(row) {
     role: normalizeEntityName(row?.role) || 'Supporting',
     animeMalId: Number.isFinite(animeMalId) && animeMalId > 0 ? animeMalId : undefined,
   }
-}
-
-/**
- * Unique voice actors for a title, Japanese / Main credits first, capped for the Cast row.
- * @param {object[]} [entities]
- * @param {unknown} contentId
- * @param {number} [limit]
- * @returns {object[]}
- */
-export function highlightedVoiceActors(
-  entities,
-  contentId,
-  limit = HIGHLIGHTED_CHARACTERS_PER_TITLE,
-) {
-  const cap = Number.isFinite(Number(limit)) ? Number(limit) : HIGHLIGHTED_CHARACTERS_PER_TITLE
-  return [...(Array.isArray(entities) ? entities : [])]
-    .filter((entity) => displayPersonName(entity?.name))
-    .sort((left, right) => {
-      const leftApp = appearanceForContentId(left, contentId)
-      const rightApp = appearanceForContentId(right, contentId)
-      const roleDiff = appearanceRoleRank(leftApp?.role) - appearanceRoleRank(rightApp?.role)
-      if (roleDiff) return roleDiff
-      const leftJa = /japanese/i.test(leftApp?.language || '') ? 0 : 1
-      const rightJa = /japanese/i.test(rightApp?.language || '') ? 0 : 1
-      if (leftJa !== rightJa) return leftJa - rightJa
-      const importanceDiff = (Number(rightApp?.importance) || 0) - (Number(leftApp?.importance) || 0)
-      if (importanceDiff) return importanceDiff
-      return displayPersonName(left?.name).localeCompare(displayPersonName(right?.name))
-    })
-    .slice(0, Math.max(0, cap))
-}
-
-/**
- * Find a persisted character that matches an episode-cast character name.
- * @param {string} characterName
- * @param {Array<{ _id?: unknown, name?: string, englishName?: string, nativeName?: string, alternativeNames?: string[] }>} characters
- * @returns {object | null}
- */
-export function matchCharacterByName(characterName, characters) {
-  const target = canonicalCharacterNameKey(characterName)
-  if (!target || !Array.isArray(characters)) return null
-  return (
-    characters.find((entity) => {
-      const names = [
-        entity?.name,
-        entity?.englishName,
-        entity?.nativeName,
-        ...(Array.isArray(entity?.alternativeNames) ? entity.alternativeNames : []),
-      ]
-      return names.some((name) => canonicalCharacterNameKey(name) === target)
-    }) || null
-  )
 }
 
 /**

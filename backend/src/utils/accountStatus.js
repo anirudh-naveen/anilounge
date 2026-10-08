@@ -60,5 +60,3 @@ export function mutedMessage(user) {
 }
 
 export const BANNED_MESSAGE = 'This account has been banned from AniLounge.'
-
-export default { isBanned, isMuted, muteEndsAt, mutedMessage, MUTE_DURATIONS, BANNED_MESSAGE }

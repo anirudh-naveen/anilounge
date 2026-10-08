@@ -6,8 +6,8 @@ import { query } from '../../config/postgres.js'
 import { appearanceRole, appearanceRoleToApi, entityTypeFromKind, kindFromEntityType } from '../db/kinds.js'
 import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
-import { asId } from '../db/ids.js'
-import { attachContentRelations, loadAdminOverrides, mapContentRow } from './Content.js'
+import { asId, isUuid } from '../db/ids.js'
+import { groupBy, loadAdminOverrides, loadWorksById, pick } from './Content.js'
 import { applyAdminOverrides, readEditableFields } from '../utils/adminContent.js'
 import { planSyncChanges } from '../utils/syncReview.js'
 import { recordSyncNotices } from '../services/syncGuard.js'
@@ -70,9 +70,9 @@ async function loadEntityChildren(docs) {
     ),
     query('SELECT studio_id, work_id FROM studio_credits WHERE studio_id = ANY($1::uuid[])', [ids]),
   ])
-  const namesById = groupRows(names.rows, 'content_id')
-  const appsById = groupRows(appearances.rows, 'owner_id')
-  const studioById = groupRows(studioWorks.rows, 'studio_id')
+  const namesById = groupBy(names.rows, 'content_id')
+  const appsById = groupBy(appearances.rows, 'owner_id')
+  const studioById = groupBy(studioWorks.rows, 'studio_id')
   for (const doc of docs) {
     const id = String(doc._id)
     doc.alternativeNames = (namesById.get(id) || []).map((row) => row.name)
@@ -97,16 +97,6 @@ async function loadEntityChildren(docs) {
     }))
   }
   return docs
-}
-
-function groupRows(rows, key) {
-  const map = new Map()
-  for (const row of rows) {
-    const id = String(row[key])
-    if (!map.has(id)) map.set(id, [])
-    map.get(id).push(row)
-  }
-  return map
 }
 
 function Entity(data = {}, options = {}) {
@@ -147,12 +137,7 @@ Entity.prototype.populate = async function populate(specs) {
   const characterIds = [
     ...new Set(this.appearances.map((row) => asId(row.character)).filter(Boolean)),
   ]
-  let contents = []
-  if (contentIds.length) {
-    const { rows } = await query('SELECT * FROM works WHERE id = ANY($1::uuid[])', [contentIds])
-    contents = await attachContentRelations(rows.map(mapContentRow))
-  }
-  const contentById = new Map(contents.map((item) => [String(item._id), item]))
+  const contentById = await loadWorksById(contentIds)
   const characterById = new Map()
   if (characterIds.length) {
     const { rows } = await query(
@@ -181,21 +166,6 @@ Entity.prototype.populate = async function populate(specs) {
     }
   }
   return this
-}
-
-function pick(doc, select) {
-  if (!doc) return null
-  if (!select || typeof select !== 'string') return doc
-  const fields = select.split(/\s+/).filter(Boolean)
-  const out = { _id: doc._id || doc.id, id: doc._id || doc.id }
-  for (const field of fields) out[field] = doc[field]
-  return out
-}
-
-const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function isUuid(value) {
-  return typeof value === 'string' && UUID_SHAPE.test(value)
 }
 
 /**
@@ -452,7 +422,7 @@ Entity.prototype.save = async function save() {
         await query(
           `DELETE FROM appearances
            WHERE character_id = $1 AND NOT admin_locked
-             AND NOT (work_id::text = ANY($2::text[]))`,
+             AND work_id <> ALL($2::uuid[])`,
           [this._id, keptWorks],
         )
       }
@@ -582,16 +552,6 @@ Entity.updateMany = async function updateMany(filter = {}, update = {}) {
     params,
   )
   return { modifiedCount: result.rowCount || 0 }
-}
-
-Entity.collection = {
-  dropIndex: async () => {},
-}
-
-Entity.create = async function create(data) {
-  const doc = data instanceof Entity ? data : new Entity(data)
-  await doc.save()
-  return doc
 }
 
 export default Entity

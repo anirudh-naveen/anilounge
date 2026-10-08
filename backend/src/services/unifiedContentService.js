@@ -1,6 +1,7 @@
 /**
  * TMDB and MyAnimeList adapters that map animation catalog payloads into Content-shaped objects.
- * Domain service: search, popular lists, type mapping (OVA/special → special), and live-search dedup.
+ * Domain service: discovery/ranking fetches, TMDB title search, type mapping (OVA/special → special),
+ * airing-schedule refresh, and episode data.
  * Does not persist; contentSyncService writes the converted documents.
  *
  * API references: https://developer.themoviedb.org/docs/getting-started
@@ -15,12 +16,7 @@ import {
   mapTmdbSeason,
   tmdbSeasonNumbers,
 } from '../utils/episodes.js'
-import {
-  buildTitleFields,
-  collectContentTitles,
-  contentTitlesOverlap,
-  externalIdsConflict,
-} from '../utils/titles.js'
+import { buildTitleFields } from '../utils/titles.js'
 import { MAL_ORIGIN_COUNTRIES, extractOriginCountries } from '../utils/originCountries.js'
 import { parseMalDate } from '../utils/malDates.js'
 
@@ -31,24 +27,60 @@ const MAL_ANIME_FIELDS =
 
 const MAL_SPECIAL_TYPES = new Set(['ova', 'special'])
 
-/** External search results are reused for this long. */
-const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000
-const SEARCH_CACHE_MAX = 500
-/** Longest a user-facing search waits for a provider's rate-limit slot. */
-const SEARCH_MAX_WAIT_MS = 3000
+const EPISODE_CACHE_MAX = 500
 
-/**
- * Whether a converted item should appear in a typed search/popular request.
- * `movie` includes MAL specials so they surface with movies in the UI.
- * @param {{ contentType: string }} item
- * @param {string} contentType - `all` | `movie` | `tv` | `special`
- * @returns {boolean}
- */
-const matchesRequestedType = (item, contentType) => {
-  if (!contentType || contentType === 'all') return true
-  if (contentType === 'movie') return item.contentType === 'movie' || item.contentType === 'special'
-  return item.contentType === contentType
-}
+/** Runtimes (minutes) for well-known films MAL lists without one. */
+const KNOWN_MOVIE_RUNTIMES = Object.entries({
+  'Gintama: The Final': 104,
+  'Gintama: The Very Final': 104,
+  'Demon Slayer: Kimetsu no Yaiba - The Movie: Mugen Train': 117,
+  'Demon Slayer: Mugen Train': 117,
+  'Your Name': 106,
+  'Kimi no Na wa': 106,
+  'Spirited Away': 125,
+  'Sen to Chihiro no Kamikakushi': 125,
+  'Princess Mononoke': 134,
+  'Mononoke-hime': 134,
+  "Howl's Moving Castle": 119,
+  'Hauru no Ugoku Shiro': 119,
+  'My Neighbor Totoro': 86,
+  'Tonari no Totoro': 86,
+  "Kiki's Delivery Service": 103,
+  'Majo no Takkyuubin': 103,
+  'Castle in the Sky': 125,
+  'Tenkuu no Shiro Laputa': 125,
+  'The Wind Rises': 126,
+  'Kaze Tachinu': 126,
+  Ponyo: 101,
+  'Gake no Ue no Ponyo': 101,
+  'The Tale of Princess Kaguya': 137,
+  'Kaguya-hime no Monogatari': 137,
+  'When Marnie Was There': 103,
+  'Omoide no Marnie': 103,
+  'The Red Turtle': 80,
+  'La Tortue Rouge': 80,
+  'A Silent Voice': 130,
+  'Koe no Katachi': 130,
+  'Weathering with You': 112,
+  'Tenki no Ko': 112,
+  Suzume: 122,
+  'Suzume no Tojimari': 122,
+  'Perfect Blue': 81,
+  'Millennium Actress': 87,
+  'Tokyo Godfathers': 92,
+  Paprika: 90,
+  'Wolf Children': 117,
+  'Ookami Kodomo no Ame to Yuki': 117,
+  'The Boy and the Heron': 124,
+  'Kimitachi wa Dou Ikiru ka': 124,
+  'The Girl Who Leapt Through Time': 98,
+  'Toki wo Kakeru Shoujo': 98,
+  'Summer Wars': 114,
+  'The Secret World of Arrietty': 94,
+  'Karigurashi no Arrietty': 94,
+  'From Up on Poppy Hill': 91,
+  'Kokuriko-zaka Kara': 91,
+}).map(([title, runtime]) => ({ title, key: title.toLowerCase(), runtime }))
 
 class UnifiedContentService {
   constructor() {
@@ -80,8 +112,6 @@ class UnifiedContentService {
     this.episodeCache = new Map()
     /** Earliest time the next call to each provider may start (see `throttle`). */
     this.nextSlot = { tmdb: 0, mal: 0 }
-    /** Recent external search results, so repeated searches don't hit the APIs again. */
-    this.searchCache = new Map()
   }
 
   /**
@@ -97,15 +127,6 @@ class UnifiedContentService {
     const at = Math.max(now, this.nextSlot[provider])
     this.nextSlot[provider] = at + interval
     if (at > now) await this.delay(at - now)
-  }
-
-  /**
-   * How long a new call to `provider` would wait for its slot.
-   * @param {'tmdb' | 'mal'} provider
-   * @returns {number} Milliseconds.
-   */
-  queueDelay(provider) {
-    return Math.max(0, this.nextSlot[provider] - Date.now())
   }
 
   /**
@@ -145,12 +166,13 @@ class UnifiedContentService {
   }
 
   /**
-   * Discover TMDB animation movies (genre 16), popularity descending.
-   * @param {number} [page=1]
-   * @param {number} [limit=20]
+   * Discover TMDB animation (genre 16), popularity descending.
+   * @param {'movie' | 'tv'} type
+   * @param {number} page
+   * @param {number} limit
    * @returns {Promise<object[]>}
    */
-  async getTmdbAnimatedMovies(page = 1, limit = 20) {
+  async discoverTmdbAnimated(type, page, limit) {
     if (!this.hasTmdbKey) {
       console.log('TMDB API key not configured')
       return []
@@ -158,7 +180,7 @@ class UnifiedContentService {
 
     try {
       await this.throttle('tmdb')
-      const response = await this.tmdbClient.get('/discover/movie', {
+      const response = await this.tmdbClient.get(`/discover/${type}`, {
         params: {
           api_key: this.tmdbApiKey,
           with_genres: '16', // Animation genre
@@ -170,9 +192,19 @@ class UnifiedContentService {
 
       return response.data.results.slice(0, limit)
     } catch (error) {
-      console.error('TMDB animated movies error:', error.response?.data || error.message)
+      console.error(`TMDB animated ${type} error:`, error.response?.data || error.message)
       return []
     }
+  }
+
+  /**
+   * Discover TMDB animation movies (genre 16), popularity descending.
+   * @param {number} [page=1]
+   * @param {number} [limit=20]
+   * @returns {Promise<object[]>}
+   */
+  getTmdbAnimatedMovies(page = 1, limit = 20) {
+    return this.discoverTmdbAnimated('movie', page, limit)
   }
 
   /**
@@ -220,29 +252,8 @@ class UnifiedContentService {
    * @param {number} [limit=20]
    * @returns {Promise<object[]>}
    */
-  async getTmdbAnimatedTVShows(page = 1, limit = 20) {
-    if (!this.hasTmdbKey) {
-      console.log('TMDB API key not configured')
-      return []
-    }
-
-    try {
-      await this.throttle('tmdb')
-      const response = await this.tmdbClient.get('/discover/tv', {
-        params: {
-          api_key: this.tmdbApiKey,
-          with_genres: '16', // Animation genre
-          sort_by: 'popularity.desc',
-          page,
-          include_adult: false,
-        },
-      })
-
-      return response.data.results.slice(0, limit)
-    } catch (error) {
-      console.error('TMDB animated TV shows error:', error.response?.data || error.message)
-      return []
-    }
+  getTmdbAnimatedTVShows(page = 1, limit = 20) {
+    return this.discoverTmdbAnimated('tv', page, limit)
   }
 
   /**
@@ -382,32 +393,6 @@ class UnifiedContentService {
     } catch (error) {
       console.error('MAL anime details error:', error.response?.data || error.message)
       return null
-    }
-  }
-
-  /**
-   * MAL title search.
-   * @param {string} query
-   * @param {number} [limit=20]
-   * @returns {Promise<object[]>}
-   */
-  async searchMalAnime(query, limit = 20) {
-    if (!this.hasMalKey) return []
-
-    try {
-      await this.throttle('mal')
-      const response = await this.malClient.get('/anime', {
-        params: {
-          q: query,
-          limit: Math.min(limit, 100),
-          fields: MAL_ANIME_FIELDS,
-        },
-      })
-
-      return response.data.data || []
-    } catch (error) {
-      console.error('MAL search error:', error.response?.data || error.message)
-      return []
     }
   }
 
@@ -609,103 +594,13 @@ class UnifiedContentService {
    * @returns {number} Minutes
    */
   getEstimatedRuntime(title) {
-    const knownRuntimes = {
-      'Gintama: The Final': 104,
-      'Gintama: The Very Final': 104,
-      'Demon Slayer: Kimetsu no Yaiba - The Movie: Mugen Train': 117,
-      'Demon Slayer: Mugen Train': 117,
-      'Your Name': 106,
-      'Kimi no Na wa': 106,
-      'Spirited Away': 125,
-      'Sen to Chihiro no Kamikakushi': 125,
-      'Princess Mononoke': 134,
-      'Mononoke-hime': 134,
-      "Howl's Moving Castle": 119,
-      'Hauru no Ugoku Shiro': 119,
-      'My Neighbor Totoro': 86,
-      'Tonari no Totoro': 86,
-      "Kiki's Delivery Service": 103,
-      'Majo no Takkyuubin': 103,
-      'Castle in the Sky': 125,
-      'Tenkuu no Shiro Laputa': 125,
-      'The Wind Rises': 126,
-      'Kaze Tachinu': 126,
-      Ponyo: 101,
-      'Gake no Ue no Ponyo': 101,
-      'The Tale of Princess Kaguya': 137,
-      'Kaguya-hime no Monogatari': 137,
-      'When Marnie Was There': 103,
-      'Omoide no Marnie': 103,
-      'The Red Turtle': 80,
-      'La Tortue Rouge': 80,
-      'A Silent Voice': 130,
-      'Koe no Katachi': 130,
-      'Weathering with You': 112,
-      'Tenki no Ko': 112,
-      Suzume: 122,
-      'Suzume no Tojimari': 122,
-      'Perfect Blue': 81,
-      'Millennium Actress': 87,
-      'Tokyo Godfathers': 92,
-      Paprika: 90,
-      'Wolf Children': 117,
-      'Ookami Kodomo no Ame to Yuki': 117,
-      'The Boy and the Heron': 124,
-      'Kimitachi wa Dou Ikiru ka': 124,
-      'The Girl Who Leapt Through Time': 98,
-      'Toki wo Kakeru Shoujo': 98,
-      'Summer Wars': 114,
-      'Summer Wars': 114,
-      'The Secret World of Arrietty': 94,
-      'Karigurashi no Arrietty': 94,
-      'From Up on Poppy Hill': 91,
-      'Kokuriko-zaka Kara': 91,
-      'The Wind Rises': 126,
-      'Kaze Tachinu': 126,
-      'The Tale of Princess Kaguya': 137,
-      'Kaguya-hime no Monogatari': 137,
-      'When Marnie Was There': 103,
-      'Omoide no Marnie': 103,
-      'The Red Turtle': 80,
-      'La Tortue Rouge': 80,
-      'A Silent Voice': 130,
-      'Koe no Katachi': 130,
-      'Weathering with You': 112,
-      'Tenki no Ko': 112,
-      Suzume: 122,
-      'Suzume no Tojimari': 122,
-      'Perfect Blue': 81,
-      'Millennium Actress': 87,
-      'Tokyo Godfathers': 92,
-      Paprika: 90,
-      'Wolf Children': 117,
-      'Ookami Kodomo no Ame to Yuki': 117,
-      'The Boy and the Heron': 124,
-      'Kimitachi wa Dou Ikiru ka': 124,
-      'The Girl Who Leapt Through Time': 98,
-      'Toki wo Kakeru Shoujo': 98,
-      'Summer Wars': 114,
-      'Summer Wars': 114,
-      'The Secret World of Arrietty': 94,
-      'Karigurashi no Arrietty': 94,
-      'From Up on Poppy Hill': 91,
-      'Kokuriko-zaka Kara': 91,
-    }
-
-    if (knownRuntimes[title]) {
-      return knownRuntimes[title]
-    }
-
-    for (const [knownTitle, runtime] of Object.entries(knownRuntimes)) {
-      if (
-        title.toLowerCase().includes(knownTitle.toLowerCase()) ||
-        knownTitle.toLowerCase().includes(title.toLowerCase())
-      ) {
-        return runtime
-      }
-    }
-
     const titleLower = title.toLowerCase()
+    const known =
+      KNOWN_MOVIE_RUNTIMES.find((entry) => entry.title === title) ||
+      KNOWN_MOVIE_RUNTIMES.find(
+        (entry) => titleLower.includes(entry.key) || entry.key.includes(titleLower),
+      )
+    if (known) return known.runtime
 
     if (
       titleLower.includes('ghibli') ||
@@ -774,64 +669,6 @@ class UnifiedContentService {
   }
 
   /**
-   * Live search across TMDB and MAL, then title/type dedup and relevance ranking.
-   * @param {string} query
-   * @param {{ contentType?: string, limit?: number, includeTmdb?: boolean, includeMal?: boolean }} [options={}]
-   * @returns {Promise<object[]>}
-   */
-  async searchContent(query, options = {}) {
-    const { contentType = 'all', limit = 20, includeTmdb = true, includeMal = true } = options
-
-    const cacheKey = [contentType, limit, includeTmdb, includeMal, String(query).toLowerCase()].join('|')
-    const cached = this.searchCache.get(cacheKey)
-    if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return cached.results
-
-    const results = []
-
-    // A user is waiting: skip a provider whose queue is already long (a sync or other
-    // searches are using it) rather than make the search hang.
-    if (includeTmdb && this.hasTmdbKey && this.queueDelay('tmdb') < SEARCH_MAX_WAIT_MS) {
-      try {
-        const tmdbResults = await this.searchTmdb(query, contentType, limit)
-        results.push(
-          ...tmdbResults.map((item) => ({
-            ...item,
-            source: 'tmdb',
-          })),
-        )
-      } catch (error) {
-        console.error('TMDB search error:', error.message)
-      }
-    }
-
-    if (includeMal && this.hasMalKey && this.queueDelay('mal') < SEARCH_MAX_WAIT_MS) {
-      try {
-        const malResults = await this.searchMalAnime(query, limit)
-        results.push(
-          ...malResults
-            .map((item) => this.convertMalToContent(item))
-            .filter((item) => item !== null)
-            .filter((item) => matchesRequestedType(item, contentType))
-            .map((item) => ({
-              ...item,
-              source: 'mal',
-            })),
-        )
-      } catch (error) {
-        console.error('MAL search error:', error.message)
-      }
-    }
-
-    const ranked = this.deduplicateAndRank(results, query)
-    this.searchCache.delete(cacheKey)
-    this.searchCache.set(cacheKey, { at: Date.now(), results: ranked })
-    if (this.searchCache.size > SEARCH_CACHE_MAX) {
-      this.searchCache.delete(this.searchCache.keys().next().value)
-    }
-    return ranked
-  }
-
-  /**
    * TMDB movie/TV search limited to animation (genre id 16).
    * @param {string} query
    * @param {string} contentType
@@ -843,44 +680,25 @@ class UnifiedContentService {
 
     const results = []
     const searchLimit = Math.ceil(limit / 2)
+    const types = ['movie', 'tv'].filter((type) => contentType === 'all' || contentType === type)
 
     try {
-      if (contentType === 'all' || contentType === 'movie') {
+      for (const type of types) {
         await this.throttle('tmdb')
-        const movieResponse = await this.tmdbClient.get('/search/movie', {
+        const response = await this.tmdbClient.get(`/search/${type}`, {
           params: {
             api_key: this.tmdbApiKey,
             query,
             include_adult: false,
           },
         })
-
-        const movies = movieResponse.data.results
-          .filter((movie) => this.isAnimatedContent(movie))
-          .map((movie) => this.convertTmdbToContent(movie, 'movie'))
-          .filter((movie) => movie !== null)
-          .slice(0, searchLimit)
-
-        results.push(...movies)
-      }
-
-      if (contentType === 'all' || contentType === 'tv') {
-        await this.throttle('tmdb')
-        const tvResponse = await this.tmdbClient.get('/search/tv', {
-          params: {
-            api_key: this.tmdbApiKey,
-            query,
-            include_adult: false,
-          },
-        })
-
-        const tvShows = tvResponse.data.results
-          .filter((tv) => this.isAnimatedContent(tv))
-          .map((tv) => this.convertTmdbToContent(tv, 'tv'))
-          .filter((tv) => tv !== null)
-          .slice(0, searchLimit)
-
-        results.push(...tvShows)
+        results.push(
+          ...response.data.results
+            .filter((item) => this.isAnimatedContent(item))
+            .map((item) => this.convertTmdbToContent(item, type))
+            .filter((item) => item !== null)
+            .slice(0, searchLimit),
+        )
       }
 
       return results
@@ -899,113 +717,6 @@ class UnifiedContentService {
     if (!content.genre_ids) return false
 
     return content.genre_ids.includes(16)
-  }
-
-  /**
-   * Collapse live-search hits when any names overlap on the same contentType, then rank title match over score.
-   * @param {object[]} results
-   * @param {string} query
-   * @returns {object[]}
-   */
-  deduplicateAndRank(results, query) {
-    const deduplicated = []
-
-    for (const result of results) {
-      const duplicate = deduplicated.find(
-        (item) =>
-          item.contentType === result.contentType &&
-          contentTitlesOverlap(item, result) &&
-          !externalIdsConflict(item, result),
-      )
-      if (!duplicate) {
-        deduplicated.push(result)
-      }
-    }
-
-    const queryLower = query.toLowerCase()
-    const matchesQuery = (item) =>
-      collectContentTitles(item).some((title) => title.toLowerCase().includes(queryLower))
-
-    return deduplicated.sort((a, b) => {
-      const aTitleMatch = matchesQuery(a)
-      const bTitleMatch = matchesQuery(b)
-
-      if (aTitleMatch && !bTitleMatch) return -1
-      if (!aTitleMatch && bTitleMatch) return 1
-
-      const aScore = a.malScore || a.voteAverage || 0
-      const bScore = b.malScore || b.voteAverage || 0
-      return bScore - aScore
-    })
-  }
-
-  /**
-   * Mix TMDB discover + MAL ranking, sorted by TMDB popularity or MAL scored-by count.
-   * @param {{ contentType?: string, limit?: number, includeTmdb?: boolean, includeMal?: boolean }} [options={}]
-   * @returns {Promise<object[]>}
-   */
-  async getPopularContent(options = {}) {
-    const { contentType = 'all', limit = 20, includeTmdb = true, includeMal = true } = options
-
-    const results = []
-
-    if (includeTmdb && this.hasTmdbKey) {
-      try {
-        if (contentType === 'all' || contentType === 'movie') {
-          const movies = await this.getTmdbAnimatedMovies(1, Math.ceil(limit / 2))
-          results.push(
-            ...movies
-              .map((movie) => this.convertTmdbToContent(movie, 'movie'))
-              .filter((movie) => movie !== null)
-              .map((movie) => ({
-                ...movie,
-                source: 'tmdb',
-              })),
-          )
-        }
-
-        if (contentType === 'all' || contentType === 'tv') {
-          const tvShows = await this.getTmdbAnimatedTVShows(1, Math.ceil(limit / 2))
-          results.push(
-            ...tvShows
-              .map((tv) => this.convertTmdbToContent(tv, 'tv'))
-              .filter((tv) => tv !== null)
-              .map((tv) => ({
-                ...tv,
-                source: 'tmdb',
-              })),
-          )
-        }
-      } catch (error) {
-        console.error('Error getting TMDB popular content:', error.message)
-      }
-    }
-
-    if (includeMal && this.hasMalKey) {
-      try {
-        const malAnime = await this.getMalTopAnime(Math.ceil(limit / 2))
-        results.push(
-          ...malAnime
-            .map((anime) => this.convertMalToContent(anime))
-            .filter((anime) => anime !== null)
-            .filter((anime) => matchesRequestedType(anime, contentType))
-            .map((anime) => ({
-              ...anime,
-              source: 'mal',
-            })),
-        )
-      } catch (error) {
-        console.error('Error getting MAL popular content:', error.message)
-      }
-    }
-
-    return results
-      .sort((a, b) => {
-        const aPop = a.popularity || a.malScoredBy || 0
-        const bPop = b.popularity || b.malScoredBy || 0
-        return bPop - aPop
-      })
-      .slice(0, limit)
   }
 
   /**
@@ -1040,29 +751,28 @@ class UnifiedContentService {
     if (!this.needsAiringRefresh(content)) return false
 
     let updated = false
+    // Independent lookups; the page view is waiting on them.
+    const [mal, tmdb] = await Promise.all([
+      content.malId ? this.getMalAnimeDetails(content.malId, { skipDelay: true }) : null,
+      content.tmdbId ? this.getTmdbContentDetails(content.tmdbId, 'tv', { skipDelay: true }) : null,
+    ])
 
-    if (content.malId) {
-      const mal = await this.getMalAnimeDetails(content.malId, { skipDelay: true })
-      if (mal) {
-        if (mal.status) content.malStatus = mal.status
-        if (mal.num_episodes != null) content.malEpisodes = mal.num_episodes
-        content.broadcastDay = mal.broadcast?.day_of_the_week || null
-        content.broadcastTime = mal.broadcast?.start_time || null
-        updated = true
-      }
+    if (mal) {
+      if (mal.status) content.malStatus = mal.status
+      if (mal.num_episodes != null) content.malEpisodes = mal.num_episodes
+      content.broadcastDay = mal.broadcast?.day_of_the_week || null
+      content.broadcastTime = mal.broadcast?.start_time || null
+      updated = true
     }
 
-    if (content.tmdbId) {
-      const tmdb = await this.getTmdbContentDetails(content.tmdbId, 'tv', { skipDelay: true })
-      if (tmdb) {
-        const next = tmdb.next_episode_to_air
-        content.nextEpisodeAirDate = next?.air_date || null
-        content.nextEpisodeNumber = next?.episode_number ?? null
-        content.nextEpisodeSeason = next?.season_number ?? null
-        if (tmdb.number_of_episodes != null) content.episodeCount = tmdb.number_of_episodes
-        if (tmdb.number_of_seasons != null) content.seasonCount = tmdb.number_of_seasons
-        updated = true
-      }
+    if (tmdb) {
+      const next = tmdb.next_episode_to_air
+      content.nextEpisodeAirDate = next?.air_date || null
+      content.nextEpisodeNumber = next?.episode_number ?? null
+      content.nextEpisodeSeason = next?.season_number ?? null
+      if (tmdb.number_of_episodes != null) content.episodeCount = tmdb.number_of_episodes
+      if (tmdb.number_of_seasons != null) content.seasonCount = tmdb.number_of_seasons
+      updated = true
     }
 
     if (updated) {
@@ -1112,10 +822,13 @@ class UnifiedContentService {
    * @param {number} ttlMs
    */
   setCachedEpisodes(contentId, data, ttlMs) {
-    this.episodeCache.set(String(contentId), {
-      data,
-      expiresAt: Date.now() + ttlMs,
-    })
+    const key = String(contentId)
+    this.episodeCache.delete(key)
+    this.episodeCache.set(key, { data, expiresAt: Date.now() + ttlMs })
+    // Oldest first: drop one so every title viewed doesn't stay in memory for good.
+    if (this.episodeCache.size > EPISODE_CACHE_MAX) {
+      this.episodeCache.delete(this.episodeCache.keys().next().value)
+    }
   }
 
   /**
@@ -1258,15 +971,6 @@ class UnifiedContentService {
     const ttlMs = airing ? 6 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000
     this.setCachedEpisodes(cacheKey, data, ttlMs)
     return data
-  }
-
-  /**
-   * Episode cards for a TV catalog document (see `getTvShowSeasonData`).
-   * @param {object} content
-   * @returns {Promise<object[]>}
-   */
-  async getTvShowEpisodes(content) {
-    return (await this.getTvShowSeasonData(content)).episodes
   }
 }
 

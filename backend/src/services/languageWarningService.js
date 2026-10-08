@@ -227,14 +227,3 @@ export async function screenText(user, surface, fields, options = {}) {
   }
   return { fields: masked, warning }
 }
-
-export default {
-  maskLanguage,
-  screenText,
-  recordWarning,
-  warningMessage,
-  breakdown,
-  maskTerm,
-  excerpt,
-  WARNING_LIMIT,
-}

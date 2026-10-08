@@ -63,12 +63,21 @@ export function titleKeySql(sqlCol) {
 }
 
 /**
+ * Escape LIKE wildcards (and the escape character) so `text` matches literally.
+ * @param {string} text
+ * @returns {string}
+ */
+export function escapeLike(text) {
+  return String(text).replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
+/**
+ * LIKE body for a regex source: drop regex escapes, then escape LIKE wildcards.
  * @param {string} pattern
  * @returns {string}
  */
 function likePattern(pattern) {
-  const unescaped = String(pattern).replace(/\\([.*+?^${}()|[\]\\])/g, '$1')
-  return unescaped.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+  return escapeLike(String(pattern).replace(/\\([.*+?^${}()|[\]\\])/g, '$1'))
 }
 
 /**
@@ -200,6 +209,7 @@ function compileRelation(table, field, condition, ctx) {
 /**
  * @param {{ params: unknown[] }} ctx
  * @param {string} relTable
+ * @param {string} alias
  * @param {string} fk
  * @param {string} column
  * @param {unknown} condition
@@ -411,11 +421,6 @@ const SORT_COLUMNS = {
   favoritesCount: '(SELECT count(*) FROM favorites f WHERE f.content_id = e.id)',
   name: 'e.name',
   createdAt: 'created_at',
-  popularity: 'c.popularity',
-  unifiedScore: 'c.unified_score',
-  releaseDate: 'c.release_date',
-  nextEpisodeAirDate: 'c.next_episode_at',
-  _id: 'c.id',
 }
 
 /**
@@ -450,7 +455,7 @@ export function compileSort(sort, table = 'content') {
     const col =
       field === '_id'
         ? `${table === 'entities' ? 'e' : table === 'users' ? 'u' : 'c'}.id`
-        : SORT_COLUMNS[field] || CONTENT_COLUMNS[field]
+        : SORT_COLUMNS[field]
     if (!col) continue
     parts.push(`${col} ${dir} NULLS LAST`)
   }

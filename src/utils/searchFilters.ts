@@ -75,17 +75,6 @@ export type CountryFilterFields = {
 }
 
 /**
- * Anime season for a 0-based month (Jan–Mar winter, Apr–Jun spring, Jul–Sep summer, Oct–Dec fall).
- * @param month - 0-based month.
- */
-export const seasonFromMonth = (month: number): AnimeSeason => {
-  if (month <= 2) return 'winter'
-  if (month <= 5) return 'spring'
-  if (month <= 8) return 'summer'
-  return 'fall'
-}
-
-/**
  * Parse a catalog date (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`, or Date) as UTC.
  * @param raw - Stored release or last-air value.
  */
@@ -103,18 +92,6 @@ export const parseCatalogDate = (raw: string | Date | null | undefined): Date | 
   const month = match[2] ? Number(match[2]) - 1 : 0
   const day = match[3] ? Number(match[3]) : 1
   return new Date(Date.UTC(year, month, day))
-}
-
-/**
- * Calendar year/month from a catalog release date. Prefers `YYYY-MM` in date strings.
- * @param item - Catalog fields with an optional release date.
- */
-export const getReleaseYearMonth = (
-  item: Pick<PeriodFilterFields, 'releaseDate'>,
-): { year: number; month: number } | null => {
-  const date = parseCatalogDate(item.releaseDate)
-  if (!date) return null
-  return { year: date.getUTCFullYear(), month: date.getUTCMonth() }
 }
 
 function seasonStartDate(year: number, season: AnimeSeason): Date {

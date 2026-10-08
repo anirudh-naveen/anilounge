@@ -21,7 +21,6 @@ import type {
   ContentParams,
 } from '@/types'
 import type { ProfileSettings } from '@/types/profile'
-import { getDisplayTitle } from '@/utils/titles'
 
 /**
  * Base URL for API calls.
@@ -217,10 +216,6 @@ export const entityAPI = {
 
   getContentCharacters: (contentId: string) => api.get(`/content/${contentId}/characters`),
 
-  getContentVoiceActors: (contentId: string) => api.get(`/content/${contentId}/voice-actors`),
-
-  getFavorites: () => api.get('/favorites'),
-
   favorite: (id: string) => api.post(`/entities/${id}/favorite`),
 
   unfavorite: (id: string) => api.delete(`/entities/${id}/favorite`),
@@ -286,35 +281,10 @@ export const contentAPI = {
 
   getContentEpisodes: (id: string) => api.get(`/content/${id}/episodes`),
 
-  getContentByExternalId: (id: string, source?: 'tmdb' | 'mal') =>
-    api.get(`/content/external/${id}`, {
-      params: source ? { source } : {},
-    }),
-
-  searchContent: (searchParams: Record<string, string | number>) =>
-    api.get('/search', { params: searchParams }),
-
-  getPopularContent: (params?: { type?: string; limit?: number }) =>
-    api.get('/popular', { params }),
-
-  getSimilarContent: (id: string, limit?: number) =>
-    api.get(`/content/${id}/similar`, {
-      params: limit ? { limit } : {},
-    }),
-
   getRelatedContent: (contentId: string) => api.get(`/content/${contentId}/related`),
-
-  getFranchiseContent: (franchiseName: string) => api.get(`/franchise/${franchiseName}`),
-
-  getDatabaseStats: () => api.get('/stats'),
 }
 
 export const aiAPI = {
-  search: (query: string) => api.post('/ai-search', { query }),
-
-  // Legacy endpoints kept for older chatbot/recommendation callers.
-  getRecommendations: (userId: string) => api.get(`/ai/recommendations/${userId}`),
-  analyzeContent: (contentId: string) => api.get(`/ai/analyze/${contentId}`),
   chat: (message: string, history: Array<{ role: string; text: string }> = []) =>
     api.post('/ai/chat', { message, history }),
 }
@@ -545,8 +515,6 @@ export const getPosterUrl = (path: string) => getImageUrl(path, 'w500')
  * @param path - Backdrop path or absolute URL.
  * @returns Image URL or placeholder.
  */
-export const getBackdropUrl = (path: string) => getImageUrl(path, 'w1280')
-
 /**
  * Episode still TMDB image URL (`w300`).
  * @param path - Still path or absolute URL.
@@ -560,74 +528,6 @@ export const getStillUrl = (path: string) => getImageUrl(path, 'w300')
  * @returns Image URL or placeholder.
  */
 export const getProfileUrl = (path: string) => getImageUrl(path, 'w185')
-
-/** Local loose shape for display helpers; distinct from `UnifiedContent`. */
-interface ContentData {
-  _id?: string
-  id?: string
-  title?: string
-  englishTitle?: string
-  nativeTitle?: string
-  displayTitle?: string
-  originalTitle?: string
-  overview?: string
-  posterPath?: string
-  backdropPath?: string
-  contentType?: string
-  releaseDate?: string | Date
-  genres?: Array<{ id?: number; name?: string }> | string[]
-  voteAverage?: number
-  malScore?: number
-  unifiedScore?: number
-  voteCount?: number
-  malScoredBy?: number
-  userRatingAverage?: number
-  userRatingCount?: number
-  runtime?: number
-  episodeCount?: number
-  malEpisodes?: number
-  seasonCount?: number
-  studios?: string[]
-  productionCompanies?: string[]
-  alternativeTitles?: string[]
-  tmdbId?: number
-  malId?: number
-  dataSources?: {
-    tmdb?: { hasData?: boolean }
-    mal?: { hasData?: boolean }
-  }
-}
-
-/**
- * Flattened display fields for catalog cards and detail views.
- * @param content - Catalog item or API payload with optional source fields.
- * @returns Title, media, rating, and source flags used by the UI.
- */
-export const getContentDisplayInfo = (content: ContentData) => {
-  return {
-    id: content._id || content.id,
-    title: getDisplayTitle(content),
-    overview: content.overview || '',
-    posterPath: content.posterPath,
-    backdropPath: content.backdropPath,
-    contentType: content.contentType,
-    releaseDate: content.releaseDate,
-    genres: content.genres || [],
-    rating: {
-      score: content.unifiedScore || 0,
-      count: (content.voteCount || 0) + (content.malScoredBy || 0) + (content.userRatingCount || 0),
-    },
-    runtime: content.runtime,
-    episodeCount: content.episodeCount || content.malEpisodes,
-    seasonCount: content.seasonCount,
-    studios: content.studios || content.productionCompanies || [],
-    alternativeTitles: content.alternativeTitles || [],
-    tmdbId: content.tmdbId,
-    malId: content.malId,
-    hasTmdbData: content.dataSources?.tmdb?.hasData || false,
-    hasMalData: content.dataSources?.mal?.hasData || false,
-  }
-}
 
 /**
  * Maps genre objects/strings to names and drops the redundant `"Animation"` genre.
@@ -669,21 +569,21 @@ export const getContentTypeDisplay = (contentType: string) => {
 export const isMovieLike = (contentType?: string) =>
   contentType === 'movie' || contentType === 'special'
 
+const ENTITY_KINDS = new Set(['character', 'voice_actor', 'studio'])
+
 /**
  * Whether this row is a character, voice actor, or studio (not a watchable title).
  * @param item - Search or catalog row.
  */
-export const isCatalogEntity = (item?: { entityType?: string; contentType?: string }) => {
-  const kind = item?.entityType || item?.contentType
-  return kind === 'character' || kind === 'voice_actor' || kind === 'studio'
-}
+export const isCatalogEntity = (item?: { entityType?: string; contentType?: string }) =>
+  ENTITY_KINDS.has(item?.entityType || item?.contentType || '')
 
 /**
  * Card badge label. Specials keep their own tag even though they live in Movies.
  * @param contentType - `movie`, `tv`, or `special`.
  * @returns `"Movie"`, `"Series"`, or `"Special"`.
  */
-export const getCardContentTypeDisplay = (contentType: string) => getContentTypeDisplay(contentType)
+export const getCardContentTypeDisplay = getContentTypeDisplay
 
 /**
  * Whether an item matches a Movies/TV/All filter; `"movie"` includes specials.
@@ -693,9 +593,7 @@ export const getCardContentTypeDisplay = (contentType: string) => getContentType
  */
 export const matchesContentTypeFilter = (itemType: string | undefined, filter?: string) => {
   if (!filter || filter === 'all') return true
-  if (itemType === 'character' || itemType === 'voice_actor' || itemType === 'studio') {
-    return false
-  }
+  if (ENTITY_KINDS.has(itemType || '')) return false
   if (filter === 'movie') return isMovieLike(itemType)
   return itemType === filter
 }

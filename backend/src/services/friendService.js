@@ -19,9 +19,10 @@
  */
 
 import cron from 'node-cron'
-import { query, startSession } from '../../config/postgres.js'
+import { query, withTransaction } from '../../config/postgres.js'
 import { withJobLock } from '../utils/jobLock.js'
 import { isUuid } from '../db/ids.js'
+import { escapeLike } from '../db/mongoFilter.js'
 import { HttpError } from '../utils/httpError.js'
 import { moderationMessage } from '../utils/moderation.js'
 import { cleanUserText } from '../utils/userText.js'
@@ -283,9 +284,7 @@ function emailFriendRequest(fromId, recipient, note, expiresAt) {
  * @throws {HttpError} 404 when there is no such pending request.
  */
 export async function acceptFriendRequest(userId, requesterId) {
-  const session = await startSession()
-  try {
-    session.startTransaction()
+  await withTransaction(async () => {
     const { rows } = await query(
       `UPDATE friendships SET status = 'accepted', responded_at = now()
        WHERE follower_id = $1 AND followee_id = $2 AND status = 'pending' AND ${liveLinkSql()}
@@ -300,13 +299,7 @@ export async function acceptFriendRequest(userId, requesterId) {
         [requesterId, userId, rows[0].message, rows[0].created_at],
       )
     }
-    await session.commitTransaction()
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
-  }
+  })
   await notify(requesterId, 'friend_accepted', { actorId: userId })
 }
 
@@ -412,15 +405,6 @@ export async function removeFriendship(userId, otherId) {
 }
 
 /**
- * Escape `%`, `_`, and `\` for a LIKE pattern.
- * @param {string} text
- * @returns {string}
- */
-export function escapeLike(text) {
-  return text.replace(/[\\%_]/g, (char) => `\\${char}`)
-}
-
-/**
  * Find users by username (prefix matches first) with the viewer's relationship to each.
  * The viewer and unfinished sign-ups are left out.
  *
@@ -514,7 +498,6 @@ export default {
   acceptFriendRequest,
   removeFriendship,
   searchUsers,
-  escapeLike,
   liveLinkSql,
   requestExpiresAt,
   cooldownMs,

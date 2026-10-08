@@ -485,6 +485,7 @@ export async function accessTokenFor(row, { force = false } = {}) {
       ? await malTokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken })
       : null
     if (!tokens) throw new ConnectionError(`Your ${label} sign-in expired. Reconnect ${label}.`, RECONNECT_STATUS)
+    const sealedToken = seal(tokens.accessToken)
     await query(
       `UPDATE account_connections SET access_token = $3, refresh_token = COALESCE($4, refresh_token),
          token_expires_at = $5, updated_at = now()
@@ -492,12 +493,12 @@ export async function accessTokenFor(row, { force = false } = {}) {
       [
         row.user_id,
         row.provider,
-        seal(tokens.accessToken),
+        sealedToken,
         tokens.refreshToken ? seal(tokens.refreshToken) : null,
         tokens.expiresAt,
       ],
     )
-    row.access_token = seal(tokens.accessToken)
+    row.access_token = sealedToken
     row.token_expires_at = tokens.expiresAt
     return tokens.accessToken
   }

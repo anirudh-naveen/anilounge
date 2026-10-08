@@ -208,6 +208,16 @@ function layout(heading, bodyHtml, footerHtml = accountFooterHtml()) {
  * @param {string} value
  * @returns {string}
  */
+/**
+ * Call-to-action button (a styled link) for the email body.
+ * @param {string} href
+ * @param {string} label - Trusted template text.
+ * @returns {string}
+ */
+function button(href, label) {
+  return `<p><a href="${href}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">${label}</a></p>`
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`)
 }
@@ -233,7 +243,7 @@ export function sendVerificationEmail(user, code) {
       `<p>Hi ${escapeHtml(user.username)}, welcome to AniLounge!</p>
 <p>Your verification code:</p>
 <p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:8px 0 24px">${code}</p>
-<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Verify email</a></p>
+${button(link, 'Verify email')}
 <p style="color:#5b6578;font-size:14px">The code expires in 24 hours.${note} If you didn't sign up, ignore this email.</p>`,
     ),
   })
@@ -255,7 +265,7 @@ export function sendUnlockEmail(user, code) {
       'Account locked',
       `<p>Hi ${escapeHtml(user.username)}, your account was locked after several failed sign-in attempts.</p>
 <p>If this was you, unlock it now:</p>
-<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Unlock my account</a></p>
+${button(link, 'Unlock my account')}
 <p style="color:#5b6578;font-size:14px">Or enter code <strong>${code}</strong>. The link expires in 1 hour; otherwise the lock lifts on its own in 30 minutes. If this wasn't you, consider changing your password after signing in.</p>`,
     ),
   })
@@ -312,7 +322,7 @@ export function sendInactivityWarning(user, daysLeft, deleteAt) {
       `Your account will be deleted in ${when}`,
       `<p>Hi ${escapeHtml(user.username)}, you haven't used AniLounge in almost a year.</p>
 <p>Inactive accounts are deleted after one year. Your account, watchlist, ratings, and favorites will be permanently deleted on <strong>${date}</strong>.</p>
-<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Sign in to keep my account</a></p>
+${button(link, 'Sign in to keep my account')}
 <p style="color:#5b6578;font-size:14px">If you'd rather let it go, you don't need to do anything.</p>`,
     ),
   })
@@ -361,7 +371,7 @@ export function sendVerificationReminder(user, code, deleteAt) {
 <p>Your account will be deleted on <strong>${when} UTC</strong> (in about 1 day) unless you verify it.</p>
 <p>Your new verification code:</p>
 <p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:8px 0 24px">${code}</p>
-<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Verify email</a></p>
+${button(link, 'Verify email')}
 <p style="color:#5b6578;font-size:14px">If you didn't sign up, ignore this email and the account will be removed.</p>`,
     ),
   })
@@ -395,7 +405,7 @@ export function sendFriendRequestEmail(recipient, requester, note, expiresAt, un
     html: layout(
       'New friend request',
       `<p>Hi ${escapeHtml(recipient.username)}, <strong>${escapeHtml(requester.username)}</strong> wants to be friends on AniLounge.</p>${noteHtml}
-<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">View request</a></p>
+${button(link, 'View request')}
 <p style="color:#5b6578;font-size:14px">The request expires on ${expires} if you don't answer.</p>`,
       `AniLounge · You're receiving this because someone sent you a friend request. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#8b93a6">Stop friend request emails</a> or <a href="${emailSettingsLink()}" style="color:#8b93a6">manage all emails</a>.`,
     ),
@@ -422,7 +432,7 @@ export function sendLanguageAlertEmail(user, warning) {
       `${label} alert: language warning limit reached`,
       `<p>${escapeHtml(summary)}</p>
 <p style="margin:16px 0;padding:12px 16px;background:#f4f5f7;border-radius:8px;white-space:pre-wrap">${escapeHtml(warning.excerpt)}</p>
-<p><a href="${link}" style="background:#e07a5f;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block">Review in Admin</a></p>
+${button(link, 'Review in Admin')}
 <p style="color:#5b6578;font-size:14px">Admin → Users → Flagged. User ID: ${escapeHtml(user.id)}</p>`,
       'AniLounge · Sent by the language filter.',
     ),

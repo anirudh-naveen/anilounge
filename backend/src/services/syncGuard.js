@@ -121,11 +121,3 @@ export async function clearSyncNotices(contentId, fields) {
     [contentId, fields],
   )
 }
-
-export default {
-  NOTICE_TTL_DAYS,
-  noticesTableReady,
-  pruneExpiredNotices,
-  recordSyncNotices,
-  clearSyncNotices,
-}
