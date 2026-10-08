@@ -4,6 +4,7 @@
  * Mutates Content via populateDatabase with clear:false and the process PostgreSQL pool.
  */
 import cron from 'node-cron'
+import { withJobLock } from '../utils/jobLock.js'
 import DatabasePopulator from './contentSyncService.js'
 
 const DEFAULT_CRON = '0 * * * *'
@@ -145,8 +146,12 @@ export function startContentSyncScheduler() {
     return scheduledTask
   }
 
+  // With several instances, only one runs each hour's sync (utils/jobLock.js).
   scheduledTask = cron.schedule(schedule, () => {
-    void runContentSync('scheduled')
+    withJobLock('content-sync', () => runContentSync('scheduled'), {
+      ttlMs: 2 * 60 * 60_000,
+      minIntervalMs: 50 * 60_000,
+    }).catch((error) => console.error('Content sync lock failed:', error.message))
   })
 
   console.log(`Content sync scheduled (${schedule})`)
@@ -155,7 +160,10 @@ export function startContentSyncScheduler() {
     const delayMs = parseLimit(process.env.CONTENT_SYNC_START_DELAY_MS, 20000)
     console.log(`Content sync will run on start in ${delayMs}ms`)
     setTimeout(() => {
-      void runContentSync('startup')
+      withJobLock('content-sync', () => runContentSync('startup'), {
+        ttlMs: 2 * 60 * 60_000,
+        minIntervalMs: 50 * 60_000,
+      }).catch((error) => console.error('Content sync lock failed:', error.message))
     }, delayMs)
   }
 

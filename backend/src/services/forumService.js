@@ -20,7 +20,9 @@
  * comments are hidden. Throws `HttpError` for user-facing failures.
  */
 
+import cron from 'node-cron'
 import { query, startSession } from '../../config/postgres.js'
+import { withJobLock } from '../utils/jobLock.js'
 import { isUuid } from '../db/ids.js'
 import Content from '../models/Content.js'
 import { isAdminUser } from '../middleware/adminOnly.js'
@@ -55,21 +57,82 @@ const CHARACTERS_MAX = 30
 const SEARCH_WORDS_MAX = 6
 
 /**
- * Ranking for 'hot': engagement decayed by age in hours (comments weigh double).
+ * Ranking for 'hot': engagement decayed by age in hours (comments weigh double). Stored
+ * on `posts.hot_score` (indexed): the likes/comments triggers in `db/schema.sql` update
+ * it when engagement changes, and `refreshHotScores` re-decays recent posts every few
+ * minutes, so listing a page never recounts every post.
  * @param {string} [alias] - posts alias.
  * @returns {string}
  */
 export function hotScoreSql(alias = 'p') {
-  return `((${likeCountSql(alias)} + 2 * ${commentCountSql(alias)} + 1)
-    / power(extract(epoch FROM now() - ${alias}.created_at) / 3600 + 2, 1.5))`
+  return `${alias}.hot_score`
 }
 
 /** Count queries share the list's params, so `$1` (viewer id) needs a typed use. */
 const VIEWER_PARAM = 'CROSS JOIN (SELECT $1::uuid AS viewer_id) viewer'
 
-const likeCountSql = (alias) => `(SELECT count(*) FROM post_likes l WHERE l.post_id = ${alias}.id)`
-const commentCountSql = (alias) =>
-  `(SELECT count(*) FROM comments c WHERE c.post_id = ${alias}.id AND c.deleted_at IS NULL)`
+// Kept by triggers on post_likes / comments (db/schema.sql).
+const likeCountSql = (alias) => `${alias}.like_count`
+const commentCountSql = (alias) => `${alias}.comment_count`
+
+/** Post totals only drive page counts, so a few seconds' staleness is fine. */
+const COUNT_CACHE_TTL_MS = 30 * 1000
+const COUNT_CACHE_MAX = 500
+/** @type {Map<string, { at: number, n: Promise<number> }>} */
+const postCountCache = new Map()
+
+/**
+ * Number of posts matching a list filter, cached briefly per filter: counting every
+ * matching post on each page view was one of the forum's heaviest queries.
+ * @param {string} where - The list's WHERE clause.
+ * @param {unknown[]} params - The list's params; `$1` (viewer) does not affect the count.
+ * @returns {Promise<number>}
+ */
+function cachedPostCount(where, params) {
+  const key = `${where}\u0000${JSON.stringify(params.slice(1))}`
+  const hit = postCountCache.get(key)
+  if (hit && Date.now() - hit.at < COUNT_CACHE_TTL_MS) return hit.n
+  const n = query(
+    `SELECT count(*)::int AS n FROM posts p JOIN users u ON u.id = p.user_id ${VIEWER_PARAM} WHERE ${where}`,
+    [null, ...params.slice(1)],
+  ).then((result) => result.rows[0].n)
+  n.catch(() => postCountCache.delete(key))
+  postCountCache.delete(key)
+  postCountCache.set(key, { at: Date.now(), n })
+  if (postCountCache.size > COUNT_CACHE_MAX) {
+    postCountCache.delete(postCountCache.keys().next().value)
+  }
+  return n
+}
+
+/** How often recent posts' hot scores are re-decayed. */
+const HOT_REFRESH_CRON = process.env.FORUM_HOT_REFRESH_CRON || '*/5 * * * *'
+/** Posts older than this keep their last score; by then the decay has buried them. */
+const HOT_WINDOW_DAYS = 60
+
+/**
+ * Recompute `hot_score` for posts inside the window (the score depends on `now()`).
+ * @returns {Promise<number>} Rows updated.
+ */
+export async function refreshHotScores() {
+  const { rowCount } = await query(
+    `UPDATE posts SET hot_score = forum_hot_score(like_count, comment_count, created_at)
+     WHERE created_at > now() - interval '${HOT_WINDOW_DAYS} days'`,
+  )
+  return rowCount || 0
+}
+
+/**
+ * Schedule `refreshHotScores` (one instance at a time; see utils/jobLock.js).
+ * @returns {import('node-cron').ScheduledTask}
+ */
+export function startHotScoreScheduler() {
+  return cron.schedule(HOT_REFRESH_CRON, () => {
+    withJobLock('forum-hot-scores', refreshHotScores).catch((error) =>
+      console.error('Forum hot score refresh failed:', error.message),
+    )
+  })
+}
 
 /** Tag display order: franchise, then movies/series/specials, then characters. */
 const TAG_LEVEL_SQL = `CASE tc.kind WHEN 'franchise' THEN 0 WHEN 'character' THEN 2 ELSE 1 END`
@@ -635,7 +698,7 @@ export async function listPosts(viewer, filters = {}) {
     active: 'p.last_activity_at DESC',
   }[sort]
 
-  const [{ rows }, count] = await Promise.all([
+  const [{ rows }, total] = await Promise.all([
     query(
       `SELECT ${postColumns()} FROM posts p JOIN users u ON u.id = p.user_id
        WHERE ${where}
@@ -643,16 +706,13 @@ export async function listPosts(viewer, filters = {}) {
        LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
       params,
     ),
-    query(
-      `SELECT count(*)::int AS n FROM posts p JOIN users u ON u.id = p.user_id ${VIEWER_PARAM} WHERE ${where}`,
-      params,
-    ),
+    cachedPostCount(where, params),
   ])
   return {
     items: rows.map((row) => postEntry(row, { viewer })),
     page,
     pageSize: PAGE_SIZE,
-    total: count.rows[0].n,
+    total,
     tag,
     sort,
   }

@@ -156,14 +156,21 @@ async function watchlistActivity(userIds, viewerId, limit) {
             u.username, u.profile_picture,
             c.name, c.native_name, c.image_path, c.kind,
             s.episode_count, r.score
-     FROM watchlist w
+     -- Latest few per person (watchlist_activity_idx), then the newest overall, instead
+     -- of sorting every row of every friend's list.
+     FROM unnest($1::uuid[]) AS people(id)
+     CROSS JOIN LATERAL (
+       SELECT * FROM watchlist w
+       WHERE w.user_id = people.id
+         -- Rows an import wrote stay out until the user changes them.
+         AND (w.imported_at IS NULL OR w.updated_at > w.imported_at)
+       ORDER BY w.updated_at DESC
+       LIMIT $2
+     ) w
      JOIN users u ON u.id = w.user_id
      JOIN content c ON c.id = w.content_id
      LEFT JOIN series s ON s.content_id = c.id
      LEFT JOIN ratings r ON r.user_id = w.user_id AND r.content_id = w.content_id
-     WHERE w.user_id = ANY($1::uuid[])
-       -- Rows an import wrote stay out until the user changes them.
-       AND (w.imported_at IS NULL OR w.updated_at > w.imported_at)
      ORDER BY w.updated_at DESC
      LIMIT $2`,
     [userIds, limit],

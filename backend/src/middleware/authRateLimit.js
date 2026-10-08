@@ -8,6 +8,8 @@
 
 import rateLimit from 'express-rate-limit'
 import { isDemoEmail } from '../models/User.js'
+import { bruteForceProtection } from './antiBot.js'
+import { rateLimitStore } from './pgRateLimitStore.js'
 
 /** Session-cookie endpoints: the cookie holds an unguessable token, so there is nothing to brute-force. */
 const COOKIE_SESSION_PATHS = new Set(['/refresh', '/revoke'])
@@ -34,6 +36,7 @@ export const authLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  ...rateLimitStore('auth'),
 })
 
 /**
@@ -43,6 +46,5 @@ export const authLimiter = rateLimit({
  * @returns {Promise<void>}
  */
 export async function resetAuthRateLimits(ip) {
-  global.bruteForceStore?.delete(`brute-force-${ip}`)
-  await authLimiter.resetKey(ip)
+  await Promise.all([bruteForceProtection.reset(ip), authLimiter.resetKey(ip)])
 }

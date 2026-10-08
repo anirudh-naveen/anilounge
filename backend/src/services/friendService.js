@@ -20,6 +20,7 @@
 
 import cron from 'node-cron'
 import { query, startSession } from '../../config/postgres.js'
+import { withJobLock } from '../utils/jobLock.js'
 import { isUuid } from '../db/ids.js'
 import { HttpError } from '../utils/httpError.js'
 import { moderationMessage } from '../utils/moderation.js'
@@ -491,7 +492,9 @@ export function startFriendRequestCleanupScheduler() {
   return cron.schedule(
     schedule,
     () => {
-      deleteExpiredFriendRequests().catch((error) =>
+      withJobLock('friend-request-cleanup', deleteExpiredFriendRequests, {
+        minIntervalMs: 50 * 60_000,
+      }).catch((error) =>
         console.error('Friend request cleanup failed:', error),
       )
     },

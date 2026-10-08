@@ -310,7 +310,10 @@ export const getAvatarImage = async (req, res) => {
     res.set({
       'Content-Type': avatar.contentType,
       'Content-Length': String(avatar.data.length),
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable',
+      // Lets Vercel's edge (which proxies /api) keep the image, so repeat views never
+      // reach the server or the database.
+      'CDN-Cache-Control': 'public, max-age=31536000, immutable',
       'Last-Modified': new Date(avatar.updatedAt).toUTCString(),
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': "default-src 'none'; sandbox",
