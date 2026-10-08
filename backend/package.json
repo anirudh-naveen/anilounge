@@ -20,7 +20,7 @@
     "mongoose": "^8.19.1",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
-    "node-fetch": "^2.7.0",
+    "node-fetch": "^3.3.2",
     "nodemailer": "^10.0.12",
     "pg": "^8.23.0",
     "qrcode": "^1.5.4",
