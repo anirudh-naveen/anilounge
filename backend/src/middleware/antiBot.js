@@ -48,8 +48,8 @@ const sweepTimer = setInterval(() => {
 sweepTimer.unref?.()
 
 /**
- * Block suspicious/minimal User-Agents and more than 10 requests per second per IP+UA.
- * Skipped for localhost and development.
+ * Block suspicious/minimal User-Agents (and ban the IP) and refuse more than 10 requests
+ * per second per IP+UA. Skipped for localhost and development.
  *
  * @param {import('express').Request} req - Uses `req.ip`, hostname, and User-Agent.
  * @param {import('express').Response} res - 429 on rapid fire, 403 on bot UA.
@@ -69,9 +69,9 @@ export const antiBotProtection = (req, res, next) => {
   const timestamps = requestTimestamps.get(key) || []
   const recentRequests = timestamps.filter((t) => now - t < 1000) // Last 1 second
 
+  // Refused but not banned: one page can load many avatars at once, and people behind
+  // a shared address can burst together. Sustained abuse hits the rate limiters.
   if (recentRequests.length > 10) {
-    banIPForSuspiciousActivity(ip, userAgent, 'rapid_requests').catch(console.error)
-
     return res.status(429).json({
       success: false,
       message: 'Too many requests detected. Please slow down.',
@@ -178,8 +178,9 @@ const FREE_TEXT_FIELDS = new Set([
 ])
 
 /**
- * Recursively scan body/query/params strings for Mongo operator / eval patterns.
- * On a hit, bans the IP and returns 400 without throwing to Express.
+ * Recursively scan body/query/params strings for Mongo operator / eval patterns and
+ * return 400 on a hit. Operator patterns also ban the IP; code-ish words alone do not,
+ * since ordinary names and emails can contain them ("medieval", "this.name@...").
  *
  * @param {import('express').Request} req - Inspects `body`, `query`, and `params`.
  * @param {import('express').Response} res - 400 `{ message: 'Invalid request format detected.' }` on injection.
@@ -188,39 +189,36 @@ const FREE_TEXT_FIELDS = new Set([
  */
 export const databaseProtection = (req, res, next) => {
   /**
-   * Walk a JSON-like value and throw if a string matches a dangerous pattern.
-   * Prose fields skip the word patterns, so "I loved this." or "evaluate" in a post
-   * is not treated as an injection attempt.
+   * Walk a JSON-like value for dangerous patterns. Prose fields skip the word patterns,
+   * so "I loved this." or "evaluate" in a post is not treated as an injection attempt.
    *
    * @param {unknown} obj - Current node (string, object, or other).
-   * @param {string} [path=''] - Dotted path used in the thrown message.
-   * @returns {void}
+   * @param {string} [path=''] - Dotted path; its last segment picks the field rules.
+   * @returns {'operator' | 'word' | null} The worst hit (an operator wins over a word).
    */
   const checkForInjection = (obj, path = '') => {
     if (typeof obj === 'string') {
       const field = path.slice(path.lastIndexOf('.') + 1)
-      if (
-        OPERATOR_PATTERN.test(obj) ||
-        (!FREE_TEXT_FIELDS.has(field) && CODE_WORD_PATTERN.test(obj))
-      ) {
-        throw new Error(`Potential NoSQL injection detected in ${path}`)
-      }
-    } else if (typeof obj === 'object' && obj !== null) {
-      for (const [key, value] of Object.entries(obj)) {
-        checkForInjection(value, `${path}.${key}`)
-      }
+      if (OPERATOR_PATTERN.test(obj)) return 'operator'
+      return !FREE_TEXT_FIELDS.has(field) && CODE_WORD_PATTERN.test(obj) ? 'word' : null
     }
+    if (typeof obj !== 'object' || obj === null) return null
+    let worst = null
+    for (const [key, value] of Object.entries(obj)) {
+      const hit = checkForInjection(value, `${path}.${key}`)
+      if (hit === 'operator') return hit
+      worst ||= hit
+    }
+    return worst
   }
 
-  try {
-    if (req.body) checkForInjection(req.body, 'body')
-    if (req.query) checkForInjection(req.query, 'query')
-    if (req.params) checkForInjection(req.params, 'params')
-  } catch {
-    banIPForSuspiciousActivity(req.ip, req.get('User-Agent'), 'injection_attempt').catch(
-      console.error,
-    )
-
+  const hit = checkForInjection({ body: req.body, query: req.query, params: req.params })
+  if (hit) {
+    if (hit === 'operator') {
+      banIPForSuspiciousActivity(req.ip, req.get('User-Agent'), 'injection_attempt').catch(
+        console.error,
+      )
+    }
     return res.status(400).json({
       success: false,
       message: 'Invalid request format detected.',

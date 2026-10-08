@@ -5,7 +5,7 @@
  * called from the anti-bot middleware, the auth controller, and the admin router.
  */
 
-import IPBan from '../models/IPBan.js'
+import IPBan, { normalizeIp } from '../models/IPBan.js'
 
 // Ban windows by reason (milliseconds)
 const BAN_DURATIONS = {
@@ -15,76 +15,42 @@ const BAN_DURATIONS = {
   manual: 30 * 24 * 60 * 60 * 1000, // 30 days
 }
 
+/** Loopback and private (RFC1918) addresses are never checked: a ban on a proxy's
+ * internal address would block everyone behind it. */
+const UNCHECKED_IP = /^(?:::1|127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/
+
 /**
- * Reject banned client IPs with 403. Skips localhost, RFC1918, and development.
+ * Reject banned client IPs with 403. Skips loopback/private addresses and development.
  * On lookup failure the request still continues (fail-open) so DB outages do not lock out users.
  *
- * @param {import('express').Request} req - IP from `req.ip`, socket, or `X-Forwarded-For` / `X-Real-IP`.
+ * @param {import('express').Request} req - Client address from `req.ip` (honours `trust proxy`).
  * @param {import('express').Response} res - 403 JSON with `banReason` and `expiresAt` when banned.
  * @param {import('express').NextFunction} next - Continues when not banned or when the check is skipped.
  * @returns {Promise<void>}
  */
 export const checkIPBan = async (req, res, next) => {
+  const ip = normalizeIp(req.ip || req.socket?.remoteAddress)
+  // The emailed unlock code proves account ownership, so a locked-out user can
+  // always reach the unlock endpoint even from the IP their failed attempts banned.
+  const isUnlock = req.method === 'POST' && req.originalUrl.split('?')[0] === '/api/auth/unlock'
+  if (!ip || isUnlock || UNCHECKED_IP.test(ip) || process.env.NODE_ENV === 'development') {
+    return next()
+  }
+
   try {
-    let ip = req.ip || 
-             req.connection?.remoteAddress || 
-             req.socket?.remoteAddress ||
-             (req.headers['x-forwarded-for'] && req.headers['x-forwarded-for'].split(',')[0].trim()) ||
-             req.headers['x-real-ip'] ||
-             'unknown'
-
-    if (ip.startsWith('::ffff:')) {
-      ip = ip.replace('::ffff:', '')
-    }
-
-    // The emailed unlock code proves account ownership, so a locked-out user can
-    // always reach the unlock endpoint even from the IP their failed attempts banned.
-    if (req.method === 'POST' && req.originalUrl.split('?')[0] === '/api/auth/unlock') {
-      return next()
-    }
-
-    // Skip IP ban check for localhost/development
-    if (
-      ip === '::1' ||
-      ip === '127.0.0.1' ||
-      ip === 'localhost' ||
-      ip === 'unknown' ||
-      ip.startsWith('127.') ||
-      ip.startsWith('192.168.') ||
-      ip.startsWith('10.') ||
-      req.hostname === 'localhost' ||
-      req.hostname?.includes('localhost') ||
-      process.env.NODE_ENV === 'development'
-    ) {
-      return next()
-    }
-
-    if (ip && ip !== 'unknown') {
-      const ban = await IPBan.isIPBanned(ip)
-
-      if (ban) {
-        ban.lastSeen = new Date()
-        await ban.save()
-
-        return res.status(403).json({
-          success: false,
-          message: 'Your IP address has been banned due to suspicious activity.',
-          banReason: ban.reason,
-          expiresAt: ban.expiresAt,
-          attempts: ban.attempts,
-        })
-      }
-    }
-
-    next()
+    const ban = await IPBan.isIPBanned(ip)
+    if (!ban) return next()
+    IPBan.markSeen(ban._id).catch((error) => console.error('Error updating IP ban:', error))
+    return res.status(403).json({
+      success: false,
+      message: 'Your IP address has been banned due to suspicious activity.',
+      banReason: ban.reason,
+      expiresAt: ban.expiresAt,
+      attempts: ban.attempts,
+    })
   } catch (error) {
+    // Fail open so a ban-table outage cannot block legitimate users.
     console.error('Error checking IP ban:', error)
-    // In development, allow requests through even if check fails
-    if (process.env.NODE_ENV === 'development') {
-      return next()
-    }
-    // Production still fail-opens so a ban-collection outage cannot block legitimate users.
-    console.error('IP ban check failed in production:', error.message)
     return next()
   }
 }
@@ -174,17 +140,11 @@ export const unbanIP = async (ip) => {
  * @returns {Promise<boolean>} True when a ban was lifted.
  */
 export const liftBruteForceBan = async (ip) => {
-  const raw = String(ip || '')
-  if (!raw) return false
-  // Bans are written with the raw `req.ip` but checked normalized; clear both forms.
-  let lifted = false
-  for (const address of new Set([raw, raw.replace(/^::ffff:/, '')])) {
-    const ban = await IPBan.isIPBanned(address)
-    if (ban?.reason !== 'brute_force') continue
-    await IPBan.unbanIP(address)
-    lifted = true
-  }
-  return lifted
+  if (!normalizeIp(ip)) return false
+  const ban = await IPBan.isIPBanned(ip)
+  if (ban?.reason !== 'brute_force') return false
+  await IPBan.unbanIP(ip)
+  return true
 }
 
 /**
