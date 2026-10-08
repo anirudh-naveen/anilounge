@@ -226,6 +226,7 @@ const submit = async () => {
       contentId: tag.contentId,
       season: tag.season,
       episode: tag.episode,
+      top: tag.top === true,
     })),
     ...(kind.value === 'review' ? { score: score.value } : {}),
   }

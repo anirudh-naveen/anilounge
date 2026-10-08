@@ -5,15 +5,26 @@
   to TAGS_MAX tags. Title results expand to list their characters, main cast
   first. A series tag can be narrowed to one episode, picked from the series'
   episode list (the same one its page shows), to make an episode thread.
-  v-model is the selected tag list, kept in hierarchy order (franchise, titles,
-  characters).
+  The star on a chip makes it the post's top tag (one at most). v-model is the
+  selected tag list, kept in hierarchy order (franchise, titles, characters).
 -->
 <template>
   <div class="tag-picker">
     <!-- Title: Selected -->
     <ul v-if="modelValue.length" class="tag-chips" data-testid="selected-tags">
       <li v-for="(tag, index) in modelValue" :key="`${tag.contentId}-${index}`" class="tag-chip">
-        <span class="tag-chip-main">
+        <span class="tag-chip-main" :class="{ top: tag.top }">
+          <button
+            type="button"
+            class="tag-top"
+            :aria-pressed="!!tag.top"
+            :aria-label="tag.top ? `Unset ${tag.name} as top tag` : `Make ${tag.name} the top tag`"
+            :title="tag.top ? 'Top tag (click to unset)' : 'Make this the top tag'"
+            :data-testid="`tag-top-${index}`"
+            @click="toggleTop(index)"
+          >
+            <ForumIcon name="star" :filled="!!tag.top" />
+          </button>
           <span class="tag-kind">{{ KIND_LABELS[tag.kind] }}</span>
           {{ tagLabel(tag) }}
           <button
@@ -81,6 +92,10 @@
         </span>
       </li>
     </ul>
+
+    <p v-if="modelValue.length" class="social-meta tag-hint" data-testid="tag-top-hint">
+      ★ marks your top tag: it's highlighted on the post and its picture shows with it.
+    </p>
 
     <!-- Title: Search -->
     <div v-if="modelValue.length < TAGS_MAX" class="tag-search">
@@ -166,6 +181,7 @@ import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { contentAPI, forumAPI, getPosterUrl } from '@/services/api'
 import type { Episode } from '@/types/content'
 import type { CharacterHit, PostTag, TagSearchHit } from '@/types/forum'
+import ForumIcon from '@/components/ForumIcon.vue'
 import { KIND_LABELS, REVIEWABLE_KINDS, sortTags, TAGS_MAX, tagLabel } from '@/utils/forum'
 
 const SEARCH_DELAY_MS = 250
@@ -270,6 +286,11 @@ const add = (hit: TagSearchHit | CharacterHit) => {
   if (hit.kind !== 'character' || !expanded.value) term.value = ''
 }
 
+/** Make one tag the top tag (or unset it); only one can be top. */
+const toggleTop = (index: number) => {
+  update(props.modelValue.map((tag, i) => ({ ...tag, top: i === index ? !tag.top : false })))
+}
+
 const remove = (index: number) => update(props.modelValue.filter((_, i) => i !== index))
 
 const setEpisode = (index: number, season: number | null, episode: number | null) => {
@@ -337,6 +358,39 @@ onUnmounted(() => clearTimeout(timer))
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+.tag-top {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: -0.35rem;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.tag-top:hover {
+  background: var(--bg-hover);
+  color: var(--coral-primary);
+}
+
+.tag-top[aria-pressed='true'] {
+  color: var(--coral-primary);
+}
+
+.tag-chip-main.top {
+  border-color: color-mix(in srgb, var(--coral-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--coral-primary) 10%, transparent);
+}
+
+.tag-hint {
+  margin: 0;
 }
 
 .tag-chip-main {

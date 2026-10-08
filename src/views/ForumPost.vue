@@ -1,7 +1,8 @@
 <!--
   ForumPost.vue — one forum post with its comments (view).
 
-  Shows the post (spoiler posts start covered), likes, and tags; the author can
+  Shows the post (spoiler posts start covered), likes, and tags, with the top
+  tag's picture (else the highest tag with one) on the right; the author can
   edit or delete it and admins can delete it. Comments nest one level: replying
   to a reply threads under the top-level comment. A deleted comment that has
   replies stays as "[deleted]" so the thread still reads.
@@ -23,39 +24,59 @@
 
         <!-- Title: Post -->
         <article v-else class="social-panel post-article" data-testid="forum-post">
-          <header class="post-head">
-            <span class="post-badge post-kind" :class="post.kind">
-              {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
-            </span>
-            <span
-              v-if="post.score !== null"
-              class="post-badge post-score"
-              :style="getRatingBadgeColors(post.score)"
-              title="The author's watchlist rating"
-              data-testid="post-score"
-            >
-              {{ scoreLabel(post.score) }}
-            </span>
-            <span v-if="post.spoiler" class="post-badge post-spoiler-flag">Spoilers</span>
-          </header>
-          <h1 class="post-title">{{ post.title }}</h1>
-          <div class="post-byline">
-            <router-link :to="profileRoute(post.author.username)" class="post-author">
-              <UserAvatar
-                :src="post.author.profilePicture"
-                :name="post.author.username"
-                :size="28"
-              />
-              {{ post.author.username }}
-              <RoleBadge :username="post.author.username" />
-            </router-link>
-            <span class="social-meta" :title="new Date(post.createdAt).toLocaleString()">
-              {{ timeAgo(post.createdAt) }}
-              <template v-if="post.editedAt"> · edited</template>
-            </span>
-          </div>
+          <div class="post-top" :class="{ 'has-poster': cover && !coverFailed }">
+            <div class="post-intro">
+              <header class="post-head">
+                <span class="post-badge post-kind" :class="post.kind">
+                  {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
+                </span>
+                <span
+                  v-if="post.score !== null"
+                  class="post-badge post-score"
+                  :style="getRatingBadgeColors(post.score)"
+                  title="The author's watchlist rating"
+                  data-testid="post-score"
+                >
+                  {{ scoreLabel(post.score) }}
+                </span>
+                <span v-if="post.spoiler" class="post-badge post-spoiler-flag">Spoilers</span>
+              </header>
+              <h1 class="post-title">{{ post.title }}</h1>
+              <div class="post-byline">
+                <router-link :to="profileRoute(post.author.username)" class="post-author">
+                  <UserAvatar
+                    :src="post.author.profilePicture"
+                    :name="post.author.username"
+                    :size="28"
+                  />
+                  {{ post.author.username }}
+                  <RoleBadge :username="post.author.username" />
+                </router-link>
+                <span class="social-meta" :title="new Date(post.createdAt).toLocaleString()">
+                  {{ timeAgo(post.createdAt) }}
+                  <template v-if="post.editedAt"> · edited</template>
+                </span>
+              </div>
 
-          <ForumTags :tags="post.tags" show-kind class="post-tags" />
+              <ForumTags :tags="post.tags" show-kind class="post-tags" />
+            </div>
+
+            <!-- Title: Poster -->
+            <router-link
+              v-if="cover && !coverFailed"
+              :to="tagRoute(cover)"
+              class="post-poster"
+              :title="cover.name"
+              data-testid="post-poster"
+            >
+              <img
+                :src="getPosterUrl(cover.imagePath || '')"
+                :alt="cover.name"
+                @error="coverFailed = true"
+              />
+              <span class="post-poster-name">{{ cover.name }}</span>
+            </router-link>
+          </div>
 
           <button
             v-if="post.spoiler && !revealed"
@@ -213,11 +234,11 @@ import ForumIcon from '@/components/ForumIcon.vue'
 import ForumTags from '@/components/ForumTags.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import { forumAPI } from '@/services/api'
+import { forumAPI, getPosterUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumComment, ForumPost } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
-import { COMMENT_MAX, scoreLabel, showLanguageWarning } from '@/utils/forum'
+import { COMMENT_MAX, coverTag, scoreLabel, showLanguageWarning, tagRoute } from '@/utils/forum'
 import { getRatingBadgeColors } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
@@ -230,6 +251,9 @@ const toast = useToast()
 const authStore = useAuthStore()
 
 const post = ref<ForumPost | null>(null)
+/** Picture beside the post: the top tag's, else the highest tag with one. */
+const cover = computed(() => (post.value ? coverTag(post.value.tags) : null))
+const coverFailed = ref(false)
 const comments = ref<ForumComment[]>([])
 const loading = ref(true)
 const error = ref('')
@@ -314,6 +338,7 @@ const deletePost = async () => {
 
 const onEdited = (next: ForumPost) => {
   post.value = next
+  coverFailed.value = false
   editing.value = false
 }
 
@@ -434,6 +459,52 @@ onMounted(load)
 .post-score {
   font-size: 0.8rem;
   letter-spacing: 0.01em;
+}
+
+.post-top.has-poster {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.post-intro {
+  min-width: 0;
+}
+
+.post-poster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  text-decoration: none;
+}
+
+.post-poster img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  background: var(--bg-secondary);
+  transition: transform 0.2s ease;
+}
+
+.post-poster:hover img {
+  transform: translateY(-2px);
+}
+
+.post-poster-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .post-title {
@@ -601,6 +672,15 @@ onMounted(load)
 @media (max-width: 640px) {
   .post-title {
     font-size: 1.6rem;
+  }
+
+  .post-top.has-poster {
+    grid-template-columns: minmax(0, 1fr) 88px;
+    gap: 1rem;
+  }
+
+  .post-poster-name {
+    display: none;
   }
 
   .reply-list {
