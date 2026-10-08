@@ -281,7 +281,10 @@ const connect = async (provider: ConnectionProvider) => {
     // TMDB appends `&request_token=…` to this address; AniList and MAL use the
     // redirect registered with them (this page) and tag `state` with the provider.
     const redirectTo = `${window.location.origin}/connections?provider=tmdb`
-    const response = await connectionsAPI.start(provider, provider === 'tmdb' ? redirectTo : undefined)
+    const response = await connectionsAPI.start(
+      provider,
+      provider === 'tmdb' ? redirectTo : undefined,
+    )
     const { authorizeUrl } = response.data.data as { authorizeUrl: string }
     if (!tab) {
       try {

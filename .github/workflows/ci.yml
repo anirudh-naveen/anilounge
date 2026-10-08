@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to the same PR cancels the run that's still going.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22
+  # `npm ci` runs the `prepare` script (cypress install); CI doesn't run e2e yet.
+  CYPRESS_INSTALL_BINARY: 0
+
+jobs:
+  # On PRs, only run the jobs whose code changed. Pushes to main and manual
+  # runs always run everything.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend == 'true' }}
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        if: github.event_name == 'pull_request'
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            shared: &shared
+              - .github/workflows/ci.yml
+            frontend:
+              - *shared
+              - 'src/**'
+              - 'public/**'
+              - 'cypress/**'
+              - index.html
+              - env.d.ts
+              - package.json
+              - package-lock.json
+              - 'tsconfig*.json'
+              - 'vite.config.*'
+              - 'vitest.config.*'
+              - 'cypress.config.*'
+              - eslint.config.ts
+              - .prettierrc.json
+              - vercel.json
+            backend:
+              - *shared
+              - 'backend/**'
+
+  frontend:
+    name: Frontend (format, lint, types, unit, build)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint:check
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Unit tests
+        run: npm run test:unit:ci
+
+      - name: Build
+        run: npm run build-only
+
+  backend:
+    name: Backend (syntax, tests)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Catches syntax errors in files no test imports (scripts, controllers, routes).
+      - name: Syntax check
+        run: find src config -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Tests
+        run: npm test
+
+  # Single check to mark as required in branch protection, so adding/renaming
+  # jobs above doesn't mean editing the ruleset. Skipped jobs count as passing.
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [changes, frontend, backend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

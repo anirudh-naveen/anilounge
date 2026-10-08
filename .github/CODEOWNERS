@@ -1,0 +1,7 @@
+# Every PR needs a review from the maintainer. Narrow these as the team grows.
+* @anirudh-naveen
+
+# Changes to CI, schema and auth always need maintainer sign-off.
+/.github/ @anirudh-naveen
+/backend/db/ @anirudh-naveen
+/backend/src/middleware/ @anirudh-naveen

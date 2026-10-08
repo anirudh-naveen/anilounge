@@ -12,7 +12,11 @@
         Welcome to AniLounge Beta! This is a preview version.
         <router-link to="/feedback" class="feedback-link">Report bugs or suggestions</router-link>
         or
-        <a :href="DISCORD_INVITE_URL" target="_blank" rel="noopener noreferrer" class="feedback-link"
+        <a
+          :href="DISCORD_INVITE_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="feedback-link"
           >join our Discord</a
         >
       </span>
