@@ -112,8 +112,14 @@ describe('CharacterDetails', () => {
       ...character,
       appearances: [
         { role: 'Main', content: { _id: 'show-1', title: 'One Piece', franchise: 'One Piece' } },
-        { role: 'Main', content: { _id: 'movie-1', title: 'One Piece Film: Red', franchise: 'One Piece' } },
-        { role: 'Cameo', content: { _id: 'special-1', title: 'Crossover', franchise: 'Jump Heroes' } },
+        {
+          role: 'Main',
+          content: { _id: 'movie-1', title: 'One Piece Film: Red', franchise: 'One Piece' },
+        },
+        {
+          role: 'Cameo',
+          content: { _id: 'special-1', title: 'Crossover', franchise: 'Jump Heroes' },
+        },
         { role: 'Cameo', content: { _id: 'special-2', title: 'Standalone', franchise: null } },
       ],
     })

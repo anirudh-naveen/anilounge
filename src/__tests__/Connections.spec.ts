@@ -34,7 +34,13 @@ vi.mock('@/stores/content', () => ({
   useContentStore: () => ({ loadWatchlist: vi.fn() }),
 }))
 
-const base = { externalId: null, connectedAt: null, lastSyncedAt: null, lastError: null, expiresAt: null }
+const base = {
+  externalId: null,
+  connectedAt: null,
+  lastSyncedAt: null,
+  lastError: null,
+  expiresAt: null,
+}
 const anilist = {
   ...base,
   provider: 'anilist',
