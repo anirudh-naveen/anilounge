@@ -120,7 +120,7 @@ export function isProviderConfigured(provider, env = process.env) {
 export function connectionsRedirectUri(env = process.env) {
   if (env.CONNECTIONS_REDIRECT_URL) return env.CONNECTIONS_REDIRECT_URL.trim()
   const base =
-    env.PUBLIC_APP_URL || String(env.FRONTEND_URL || '').split(',')[0] || 'http://localhost:5173'
+    env.PUBLIC_APP_URL || String(env.FRONTEND_URL || '').split(',')[0] || 'http://localhost:5174'
   return `${base.trim().replace(/\/+$/, '')}/connections`
 }
 
