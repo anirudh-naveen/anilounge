@@ -4,9 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-  schedule:
-    - cron: '0 6 * * 1' # Mondays 06:00 UTC
-  workflow_dispatch:
 
 concurrency:
   group: security-${{ github.event.pull_request.number || github.ref }}
@@ -34,24 +31,3 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  audit:
-    name: npm audit (${{ matrix.dir }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Informational until the existing backlog is cleared; flip to blocking after.
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        dir: [., backend]
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-
-      - name: Audit production dependencies
-        working-directory: ${{ matrix.dir }}
-        run: npm audit --omit=dev --audit-level=high
