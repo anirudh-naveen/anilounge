@@ -1,0 +1,54 @@
+name: Dependency audit
+
+# Runs on PRs only when dependencies change, so a newly published advisory
+# doesn't turn every unrelated PR red. The weekly run (and Dependabot alerts)
+# catch advisories against code that's already merged.
+on:
+  pull_request:
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - .github/workflows/audit.yml
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Set `blocking: false` on an entry to downgrade it to a warning, e.g. while
+        # waiting on an upstream fix for an advisory.
+        include:
+          - dir: .
+            blocking: true
+          - dir: backend
+            blocking: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Audit production dependencies
+        working-directory: ${{ matrix.dir }}
+        run: |
+          if npm audit --omit=dev --audit-level=high; then
+            exit 0
+          elif [ "${{ matrix.blocking }}" = "true" ]; then
+            exit 1
+          else
+            echo "::warning title=npm audit (${{ matrix.dir }})::High-severity advisories found (warn-only for now, see log)"
+          fi
