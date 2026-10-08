@@ -23,5 +23,3 @@ export async function fetchJson(url, init = {}) {
     clearTimeout(timer)
   }
 }
-
-export default fetchJson

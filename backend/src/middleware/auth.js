@@ -13,6 +13,27 @@ import { canEditContent, isAdminUser } from './adminOnly.js'
 import { BANNED_MESSAGE, isBanned } from '../utils/accountStatus.js'
 
 /**
+ * The signed-in user as the app receives it on sign-in and session refresh.
+ * @param {object} user - Loaded `User`.
+ * @returns {object}
+ */
+export function sessionUserPayload(user) {
+  return {
+    id: user._id,
+    username: user.username,
+    email: user.email,
+    isDemoAccount: user.isDemo(),
+    isAdmin: isAdminUser(user),
+    canEditContent: canEditContent(user),
+    role: user.role,
+    profilePicture: user.profilePicture,
+    createdAt: user.createdAt,
+    watchlistImportedAt: user.watchlistImportedAt,
+    preferences: user.preferences,
+  }
+}
+
+/**
  * Verify the Bearer JWT and attach the matching user to the request.
  *
  * @param {import('express').Request} req - Reads `headers.authorization`.
@@ -156,22 +177,7 @@ export const refreshAccessToken = async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        accessToken: session.accessToken,
-        user: {
-          id: user._id,
-          username: user.username,
-          email: user.email,
-          isDemoAccount: user.isDemo(),
-          isAdmin: isAdminUser(user),
-          canEditContent: canEditContent(user),
-          role: user.role,
-          profilePicture: user.profilePicture,
-          createdAt: user.createdAt,
-          watchlistImportedAt: user.watchlistImportedAt,
-          preferences: user.preferences,
-        },
-      },
+      data: { accessToken: session.accessToken, user: sessionUserPayload(user) },
     })
   } catch (error) {
     console.error('Refresh token error:', error)

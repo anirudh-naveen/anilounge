@@ -12,25 +12,9 @@
 
 import { query } from '../../config/postgres.js'
 import { sendAnnouncementEmail } from './emailService.js'
-import {
-  unsubscribe,
-  unsubscribeToken,
-  unsubscribeUrl,
-  verifyUnsubscribeToken,
-} from './emailPreferenceService.js'
-
-// Link helpers moved to emailPreferenceService; re-exported for existing callers.
-export { unsubscribeToken, unsubscribeUrl, verifyUnsubscribeToken }
+import { unsubscribeUrl } from './emailPreferenceService.js'
 
 const DEFAULT_DELAY_MS = 600
-
-/**
- * @param {string} userId
- * @returns {Promise<boolean>} Whether an account was updated.
- */
-export function unsubscribeFromAnnouncements(userId) {
-  return unsubscribe(userId, 'announcements')
-}
 
 /**
  * Accounts that should receive announcements.

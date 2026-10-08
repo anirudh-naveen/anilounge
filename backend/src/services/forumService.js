@@ -21,7 +21,7 @@
  */
 
 import cron from 'node-cron'
-import { query, startSession } from '../../config/postgres.js'
+import { query, withTransaction } from '../../config/postgres.js'
 import { withJobLock } from '../utils/jobLock.js'
 import { isUuid } from '../db/ids.js'
 import Content from '../models/Content.js'
@@ -29,7 +29,8 @@ import { isAdminUser } from '../middleware/adminOnly.js'
 import { HttpError } from '../utils/httpError.js'
 import { cleanUserText } from '../utils/userText.js'
 import { logAction, quoteValue } from './adminLog.js'
-import { escapeLike, publicUser } from './friendService.js'
+import { escapeLike } from '../db/mongoFilter.js'
+import { publicUser } from './friendService.js'
 import { getSeasonGuide } from './seasonService.js'
 import { screenText } from './languageWarningService.js'
 import { notify } from './notificationService.js'
@@ -460,27 +461,6 @@ async function insertTags(postId, tags) {
 }
 
 /**
- * Run `work` in a transaction.
- * @template T
- * @param {() => Promise<T>} work
- * @returns {Promise<T>}
- */
-async function inTransaction(work) {
-  const session = await startSession()
-  try {
-    session.startTransaction()
-    const result = await work()
-    await session.commitTransaction()
-    return result
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
-  } finally {
-    session.endSession()
-  }
-}
-
-/**
  * Load one visible post.
  * @param {string} postId
  * @param {object | null} viewer
@@ -508,7 +488,7 @@ export async function createPost(user, input) {
   const fields = await validatePostInput(input)
   await assertBurst('posts', user._id, POST_BURST)
   const screened = await screenText(user, 'post', { title: fields.title, body: fields.body })
-  const postId = await inTransaction(async () => {
+  const postId = await withTransaction(async () => {
     const { rows } = await query(
       `INSERT INTO posts (user_id, kind, title, body, score, spoiler, content_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
@@ -551,7 +531,7 @@ export async function updatePost(user, postId, input = {}) {
     ? await screenText(user, 'post', text)
     : { fields: {}, warning: null }
 
-  await inTransaction(async () => {
+  await withTransaction(async () => {
     await query(
       `UPDATE posts SET
          title = COALESCE($2, title),
@@ -1168,11 +1148,6 @@ export async function getHomeHighlights(viewer) {
     personalized: items.some((item) => item.forYou),
     refreshesAt: cached.refreshesAt,
   }
-}
-
-/** Forget cached Home picks (tests). */
-export function clearHomeCache() {
-  homeCache.clear()
 }
 
 export default {

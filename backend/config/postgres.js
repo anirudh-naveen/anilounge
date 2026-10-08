@@ -112,8 +112,8 @@ export function withReplica(fn) {
 }
 
 /**
- * Connect and `SELECT 1`. Production should treat failure as fatal once this
- * replaces mongoose; development logs and continues.
+ * Connect and `SELECT 1`. Never rejects: production exits on failure; development
+ * logs and continues so the HTTP server can still bind.
  * @returns {Promise<void>}
  */
 export async function connectPostgres() {
@@ -200,4 +200,23 @@ export async function startSession() {
   }
 }
 
-export default { getPool, connectPostgres, closePostgres, query, startSession, withReplica }
+/**
+ * Run `fn` in one transaction: its `query` calls join it, a throw rolls it back.
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ * @template T
+ */
+export async function withTransaction(fn) {
+  const session = await startSession()
+  try {
+    await session.startTransaction()
+    const result = await fn()
+    await session.commitTransaction()
+    return result
+  } catch (error) {
+    await session.abortTransaction()
+    throw error
+  } finally {
+    session.endSession()
+  }
+}

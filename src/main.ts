@@ -40,12 +40,10 @@ app.use(Toast, {
 const authStore = useAuthStore()
 const contentStore = useContentStore()
 
-// Restore the signed-in session from the httpOnly cookie, then load user data.
+// Restore the signed-in session from the httpOnly cookie (its reply carries the user),
+// then load the watchlist.
 authStore.restoreSession().then(() => {
-  if (authStore.isAuthenticated) {
-    contentStore.loadWatchlist()
-    authStore.loadUser() // Refresh user data to get updated creation date
-  }
+  if (authStore.isAuthenticated) contentStore.loadWatchlist()
 })
 
 app.mount('#app')

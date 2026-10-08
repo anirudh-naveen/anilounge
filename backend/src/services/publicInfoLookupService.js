@@ -78,6 +78,20 @@ function wikiPayload({ kind, name, summary, extra = {} }) {
   }
 }
 
+/**
+ * A person entity with its appearances' titles loaded (for the credit lists).
+ * @param {object | null} entity
+ * @returns {Promise<object | null>}
+ */
+async function withCatalogTitles(entity) {
+  if (!entity) return null
+  await entity.populate({
+    path: 'appearances.content',
+    select: 'title englishTitle nativeTitle contentType',
+  })
+  return entity
+}
+
 async function lookupTitle(name, options) {
   const doc = await findByTitle(name)
   if (!doc) {
@@ -122,8 +136,10 @@ const STUDIO_NOTE =
 async function lookupStudio(name, options) {
   const entity = await findEntityByName(name, 'studio')
   const studioName = entity?.name || name
-  const docs = await searchCatalog({ studio: studioName, limit: 8 })
-  const summary = await firstWikipediaHit(wikiLookupCandidates(studioName, 'studio'), options)
+  const [docs, summary] = await Promise.all([
+    searchCatalog({ studio: studioName, limit: 8 }),
+    firstWikipediaHit(wikiLookupCandidates(studioName, 'studio'), options),
+  ])
   const studioLike = summary
     ? extractMatchesTopic(summary.extract, summary.description, 'studio')
     : false
@@ -183,18 +199,12 @@ const VOICE_ACTOR_NOTE =
   'Answer the voice-actor question from this lookup. Do not recommend series from voice-actor credits. Only search_catalog if the user explicitly asked for title recommendations.'
 
 async function lookupVoiceActor(name, options) {
-  const entity = await findEntityByName(name, 'voice_actor')
-  if (entity) {
-    await entity.populate({
-      path: 'appearances.content',
-      select: 'title englishTitle nativeTitle contentType',
-    })
-  }
-  const summary = await firstWikipediaHit(
-    wikiLookupCandidates(name, 'voice_actor'),
-    options,
-    (hit) => extractMatchesTopic(hit.extract, hit.description, 'voice_actor'),
-  )
+  const [entity, summary] = await Promise.all([
+    findEntityByName(name, 'voice_actor').then(withCatalogTitles),
+    firstWikipediaHit(wikiLookupCandidates(name, 'voice_actor'), options, (hit) =>
+      extractMatchesTopic(hit.extract, hit.description, 'voice_actor'),
+    ),
+  ])
   const serialized = entity ? serializeEntity(entity) : null
   if (!serialized && !summary) {
     return {
@@ -234,18 +244,12 @@ const CHARACTER_NOTE =
   'Answer the character question from this lookup. Do not recommend series from character info. Only search_catalog if the user explicitly asked for title recommendations.'
 
 async function lookupCharacter(name, options) {
-  const entity = await findEntityByName(name, 'character')
-  if (entity) {
-    await entity.populate({
-      path: 'appearances.content',
-      select: 'title englishTitle nativeTitle contentType',
-    })
-  }
-  const summary = await firstWikipediaHit(
-    wikiLookupCandidates(name, 'character'),
-    options,
-    (hit) => extractMatchesTopic(hit.extract, hit.description, 'character'),
-  )
+  const [entity, summary] = await Promise.all([
+    findEntityByName(name, 'character').then(withCatalogTitles),
+    firstWikipediaHit(wikiLookupCandidates(name, 'character'), options, (hit) =>
+      extractMatchesTopic(hit.extract, hit.description, 'character'),
+    ),
+  ])
   const serialized = entity ? serializeEntity(entity) : null
   if (!serialized && !summary) {
     return {

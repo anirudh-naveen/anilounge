@@ -13,15 +13,9 @@ export class DocQuery {
     this._limit = null
     this._lean = false
     this._populate = []
-    this._select = null
   }
 
   session() {
-    return this
-  }
-
-  select(fields) {
-    this._select = fields
     return this
   }
 

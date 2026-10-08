@@ -209,11 +209,7 @@ export const updateProfileSettings = async (req, res) => {
       return res.status(400).json({ success: false, message: blocked })
     }
 
-    const user = await User.findById(req.user._id)
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' })
-    }
-
+    const user = req.user
     if (settings !== undefined) {
       user.profileSettings = normalizeProfileSettings(
         settings,

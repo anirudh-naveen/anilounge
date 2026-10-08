@@ -227,14 +227,3 @@ export function mergeOverrides(current, { values, unlock, kind, oldName }) {
   }
   return next
 }
-
-export default {
-  CONTENT_FIELDS,
-  EDITABLE_KINDS,
-  fieldsForKind,
-  nameField,
-  parseContentEdits,
-  readEditableFields,
-  applyAdminOverrides,
-  mergeOverrides,
-}

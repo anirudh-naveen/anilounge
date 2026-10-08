@@ -10,7 +10,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
-import connectDB from '../config/database.js'
+import { connectPostgres } from '../config/postgres.js'
 import apiRoutes from './routes/api.js'
 import adminRoutes from './routes/admin.js'
 import emailRoutes from './routes/email.js'
@@ -51,22 +51,15 @@ import { emailProvider } from './services/emailService.js'
 dotenv.config()
 
 // Production exits without JWT_SECRET and DATABASE_URL; development only warns so local work can start.
-if (process.env.NODE_ENV === 'production') {
-  const requiredEnvVars = ['JWT_SECRET', 'DATABASE_URL']
-  const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
-
-  if (missingVars.length > 0) {
+const missingVars = ['JWT_SECRET', 'DATABASE_URL'].filter((varName) => !process.env[varName])
+if (missingVars.length > 0) {
+  if (process.env.NODE_ENV === 'production') {
     console.error('Missing required environment variables:', missingVars.join(', '))
     console.error('Please set these variables in your .env file or environment')
     process.exit(1)
   }
-} else {
-  const requiredEnvVars = ['JWT_SECRET', 'DATABASE_URL']
-  const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
-  if (missingVars.length > 0) {
-    console.warn('Missing environment variables (development mode):', missingVars.join(', '))
-    console.warn('Server will start but authentication features may not work')
-  }
+  console.warn('Missing environment variables (development mode):', missingVars.join(', '))
+  console.warn('Server will start but authentication features may not work')
 }
 
 /** Short HMAC secrets make access tokens forgeable by brute force. */
@@ -112,15 +105,8 @@ app.get('/api/status', (req, res) => {
 // API requests should never run a statement for minutes; scripts keep no limit.
 process.env.PG_STATEMENT_TIMEOUT_MS ??= '60000'
 
-// connectDB is non-blocking in development; production exits if the promise rejects.
-connectDB().catch((error) => {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('Failed to connect to database. Exiting...', error)
-    process.exit(1)
-  } else {
-    console.warn('Database connection failed, but continuing in development mode', error)
-  }
-})
+// Non-blocking: production exits on failure, development logs and keeps serving.
+connectPostgres()
 
 // Trust the proxy hops in front of the app so req.ip (and rate limits) reflect the
 // client, not the proxy. TRUST_PROXY overrides the default of one hop.
@@ -202,19 +188,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions))
 
-/** JSON/urlencoded bodies capped at 10mb; JSON is re-parsed so malformed payloads fail closed. */
-app.use(
-  express.json({
-    limit: '10mb',
-    verify: (req, res, buf) => {
-      try {
-        JSON.parse(buf.toString())
-      } catch {
-        throw new Error('Invalid JSON')
-      }
-    },
-  }),
-)
+/** JSON/urlencoded bodies capped at 10mb; malformed JSON is a 400 (see the error handler). */
+app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 /** Strip HTML tags and XSS payloads from inbound body/query before controllers run. */
@@ -224,49 +199,16 @@ app.use(sanitizeXSS)
 /** Security monitor/logger: swallow their own errors so a logging failure cannot 500 the request. */
 app.use((req, res, next) => {
   try {
-    if (securityMonitor) {
-      securityMonitor(req, res, next)
-    } else {
-      next()
-    }
+    securityMonitor(req, res, next)
   } catch (error) {
     console.error('Security monitor error:', error)
-    next() // Continue on error, but log it
-  }
-})
-
-app.use((req, res, next) => {
-  try {
-    if (securityLogger) {
-      securityLogger(req, res, next)
-    } else {
-      next()
-    }
-  } catch (error) {
-    console.error('Security logger error:', error)
     next()
   }
 })
+app.use(securityLogger)
 
-/** IP ban runs early. Development continues on error; production fails closed with 500. */
-app.use(async (req, res, next) => {
-  try {
-    await checkIPBan(req, res, next)
-  } catch (error) {
-    console.error('IP ban check error:', error)
-    // In development, allow requests through
-    if (process.env.NODE_ENV === 'development') {
-      return next()
-    }
-    // In production, fail closed for security
-    if (!res.headersSent) {
-      return res.status(500).json({
-        success: false,
-        message: 'Security check failed. Please try again later.',
-      })
-    }
-  }
-})
+/** IP ban runs early; a failed lookup lets the request through (see checkIPBan). */
+app.use(checkIPBan)
 
 /**
  * Email links (announcement unsubscribe) skip the bot and referer checks: mail providers
@@ -300,17 +242,6 @@ app.use(
   express.static('uploads'),
 )
 
-/** Duplicate health route (legacy JSON shape; does not include contentSync). */
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Find Animation API is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    version: process.env.npm_package_version || '1.0.0',
-  })
-})
-
 /** Tighter limits on credential and upload paths (stacked on the general limiter). */
 app.use('/api/auth', authLimiter)
 app.use('/api/auth/upload-profile-picture', uploadLimiter)
@@ -334,29 +265,17 @@ app.use('*', (req, res) => {
 })
 
 /**
- * Express error middleware (four args). Maps Mongoose validation/duplicate-key
- * and JWT errors to 400/401; otherwise 500. Stack is included only in development.
+ * Express error middleware (four args). Malformed JSON is a 400, JWT errors a 401;
+ * otherwise the error's status or 500. Stack is included only in development.
  */
 app.use((err, req, res, next) => {
   void next // Express requires 4 args to treat this as error middleware
+
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ success: false, message: 'Invalid JSON' })
+  }
+
   console.error('Global error handler:', err)
-
-  if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map((e) => e.message)
-    return res.status(400).json({
-      success: false,
-      message: 'Validation error',
-      errors,
-    })
-  }
-
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0]
-    return res.status(400).json({
-      success: false,
-      message: `${field} already exists`,
-    })
-  }
 
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({

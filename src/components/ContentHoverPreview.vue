@@ -522,13 +522,9 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-.movie-card:hover > .hover-preview,
-.show-card:hover > .hover-preview,
 .result-card:hover > .hover-preview,
 .content-card:hover > .hover-preview,
 .rail-card:hover > .hover-preview,
-.movie-card:has(.hover-preview.is-adding) > .hover-preview,
-.show-card:has(.hover-preview.is-adding) > .hover-preview,
 .result-card:has(.hover-preview.is-adding) > .hover-preview,
 .content-card:has(.hover-preview.is-adding) > .hover-preview,
 .rail-card:has(.hover-preview.is-adding) > .hover-preview {

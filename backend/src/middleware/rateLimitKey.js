@@ -12,11 +12,27 @@ import jwt from 'jsonwebtoken'
 const DEFAULT_USER_MAX = 1500
 const DEFAULT_IP_MAX = 600
 
+/** Key per request: the general limiter and the slowdown both ask, and each check verifies the JWT. */
+const keysByRequest = new WeakMap()
+
 /**
  * @param {import('express').Request} req
  * @returns {string} `u:<userId>` or `ip:<address>`.
  */
 export function rateLimitKey(req) {
+  let key = keysByRequest.get(req)
+  if (!key) {
+    key = computeKey(req)
+    keysByRequest.set(req, key)
+  }
+  return key
+}
+
+/**
+ * @param {import('express').Request} req
+ * @returns {string}
+ */
+function computeKey(req) {
   const header = req.headers.authorization
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null
   if (token && process.env.JWT_SECRET) {

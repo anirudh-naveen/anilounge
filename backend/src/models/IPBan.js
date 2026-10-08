@@ -94,12 +94,6 @@ const IPBan = {
     )
     return rows.map(mapRow)
   },
-
-  async findOne(filter = {}) {
-    const rows = await IPBan.find(filter)
-    if (filter.ip) return rows.find((row) => row.ip === filter.ip) || null
-    return rows[0] || null
-  },
 }
 
 export default IPBan

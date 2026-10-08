@@ -10,8 +10,7 @@
  * span two existing franchises are left for an admin.
  */
 import crypto from 'crypto'
-import { query } from '../../config/postgres.js'
-import { inTransaction } from './catalogRepair.js'
+import { query, withTransaction } from '../../config/postgres.js'
 import { canonicalCharacterNameKey } from '../utils/entities.js'
 
 /** Share of each title's main cast two titles must have in common. */
@@ -247,7 +246,7 @@ export async function loadFranchisePlan() {
  *   `changedWorkIds`: one title per franchise that gained titles, for follow-up work.
  */
 export async function applyFranchisePlan(plan) {
-  return inTransaction(async () => {
+  return withTransaction(async () => {
     let created = 0
     let added = 0
     const changedWorkIds = []

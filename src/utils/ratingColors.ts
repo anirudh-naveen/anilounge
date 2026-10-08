@@ -41,24 +41,6 @@ export const getRatingColor = (rating: number | null | undefined): string => {
 }
 
 /**
- * Same slider palette, used for rating text on light backgrounds.
- * @param rating - Score on a 0–10 scale.
- * @returns CSS `rgb()` color, or red when missing/zero.
- */
-export const getRatingColorHSL = (rating: number | null | undefined): string => {
-  return getRatingColor(rating)
-}
-
-/**
- * Same slider palette, used for rating badge backgrounds.
- * @param rating - Score on a 0–10 scale.
- * @returns CSS `rgb()` color, or red when missing/zero.
- */
-export const getRatingColorHSLBackground = (rating: number | null | undefined): string => {
-  return getRatingColor(rating)
-}
-
-/**
  * Inline styles for a rating badge (colored background, contrast text).
  * @param rating - Score on a 0–10 scale.
  * @returns Style object for a rating label.

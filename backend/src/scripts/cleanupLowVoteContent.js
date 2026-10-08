@@ -8,7 +8,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import { connectPostgres, closePostgres } from '../../config/postgres.js'
-import Content from '../models/Content.js'
+import Content, { catalogStats } from '../models/Content.js'
 import User from '../models/User.js'
 
 dotenv.config()
@@ -76,9 +76,7 @@ const cleanupLowVoteContent = async () => {
     const excludeIds = [...new Set([...watchlistedIds, ...ratedIds].filter(Boolean))]
     const query = lowVoteCleanupFilter({ excludeIds })
 
-    const lowVoteContent = await Content.find(query).select(
-      'title voteCount voteAverage contentType malId',
-    )
+    const lowVoteContent = await Content.find(query)
 
     console.log(`Found ${lowVoteContent.length} TMDB-only items with low vote counts:`)
     lowVoteContent.forEach((item) => {
@@ -92,19 +90,11 @@ const cleanupLowVoteContent = async () => {
 
       console.log(`\nDeleted ${result.deletedCount} low-vote content items`)
 
-      const remainingCounts = await Content.aggregate([
-        {
-          $group: {
-            _id: '$contentType',
-            count: { $sum: 1 },
-          },
-        },
-      ])
-
+      const { movies, tvShows, specials } = await catalogStats()
       console.log('\nRemaining content by type:')
-      remainingCounts.forEach((item) => {
-        console.log(`- ${item._id}: ${item.count} items`)
-      })
+      console.log(`- movie: ${movies} items`)
+      console.log(`- tv: ${tvShows} items`)
+      console.log(`- special: ${specials} items`)
     } else {
       console.log('No low-vote content found to clean up')
     }

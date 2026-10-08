@@ -175,6 +175,7 @@ const WORD_PATTERNS = WORD_TERMS.map((term) => ({
   term,
   pattern: new RegExp(`^${stretch(term)}${WORD_SUFFIX}$`),
 }))
+const ALL_PATTERNS = [...SUBSTRING_PATTERNS, ...WORD_PATTERNS]
 
 /**
  * Lowercase, strip accents, and decode leetspeak for one whitespace-delimited chunk,
@@ -222,7 +223,7 @@ function candidateWords(text) {
  */
 function matchWord(word, { allowCurses = false } = {}) {
   let curse = null
-  for (const { term, pattern } of [...SUBSTRING_PATTERNS, ...WORD_PATTERNS]) {
+  for (const { term, pattern } of ALL_PATTERNS) {
     if (!pattern.test(word)) continue
     if (SLUR_TERMS.has(term)) return term
     curse ??= term
@@ -339,15 +340,4 @@ export function moderationMessage(fields) {
     if (containsBlockedLanguage(value)) return `${label} ${BLOCKED_LANGUAGE_MESSAGE}`
   }
   return null
-}
-
-export default {
-  findBlockedTerm,
-  classifyLanguage,
-  termCategory,
-  containsBlockedLanguage,
-  censorText,
-  assertCleanLanguage,
-  moderationMessage,
-  BLOCKED_LANGUAGE_MESSAGE,
 }

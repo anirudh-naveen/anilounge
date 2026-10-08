@@ -6,7 +6,7 @@
  * ban changes also `creatorOnly`). Business rules live in `services/adminService.js`.
  */
 
-import adminService from '../services/adminService.js'
+import * as adminService from '../services/adminService.js'
 import adminLinks from '../services/adminLinks.js'
 import { LOG_CATEGORIES, listLogMonths, readLogMonth } from '../services/adminLog.js'
 import { sendError } from '../utils/httpError.js'

@@ -45,27 +45,29 @@ function hasLoadedAppearances(doc) {
 async function loadCharacterDocs(characterIds) {
   const ids = [...new Set(characterIds.map((id) => asId(id)).filter(Boolean))]
   if (!ids.length) return []
-  const { rows } = await query(
-    `SELECT e.id, e.name, e.native_name, e.about, e.image_path, e.mal_id, e.tmdb_id,
-            e.anilist_id, ch.english_name
-     FROM content e
-     LEFT JOIN characters ch ON ch.content_id = e.id
-     WHERE e.kind = 'character' AND e.id = ANY($1::uuid[])`,
-    [ids],
-  )
-  const { rows: akaRows } = await query(
-    `SELECT content_id::text AS id, name
-     FROM content_akas
-     WHERE content_id = ANY($1::uuid[])`,
-    [ids],
-  )
-  const { rows: appRows } = await query(
-    `SELECT character_id::text AS id, count(*)::int AS n
-     FROM appearances
-     WHERE character_id = ANY($1::uuid[])
-     GROUP BY character_id`,
-    [ids],
-  )
+  const [{ rows }, { rows: akaRows }, { rows: appRows }] = await Promise.all([
+    query(
+      `SELECT e.id, e.name, e.native_name, e.about, e.image_path, e.mal_id, e.tmdb_id,
+              e.anilist_id, ch.english_name
+       FROM content e
+       LEFT JOIN characters ch ON ch.content_id = e.id
+       WHERE e.kind = 'character' AND e.id = ANY($1::uuid[])`,
+      [ids],
+    ),
+    query(
+      `SELECT content_id::text AS id, name
+       FROM content_akas
+       WHERE content_id = ANY($1::uuid[])`,
+      [ids],
+    ),
+    query(
+      `SELECT character_id::text AS id, count(*)::int AS n
+       FROM appearances
+       WHERE character_id = ANY($1::uuid[])
+       GROUP BY character_id`,
+      [ids],
+    ),
+  ])
   const akasById = new Map()
   for (const row of akaRows) {
     if (!akasById.has(row.id)) akasById.set(row.id, [])
@@ -199,7 +201,7 @@ export async function siblingMalId(workId) {
   if (!ids.length) return null
   const { rows } = await query(
     `SELECT mal_id FROM content
-     WHERE id::text = ANY($1::text[]) AND mal_id IS NOT NULL
+     WHERE id = ANY($1::uuid[]) AND mal_id IS NOT NULL
      ORDER BY mal_id
      LIMIT 1`,
     [ids],
@@ -217,20 +219,25 @@ export async function charactersInHome(workId) {
   const id = asId(workId)
   if (!id) return []
   if (homeCharacterCache.has(id)) return homeCharacterCache.get(id)
-  const ids = await homeWorkIds(id)
-  if (!ids.length) {
-    homeCharacterCache.set(id, [])
-    return []
-  }
+  const docs = await charactersInWorks(await homeWorkIds(id))
+  homeCharacterCache.set(id, docs)
+  return docs
+}
+
+/**
+ * Lite character rows for everyone appearing in any of `workIds`.
+ * @param {string[]} workIds
+ * @returns {Promise<object[]>}
+ */
+async function charactersInWorks(workIds) {
+  if (!workIds.length) return []
   const { rows } = await query(
     `SELECT DISTINCT character_id::text AS character_id
      FROM appearances
-     WHERE work_id::text = ANY($1::text[])`,
-    [ids],
+     WHERE work_id = ANY($1::uuid[])`,
+    [workIds],
   )
-  const docs = await loadCharacterDocs(rows.map((row) => row.character_id))
-  homeCharacterCache.set(id, docs)
-  return docs
+  return loadCharacterDocs(rows.map((row) => row.character_id))
 }
 
 const SOURCE_ID_FIELDS = ['malId', 'anilistId']
@@ -472,12 +479,13 @@ function mergeDuplicateGroups(docs) {
 /**
  * Merge same-name characters in the home franchise of a catalog title.
  * @param {unknown} workId
+ * @param {string[]} [knownHomeIds] - `homeWorkIds(workId)`, when the caller has it.
  * @returns {Promise<number>} Number of characters deleted.
  */
-export async function mergeFranchiseCharactersForWork(workId) {
+export async function mergeFranchiseCharactersForWork(workId, knownHomeIds) {
   homeCharacterCache.clear()
-  const homeIds = await homeWorkIds(workId)
-  const docs = await charactersInHome(workId)
+  const homeIds = knownHomeIds || (await homeWorkIds(workId))
+  const docs = await charactersInWorks(homeIds)
   let merged = 0
   for (const group of mergeDuplicateGroups(docs)) {
     const primary = pickPrimaryCharacter(group)
@@ -519,7 +527,7 @@ export async function mergeAllFranchiseCharacters({ onProgress } = {}) {
     const homeKey = [...homeIds].sort().join(',')
     if (!homeKey || seen.has(homeKey)) continue
     seen.add(homeKey)
-    merged += await mergeFranchiseCharactersForWork(row.id)
+    merged += await mergeFranchiseCharactersForWork(row.id, homeIds)
   }
   homeCharacterCache.clear()
   return merged

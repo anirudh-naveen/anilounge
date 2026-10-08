@@ -77,5 +77,3 @@ export function planSyncChanges({ kind, current, incoming, locked = [], accepted
   }
   return { keep, notices }
 }
-
-export default { planSyncChanges, normalizeFieldValue }

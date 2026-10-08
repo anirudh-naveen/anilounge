@@ -74,25 +74,3 @@ export function getSearchableTitles(content?: TitledContent | null) {
 
   return titles
 }
-
-/**
- * Alternate titles that are not already the display, English, native, or original name.
- * Kept for search; detail pages do not render this list.
- * @param content - Title fields from a catalog item (or null).
- * @returns Remaining alternative titles, excluding the on-screen English/native names.
- */
-export function getAlternativeTitles(content?: TitledContent | null) {
-  if (!content) return []
-
-  const excluded = new Set(
-    [getDisplayTitle(content), content.englishTitle, content.nativeTitle, content.originalTitle]
-      .map((value) => normalize(value))
-      .filter(Boolean)
-      .map((value) => value.toLowerCase()),
-  )
-
-  return (content.alternativeTitles || []).filter((title) => {
-    const normalized = normalize(title)
-    return Boolean(normalized) && !excluded.has(normalized.toLowerCase())
-  })
-}

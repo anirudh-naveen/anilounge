@@ -19,6 +19,26 @@ import { isDemoEmail } from '../models/User.js'
  * @type {Map<string, number[]>}
  */
 const requestTimestamps = new Map()
+
+const LOCAL_IPS = new Set(['::1', '127.0.0.1', 'localhost'])
+const SUSPICIOUS_USER_AGENT = /bot|crawler|spider|scraper|headless|phantom|selenium|puppeteer/i
+/** Mongo operators and script URLs, rejected in every field. */
+const OPERATOR_PATTERN = /\$(?:where|ne|gt|lt|regex|exists|in|nin|or|and)|javascript:/i
+/** Code-ish words, rejected outside prose fields (see FREE_TEXT_FIELDS). */
+const CODE_WORD_PATTERN = /this\.|function|eval/i
+
+/**
+ * Local and development requests skip the bot and referer checks.
+ * @param {import('express').Request} req
+ * @returns {boolean}
+ */
+function isLocalRequest(req) {
+  return (
+    process.env.NODE_ENV === 'development' ||
+    LOCAL_IPS.has(req.ip) ||
+    Boolean(req.hostname?.includes('localhost'))
+  )
+}
 const sweepTimer = setInterval(() => {
   const cutoff = Date.now() - 1000
   for (const [key, times] of requestTimestamps) {
@@ -37,34 +57,11 @@ sweepTimer.unref?.()
  * @returns {void}
  */
 export const antiBotProtection = (req, res, next) => {
+  if (isLocalRequest(req)) return next()
+
   const userAgent = req.get('User-Agent') || ''
   const ip = req.ip
-
-  // Skip anti-bot protection for localhost/development
-  if (
-    ip === '::1' ||
-    ip === '127.0.0.1' ||
-    ip === 'localhost' ||
-    process.env.NODE_ENV === 'development' ||
-    req.hostname === 'localhost' ||
-    req.hostname?.includes('localhost')
-  ) {
-    return next()
-  }
-
-  const suspiciousPatterns = [
-    /bot/i,
-    /crawler/i,
-    /spider/i,
-    /scraper/i,
-    /headless/i,
-    /phantom/i,
-    /selenium/i,
-    /puppeteer/i,
-  ]
-
-  const isSuspiciousUA = suspiciousPatterns.some((pattern) => pattern.test(userAgent))
-
+  const isSuspiciousUA = SUSPICIOUS_USER_AGENT.test(userAgent)
   const isMinimalUA = userAgent.length < 5
 
   const now = Date.now()
@@ -190,21 +187,6 @@ const FREE_TEXT_FIELDS = new Set([
  * @returns {void}
  */
 export const databaseProtection = (req, res, next) => {
-  const operatorPatterns = [
-    /\$where/i,
-    /\$ne/i,
-    /\$gt/i,
-    /\$lt/i,
-    /\$regex/i,
-    /\$exists/i,
-    /\$in/i,
-    /\$nin/i,
-    /\$or/i,
-    /\$and/i,
-    /javascript:/i,
-  ]
-  const dangerousPatterns = [...operatorPatterns, /this\./i, /function/i, /eval/i]
-
   /**
    * Walk a JSON-like value and throw if a string matches a dangerous pattern.
    * Prose fields skip the word patterns, so "I loved this." or "evaluate" in a post
@@ -217,11 +199,11 @@ export const databaseProtection = (req, res, next) => {
   const checkForInjection = (obj, path = '') => {
     if (typeof obj === 'string') {
       const field = path.slice(path.lastIndexOf('.') + 1)
-      const patterns = FREE_TEXT_FIELDS.has(field) ? operatorPatterns : dangerousPatterns
-      for (const pattern of patterns) {
-        if (pattern.test(obj)) {
-          throw new Error(`Potential NoSQL injection detected in ${path}`)
-        }
+      if (
+        OPERATOR_PATTERN.test(obj) ||
+        (!FREE_TEXT_FIELDS.has(field) && CODE_WORD_PATTERN.test(obj))
+      ) {
+        throw new Error(`Potential NoSQL injection detected in ${path}`)
       }
     } else if (typeof obj === 'object' && obj !== null) {
       for (const [key, value] of Object.entries(obj)) {
@@ -260,17 +242,7 @@ export const databaseProtection = (req, res, next) => {
 export const apiProtection = (req, res, next) => {
   const origin = req.get('origin')
   const referer = req.get('referer') || req.get('referrer')
-
-  // Skip API protection for localhost origins (development)
-  if (
-    origin?.includes('localhost') ||
-    referer?.includes('localhost') ||
-    req.hostname === 'localhost' ||
-    req.hostname?.includes('localhost') ||
-    req.ip === '::1' ||
-    req.ip === '127.0.0.1' ||
-    process.env.NODE_ENV === 'development'
-  ) {
+  if (isLocalRequest(req) || origin?.includes('localhost') || referer?.includes('localhost')) {
     return next()
   }
 
@@ -293,12 +265,4 @@ export const apiProtection = (req, res, next) => {
   }
 
   next()
-}
-
-export default {
-  antiBotProtection,
-  progressiveSlowdown,
-  bruteForceProtection,
-  databaseProtection,
-  apiProtection,
 }

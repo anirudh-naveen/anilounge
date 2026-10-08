@@ -321,7 +321,7 @@
                 class="stat-number"
                 :style="
                   profile.stats.totals.averageRating
-                    ? { color: getRatingColorHSL(profile.stats.totals.averageRating) }
+                    ? { color: getRatingColor(profile.stats.totals.averageRating) }
                     : undefined
                 "
               >
@@ -616,7 +616,7 @@ import {
   getPosterUrl,
   profileAPI,
 } from '@/services/api'
-import { getRatingColorHSL, getRatingTextStyle } from '@/utils/ratingColors'
+import { getRatingColor, getRatingTextStyle } from '@/utils/ratingColors'
 import { getDisplayTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel, WATCHLIST_STATUS_OPTIONS } from '@/utils/watchlist'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'

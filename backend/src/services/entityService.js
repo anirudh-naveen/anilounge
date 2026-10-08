@@ -10,6 +10,7 @@
  */
 
 import { query } from '../../config/postgres.js'
+import { escapeRegex } from '../utils/catalogChatQuery.js'
 import Entity from '../models/Entity.js'
 import Content from '../models/Content.js'
 import {
@@ -39,7 +40,6 @@ import {
   entityNamesEqual,
   foldEntityName,
   highlightedCharacters,
-  highlightedVoiceActors,
   isUsableCharacterName,
   knownVoiceLanguage,
   mapJikanCharacterRow,
@@ -106,7 +106,6 @@ const jikanWindow = []
 const jikanOutage = { failures: 0, downUntil: 0 }
 
 let lastJikanAt = 0
-let indexesReady = false
 const ingestLocks = new Map()
 
 /**
@@ -147,7 +146,7 @@ async function requestJson(url, { headers = {}, fetchImpl = fetch } = {}) {
  * @param {{ headers?: object, fetchImpl?: typeof fetch }} [options]
  * @returns {Promise<object|null>}
  */
-export async function fetchJson(url, options = {}) {
+async function fetchJson(url, options = {}) {
   return (await requestJson(url, options)).body
 }
 
@@ -235,37 +234,6 @@ export async function jikanGet(path, options = {}) {
     return null
   }
   return null
-}
-
-/**
- * Drop the unique sparse malId index that rejected every TMDB character after
- * the first (`malId: null` is still indexed). Partial unique index is on the schema.
- * @returns {Promise<void>}
- */
-export async function ensureEntityIndexes() {
-  if (indexesReady) return
-  try {
-    await Entity.collection.dropIndex('entityType_1_malId_1')
-  } catch {
-    // Already dropped or never created.
-  }
-  try {
-    await Entity.updateMany({ malId: null }, { $unset: { malId: 1 } })
-  } catch (error) {
-    console.error('Failed to unset null character malIds:', error.message)
-  }
-  indexesReady = true
-}
-
-/**
- * Whether this title's character list is fresh enough to skip a remote fetch.
- * Uses the title's own sync stamp so a failed/partial ingest is retried.
- * @param {object} content
- * @returns {boolean}
- */
-export function charactersAreFresh(content, now = Date.now()) {
-  const stamp = content?.characterSyncAt ? new Date(content.characterSyncAt).getTime() : 0
-  return stamp > 0 && now - stamp < STALE_MS
 }
 
 /**
@@ -384,7 +352,7 @@ function nativeNamesAgree(left, right) {
  * @returns {{ $regex: string, $options: string }}
  */
 function exactName(name) {
-  return { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' }
+  return { $regex: `^${escapeRegex(name)}$`, $options: 'i' }
 }
 
 /**
@@ -820,8 +788,6 @@ export async function ensureCharactersForContent(content, options = {}) {
  * @returns {Promise<object[]>}
  */
 async function loadCharactersForContent(content, options = {}) {
-  await ensureEntityIndexes()
-
   let docs = await Entity.find({
     entityType: 'character',
     'appearances.content': content._id,
@@ -989,22 +955,6 @@ async function fillVoiceActorFromAnilist(entity, needsImage, options) {
   if (needsImage && image) entity.imagePath = image
   await entity.save()
   return entity
-}
-
-/**
- * Voice actors attached to a title (created while ingesting its characters).
- * @param {object} content
- * @param {{ fetchImpl?: typeof fetch }} [options]
- * @returns {Promise<object[]>}
- */
-export async function ensureVoiceActorsForContent(content, options = {}) {
-  if (!content?._id) return []
-  await ensureCharactersForContent(content, options)
-  const docs = await Entity.find({
-    entityType: 'voice_actor',
-    'appearances.content': content._id,
-  })
-  return highlightedVoiceActors(docs, content._id)
 }
 
 /**
@@ -1258,7 +1208,6 @@ async function anilistVoicedRows(entity, options) {
  * @returns {Promise<object>}
  */
 async function ingestVoiceActorCredits(entity, options = {}) {
-  await ensureEntityIndexes()
   const now = new Date()
   let changed = await attachLocalCharactersToVoiceActor(entity)
 
@@ -1288,7 +1237,7 @@ async function ingestVoiceActorCredits(entity, options = {}) {
       ? Entity.find({ entityType: 'character', $or: characterIdFilters })
       : Promise.resolve([]),
     contentIdFilters.length
-      ? Content.find({ $or: contentIdFilters }).select('_id malId anilistId')
+      ? Content.find({ $or: contentIdFilters })
       : Promise.resolve([]),
   ])
   const known = new Map()
@@ -1490,8 +1439,7 @@ export async function ensureStudioDetails(entity, options = {}) {
 export async function searchEntities(query, { entityType = 'character', limit = 20 } = {}) {
   const term = String(query || '').trim()
   if (!term || term.length < 1) return []
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(escaped, 'i')
+  const regex = new RegExp(escapeRegex(term), 'i')
   const typeFilter = entityType && entityType !== 'all' ? { entityType } : {}
   return Entity.find({
     ...typeFilter,

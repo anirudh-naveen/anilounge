@@ -7,6 +7,11 @@
 
 import multer from 'multer'
 import path from 'path'
+import { MAX_AVATAR_BYTES } from '../services/avatarService.js'
+
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+const SUSPICIOUS_NAME = /[<>:"/\\|?*]|\.(exe|bat|cmd|scr|pif|vbs|js|jar|php|asp|aspx)$/i
 
 // Kept in memory: the controller validates the bytes and stores them in Postgres.
 const storage = multer.memoryStorage()
@@ -20,32 +25,23 @@ const storage = multer.memoryStorage()
  * @returns {void}
  */
 const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-
-  if (!allowedMimeTypes.includes(file.mimetype)) {
+  if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     return cb(new Error('Only image files are allowed (JPG, PNG, GIF, WebP)'), false)
   }
-
-  const ext = path.extname(file.originalname).toLowerCase()
-  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
-
-  if (!allowedExtensions.includes(ext)) {
+  if (!ALLOWED_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase())) {
     return cb(new Error('Invalid file extension'), false)
   }
-
-  const suspiciousPatterns = /[<>:"/\\|?*]|\.(exe|bat|cmd|scr|pif|vbs|js|jar|php|asp|aspx)$/i
-  if (suspiciousPatterns.test(file.originalname)) {
+  if (SUSPICIOUS_NAME.test(file.originalname)) {
     return cb(new Error('Invalid filename'), false)
   }
-
   cb(null, true)
 }
 
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
+  storage,
+  fileFilter,
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB (the client uploads a 300x300 crop)
+    fileSize: MAX_AVATAR_BYTES, // the client uploads a 300x300 crop
     files: 1, // Only one file at a time
   },
 })
