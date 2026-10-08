@@ -275,6 +275,17 @@ function compileLeaf(sqlCol, condition, ctx) {
 }
 
 /**
+ * `kind` value for a public content type (the inverse of the `works` view's content_type).
+ * @param {unknown} contentType
+ * @returns {unknown}
+ */
+function kindForContentType(contentType) {
+  if (contentType === 'tv') return 'series'
+  if (contentType === 'series') return '(none)'
+  return contentType
+}
+
+/**
  * @param {string} table
  * @param {object} filter
  * @param {{ params: unknown[] }} ctx
@@ -298,6 +309,12 @@ function compileNode(table, filter, ctx) {
     }
     if (field === '_id' || field === 'id') {
       parts.push(compileId(alias, condition, ctx))
+      continue
+    }
+    if (field === 'contentType' && table === 'content') {
+      // Filter on the indexed `kind` rather than the view's computed content_type
+      // ('tv' is kind 'series'; content_type is never 'series').
+      parts.push(compileLeaf('c.kind', remapCondition(condition, kindForContentType), ctx))
       continue
     }
     if (field === 'malStatus') {
@@ -338,25 +355,27 @@ function compileNode(table, filter, ctx) {
  * @returns {string}
  */
 function compileId(alias, condition, ctx) {
-  const idSql = (param) => `${alias}.id::text = ${param}`
+  // Compare as uuid so the primary-key index applies (`id::text = $1` scanned the table).
+  // A value that isn't a uuid can't match any row, so it compiles to a constant.
+  const uuids = (values) => values.map((value) => asId(value)).filter((value) => isUuid(value))
   if (condition && typeof condition === 'object' && !Array.isArray(condition) && !(condition instanceof Date)) {
     if (condition.$in) {
-      const values = condition.$in.map((value) => asId(value))
-      const p = pushParam(ctx, values)
-      return `${alias}.id::text = ANY(${p})`
+      const p = pushParam(ctx, uuids(condition.$in))
+      return `${alias}.id = ANY(${p}::uuid[])`
     }
     if (condition.$nin) {
-      const values = condition.$nin.map((value) => asId(value))
-      const p = pushParam(ctx, values)
-      return `NOT (${alias}.id::text = ANY(${p}))`
+      const p = pushParam(ctx, uuids(condition.$nin))
+      return `NOT (${alias}.id = ANY(${p}::uuid[]))`
     }
     if (condition.$ne) {
-      const p = pushParam(ctx, asId(condition.$ne))
-      return `NOT ${idSql(p)}`
+      const id = asId(condition.$ne)
+      if (!isUuid(id)) return 'TRUE'
+      return `${alias}.id <> ${pushParam(ctx, id)}::uuid`
     }
   }
-  const p = pushParam(ctx, asId(condition))
-  return idSql(p)
+  const id = asId(condition)
+  if (!isUuid(id)) return 'FALSE'
+  return `${alias}.id = ${pushParam(ctx, id)}::uuid`
 }
 
 /**
@@ -409,11 +428,9 @@ export function compileSort(sort, table = 'content') {
     return table === 'entities' ? 'e.name ASC' : 'c.unified_score DESC NULLS LAST'
   }
 
-  const hiddenScore = `(
-    COALESCE(c.unified_score, 0)
-    + CASE WHEN c.tmdb_id IS NOT NULL THEN 1.0 ELSE 0 END
-    + CASE WHEN c.tmdb_id IS NOT NULL THEN COALESCE(c.popularity, 0) * 0.05 ELSE 0 END
-  )`
+  // Stored and indexed (content.catalog_score in db/schema.sql): unified score, plus 1.0
+  // and 5% of popularity for titles TMDB knows.
+  const hiddenScore = 'c.catalog_score'
 
   const parts = []
   for (const [field, direction] of Object.entries(sort)) {

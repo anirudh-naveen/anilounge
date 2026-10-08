@@ -13,7 +13,8 @@
 import fs from 'fs'
 import path from 'path'
 import cron from 'node-cron'
-import { getPool, query } from '../../config/postgres.js'
+import { query } from '../../config/postgres.js'
+import { withJobLock } from '../utils/jobLock.js'
 import { sendInactiveAccountDeleted, sendInactivityWarning } from './emailService.js'
 
 export const INACTIVITY_LIMIT_DAYS = 365
@@ -21,8 +22,6 @@ export const INACTIVITY_LIMIT_DAYS = 365
 export const WARNING_DAYS = [90, 30, 14, 7, 1]
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_CRON = '0 9 * * *'
-/** Arbitrary constant so only one server instance runs the job at a time. */
-const JOB_LOCK_KEY = 815_365
 
 let activityColumnsMissing = false
 
@@ -95,57 +94,57 @@ async function deleteInactiveAccount(row) {
  */
 export async function runInactiveAccountCleanup(now = new Date()) {
   const summary = { skipped: false, warned: 0, deleted: 0, failed: 0 }
-  // Advisory locks belong to one connection, so hold a dedicated client for the run.
-  const lockClient = await getPool().connect()
-  const { rows: lock } = await lockClient.query('SELECT pg_try_advisory_lock($1) AS ok', [
-    JOB_LOCK_KEY,
-  ])
-  if (!lock[0]?.ok) {
-    lockClient.release()
-    return { ...summary, skipped: true }
-  }
+  // One instance at a time (utils/jobLock.js; a lease row, so it also works behind a
+  // transaction-pooling PgBouncer, unlike a session advisory lock).
+  const outcome = await withJobLock('inactive-account-cleanup', () => runPass(summary, now), {
+    ttlMs: 60 * 60_000,
+  })
+  return outcome?.skipped ? { ...summary, skipped: true } : outcome
+}
 
-  try {
-    const firstWarning = INACTIVITY_LIMIT_DAYS - WARNING_DAYS[0]
-    const { rows } = await query(
-      `SELECT id, username, email, profile_picture, last_active_at, inactivity_warning_days
-       FROM users
-       WHERE is_demo = false
-         AND last_active_at < $1::timestamptz - make_interval(days => $2)
-       ORDER BY last_active_at`,
-      [now, firstWarning],
-    )
+/**
+ * The cleanup pass itself (called under the job lease).
+ * @param {object} summary
+ * @param {Date} now
+ * @returns {Promise<object>}
+ */
+async function runPass(summary, now) {
+  const firstWarning = INACTIVITY_LIMIT_DAYS - WARNING_DAYS[0]
+  const { rows } = await query(
+    `SELECT id, username, email, profile_picture, last_active_at, inactivity_warning_days
+     FROM users
+     WHERE is_demo = false
+       AND last_active_at < $1::timestamptz - make_interval(days => $2)
+     ORDER BY last_active_at`,
+    [now, firstWarning],
+  )
 
-    for (const row of rows) {
-      try {
-        const plan = planInactivityAction(
-          new Date(row.last_active_at),
-          row.inactivity_warning_days,
-          now,
-        )
-        if (plan.action === 'warn') {
-          await sendInactivityWarning(row, plan.daysLeft, plan.deleteAt)
-          await query('UPDATE users SET inactivity_warning_days = $2 WHERE id = $1', [
-            row.id,
-            plan.stage,
-          ])
-          summary.warned += 1
-        } else if (plan.action === 'delete') {
-          if (await deleteInactiveAccount(row)) {
-            summary.deleted += 1
-            await sendInactiveAccountDeleted(row).catch((error) =>
-              console.error('Failed to send deletion notice:', error.message),
-            )
-          }
+  for (const row of rows) {
+    try {
+      const plan = planInactivityAction(
+        new Date(row.last_active_at),
+        row.inactivity_warning_days,
+        now,
+      )
+      if (plan.action === 'warn') {
+        await sendInactivityWarning(row, plan.daysLeft, plan.deleteAt)
+        await query('UPDATE users SET inactivity_warning_days = $2 WHERE id = $1', [
+          row.id,
+          plan.stage,
+        ])
+        summary.warned += 1
+      } else if (plan.action === 'delete') {
+        if (await deleteInactiveAccount(row)) {
+          summary.deleted += 1
+          await sendInactiveAccountDeleted(row).catch((error) =>
+            console.error('Failed to send deletion notice:', error.message),
+          )
         }
-      } catch (error) {
-        summary.failed += 1
-        console.error(`Inactive account cleanup failed for ${row.id}:`, error.message)
       }
+    } catch (error) {
+      summary.failed += 1
+      console.error(`Inactive account cleanup failed for ${row.id}:`, error.message)
     }
-  } finally {
-    await lockClient.query('SELECT pg_advisory_unlock($1)', [JOB_LOCK_KEY]).catch(() => {})
-    lockClient.release()
   }
   if (summary.warned || summary.deleted || summary.failed) {
     console.log('Inactive account cleanup:', summary)

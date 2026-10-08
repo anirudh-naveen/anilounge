@@ -31,6 +31,12 @@ const MAL_ANIME_FIELDS =
 
 const MAL_SPECIAL_TYPES = new Set(['ova', 'special'])
 
+/** External search results are reused for this long. */
+const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000
+const SEARCH_CACHE_MAX = 500
+/** Longest a user-facing search waits for a provider's rate-limit slot. */
+const SEARCH_MAX_WAIT_MS = 3000
+
 /**
  * Whether a converted item should appear in a typed search/popular request.
  * `movie` includes MAL specials so they surface with movies in the UI.
@@ -72,6 +78,34 @@ class UnifiedContentService {
     this.hasTmdbKey = !!this.tmdbApiKey
     this.hasMalKey = !!this.malClientId
     this.episodeCache = new Map()
+    /** Earliest time the next call to each provider may start (see `throttle`). */
+    this.nextSlot = { tmdb: 0, mal: 0 }
+    /** Recent external search results, so repeated searches don't hit the APIs again. */
+    this.searchCache = new Map()
+  }
+
+  /**
+   * Wait for this provider's next free slot. Slots are spaced TMDB_DELAY_MS / MAL_DELAY_MS
+   * apart across every caller in the process, so concurrent searches and syncs together
+   * stay under the provider's rate limit (a per-call sleep only spaced one caller's calls).
+   * @param {'tmdb' | 'mal'} provider
+   * @returns {Promise<void>}
+   */
+  async throttle(provider) {
+    const interval = provider === 'tmdb' ? this.tmdbDelay : this.malDelay
+    const now = Date.now()
+    const at = Math.max(now, this.nextSlot[provider])
+    this.nextSlot[provider] = at + interval
+    if (at > now) await this.delay(at - now)
+  }
+
+  /**
+   * How long a new call to `provider` would wait for its slot.
+   * @param {'tmdb' | 'mal'} provider
+   * @returns {number} Milliseconds.
+   */
+  queueDelay(provider) {
+    return Math.max(0, this.nextSlot[provider] - Date.now())
   }
 
   /**
@@ -123,7 +157,7 @@ class UnifiedContentService {
     }
 
     try {
-      await this.delay(this.tmdbDelay)
+      await this.throttle('tmdb')
       const response = await this.tmdbClient.get('/discover/movie', {
         params: {
           api_key: this.tmdbApiKey,
@@ -155,7 +189,7 @@ class UnifiedContentService {
     const collected = []
     try {
       for (let page = 1; page <= 5 && collected.length < limit; page++) {
-        await this.delay(this.tmdbDelay)
+        await this.throttle('tmdb')
         const response = await this.tmdbClient.get('/movie/now_playing', {
           params: {
             api_key: this.tmdbApiKey,
@@ -193,7 +227,7 @@ class UnifiedContentService {
     }
 
     try {
-      await this.delay(this.tmdbDelay)
+      await this.throttle('tmdb')
       const response = await this.tmdbClient.get('/discover/tv', {
         params: {
           api_key: this.tmdbApiKey,
@@ -222,7 +256,7 @@ class UnifiedContentService {
     if (!this.hasTmdbKey) return null
 
     try {
-      if (!skipDelay) await this.delay(this.tmdbDelay)
+      if (!skipDelay) await this.throttle('tmdb')
       const endpoint = contentType === 'movie' ? '/movie' : '/tv'
       const response = await this.tmdbClient.get(`${endpoint}/${tmdbId}`, {
         params: {
@@ -251,7 +285,7 @@ class UnifiedContentService {
     }
 
     try {
-      await this.delay(this.malDelay)
+      await this.throttle('mal')
       const response = await this.malClient.get('/anime/ranking', {
         params: {
           ranking_type: 'all',
@@ -310,7 +344,7 @@ class UnifiedContentService {
     }
 
     try {
-      await this.delay(this.malDelay)
+      await this.throttle('mal')
       const response = await this.malClient.get('/anime/ranking', {
         params: {
           ranking_type: rankingType,
@@ -337,7 +371,7 @@ class UnifiedContentService {
     if (!this.hasMalKey) return null
 
     try {
-      if (!skipDelay) await this.delay(this.malDelay)
+      if (!skipDelay) await this.throttle('mal')
       const response = await this.malClient.get(`/anime/${malId}`, {
         params: {
           fields: [MAL_ANIME_FIELDS, ...extraFields].join(','),
@@ -361,7 +395,7 @@ class UnifiedContentService {
     if (!this.hasMalKey) return []
 
     try {
-      await this.delay(this.malDelay)
+      await this.throttle('mal')
       const response = await this.malClient.get('/anime', {
         params: {
           q: query,
@@ -748,9 +782,15 @@ class UnifiedContentService {
   async searchContent(query, options = {}) {
     const { contentType = 'all', limit = 20, includeTmdb = true, includeMal = true } = options
 
+    const cacheKey = [contentType, limit, includeTmdb, includeMal, String(query).toLowerCase()].join('|')
+    const cached = this.searchCache.get(cacheKey)
+    if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return cached.results
+
     const results = []
 
-    if (includeTmdb && this.hasTmdbKey) {
+    // A user is waiting: skip a provider whose queue is already long (a sync or other
+    // searches are using it) rather than make the search hang.
+    if (includeTmdb && this.hasTmdbKey && this.queueDelay('tmdb') < SEARCH_MAX_WAIT_MS) {
       try {
         const tmdbResults = await this.searchTmdb(query, contentType, limit)
         results.push(
@@ -764,7 +804,7 @@ class UnifiedContentService {
       }
     }
 
-    if (includeMal && this.hasMalKey) {
+    if (includeMal && this.hasMalKey && this.queueDelay('mal') < SEARCH_MAX_WAIT_MS) {
       try {
         const malResults = await this.searchMalAnime(query, limit)
         results.push(
@@ -782,7 +822,13 @@ class UnifiedContentService {
       }
     }
 
-    return this.deduplicateAndRank(results, query)
+    const ranked = this.deduplicateAndRank(results, query)
+    this.searchCache.delete(cacheKey)
+    this.searchCache.set(cacheKey, { at: Date.now(), results: ranked })
+    if (this.searchCache.size > SEARCH_CACHE_MAX) {
+      this.searchCache.delete(this.searchCache.keys().next().value)
+    }
+    return ranked
   }
 
   /**
@@ -800,7 +846,7 @@ class UnifiedContentService {
 
     try {
       if (contentType === 'all' || contentType === 'movie') {
-        await this.delay(this.tmdbDelay)
+        await this.throttle('tmdb')
         const movieResponse = await this.tmdbClient.get('/search/movie', {
           params: {
             api_key: this.tmdbApiKey,
@@ -819,7 +865,7 @@ class UnifiedContentService {
       }
 
       if (contentType === 'all' || contentType === 'tv') {
-        await this.delay(this.tmdbDelay)
+        await this.throttle('tmdb')
         const tvResponse = await this.tmdbClient.get('/search/tv', {
           params: {
             api_key: this.tmdbApiKey,

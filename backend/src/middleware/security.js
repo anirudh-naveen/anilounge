@@ -94,45 +94,6 @@ export const validateObjectId = (req, res, next) => {
 }
 
 /**
- * Factory for a process-local IP+path rate limiter (not shared across instances).
- *
- * @param {number} windowMs - Window length in milliseconds before the counter resets.
- * @param {number} max - Maximum hits per IP+path in that window.
- * @param {string} [message] - JSON `message` on 429; defaults to `'Too many requests'`.
- * @returns {import('express').RequestHandler} Middleware that 429s when `max` is exceeded.
- */
-export const createRateLimit = (windowMs, max, message) => {
-  return (req, res, next) => {
-    const key = `${req.ip}-${req.route?.path || req.path}`
-    const now = Date.now()
-
-    if (!global.rateLimitStore) {
-      global.rateLimitStore = new Map()
-    }
-
-    const store = global.rateLimitStore
-    const userLimit = store.get(key) || { count: 0, resetTime: now + windowMs }
-
-    if (now > userLimit.resetTime) {
-      userLimit.count = 0
-      userLimit.resetTime = now + windowMs
-    }
-
-    if (userLimit.count >= max) {
-      return res.status(429).json({
-        success: false,
-        message: message || 'Too many requests',
-      })
-    }
-
-    userLimit.count++
-    store.set(key, userLimit)
-
-    next()
-  }
-}
-
-/**
  * Reject uploaded files over 5MB, non-image MIME types, or executable-like names.
  *
  * @param {import('express').Request} req - Optional `req.file` from multer.
@@ -174,6 +135,5 @@ export default {
   sanitizeHtmlInput,
   sanitizeXSS,
   validateObjectId,
-  createRateLimit,
   validateFileUpload,
 }

@@ -29,9 +29,10 @@ describe('compileMongoFilter', () => {
       contentType: 'tv',
       $or: [{ malStatus: 'not_yet_aired' }, { releaseDate: { $gt: new Date('2026-09-18') } }],
     })
-    assert.match(compiled.sql, /c\.content_type/)
+    // Filters the indexed kind column: 'tv' is kind 'series'.
+    assert.match(compiled.sql, /c\.kind/)
     assert.match(compiled.sql, /c\.airing_status/)
-    assert.equal(compiled.params[0], 'tv')
+    assert.equal(compiled.params[0], 'series')
     assert.equal(compiled.params[1], 'upcoming')
   })
 
@@ -42,5 +43,20 @@ describe('compileMongoFilter', () => {
     assert.match(compiled.sql, /regexp_replace\(lower\(normalize\(c\.title, NFKC\)\), '\\s', '', 'g'\) = \$1/)
     assert.match(compiled.sql, /content_akas ca/)
     assert.deepEqual(compiled.params, ['rezero', 'rezero'])
+  })
+
+  it('compares ids as uuids so the primary key index applies', () => {
+    const id = '0b6b1a52-6f0e-4a3e-9d1c-7d2f3b9a8c11'
+    assert.equal(compileMongoFilter({ _id: id }).sql, 'c.id = $1::uuid')
+    assert.equal(compileMongoFilter({ _id: 'not-a-uuid' }).sql, 'FALSE')
+    const many = compileMongoFilter({ _id: { $in: [id, 'bad'] } })
+    assert.equal(many.sql, 'c.id = ANY($1::uuid[])')
+    assert.deepEqual(many.params[0], [id])
+  })
+
+  it('maps movie content types onto kinds', () => {
+    const compiled = compileMongoFilter({ contentType: { $in: ['movie', 'special'] } })
+    assert.match(compiled.sql, /c\.kind = ANY/)
+    assert.deepEqual(compiled.params[0], ['movie', 'special'])
   })
 })

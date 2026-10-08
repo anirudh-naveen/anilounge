@@ -2,13 +2,15 @@
  * App accounts stored in Postgres, with a mongoose-like document API.
  */
 import crypto from 'crypto'
-import bcrypt from 'bcryptjs'
+import { comparePassword as checkPassword, hashPassword } from '../utils/passwordHash.js'
 import { query, startSession } from '../../config/postgres.js'
 import { compileMongoFilter } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId } from '../db/ids.js'
 import { attachContentRelations, mapContentRow } from './Content.js'
 import { normalizePreferences, normalizeProfileSettings } from '../utils/profileSettings.js'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const DEMO_USER_EMAIL = 'demo@findanimation.com'
 
@@ -147,6 +149,7 @@ async function loadUserChildren(doc) {
     name: row.name,
     addedAt: row.added_at,
   }))
+  rememberChildren(doc)
   return doc
 }
 
@@ -226,7 +229,7 @@ User.prototype.isDemo = function isDemo() {
 }
 
 User.prototype.comparePassword = function comparePassword(candidate) {
-  return bcrypt.compare(candidate, this.password)
+  return checkPassword(candidate, this.password)
 }
 
 User.prototype.toJSON = function toJSON() {
@@ -264,10 +267,191 @@ User.prototype.save = async function save(options = {}) {
   }
 }
 
+/** Hidden marker on a user document: its child rows as loaded (or last saved). */
+const CHILDREN_KEY = Symbol('childrenKey')
+
+/**
+ * Remember the child rows a document holds, so `save` writes only what changed.
+ * @param {object} user
+ * @param {ReturnType<typeof childRows>} [rows]
+ * @returns {void}
+ */
+function rememberChildren(user, rows = childRows(user)) {
+  Object.defineProperty(user, CHILDREN_KEY, {
+    value: { key: JSON.stringify(rows), rows },
+    writable: true,
+    configurable: true,
+  })
+}
+
+/**
+ * Rows of `next` that are new or differ from `previous`, and ids `previous` had that
+ * `next` dropped (both keyed by content_id).
+ * @param {object[]} previous
+ * @param {object[]} next
+ * @returns {{ upserts: object[], removed: string[] }}
+ */
+function diffRows(previous, next) {
+  const before = new Map(previous.map((row) => [row.content_id, JSON.stringify(row)]))
+  const after = new Set(next.map((row) => row.content_id))
+  return {
+    upserts: next.filter((row) => before.get(row.content_id) !== JSON.stringify(row)),
+    removed: [...before.keys()].filter((id) => !after.has(id)),
+  }
+}
+
+/**
+ * Normalized watchlist, rating, and favorite rows for a user document.
+ * @param {object} user
+ * @returns {{ watchlistRows: object[], ratingRows: object[], favoriteRows: object[] }}
+ */
+function childRows(user) {
+  const watchlistRows = firstByContentId(
+    (user.watchlist || []).map((item) => ({
+      content_id: asId(item.content),
+      status: item.status || 'plan_to_watch',
+      current_episode: item.currentEpisode ?? 0,
+      previous_episode: item.previousEpisode ?? 0,
+      current_season: item.currentSeason ?? 1,
+      notes: item.notes || null,
+      started_on: item.startedOn || null,
+      completed_on: item.completedOn || null,
+      rewatch_count: item.rewatchCount ?? 0,
+      imported_at: item.importedAt || null,
+      added_at: item.addedAt || new Date(),
+      updated_at: item.updatedAt || new Date(),
+    })),
+  )
+
+  // Legacy `ratings` entries override watchlist ratings for the same title.
+  const ratingRows = new Map()
+  for (const item of user.watchlist || []) {
+    const contentId = asId(item.content)
+    if (!contentId || item.rating == null) continue
+    ratingRows.set(contentId, {
+      content_id: contentId,
+      score: item.rating,
+      review: null,
+      rated_at: item.updatedAt || new Date(),
+    })
+  }
+  for (const item of user.ratings || []) {
+    const contentId = asId(item.content)
+    if (!contentId || item.rating == null) continue
+    const previous = ratingRows.get(contentId)
+    ratingRows.set(contentId, {
+      content_id: contentId,
+      score: item.rating,
+      review: item.review || previous?.review || null,
+      rated_at: previous ? previous.rated_at : item.watchedAt || new Date(),
+    })
+  }
+
+  const favoriteRows = firstByContentId(
+    (user.favoriteEntities || []).map((item) => ({
+      content_id: asId(item.entity),
+      added_at: item.addedAt || new Date(),
+    })),
+  )
+  return { watchlistRows, ratingRows: [...ratingRows.values()], favoriteRows }
+}
+
+/**
+ * Write a user's watchlist, ratings, and favorites. With `previous` (the rows as loaded),
+ * only changed rows are upserted and dropped ones deleted, so editing one title touches
+ * one row (and one title's rating totals) instead of rewriting the whole list. Without
+ * it (a new user), the lists are replaced outright.
+ * @param {string} userId
+ * @param {ReturnType<typeof childRows>} rows
+ * @param {ReturnType<typeof childRows> | null} previous
+ * @returns {Promise<void>}
+ */
+async function writeChildren(userId, rows, previous) {
+  const valid = (list) => list.filter((row) => UUID_RE.test(String(row.content_id || '')))
+  const plan = (name) =>
+    previous
+      ? diffRows(valid(previous[name]), valid(rows[name]))
+      : { upserts: valid(rows[name]), removed: null }
+
+  const watch = plan('watchlistRows')
+  if (watch.removed === null) await query('DELETE FROM watchlist WHERE user_id = $1', [userId])
+  else if (watch.removed.length) {
+    await query('DELETE FROM watchlist WHERE user_id = $1 AND content_id = ANY($2::uuid[])', [
+      userId,
+      watch.removed,
+    ])
+  }
+  if (watch.upserts.length) {
+    await query(
+      `INSERT INTO watchlist (
+         user_id, content_id, status, current_episode, previous_episode, current_season, notes,
+         started_on, completed_on, rewatch_count, imported_at, added_at, updated_at
+       )
+       SELECT $1, c.id, r.status, r.current_episode, r.previous_episode, r.current_season, r.notes,
+              r.started_on, r.completed_on, r.rewatch_count, r.imported_at, r.added_at, r.updated_at
+       FROM jsonb_to_recordset($2::jsonb) AS r(
+         content_id uuid, status text, current_episode int, previous_episode int,
+         current_season int, notes text, started_on date, completed_on date, rewatch_count int,
+         imported_at timestamptz, added_at timestamptz, updated_at timestamptz
+       )
+       JOIN content c ON c.id = r.content_id AND c.kind IN ('movie', 'series', 'special')
+       ON CONFLICT (user_id, content_id) DO UPDATE SET
+         status = EXCLUDED.status, current_episode = EXCLUDED.current_episode,
+         previous_episode = EXCLUDED.previous_episode, current_season = EXCLUDED.current_season,
+         notes = EXCLUDED.notes, started_on = EXCLUDED.started_on,
+         completed_on = EXCLUDED.completed_on, rewatch_count = EXCLUDED.rewatch_count,
+         imported_at = EXCLUDED.imported_at, added_at = EXCLUDED.added_at,
+         updated_at = EXCLUDED.updated_at`,
+      [userId, JSON.stringify(watch.upserts)],
+    )
+  }
+
+  const rated = plan('ratingRows')
+  if (rated.removed === null) await query('DELETE FROM ratings WHERE user_id = $1', [userId])
+  else if (rated.removed.length) {
+    await query('DELETE FROM ratings WHERE user_id = $1 AND content_id = ANY($2::uuid[])', [
+      userId,
+      rated.removed,
+    ])
+  }
+  if (rated.upserts.length) {
+    await query(
+      `INSERT INTO ratings (user_id, content_id, score, review, rated_at)
+       SELECT $1, c.id, r.score, r.review, r.rated_at
+       FROM jsonb_to_recordset($2::jsonb) AS r(
+         content_id uuid, score numeric, review text, rated_at timestamptz
+       )
+       JOIN content c ON c.id = r.content_id AND c.kind IN ('movie', 'series', 'special')
+       ON CONFLICT (user_id, content_id) DO UPDATE SET
+         score = EXCLUDED.score, review = EXCLUDED.review, rated_at = EXCLUDED.rated_at`,
+      [userId, JSON.stringify(rated.upserts)],
+    )
+  }
+
+  const faves = plan('favoriteRows')
+  if (faves.removed === null) await query('DELETE FROM favorites WHERE user_id = $1', [userId])
+  else if (faves.removed.length) {
+    await query('DELETE FROM favorites WHERE user_id = $1 AND content_id = ANY($2::uuid[])', [
+      userId,
+      faves.removed,
+    ])
+  }
+  if (faves.upserts.length) {
+    await query(
+      `INSERT INTO favorites (user_id, content_id, added_at)
+       SELECT $1, r.content_id, r.added_at
+       FROM jsonb_to_recordset($2::jsonb) AS r(content_id uuid, added_at timestamptz)
+       JOIN content c ON c.id = r.content_id
+       ON CONFLICT (user_id, content_id) DO UPDATE SET added_at = EXCLUDED.added_at`,
+      [userId, JSON.stringify(faves.upserts)],
+    )
+  }
+}
+
 async function writeUser(user) {
   let passwordHash = user.password
   if (passwordHash && !isBcrypt(passwordHash)) {
-    passwordHash = await bcrypt.hash(passwordHash, 12)
+    passwordHash = await hashPassword(passwordHash)
     user.password = passwordHash
   }
   const lockUntil =
@@ -308,93 +492,18 @@ async function writeUser(user) {
     Object.values(columns),
   )
 
-  const watchlistRows = firstByContentId(
-    (user.watchlist || []).map((item) => ({
-      content_id: asId(item.content),
-      status: item.status || 'plan_to_watch',
-      current_episode: item.currentEpisode ?? 0,
-      previous_episode: item.previousEpisode ?? 0,
-      current_season: item.currentSeason ?? 1,
-      notes: item.notes || null,
-      started_on: item.startedOn || null,
-      completed_on: item.completedOn || null,
-      rewatch_count: item.rewatchCount ?? 0,
-      imported_at: item.importedAt || null,
-      added_at: item.addedAt || new Date(),
-      updated_at: item.updatedAt || new Date(),
-    })),
-  )
-  await query('DELETE FROM watchlist WHERE user_id = $1', [user._id])
-  if (watchlistRows.length) {
-    await query(
-      `INSERT INTO watchlist (
-         user_id, content_id, status, current_episode, previous_episode, current_season, notes,
-         started_on, completed_on, rewatch_count, imported_at, added_at, updated_at
-       )
-       SELECT $1, w.id, r.status, r.current_episode, r.previous_episode, r.current_season, r.notes,
-              r.started_on, r.completed_on, r.rewatch_count, r.imported_at, r.added_at, r.updated_at
-       FROM jsonb_to_recordset($2::jsonb) AS r(
-         content_id text, status text, current_episode int, previous_episode int,
-         current_season int, notes text, started_on date, completed_on date, rewatch_count int,
-         imported_at timestamptz, added_at timestamptz, updated_at timestamptz
-       )
-       JOIN works w ON w.id::text = r.content_id
-       ON CONFLICT (user_id, content_id) DO NOTHING`,
-      [user._id, JSON.stringify(watchlistRows)],
-    )
-  }
-
-  // Legacy `ratings` entries override watchlist ratings for the same title.
-  const ratingRows = new Map()
-  for (const item of user.watchlist || []) {
-    const contentId = asId(item.content)
-    if (!contentId || item.rating == null) continue
-    ratingRows.set(contentId, {
-      content_id: contentId,
-      score: item.rating,
-      review: null,
-      rated_at: item.updatedAt || new Date(),
-    })
-  }
-  for (const item of user.ratings || []) {
-    const contentId = asId(item.content)
-    if (!contentId || item.rating == null) continue
-    const previous = ratingRows.get(contentId)
-    ratingRows.set(contentId, {
-      content_id: contentId,
-      score: item.rating,
-      review: item.review || previous?.review || null,
-      rated_at: previous ? previous.rated_at : item.watchedAt || new Date(),
-    })
-  }
-  await query('DELETE FROM ratings WHERE user_id = $1', [user._id])
-  if (ratingRows.size) {
-    await query(
-      `INSERT INTO ratings (user_id, content_id, score, review, rated_at)
-       SELECT $1, w.id, r.score, r.review, r.rated_at
-       FROM jsonb_to_recordset($2::jsonb) AS r(
-         content_id text, score numeric, review text, rated_at timestamptz
-       )
-       JOIN works w ON w.id::text = r.content_id`,
-      [user._id, JSON.stringify([...ratingRows.values()])],
-    )
-  }
-
-  const favoriteRows = firstByContentId(
-    (user.favoriteEntities || []).map((item) => ({
-      content_id: asId(item.entity),
-      added_at: item.addedAt || new Date(),
-    })),
-  )
-  await query('DELETE FROM favorites WHERE user_id = $1', [user._id])
-  if (favoriteRows.length) {
-    await query(
-      `INSERT INTO favorites (user_id, content_id, added_at)
-       SELECT $1, r.content_id::uuid, r.added_at
-       FROM jsonb_to_recordset($2::jsonb) AS r(content_id text, added_at timestamptz)
-       ON CONFLICT DO NOTHING`,
-      [user._id, JSON.stringify(favoriteRows)],
-    )
+  const isNew = user.$isNew
+  const rows = childRows(user)
+  const loaded = user[CHILDREN_KEY]
+  // Lists are written only when this document holds them (new, or loaded with them) and
+  // they changed; a user loaded without them (the auth middleware's `findAuthUser`)
+  // must never empty them on save.
+  if (isNew && !loaded) {
+    await writeChildren(user._id, rows, null)
+    rememberChildren(user, rows)
+  } else if (loaded && loaded.key !== JSON.stringify(rows)) {
+    await writeChildren(user._id, rows, loaded.rows)
+    rememberChildren(user, rows)
   }
 
   user.$isNew = false
@@ -449,6 +558,22 @@ User.findOne = function findOne(filter = {}) {
 User.findById = function findById(id) {
   if (!id) return new DocQuery(async () => null)
   return User.findOne({ _id: String(id) })
+}
+
+/**
+ * The `users` row alone, without watchlist, ratings, or favorites: what the auth
+ * middleware attaches to every request. Saving it writes only the `users` row.
+ * Handlers that need the lists load them with `User.findById`.
+ * @param {string} id
+ * @returns {Promise<User|null>}
+ */
+User.findAuthUser = async function findAuthUser(id) {
+  if (!UUID_RE.test(String(id || ''))) return null
+  const { rows } = await query('SELECT * FROM users WHERE id = $1::uuid', [String(id)])
+  if (!rows[0]) return null
+  const doc = new User(mapUserRow(rows[0]), { fromDb: true })
+  Object.assign(doc, mapUserRow(rows[0]))
+  return doc
 }
 
 User.find = function find(filter = {}) {

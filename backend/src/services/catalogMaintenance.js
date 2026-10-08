@@ -14,6 +14,7 @@
  * CATALOG_MAINTENANCE_DELAY_MS (default 2 minutes).
  */
 import cron from 'node-cron'
+import { withJobLock } from '../utils/jobLock.js'
 import catalogEvents from './catalogEvents.js'
 import { mergeAllFranchiseCharacters, mergeFranchiseCharactersForWork } from './characterMerge.js'
 import { applyFranchisePlan, loadFranchisePlan } from './franchiseBuilder.js'
@@ -138,15 +139,21 @@ export function startCatalogMaintenance() {
   if (scheduledTask) return true
 
   const delayMs = Number(process.env.CATALOG_MAINTENANCE_DELAY_MS) || DEFAULT_DELAY_MS
-  trigger = createDebouncedTrigger({ run: runCatalogMaintenance, delayMs })
+  // One instance at a time (utils/jobLock.js); scheduled passes also once per period.
+  const runLocked = (label, options, minIntervalMs = 0) =>
+    withJobLock('catalog-maintenance', () => runCatalogMaintenance(label, options), {
+      ttlMs: 2 * 60 * 60_000,
+      minIntervalMs,
+    }).catch((error) => console.error('Catalog maintenance lock failed:', error.message))
+  trigger = createDebouncedTrigger({ run: (label) => runLocked(label), delayMs })
   catalogEvents.on('title-added', () => trigger.request('title added'))
   scheduledTask = cron.schedule(schedule, () => {
-    void runCatalogMaintenance('scheduled')
+    void runLocked('scheduled', undefined, 50 * 60_000)
   })
   const fullSchedule = process.env.CATALOG_MAINTENANCE_FULL_CRON || DEFAULT_FULL_CRON
   if (cron.validate(fullSchedule)) {
     fullTask = cron.schedule(fullSchedule, () => {
-      void runCatalogMaintenance('daily full pass', { full: true })
+      void runLocked('daily full pass', { full: true })
     })
   } else {
     console.error(`Invalid CATALOG_MAINTENANCE_FULL_CRON "${fullSchedule}"; no daily full pass`)

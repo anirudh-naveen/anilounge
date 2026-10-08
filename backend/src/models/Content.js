@@ -643,6 +643,41 @@ Content.findById = function findById(id) {
   return Content.findOne({ _id: String(id) })
 }
 
+/**
+ * Ids of watchables whose name, native name, alternative title, original title, or
+ * overview contains `text` (case-insensitive). Each branch is a separate lookup so the
+ * pg_trgm indexes in `db/schema.sql` serve it; one OR across the `works` view (whose
+ * original title is a COALESCE over three tables) could only scan every title.
+ * @param {string} text
+ * @param {{ limit?: number }} [options]
+ * @returns {Promise<string[]>}
+ */
+Content.searchIds = async function searchIds(text, { limit = 2000 } = {}) {
+  const needle = String(text || '').trim()
+  if (!needle) return []
+  const pattern = `%${needle.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
+  const { rows } = await query(
+    `SELECT id FROM (
+       SELECT id FROM content
+       WHERE kind IN ('movie', 'series', 'special')
+         AND (name ILIKE $1 OR native_name ILIKE $1 OR about ILIKE $1)
+       UNION
+       SELECT a.content_id FROM content_akas a
+       JOIN content c ON c.id = a.content_id AND c.kind IN ('movie', 'series', 'special')
+       WHERE a.name ILIKE $1
+       UNION
+       SELECT content_id FROM movies WHERE original_title ILIKE $1
+       UNION
+       SELECT content_id FROM series WHERE original_title ILIKE $1
+       UNION
+       SELECT content_id FROM specials WHERE original_title ILIKE $1
+     ) hits
+     LIMIT $2`,
+    [pattern, limit],
+  )
+  return rows.map((row) => String(row.id))
+}
+
 Content.countDocuments = async function countDocuments(filter = {}) {
   const compiled = compileMongoFilter(filter, 'content')
   const { rows } = await query(

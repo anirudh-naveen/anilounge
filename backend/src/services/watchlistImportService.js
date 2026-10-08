@@ -1363,19 +1363,75 @@ function publicJob(job) {
   return rest
 }
 
+/** A running job whose stored progress is older than this lost its instance. */
+const STALE_JOB_MS = 5 * 60 * 1000
+/** Minimum gap between progress writes while a job runs. */
+const PERSIST_EVERY_MS = 1000
+
 /**
- * The user's current or most recent import (finished ones expire after an hour).
- * @param {string} userId
- * @returns {object|null}
+ * Store a job's progress in `watchlist_import_jobs` so a progress poll that reaches a
+ * different server instance still finds it. Throttled while running; `force` for the
+ * start and the end. Failures only cost cross-instance visibility, never the import.
+ * @param {object} job
+ * @param {{ force?: boolean }} [options]
+ * @returns {Promise<void>}
  */
-export function getImportJob(userId) {
-  const job = jobs.get(String(userId))
-  if (!job) return null
-  if (job.finishedAt && Date.now() - new Date(job.finishedAt).getTime() > JOB_TTL_MS) {
-    jobs.delete(String(userId))
+async function persistJob(job, { force = false } = {}) {
+  const now = Date.now()
+  if (!force && now - (job.persistedAt || 0) < PERSIST_EVERY_MS) return
+  Object.defineProperty(job, 'persistedAt', { value: now, writable: true, configurable: true })
+  await query(
+    `INSERT INTO watchlist_import_jobs (user_id, job, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (user_id) DO UPDATE SET job = EXCLUDED.job, updated_at = now()`,
+    [job.userId, JSON.stringify(publicJob(job))],
+  ).catch((error) => {
+    if (error.code !== '42P01') console.warn(`Watchlist import: progress not stored: ${error.message}`)
+  })
+}
+
+/**
+ * A job another instance stored, or null (none, expired, or table missing).
+ * @param {string} key
+ * @returns {Promise<object|null>}
+ */
+async function storedJob(key) {
+  try {
+    const { rows } = await query(
+      'SELECT job, updated_at FROM watchlist_import_jobs WHERE user_id = $1',
+      [key],
+    )
+    if (!rows[0]) return null
+    const job = rows[0].job
+    if (job.state === 'running' && Date.now() - new Date(rows[0].updated_at).getTime() > STALE_JOB_MS) {
+      return {
+        ...job,
+        state: 'failed',
+        phase: null,
+        error: 'The import stopped unexpectedly. Your watchlist keeps what was saved; try again.',
+        finishedAt: new Date(rows[0].updated_at).toISOString(),
+      }
+    }
+    return job
+  } catch {
     return null
   }
-  return publicJob(job)
+}
+
+/**
+ * The user's current or most recent import (finished ones expire after an hour), from
+ * this instance's memory or, failing that, the progress another instance stored.
+ * @param {string} userId
+ * @returns {Promise<object|null>}
+ */
+export async function getImportJob(userId) {
+  const key = String(userId)
+  const job = jobs.get(key) ? publicJob(jobs.get(key)) : await storedJob(key)
+  if (!job) return null
+  if (job.finishedAt && Date.now() - new Date(job.finishedAt).getTime() > JOB_TTL_MS) {
+    jobs.delete(key)
+    return null
+  }
+  return job
 }
 
 /**
@@ -1384,11 +1440,11 @@ export function getImportJob(userId) {
  * @param {string} userId
  * @param {Array<{ source: string, load: () => Promise<ImportEntry[]> }>} sources - From `prepareSources`.
  * @param {{ addMissing?: boolean }} [options]
- * @returns {object} The new job.
+ * @returns {Promise<object>} The new job.
  */
-export function startImportJob(userId, sources, options = {}) {
+export async function startImportJob(userId, sources, options = {}) {
   const key = String(userId)
-  const current = jobs.get(key)
+  const current = await getImportJob(key)
   if (current?.state === 'running') {
     throw new ImportError('An import is already running. Wait for it to finish.', 409)
   }
@@ -1411,6 +1467,24 @@ export function startImportJob(userId, sources, options = {}) {
     error: null,
     startedAt: new Date().toISOString(),
     finishedAt: null,
+  }
+  // Claim the user's row atomically, so two instances can't both start an import.
+  const claimed = await query(
+    `INSERT INTO watchlist_import_jobs (user_id, job, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (user_id) DO UPDATE SET job = EXCLUDED.job, updated_at = now()
+       WHERE watchlist_import_jobs.job->>'state' <> 'running'
+          OR watchlist_import_jobs.updated_at < now() - make_interval(secs => $3)
+     RETURNING user_id`,
+    [key, JSON.stringify(publicJob(job)), STALE_JOB_MS / 1000],
+  ).then(
+    (result) => result.rows.length > 0,
+    (error) => {
+      if (error.code !== '42P01') throw error
+      return true // Table not added yet: single-instance behaviour.
+    },
+  )
+  if (!claimed) {
+    throw new ImportError('An import is already running. Wait for it to finish.', 409)
   }
   jobs.set(key, job)
 
@@ -1447,6 +1521,7 @@ export function startImportJob(userId, sources, options = {}) {
           job.phase = phase
           job.done = done
           job.total = total || job.total
+          void persistJob(job)
         },
       })
       job.state = 'done'
@@ -1463,6 +1538,7 @@ export function startImportJob(userId, sources, options = {}) {
     } finally {
       job.phase = null
       job.finishedAt = new Date().toISOString()
+      await persistJob(job, { force: true })
     }
   }
   run()

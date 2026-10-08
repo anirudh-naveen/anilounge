@@ -25,6 +25,7 @@
  * it doesn't sync real users' accounts alongside the live server.
  */
 import { query, startSession } from '../../config/postgres.js'
+import { withJobLock } from '../utils/jobLock.js'
 import Content from '../models/Content.js'
 import User from '../models/User.js'
 import { fetchJson } from '../utils/fetchJson.js'
@@ -638,6 +639,7 @@ async function pollProvider(provider) {
            AND (last_polled_at IS NULL OR last_polled_at < now() - make_interval(secs => $2))
          ORDER BY last_polled_at NULLS FIRST
          LIMIT $3
+         FOR UPDATE SKIP LOCKED
        )
        RETURNING *`,
       [provider, intervalSeconds, batch],
@@ -670,7 +672,11 @@ export function startConnectionSync() {
   if (scheduler.timer) return scheduler.timer
   const run = () => {
     for (const provider of CONNECTION_PROVIDERS.filter(providerPulls)) {
-      pollProvider(provider).catch((error) => {
+      // One instance per tick, so the per-minute budget holds across instances.
+      withJobLock(`connections-${provider}`, () => pollProvider(provider), {
+        ttlMs: 10 * 60_000,
+        minIntervalMs: TICK_MS - 2000,
+      }).catch((error) => {
         // Before `npm run db:schema` adds the table, stay quiet instead of logging every tick.
         if (error?.code !== '42P01') console.warn(`Connections: poll failed: ${error.message}`)
       })

@@ -14,6 +14,11 @@ dotenv.config()
 
 /** @type {pg.Pool | null} */
 let pool = null
+/** @type {pg.Pool | null} Read replica (DATABASE_READ_URL), when configured. */
+let readPool = null
+
+/** Set inside `withReplica`: plain queries in that async context may use the replica. */
+const replicaContext = new AsyncLocalStorage()
 
 /**
  * Nested transaction clients for the current async context; `query` uses the
@@ -49,19 +54,61 @@ export function getPool() {
     throw new Error('DATABASE_URL is not set')
   }
 
-  pool = new pg.Pool({
+  pool = createPool(connectionString, 'primary')
+  return pool
+}
+
+/**
+ * Pool settings shared by the primary and the replica.
+ *
+ * PG_POOL_MAX (default 10) is per server instance: keep instances × PG_POOL_MAX under
+ * the database's max_connections (Railway Postgres: 100), or put PgBouncer in front.
+ * PG_STATEMENT_TIMEOUT_MS (0/unset = none) cancels a runaway statement instead of
+ * letting it hold a connection; the API server sets a default at startup.
+ * @param {string} connectionString
+ * @param {string} label
+ * @returns {pg.Pool}
+ */
+function createPool(connectionString, label) {
+  const statementTimeout = Number(process.env.PG_STATEMENT_TIMEOUT_MS) || 0
+  const created = new pg.Pool({
     connectionString,
     ssl: sslForDatabaseUrl(connectionString),
     max: Number(process.env.PG_POOL_MAX) || 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    application_name: process.env.PG_APPLICATION_NAME || 'anilounge-api',
+    ...(statementTimeout > 0 ? { statement_timeout: statementTimeout } : {}),
   })
-
-  pool.on('error', (error) => {
-    console.error('PostgreSQL pool error:', error.message)
+  created.on('error', (error) => {
+    console.error(`PostgreSQL ${label} pool error:`, error.message)
   })
+  return created
+}
 
-  return pool
+/**
+ * The replica pool, or null when DATABASE_READ_URL is unset.
+ * @returns {pg.Pool | null}
+ */
+function getReadPool() {
+  if (readPool) return readPool
+  const connectionString = process.env.DATABASE_READ_URL
+  if (!connectionString) return null
+  readPool = createPool(connectionString, 'replica')
+  return readPool
+}
+
+/**
+ * Run `fn` with its plain queries sent to the read replica (when one is configured).
+ * Only for reads that tolerate replication lag, such as the public catalog: anything
+ * that writes, or must see a write it just made, stays outside. Queries inside a
+ * transaction still use the transaction's client.
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ * @template T
+ */
+export function withReplica(fn) {
+  return replicaContext.run(true, fn)
 }
 
 /**
@@ -93,9 +140,10 @@ export async function connectPostgres() {
  * @returns {Promise<void>}
  */
 export async function closePostgres() {
-  if (!pool) return
-  await pool.end()
+  const pools = [pool, readPool].filter(Boolean)
   pool = null
+  readPool = null
+  await Promise.all(pools.map((open) => open.end()))
 }
 
 /**
@@ -107,6 +155,10 @@ export async function closePostgres() {
 export function query(text, params) {
   const client = txContext.getStore()?.at(-1)
   if (client) return client.query(text, params)
+  if (replicaContext.getStore()) {
+    const replica = getReadPool()
+    if (replica) return replica.query(text, params)
+  }
   return getPool().query(text, params)
 }
 
@@ -148,4 +200,4 @@ export async function startSession() {
   }
 }
 
-export default { getPool, connectPostgres, closePostgres, query, startSession }
+export default { getPool, connectPostgres, closePostgres, query, startSession, withReplica }

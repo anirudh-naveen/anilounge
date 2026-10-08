@@ -10,7 +10,9 @@
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { parse as parseCookies } from 'cookie'
+import cron from 'node-cron'
 import { query } from '../../config/postgres.js'
+import { withJobLock } from '../utils/jobLock.js'
 
 export const REFRESH_COOKIE = 'al_refresh'
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -171,4 +173,43 @@ export async function revokeAllSessions(userId) {
     [userId],
   )
   return result.rowCount || 0
+}
+
+/**
+ * Delete refresh tokens past their expiry. Every refresh rotates the token, so an active
+ * user adds a row each 15 minutes; revoked rows are kept until they expire because a
+ * rotated token showing up again is how a stolen copy is detected.
+ * @returns {Promise<number>} Rows deleted.
+ */
+export async function deleteExpiredSessions() {
+  const { rowCount } = await query(
+    `DELETE FROM refresh_tokens WHERE expires_at < now() - interval '1 day'`,
+  )
+  return rowCount || 0
+}
+
+/**
+ * Run `deleteExpiredSessions` daily (SESSION_CLEANUP_CRON, default 03:20 UTC) on one
+ * instance.
+ * @returns {import('node-cron').ScheduledTask | null}
+ */
+export function startSessionCleanupScheduler() {
+  const schedule = process.env.SESSION_CLEANUP_CRON || '20 3 * * *'
+  if (!cron.validate(schedule)) {
+    console.error(`Invalid SESSION_CLEANUP_CRON "${schedule}"; session cleanup not scheduled`)
+    return null
+  }
+  return cron.schedule(
+    schedule,
+    () => {
+      withJobLock('session-cleanup', deleteExpiredSessions, { minIntervalMs: 60 * 60_000 })
+        .then((deleted) => {
+          if (typeof deleted === 'number' && deleted) {
+            console.log(`Session cleanup: deleted ${deleted} expired refresh token(s)`)
+          }
+        })
+        .catch((error) => console.error('Session cleanup failed:', error.message))
+    },
+    { timezone: 'UTC' },
+  )
 }
