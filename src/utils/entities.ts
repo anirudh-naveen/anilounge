@@ -46,7 +46,10 @@ export function highlightedCharacters<T>(
 /**
  * Appearance row for a specific title, if this character is in it.
  */
-export function appearanceForContent(entity: CatalogEntity, contentId?: string): EntityAppearance | undefined {
+export function appearanceForContent(
+  entity: CatalogEntity,
+  contentId?: string,
+): EntityAppearance | undefined {
   if (!contentId || !entity.appearances?.length) return entity.appearances?.[0]
   return entity.appearances.find((row) => {
     const id = typeof row.content === 'object' && row.content ? row.content._id : row.content
@@ -114,7 +117,9 @@ export function collectVoiceActors(entity?: CatalogEntity | null): EntityVoiceCr
   return credits.sort((left, right) => {
     const leftJa = /japanese/i.test(left.language || '') ? 0 : 1
     const rightJa = /japanese/i.test(right.language || '') ? 0 : 1
-    return leftJa - rightJa || displayPersonName(left.name).localeCompare(displayPersonName(right.name))
+    return (
+      leftJa - rightJa || displayPersonName(left.name).localeCompare(displayPersonName(right.name))
+    )
   })
 }
 
@@ -128,7 +133,12 @@ export function matchCharacterByName(
   const target = canonicalKey(characterName)
   if (!target) return undefined
   return characters.find((entity) => {
-    const names = [entity.name, entity.englishName, entity.nativeName, ...(entity.alternativeNames || [])]
+    const names = [
+      entity.name,
+      entity.englishName,
+      entity.nativeName,
+      ...(entity.alternativeNames || []),
+    ]
     return names.some((name) => canonicalKey(name) === target)
   })
 }
