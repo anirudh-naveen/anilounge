@@ -9,6 +9,7 @@ import { isCatalogId } from '../db/ids.js'
 import Content from '../models/Content.js'
 import Entity from '../models/Entity.js'
 import User from '../models/User.js'
+import { query } from '../../config/postgres.js'
 import {
   ensureCharacterAbout,
   ensureCharactersForContent,
@@ -27,13 +28,15 @@ import { entityToSearchHit } from '../utils/entities.js'
  * Whether the signed-in user has favorited this entity.
  * @param {object|null} user
  * @param {string} entityId
- * @returns {boolean}
+ * @returns {Promise<boolean>}
  */
-function userHasFavorite(user, entityId) {
-  const id = String(entityId)
-  return Boolean(
-    user?.favoriteEntities?.some((row) => String(row.entity) === id),
+async function userHasFavorite(user, entityId) {
+  if (!user) return false
+  const { rows } = await query(
+    'SELECT 1 FROM favorites WHERE user_id = $1 AND content_id = $2',
+    [user._id, String(entityId)],
   )
+  return rows.length > 0
 }
 
 /**
@@ -131,7 +134,7 @@ export const getEntityById = async (req, res) => {
     if (entity.entityType === 'studio') {
       await ensureStudioDetails(entity)
     }
-    const isFavorited = req.user ? userHasFavorite(req.user, entity._id) : false
+    const isFavorited = await userHasFavorite(req.user, entity._id)
     res.json({
       success: true,
       data: await serializeEntityDetails(entity, { isFavorited }),
@@ -156,7 +159,7 @@ export const favoriteEntity = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Entity not found' })
     }
     const user = await User.findById(req.user._id)
-    if (userHasFavorite(user, entity._id)) {
+    if (user.favoriteEntities.some((row) => String(row.entity) === String(entity._id))) {
       return res.json({
         success: true,
         data: await serializeEntityDetails(entity, { isFavorited: true }),

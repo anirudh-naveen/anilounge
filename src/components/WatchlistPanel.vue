@@ -287,6 +287,7 @@ const remove = async () => {
 <style scoped>
 .watchlist-panel {
   margin-top: 1.5rem;
+  margin-bottom: 2.5rem;
   padding: 1.25rem;
   border: 1px solid var(--border-color);
   border-radius: 14px;

@@ -45,6 +45,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS content_kind_anilist_id_unique
 CREATE INDEX IF NOT EXISTS content_kind_name_idx ON content (kind, name);
 CREATE INDEX IF NOT EXISTS content_search_idx ON content USING GIN (search_vector);
 
+-- Default catalog order for watchables (the "hidden" sort in db/mongoFilter.js):
+-- unified score, plus 1 and 5% of popularity for titles TMDB knows. Stored and indexed
+-- (triggers in the Scaling section keep it current) so a catalog page reads 20 index
+-- entries instead of scoring every title through the `works` view.
+ALTER TABLE content ADD COLUMN IF NOT EXISTS catalog_score DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+-- Community rating totals, kept by statement triggers on `ratings` (Scaling section), so
+-- `works` reads two columns instead of aggregating `ratings` for every row it returns.
+ALTER TABLE content ADD COLUMN IF NOT EXISTS rating_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE content ADD COLUMN IF NOT EXISTS rating_sum NUMERIC NOT NULL DEFAULT 0;
+
 -- Admin edits (services/adminService.js): `{ field: value }` for watchable fields an admin
 -- set by hand. Content.save re-applies them so the hourly catalog sync cannot undo them.
 ALTER TABLE content ADD COLUMN IF NOT EXISTS admin_overrides JSONB NOT NULL DEFAULT '{}'::jsonb;
@@ -564,9 +575,10 @@ SELECT
   s.broadcast_day,
   s.next_episode_at,
   s.next_episode_number,
-  (SELECT avg(r.score) FROM ratings r WHERE r.content_id = c.id) AS user_rating_average,
-  (SELECT count(*) FROM ratings r WHERE r.content_id = c.id) AS user_rating_count,
-  (SELECT coalesce(sum(r.score), 0) FROM ratings r WHERE r.content_id = c.id) AS user_rating_sum
+  CASE WHEN c.rating_count > 0 THEN c.rating_sum / c.rating_count END AS user_rating_average,
+  c.rating_count::bigint AS user_rating_count,
+  c.rating_sum AS user_rating_sum,
+  c.catalog_score
 FROM content c
 LEFT JOIN movies m ON m.content_id = c.id
 LEFT JOIN series s ON s.content_id = c.id
@@ -780,3 +792,262 @@ CREATE TABLE IF NOT EXISTS ip_bans (
 CREATE INDEX IF NOT EXISTS ip_bans_active_idx
   ON ip_bans (ip)
   WHERE is_active = true;
+
+-- ---------------------------------------------------------------------------
+-- Scaling
+-- ---------------------------------------------------------------------------
+
+-- Foreign-key and lookup indexes for the hot paths. Without ratings_content_idx every
+-- `works` row ran three full scans of `ratings` (rating average/count/sum).
+CREATE INDEX IF NOT EXISTS ratings_content_idx ON ratings (content_id) INCLUDE (score);
+CREATE INDEX IF NOT EXISTS favorites_content_idx ON favorites (content_id);
+-- Activity feed (services/homeService.js): each friend's latest in-app changes. Rows an
+-- import wrote and nobody touched since are never shown, so they stay out of the index.
+DROP INDEX IF EXISTS watchlist_user_updated_idx;
+CREATE INDEX IF NOT EXISTS watchlist_activity_idx ON watchlist (user_id, updated_at DESC)
+  WHERE imported_at IS NULL OR updated_at > imported_at;
+CREATE INDEX IF NOT EXISTS watch_events_content_idx ON watch_events (content_id);
+-- Conversation lists read "messages I sent or received".
+CREATE INDEX IF NOT EXISTS messages_sender_idx ON messages (sender_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
+-- Cascades and SET NULLs from deleting a user, post, or comment.
+CREATE INDEX IF NOT EXISTS comments_user_idx ON comments (user_id);
+CREATE INDEX IF NOT EXISTS comments_parent_idx ON comments (parent_id) WHERE parent_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS post_likes_user_idx ON post_likes (user_id);
+CREATE INDEX IF NOT EXISTS comment_likes_user_idx ON comment_likes (user_id);
+CREATE INDEX IF NOT EXISTS notifications_post_idx ON notifications (post_id) WHERE post_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS notifications_comment_idx ON notifications (comment_id) WHERE comment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS notifications_actor_idx ON notifications (actor_id) WHERE actor_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS announcement_reads_user_idx ON announcement_reads (user_id);
+CREATE INDEX IF NOT EXISTS friend_request_cooldowns_recipient_idx ON friend_request_cooldowns (recipient_id);
+CREATE INDEX IF NOT EXISTS posts_content_idx ON posts (content_id) WHERE content_id IS NOT NULL;
+
+-- Forum counters (services/forumService.js). Likes and live comments are counted on the
+-- post by triggers, and `hot_score` (engagement decayed by age) is stored so 'hot' and
+-- 'top' pages read an index instead of recounting every post. The score depends on
+-- now(), so refreshHotScores re-decays posts from the last 60 days every few minutes.
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS like_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS comment_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS hot_score DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+CREATE OR REPLACE FUNCTION forum_hot_score(likes INTEGER, comments INTEGER, created TIMESTAMPTZ)
+  RETURNS DOUBLE PRECISION LANGUAGE sql STABLE AS
+  'SELECT (likes + 2 * comments + 1)::float8
+     / power(extract(epoch FROM now() - created)::float8 / 3600 + 2, 1.5)';
+
+CREATE OR REPLACE FUNCTION posts_set_hot_score() RETURNS trigger LANGUAGE plpgsql AS
+  'BEGIN
+     NEW.hot_score := forum_hot_score(NEW.like_count, NEW.comment_count, NEW.created_at);
+     RETURN NEW;
+   END';
+DROP TRIGGER IF EXISTS posts_hot_score ON posts;
+CREATE TRIGGER posts_hot_score BEFORE INSERT OR UPDATE OF like_count, comment_count ON posts
+  FOR EACH ROW EXECUTE FUNCTION posts_set_hot_score();
+
+CREATE OR REPLACE FUNCTION post_likes_count() RETURNS trigger LANGUAGE plpgsql AS
+  'BEGIN
+     IF TG_OP = ''INSERT'' THEN
+       UPDATE posts SET like_count = like_count + 1 WHERE id = NEW.post_id;
+     ELSE
+       UPDATE posts SET like_count = greatest(like_count - 1, 0) WHERE id = OLD.post_id;
+     END IF;
+     RETURN NULL;
+   END';
+DROP TRIGGER IF EXISTS post_likes_count ON post_likes;
+CREATE TRIGGER post_likes_count AFTER INSERT OR DELETE ON post_likes
+  FOR EACH ROW EXECUTE FUNCTION post_likes_count();
+
+CREATE OR REPLACE FUNCTION comments_count() RETURNS trigger LANGUAGE plpgsql AS
+  'BEGIN
+     IF TG_OP = ''INSERT'' THEN
+       IF NEW.deleted_at IS NULL THEN
+         UPDATE posts SET comment_count = comment_count + 1 WHERE id = NEW.post_id;
+       END IF;
+     ELSIF TG_OP = ''DELETE'' THEN
+       IF OLD.deleted_at IS NULL THEN
+         UPDATE posts SET comment_count = greatest(comment_count - 1, 0) WHERE id = OLD.post_id;
+       END IF;
+     ELSIF (OLD.deleted_at IS NULL) <> (NEW.deleted_at IS NULL) THEN
+       UPDATE posts
+         SET comment_count = greatest(comment_count + CASE WHEN NEW.deleted_at IS NULL THEN 1 ELSE -1 END, 0)
+         WHERE id = NEW.post_id;
+     END IF;
+     RETURN NULL;
+   END';
+DROP TRIGGER IF EXISTS comments_count ON comments;
+CREATE TRIGGER comments_count AFTER INSERT OR DELETE OR UPDATE OF deleted_at ON comments
+  FOR EACH ROW EXECUTE FUNCTION comments_count();
+
+-- Backfill (and repair any drift): only rows whose stored counts are wrong are written.
+UPDATE posts p SET like_count = x.likes, comment_count = x.comments
+FROM (
+  SELECT p2.id,
+         (SELECT count(*) FROM post_likes l WHERE l.post_id = p2.id)::int AS likes,
+         (SELECT count(*) FROM comments c WHERE c.post_id = p2.id AND c.deleted_at IS NULL)::int AS comments
+  FROM posts p2
+) x
+WHERE x.id = p.id AND (p.like_count <> x.likes OR p.comment_count <> x.comments);
+UPDATE posts SET hot_score = forum_hot_score(like_count, comment_count, created_at)
+  WHERE created_at > now() - interval '60 days' OR hot_score = 0;
+
+CREATE INDEX IF NOT EXISTS posts_hot_idx ON posts (hot_score DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS posts_top_idx ON posts (like_count DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS posts_created_idx ON posts (created_at DESC);
+CREATE INDEX IF NOT EXISTS comment_likes_comment_idx ON comment_likes (comment_id);
+
+-- Catalog order (content.catalog_score, see the content table). Watchable rows update
+-- it when their scores change; content updates it when its TMDB id changes.
+CREATE OR REPLACE FUNCTION catalog_score_of(unified DOUBLE PRECISION, pop DOUBLE PRECISION, tmdb INTEGER)
+  RETURNS DOUBLE PRECISION LANGUAGE sql IMMUTABLE AS
+  'SELECT COALESCE(unified, 0)
+     + CASE WHEN tmdb IS NOT NULL THEN 1.0 + COALESCE(pop, 0) * 0.05 ELSE 0 END';
+
+CREATE OR REPLACE FUNCTION watchable_catalog_score() RETURNS trigger LANGUAGE plpgsql AS
+  'BEGIN
+     UPDATE content c
+       SET catalog_score = catalog_score_of(NEW.unified_score, NEW.popularity, c.tmdb_id)
+       WHERE c.id = NEW.content_id
+         AND c.catalog_score IS DISTINCT FROM catalog_score_of(NEW.unified_score, NEW.popularity, c.tmdb_id);
+     RETURN NULL;
+   END';
+DROP TRIGGER IF EXISTS movies_catalog_score ON movies;
+CREATE TRIGGER movies_catalog_score AFTER INSERT OR UPDATE OF unified_score, popularity ON movies
+  FOR EACH ROW EXECUTE FUNCTION watchable_catalog_score();
+DROP TRIGGER IF EXISTS series_catalog_score ON series;
+CREATE TRIGGER series_catalog_score AFTER INSERT OR UPDATE OF unified_score, popularity ON series
+  FOR EACH ROW EXECUTE FUNCTION watchable_catalog_score();
+DROP TRIGGER IF EXISTS specials_catalog_score ON specials;
+CREATE TRIGGER specials_catalog_score AFTER INSERT OR UPDATE OF unified_score, popularity ON specials
+  FOR EACH ROW EXECUTE FUNCTION watchable_catalog_score();
+
+CREATE OR REPLACE FUNCTION content_catalog_score() RETURNS trigger LANGUAGE plpgsql AS
+  'BEGIN
+     SELECT catalog_score_of(COALESCE(m.unified_score, s.unified_score, sp.unified_score),
+                             COALESCE(m.popularity, s.popularity, sp.popularity), NEW.tmdb_id)
+       INTO NEW.catalog_score
+       FROM (SELECT 1) one
+       LEFT JOIN movies m ON m.content_id = NEW.id
+       LEFT JOIN series s ON s.content_id = NEW.id
+       LEFT JOIN specials sp ON sp.content_id = NEW.id;
+     RETURN NEW;
+   END';
+DROP TRIGGER IF EXISTS content_catalog_score ON content;
+CREATE TRIGGER content_catalog_score BEFORE UPDATE OF tmdb_id ON content
+  FOR EACH ROW EXECUTE FUNCTION content_catalog_score();
+
+-- Backfill (and repair drift): only rows whose stored score is wrong are written.
+UPDATE content c SET catalog_score = x.score
+FROM (
+  SELECT c2.id, catalog_score_of(COALESCE(m.unified_score, s.unified_score, sp.unified_score),
+                                 COALESCE(m.popularity, s.popularity, sp.popularity), c2.tmdb_id) AS score
+  FROM content c2
+  LEFT JOIN movies m ON m.content_id = c2.id
+  LEFT JOIN series s ON s.content_id = c2.id
+  LEFT JOIN specials sp ON sp.content_id = c2.id
+  WHERE c2.kind IN ('movie', 'series', 'special')
+) x
+WHERE x.id = c.id AND c.catalog_score IS DISTINCT FROM x.score;
+
+CREATE INDEX IF NOT EXISTS content_catalog_order_idx
+  ON content (kind, catalog_score DESC NULLS LAST, id DESC NULLS LAST)
+  WHERE kind IN ('movie', 'series', 'special');
+CREATE INDEX IF NOT EXISTS content_catalog_order_all_idx
+  ON content (catalog_score DESC NULLS LAST, id DESC NULLS LAST)
+  WHERE kind IN ('movie', 'series', 'special');
+
+-- Rating totals (content.rating_count / rating_sum). Statement-level, so a save that
+-- rewrites a whole list updates each title once; titles are locked in id order so two
+-- large saves at once can't deadlock on each other.
+CREATE OR REPLACE FUNCTION ratings_apply_delta() RETURNS trigger LANGUAGE plpgsql AS
+  'BEGIN
+     IF TG_OP = ''INSERT'' THEN
+       PERFORM c.id FROM content c WHERE c.id IN (SELECT content_id FROM new_rows)
+         ORDER BY c.id FOR NO KEY UPDATE;
+       UPDATE content c SET rating_count = greatest(c.rating_count + d.n, 0), rating_sum = c.rating_sum + d.s
+         FROM (SELECT content_id, count(*)::int AS n, sum(score) AS s FROM new_rows GROUP BY content_id) d
+         WHERE c.id = d.content_id;
+     ELSIF TG_OP = ''DELETE'' THEN
+       PERFORM c.id FROM content c WHERE c.id IN (SELECT content_id FROM old_rows)
+         ORDER BY c.id FOR NO KEY UPDATE;
+       UPDATE content c SET rating_count = greatest(c.rating_count - d.n, 0), rating_sum = c.rating_sum - d.s
+         FROM (SELECT content_id, count(*)::int AS n, sum(score) AS s FROM old_rows GROUP BY content_id) d
+         WHERE c.id = d.content_id;
+     ELSE
+       PERFORM c.id FROM content c
+         WHERE c.id IN (SELECT content_id FROM new_rows UNION SELECT content_id FROM old_rows)
+         ORDER BY c.id FOR NO KEY UPDATE;
+       UPDATE content c SET rating_count = greatest(c.rating_count + d.n, 0), rating_sum = c.rating_sum + d.s
+         FROM (
+           SELECT content_id, sum(n)::int AS n, sum(s) AS s FROM (
+             SELECT content_id, 1 AS n, score AS s FROM new_rows
+             UNION ALL SELECT content_id, -1, -score FROM old_rows) x
+           GROUP BY content_id HAVING sum(n) <> 0 OR sum(s) <> 0
+         ) d
+         WHERE c.id = d.content_id;
+     END IF;
+     RETURN NULL;
+   END';
+DROP TRIGGER IF EXISTS ratings_totals_insert ON ratings;
+CREATE TRIGGER ratings_totals_insert AFTER INSERT ON ratings
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION ratings_apply_delta();
+DROP TRIGGER IF EXISTS ratings_totals_update ON ratings;
+CREATE TRIGGER ratings_totals_update AFTER UPDATE ON ratings
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION ratings_apply_delta();
+DROP TRIGGER IF EXISTS ratings_totals_delete ON ratings;
+CREATE TRIGGER ratings_totals_delete AFTER DELETE ON ratings
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION ratings_apply_delta();
+
+-- Backfill (and repair drift): only titles whose stored totals are wrong are written.
+UPDATE content c SET rating_count = x.n, rating_sum = x.s
+FROM (
+  SELECT c2.id, count(r.score)::int AS n, coalesce(sum(r.score), 0) AS s
+  FROM content c2 LEFT JOIN ratings r ON r.content_id = c2.id
+  WHERE c2.kind IN ('movie', 'series', 'special')
+  GROUP BY c2.id
+) x
+WHERE x.id = c.id AND (c.rating_count <> x.n OR c.rating_sum <> x.s);
+
+-- Substring search (Content.searchIds): trigram indexes serve ILIKE '%text%'.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS content_name_trgm_idx ON content USING GIN (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS content_native_name_trgm_idx ON content USING GIN (native_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS content_about_trgm_idx ON content USING GIN (about gin_trgm_ops)
+  WHERE kind IN ('movie', 'series', 'special');
+CREATE INDEX IF NOT EXISTS content_akas_name_trgm_idx ON content_akas USING GIN (name gin_trgm_ops);
+
+-- Scheduled-job leases (utils/jobLock.js): with several server instances, each job runs
+-- on whichever instance claims its row first.
+CREATE TABLE IF NOT EXISTS job_leases (
+  name             TEXT PRIMARY KEY,
+  locked_until     TIMESTAMPTZ NOT NULL,
+  last_started_at  TIMESTAMPTZ NOT NULL
+);
+
+-- Shared rate-limit counters (middleware/pgRateLimitStore.js), used when
+-- RATE_LIMIT_STORE=postgres so limits hold across instances. UNLOGGED: losing the
+-- counters in a crash only resets the windows.
+CREATE UNLOGGED TABLE IF NOT EXISTS rate_limit_hits (
+  key       TEXT PRIMARY KEY,
+  hits      INTEGER NOT NULL,
+  reset_at  TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS rate_limit_hits_reset_idx ON rate_limit_hits (reset_at);
+
+-- Watchlist import progress (services/watchlistImportService.js), so the progress poll
+-- works whichever instance it reaches. The import itself runs where it started.
+CREATE TABLE IF NOT EXISTS watchlist_import_jobs (
+  user_id     UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+  job         JSONB NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- AI chat/search calls per account (or IP) per day (controllers/contentController.js).
+CREATE TABLE IF NOT EXISTS ai_usage (
+  subject  TEXT NOT NULL,
+  day      DATE NOT NULL DEFAULT current_date,
+  calls    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (subject, day)
+);

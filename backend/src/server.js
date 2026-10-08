@@ -36,11 +36,16 @@ import {
   isAllowedCorsOrigin,
 } from './utils/allowedFrontends.js'
 import { authLimiter } from './middleware/authRateLimit.js'
+import { rateLimitKey, rateLimitMax, trustProxySetting } from './middleware/rateLimitKey.js'
+import { rateLimitStore } from './middleware/pgRateLimitStore.js'
 import { ensureDemoAccount } from './services/demoAccount.js'
 import { startInactiveAccountScheduler } from './services/inactiveAccountService.js'
 import { startUnverifiedAccountScheduler } from './services/unverifiedAccountService.js'
 import { startFriendRequestCleanupScheduler } from './services/friendService.js'
 import { startConnectionSync } from './services/connectionSync.js'
+import { startSessionCleanupScheduler } from './services/sessionService.js'
+import { startHotScoreScheduler } from './services/forumService.js'
+import { startAiUsageCleanupScheduler } from './services/aiUsageService.js'
 import { emailProvider } from './services/emailService.js'
 
 dotenv.config()
@@ -89,15 +94,23 @@ app.get('/health', (req, res) => {
   })
 })
 
-/** Lightweight readiness payload (no sync details). */
+/**
+ * Lightweight readiness payload (no sync details). `clientIp` is the address rate limits
+ * and IP bans use for the caller: request this through the live site and it should be
+ * your own IP. If it is a Vercel/Railway address instead, adjust TRUST_PROXY.
+ */
 app.get('/api/status', (req, res) => {
   res.json({
     success: true,
     message: 'Find Animation API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
+    clientIp: req.ip,
   })
 })
+
+// API requests should never run a statement for minutes; scripts keep no limit.
+process.env.PG_STATEMENT_TIMEOUT_MS ??= '60000'
 
 // connectDB is non-blocking in development; production exits if the promise rejects.
 connectDB().catch((error) => {
@@ -109,8 +122,9 @@ connectDB().catch((error) => {
   }
 })
 
-// Trust the first proxy hop so req.ip (and rate limits) reflect the client, not the proxy.
-app.set('trust proxy', 1)
+// Trust the proxy hops in front of the app so req.ip (and rate limits) reflect the
+// client, not the proxy. TRUST_PROXY overrides the default of one hop.
+app.set('trust proxy', trustProxySetting())
 
 // Helmet: CSP and CORP are off so the SPA on a different origin can call the API.
 app.use(
@@ -126,10 +140,19 @@ app.use(
   }),
 )
 
-/** 15-minute window: 100 requests per IP for all routes. */
+/**
+ * 15-minute window for all routes, counted per account when signed in and per IP
+ * otherwise (middleware/rateLimitKey.js). The old 100-per-IP cap was spent by one
+ * person browsing for ~15 minutes, given the unread polls and several calls per page.
+ */
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per IP per window
+  max: rateLimitMax,
+  keyGenerator: rateLimitKey,
+  // Versioned avatar images are immutable and edge-cached; a page of avatars shouldn't
+  // spend the budget.
+  skip: (req) => req.method === 'GET' && req.path.startsWith('/api/avatars/'),
+  ...rateLimitStore('general'),
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again later.',
@@ -142,6 +165,7 @@ const generalLimiter = rateLimit({
 const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // 10 uploads per IP per hour
+  ...rateLimitStore('upload'),
   message: {
     success: false,
     message: 'Too many upload attempts, please try again later.',
@@ -371,6 +395,9 @@ app
     startUnverifiedAccountScheduler()
     startFriendRequestCleanupScheduler()
     startConnectionSync()
+    startSessionCleanupScheduler()
+    startHotScoreScheduler()
+    startAiUsageCleanupScheduler()
     console.log(`Email delivery: ${emailProvider()}`)
     ensureDemoAccount()
       .then((result) => {

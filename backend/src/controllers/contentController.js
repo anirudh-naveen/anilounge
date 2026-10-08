@@ -10,6 +10,7 @@ import { getContentSyncStatus } from '../services/contentSyncScheduler.js'
 import User from '../models/User.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import geminiService from '../services/geminiService.js'
+import { consumeAiCall } from '../services/aiUsageService.js'
 import relationshipService from '../services/relationshipService.js'
 import { getSeasonGuide } from '../services/seasonService.js'
 import {
@@ -24,7 +25,6 @@ import {
   stampListDates,
   syncLegacyUserRating,
 } from '../services/watchlistWrites.js'
-import { contentTitleMatchOr } from '../utils/titles.js'
 import {
   catalogTabDateFields,
   catalogTabIsSinglePage,
@@ -37,7 +37,7 @@ import {
 } from '../utils/catalogTabs.js'
 import { validationResult } from 'express-validator'
 import { censorText } from '../utils/moderation.js'
-import { startSession } from '../../config/postgres.js'
+import { query as dbQuery, startSession, withReplica } from '../../config/postgres.js'
 import { clearWatchHistory, recordWatch } from '../services/watchEvents.js'
 import { watchUnits } from '../utils/profileStats.js'
 import { mirrorWatchlistChange } from '../services/connectionSync.js'
@@ -50,13 +50,49 @@ const movieLikeTypes = ['movie', 'special']
  * @param {import('mongoose').Document} content
  * @returns {Promise<void>}
  */
+/** Longest a page view waits for an airing refresh before answering with what it has. */
+const AIRING_REFRESH_WAIT_MS = 2500
+/** After a failed refresh, views skip that title for this long. */
+const AIRING_REFRESH_BACKOFF_MS = 15 * 60 * 1000
+/** @type {Map<string, Promise<void>>} Refreshes in flight, shared by concurrent viewers. */
+const airingRefreshes = new Map()
+/** @type {Map<string, number>} Title id -> time its last refresh failed. */
+const airingRefreshFailures = new Map()
+
 const refreshAiringIfNeeded = async (content) => {
-  try {
-    const changed = await unifiedContentService.refreshAiringSchedule(content)
-    if (changed) await content.save()
-  } catch (error) {
-    console.error('Airing schedule refresh failed:', error.message)
+  const id = String(content._id)
+  const failedAt = airingRefreshFailures.get(id)
+  if (failedAt && Date.now() - failedAt < AIRING_REFRESH_BACKOFF_MS) return
+  // Everyone viewing a stale airing title at once shares one MAL/TMDB refresh.
+  let refresh = airingRefreshes.get(id)
+  if (!refresh) {
+    refresh = (async () => {
+      try {
+        const changed = await unifiedContentService.refreshAiringSchedule(content)
+        if (changed) await content.save()
+        else if (unifiedContentService.needsAiringRefresh(content)) {
+          airingRefreshFailures.set(id, Date.now())
+        }
+      } catch (error) {
+        airingRefreshFailures.set(id, Date.now())
+        console.error('Airing schedule refresh failed:', error.message)
+      } finally {
+        airingRefreshes.delete(id)
+        if (airingRefreshFailures.size > 5000) airingRefreshFailures.clear()
+      }
+    })()
+    airingRefreshes.set(id, refresh)
   }
+  // A slow provider must not hold the page: answer after a short wait; the refresh
+  // finishes in the background and the next view gets the new schedule.
+  let timer
+  await Promise.race([
+    refresh,
+    new Promise((resolve) => {
+      timer = setTimeout(resolve, AIRING_REFRESH_WAIT_MS)
+    }),
+  ])
+  clearTimeout(timer)
 }
 
 /**
@@ -146,11 +182,12 @@ export const getContent = async (req, res) => {
       }
     }
 
-    const total = await Content.countDocuments(query)
+    // The page itself is a pure read: served by the read replica when one is configured.
+    const total = await withReplica(() => Content.countDocuments(query))
     const totalPages = singlePage ? (total > 0 ? 1 : 0) : Math.ceil(total / limit)
 
     // Hidden TMDB sort boost (+1.0 and 5% of popularity) is projected out so clients never see it.
-    const content = await Content.aggregate([
+    const content = await withReplica(() => Content.aggregate([
       { $match: query },
       {
         $addFields: {
@@ -168,7 +205,7 @@ export const getContent = async (req, res) => {
           hasScheduleDate: 0,
         },
       },
-    ])
+    ]))
 
     res.json({
       success: true,
@@ -337,16 +374,17 @@ export const searchContent = async (req, res) => {
 
     const skip = (page - 1) * limit
 
-    const dbResults = await Content.find({
-      $or: [
-        ...contentTitleMatchOr({ $regex: query, $options: 'i' }),
-        { overview: { $regex: query, $options: 'i' } },
-      ],
-      ...(type && type !== 'all' ? matchContentType(type) : {}),
+    // Indexed substring lookup first, then the usual filter/sort over just those ids.
+    const dbResults = await withReplica(async () => {
+      const matchIds = await Content.searchIds(String(query))
+      return Content.find({
+        _id: { $in: matchIds },
+        ...(type && type !== 'all' ? matchContentType(type) : {}),
+      })
+        .sort({ popularity: -1, unifiedScore: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
     })
-      .sort({ popularity: -1, unifiedScore: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
 
     let externalResults = []
     if (dbResults.length < limit) {
@@ -420,7 +458,7 @@ export const getPopularContent = async (req, res) => {
     const query = matchContentType(type)
 
     // Same hidden TMDB visibility boost as getContent; stripped from the response payload.
-    const dbContent = await Content.aggregate([
+    const dbContent = await withReplica(() => Content.aggregate([
       { $match: query },
       {
         $addFields: {
@@ -448,7 +486,7 @@ export const getPopularContent = async (req, res) => {
           hiddenSortScore: 0,
         },
       },
-    ])
+    ]))
 
     let externalContent = []
     if (dbContent.length < limit) {
@@ -533,24 +571,33 @@ export const getSimilarContent = async (req, res) => {
  * Watchlist/preference hints for catalog chat. Missing user means anonymous.
  * Favorited studio entities count as favorite studios.
  * @param {object|null|undefined} user
- * @returns {object|null}
+ * @returns {Promise<object|null>}
  */
-function chatUserContext(user) {
+async function chatUserContext(user) {
   if (!user) return null
-  const watchlist = (user.watchlist || [])
-    .filter((item) => item.content)
-    .map((item) => ({
-      id: item.content._id,
-      title: item.content.englishTitle || item.content.title,
-      status: item.status,
-    }))
-  const favoritedStudios = (user.favoriteEntities || [])
-    .filter((row) => row.kind === 'studio' && row.name)
-    .map((row) => row.name)
+  const [watchRows, studioRows] = await Promise.all([
+    dbQuery(
+      `SELECT w.status, c.id, c.name
+       FROM watchlist w JOIN content c ON c.id = w.content_id
+       WHERE w.user_id = $1`,
+      [user._id],
+    ),
+    dbQuery(
+      `SELECT DISTINCT c.name
+       FROM favorites f JOIN content c ON c.id = f.content_id
+       WHERE f.user_id = $1 AND c.kind = 'studio' AND c.name IS NOT NULL`,
+      [user._id],
+    ),
+  ])
+  const watchlist = watchRows.rows.map((row) => ({
+    id: String(row.id),
+    title: row.name,
+    status: row.status,
+  }))
   return {
     favoriteGenres: user.preferences?.favoriteGenres || [],
     // Favorite studios are studio pages the user has hearted.
-    favoriteStudios: [...new Set(favoritedStudios)],
+    favoriteStudios: studioRows.rows.map((row) => row.name),
     watchlist: watchlist.map(({ title, status }) => ({ title, status })),
     excludeIds: watchlist
       .filter((item) => item.status === 'completed' || item.status === 'dropped')
@@ -577,9 +624,10 @@ export const aiSearch = async (req, res) => {
     }
 
     const { query } = req.body
+    await consumeAiCall(req)
 
     const aiResults = await geminiService.searchContent(query, {
-      excludeIds: chatUserContext(req.user)?.excludeIds,
+      excludeIds: (await chatUserContext(req.user))?.excludeIds,
     })
 
     res.json({
@@ -591,6 +639,9 @@ export const aiSearch = async (req, res) => {
       },
     })
   } catch (error) {
+    if (error.status === 429) {
+      return res.status(429).json({ success: false, message: error.message })
+    }
     console.error('AI search error:', error)
     res.status(500).json({
       success: false,
@@ -618,9 +669,10 @@ export const aiChat = async (req, res) => {
     }
 
     const { message, history } = req.body
+    await consumeAiCall(req)
     const chatResponse = await geminiService.chatWithUser(message, {
       history,
-      userContext: chatUserContext(req.user),
+      userContext: await chatUserContext(req.user),
     })
 
     res.json({
@@ -633,6 +685,9 @@ export const aiChat = async (req, res) => {
       },
     })
   } catch (error) {
+    if (error.status === 429) {
+      return res.status(429).json({ success: false, message: error.message })
+    }
     console.error('AI chat error:', error)
     res.status(500).json({
       success: false,

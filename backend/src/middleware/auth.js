@@ -40,7 +40,9 @@ export const authenticateToken = async (req, res, next) => {
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
 
-    const user = await User.findById(decoded.userId).select('-password')
+    // Only the `users` row: watchlist/ratings/favorites are loaded by the handlers that
+    // need them, so every authenticated call stays one indexed lookup.
+    const user = await User.findAuthUser(decoded.userId)
 
     if (!user) {
       return res.status(401).json({
@@ -96,9 +98,7 @@ export const optionalAuthenticate = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
-    const user = await User.findById(decoded.userId)
-      .select('-password')
-      .populate({ path: 'watchlist.content', select: 'title englishTitle contentType' })
+    const user = await User.findAuthUser(decoded.userId)
     if (user && !isBanned(user)) req.user = user
   } catch {
     // Public chat: ignore bad tokens instead of 401.
@@ -140,7 +140,7 @@ export const refreshAccessToken = async (req, res) => {
         message: 'Session was refreshed in another tab; retry.',
       })
     }
-    let user = session ? await User.findById(session.userId) : null
+    let user = session ? await User.findAuthUser(session.userId) : null
     if (isBanned(user)) {
       // The rotation above issued a fresh token; revoke it with the rest and drop the cookie.
       await revokeAllSessions(user._id)
