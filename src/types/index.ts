@@ -13,6 +13,8 @@ export interface WatchlistItem {
   status: WatchlistStatus
   rating?: number
   currentEpisode: number
+  /** Episode before the last progress change (completing a title records where it was). */
+  previousEpisode?: number
   currentSeason?: number
   totalEpisodes?: number
   totalSeasons?: number

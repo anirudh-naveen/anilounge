@@ -2,12 +2,13 @@
 <!--
   Forum.vue — forum post list (view).
 
-  Discussions and reviews, searchable (`?q=`, matching titles, text, and tag
-  names), filtered by type and by tag (a title, franchise, character, or one
+  Discussions, reviews, guides, and articles, searchable (`?q=`, matching titles,
+  text, and tag names), filtered by type and by tag (a title, franchise, character, or one
   episode via `?tag=&season=&episode=`), sorted hot, new, top, or by latest
   activity. Signed-in users write posts in the inline composer,
   which starts with the current tag; `?compose=1` opens it (title pages link
-  here to start a discussion) and `?compose=review` opens it as a review. All filters live in the query string.
+  here to start a discussion) and `?compose=review` (or `guide`, `article`) opens it
+  as that type. All filters live in the query string.
 -->
 <template>
   <div class="social-page">
@@ -72,7 +73,7 @@
         <ForumComposer
           :key="composeKey"
           :preset-tags="presetTags"
-          :preset-kind="route.query.compose === 'review' ? 'review' : 'discussion'"
+          :preset-kind="composeKind"
           @saved="onSaved"
           @cancel="closeComposer"
         />
@@ -107,23 +108,44 @@
             {{ option.label }}
           </router-link>
         </div>
-        <label class="sort-select">
-          <span class="social-meta">Sort</span>
-          <select
-            class="input"
-            :value="sort"
-            data-testid="forum-sort"
-            @change="
-              router.push(
-                withQuery({ sort: ($event.target as HTMLSelectElement).value, page: undefined }),
-              )
-            "
-          >
-            <option v-for="option in SORT_OPTIONS" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
+        <div class="forum-sort">
+          <label class="social-meta" for="forum-sort">Sort</label>
+          <!-- Title: Sort (same pill as SortByControls, without a direction) -->
+          <div class="sort-pill">
+            <svg class="sort-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                d="M4 7h16M7 12h10M10 17h4"
+              />
+            </svg>
+            <select
+              id="forum-sort"
+              class="sort-select"
+              :value="sort"
+              data-testid="forum-sort"
+              @change="
+                router.push(
+                  withQuery({ sort: ($event.target as HTMLSelectElement).value, page: undefined }),
+                )
+              "
+            >
+              <option v-for="option in SORT_OPTIONS" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+            <svg class="sort-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="m7 10 5 5 5-5"
+              />
+            </svg>
+          </div>
+        </div>
       </div>
 
       <!-- Title: Posts -->
@@ -148,6 +170,11 @@
         />
       </template>
     </div>
+
+    <JoinPrompt
+      title="Join the Conversation"
+      message="Sign up to write posts, reply to threads, and review what you've watched."
+    />
   </div>
 </template>
 
@@ -157,20 +184,29 @@ import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import ForumComposer from '@/components/ForumComposer.vue'
 import ForumPostCard from '@/components/ForumPostCard.vue'
+import JoinPrompt from '@/components/JoinPrompt.vue'
 import PaginationNav from '@/components/PaginationNav.vue'
 import { forumAPI, getPosterUrl } from '@/services/api'
+import { usePageMeta } from '@/composables/usePageMeta'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumPost, PostKind, PostPage, PostSort, PostTag } from '@/types/forum'
-import { KIND_LABELS, postRoute, tagLabel, tagRoute } from '@/utils/forum'
+import {
+  KIND_LABELS,
+  POST_KIND_LABELS,
+  POST_KINDS,
+  postRoute,
+  tagLabel,
+  tagRoute,
+} from '@/utils/forum'
 import { apiErrorMessage } from '@/utils/social'
 
 defineOptions({ name: 'ForumPage' })
 
 const KIND_FILTERS: { value: PostKind | ''; label: string }[] = [
   { value: '', label: 'All' },
-  { value: 'discussion', label: 'Discussions' },
-  { value: 'review', label: 'Reviews' },
+  ...POST_KINDS.map((kind) => ({ value: kind, label: `${POST_KIND_LABELS[kind]}s` })),
 ]
+const isPostKind = (value: string): value is PostKind => (POST_KINDS as string[]).includes(value)
 const SEARCH_DELAY_MS = 350
 const SORT_OPTIONS: { value: PostSort; label: string }[] = [
   { value: 'hot', label: 'Hot' },
@@ -199,9 +235,14 @@ const intOrNull = (value: unknown) => {
 const tagId = computed(() => text(route.query.tag))
 const season = computed(() => (tagId.value ? intOrNull(route.query.season) : null))
 const episode = computed(() => (season.value !== null ? intOrNull(route.query.episode) : null))
-const kindFilter = computed(() => {
+const kindFilter = computed<PostKind | ''>(() => {
   const kind = text(route.query.kind)
-  return kind === 'discussion' || kind === 'review' ? kind : ''
+  return isPostKind(kind) ? kind : ''
+})
+/** Type the composer starts as: `?compose=<kind>`, else discussion. */
+const composeKind = computed<PostKind>(() => {
+  const kind = text(route.query.compose)
+  return isPostKind(kind) ? kind : 'discussion'
 })
 const sort = computed<PostSort>(() => {
   const value = text(route.query.sort) as PostSort
@@ -209,11 +250,9 @@ const sort = computed<PostSort>(() => {
 })
 const pageNumber = computed(() => Math.max(1, intOrNull(route.query.page) || 1))
 
-const heading = computed(() => {
-  if (kindFilter.value === 'review') return 'Reviews'
-  if (kindFilter.value === 'discussion') return 'Discussions'
-  return 'Forum'
-})
+const heading = computed(() =>
+  kindFilter.value ? `${POST_KIND_LABELS[kindFilter.value]}s` : 'Forum',
+)
 const query = computed(() => text(route.query.q).trim())
 const subtitle = computed(() => {
   const about = page.value?.tag
@@ -225,13 +264,32 @@ const subtitle = computed(() => {
       : 'Posts'
     return `${count} matching “${query.value}”${about ? ` ${about}` : ''}.`
   }
-  return about ? `Posts ${about}.` : 'Reviews, episode threads, and franchise talk from the lounge.'
+  return about
+    ? `Posts ${about}.`
+    : 'Reviews, guides, episode threads, and franchise talk from the lounge.'
 })
 const emptyCopy = computed(() => {
   if (query.value) return `No posts match “${query.value}”. Try other words.`
   return page.value?.tag
     ? 'No posts here yet. Start the conversation.'
     : 'No posts yet. Be the first to write one.'
+})
+
+usePageMeta(() => {
+  // Search results and later pages aren't pages of their own.
+  const tag = page.value?.tag
+  const path = tag
+    ? `/forum?tag=${tag.contentId}`
+    : kindFilter.value
+      ? `/forum?kind=${kindFilter.value}`
+      : '/forum'
+  return {
+    title: tag
+      ? `${tagLabel({ ...tag, season: season.value, episode: episode.value })} · Forum`
+      : heading.value,
+    description: subtitle.value,
+    path,
+  }
 })
 
 /** Search box text; pushed to `?q=` after a pause so typing doesn't refetch per key. */
@@ -398,6 +456,7 @@ watch(
 
 .kind-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
 }
 
@@ -417,15 +476,74 @@ watch(
   color: var(--text-on-accent);
 }
 
-.sort-select {
+.forum-sort {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.sort-select select {
-  width: auto;
-  padding: 0.35rem 0.6rem;
+.sort-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-card);
+  box-shadow: 0 1px 2px rgba(21, 34, 56, 0.06);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.sort-pill:hover {
+  border-color: var(--border-hover);
+}
+
+.sort-pill:focus-within {
+  border-color: var(--coral-primary);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.2);
+}
+
+.sort-icon,
+.sort-chevron {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.sort-icon {
+  left: 0.8rem;
+}
+
+.sort-chevron {
+  right: 0.7rem;
+}
+
+.sort-select {
+  height: 100%;
+  padding: 0 2rem 0 2.3rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.sort-select:focus {
+  outline: none;
+}
+
+.sort-select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .post-list {
