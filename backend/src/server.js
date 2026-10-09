@@ -99,6 +99,16 @@ app.get('/api/status', (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     clientIp: req.ip,
+    // `?proxy=1` echoes the forwarding headers this request arrived with, for checking
+    // TRUST_PROXY against the real proxy chain.
+    ...(req.query.proxy === '1' && {
+      forwarded: {
+        xForwardedFor: req.get('x-forwarded-for') ?? null,
+        xRealIp: req.get('x-real-ip') ?? null,
+        xVercelForwardedFor: req.get('x-vercel-forwarded-for') ?? null,
+        peer: req.socket?.remoteAddress ?? null,
+      },
+    }),
   })
 })
 
@@ -135,9 +145,11 @@ const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: rateLimitMax,
   keyGenerator: rateLimitKey,
-  // Versioned avatar images are immutable and edge-cached; a page of avatars shouldn't
+  // Avatar and upload images are static and edge-cached; a page of images shouldn't
   // spend the budget.
-  skip: (req) => req.method === 'GET' && req.path.startsWith('/api/avatars/'),
+  skip: (req) =>
+    req.method === 'GET' &&
+    (req.path.startsWith('/api/avatars/') || req.path.startsWith('/uploads/')),
   ...rateLimitStore('general'),
   message: {
     success: false,
@@ -211,17 +223,10 @@ app.use(securityLogger)
 app.use(checkIPBan)
 
 /**
- * Email links (announcement unsubscribe) skip the bot and referer checks: mail providers
- * POST one-click unsubscribes from their own servers. Links are HMAC-signed.
+ * Static `/uploads`: nosniff/DENY frame plus open CORS so poster/profile images load cross-origin.
+ * Mounted before the bot/burst checks: one page loads many images at once, and they
+ * must not spend the per-second request budget the page's API calls need.
  */
-app.use('/api/email', emailRoutes)
-
-/** Bot UA filter, NoSQL-injection scan, then progressive delay after 50 requests / 15 min. */
-app.use(antiBotProtection)
-app.use(databaseProtection)
-app.use(progressiveSlowdown)
-
-/** Static `/uploads`: nosniff/DENY frame plus open CORS so poster/profile images load cross-origin. */
 app.use(
   '/uploads',
   (req, res, next) => {
@@ -241,6 +246,17 @@ app.use(
   },
   express.static('uploads'),
 )
+
+/**
+ * Email links (announcement unsubscribe) skip the bot and referer checks: mail providers
+ * POST one-click unsubscribes from their own servers. Links are HMAC-signed.
+ */
+app.use('/api/email', emailRoutes)
+
+/** Bot UA filter, NoSQL-injection scan, then progressive delay after 50 requests / 15 min. */
+app.use(antiBotProtection)
+app.use(databaseProtection)
+app.use(progressiveSlowdown)
 
 /** Tighter limits on credential and upload paths (stacked on the general limiter). */
 app.use('/api/auth', authLimiter)
