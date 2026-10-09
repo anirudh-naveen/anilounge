@@ -338,6 +338,8 @@ import { hideBrokenImage } from '@/utils/posters'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
+import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
@@ -650,15 +652,23 @@ watch(
   { immediate: true },
 )
 
+/** Name of the title the URL points at (its slug), loaded or on screen. */
+const routeTitle = computed(() => {
+  const content = loaded.value[String(route.params.id)] || show.value
+  return content ? getDisplayTitle(content) : null
+})
+
 usePageMeta(() =>
   show.value
     ? titlePageMeta(show.value, {
-        path: `/tv-show/${route.params.id}`,
+        path: detailPath('/tv-show', String(route.params.id), routeTitle.value),
         image: show.value.posterPath ? getPosterUrl(show.value.posterPath) : null,
         seasonLabel: seasonLabel.value,
       })
     : null,
 )
+
+useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) : null))
 </script>
 
 <style scoped>

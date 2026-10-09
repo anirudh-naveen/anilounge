@@ -29,6 +29,12 @@ const SITE_NAME = 'AniLounge'
 const DESCRIPTION_MAX = 160
 /** Marks the tags this composable added, so they can be removed again. */
 const OWNED = 'data-page-meta'
+/**
+ * The site middleware (`/middleware.js`) writes the first page's meta into the HTML.
+ * Tags it added are marked OWNED; index.html tags it changed keep their original
+ * content here (and the title in `data-default`), so they still restore correctly.
+ */
+const DEFAULT_CONTENT = 'data-default-content'
 
 /** index.html's title and description, read before any page changed them. */
 let defaults: { title: string; description: string } | null = null
@@ -57,7 +63,7 @@ const originals = new Map<HTMLMetaElement, string>()
 function metaTag(attribute: 'name' | 'property', key: string) {
   let tag = document.head.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`)
   if (tag && !tag.hasAttribute(OWNED) && !originals.has(tag)) {
-    originals.set(tag, tag.getAttribute('content') || '')
+    originals.set(tag, tag.getAttribute(DEFAULT_CONTENT) ?? (tag.getAttribute('content') || ''))
   }
   if (!tag) {
     tag = document.createElement('meta')
@@ -81,7 +87,10 @@ function ownedElement<K extends 'link' | 'script'>(tagName: K, selector: string)
 export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
   const id = Symbol('page-meta')
   const descriptionTag = metaTag('name', 'description')
-  defaults ??= { title: document.title, description: descriptionTag.getAttribute('content') || '' }
+  defaults ??= {
+    title: document.querySelector('title')?.getAttribute('data-default') ?? document.title,
+    description: originals.get(descriptionTag) ?? (descriptionTag.getAttribute('content') || ''),
+  }
   const defaultDescription = defaults.description
 
   watchEffect(() => {

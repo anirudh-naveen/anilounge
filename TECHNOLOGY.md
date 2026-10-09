@@ -16,6 +16,7 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | [Cropper.js](https://github.com/fengyuanchen/cropperjs) / [vue-cropperjs](https://github.com/Agontuk/vue-cropperjs) | Profile picture cropping |
 | [Google Fonts](https://fonts.google.com) | Fraunces (display) and Outfit (body) typefaces |
 | Web Locks API | Coordinates session refresh across browser tabs |
+| [schema.org](https://schema.org) JSON-LD + Open Graph | Per-page structured data and link previews (`usePageMeta`, `src/utils/pageMeta.ts`) |
 
 ## Backend
 
@@ -50,6 +51,22 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | [AniList GraphQL API](https://docs.anilist.co) | Additional anime metadata and linking; public anime list import |
 | [Google Gemini](https://ai.google.dev) (`gemini-2.5-flash`) | The AI chatbot |
 
+## Search and discovery
+
+| Service | Used for |
+| --- | --- |
+| [Google Search Console](https://search.google.com/search-console) | Domain verification (DNS TXT record), sitemap submission, and indexing/search reports |
+| [Bing Webmaster Tools](https://www.bing.com/webmasters) | Indexing for Bing, DuckDuckGo, Yahoo, and ChatGPT search (imported from Search Console) |
+| XML sitemaps | `/sitemap.xml` index with per-section files under `/sitemaps/`, built live from the database (`services/sitemapService.js`); thin pages left out (`utils/seoIndexing.js`) |
+| [Vercel Routing Middleware](https://vercel.com/docs/routing-middleware) | Writes each public page's title, meta tags, canonical link, JSON-LD, and a text summary into the HTML before JavaScript runs (`middleware.ts`, `seo/renderPage.ts`, `GET /api/seo/page`) |
+| `robots.txt` | Crawl rules and the sitemap location (`public/robots.txt`) |
+
+## Donations
+
+| Service | Used for |
+| --- | --- |
+| [Ko-fi](https://ko-fi.com/anilounge) | Donations; its webhook (`POST /api/webhooks/kofi`) grants the Supporter badge to the account with the donor's email (`services/donationService.js`) |
+
 ## Email
 
 | Service | Used for |
@@ -61,15 +78,15 @@ The languages, frameworks, services, and tools AniLounge is built with.
 
 | Service | Used for |
 | --- | --- |
-| [Vercel](https://vercel.com) | Frontend hosting; proxies `/api` and `/uploads` to the backend and sets security headers (`vercel.json`) |
-| [Railway](https://railway.com) | Backend API and production PostgreSQL |
+| [Vercel](https://vercel.com) | Frontend hosting; proxies `/api`, `/uploads`, and the sitemaps to the backend and sets security headers (`vercel.json`); DNS for anilounge.net; Routing Middleware for search-engine HTML |
+| [Railway](https://railway.com) | Backend API and production PostgreSQL (client IPs read from Vercel's `X-Vercel-Forwarded-For`, `middleware/clientIp.js`) |
 | [Docker](https://www.docker.com) / Docker Compose | Local PostgreSQL (`docker-compose.yml`) |
 
 ## Testing and tooling
 
 | Tool | Used for |
 | --- | --- |
-| [Vitest](https://vitest.dev) + [Vue Test Utils](https://test-utils.vuejs.org) + [jsdom](https://github.com/jsdom/jsdom) | Frontend unit and component tests |
+| [Vitest](https://vitest.dev) + [Vue Test Utils](https://test-utils.vuejs.org) + [jsdom](https://github.com/jsdom/jsdom) | Frontend unit and component tests (including the middleware's HTML rendering) |
 | [Cypress](https://www.cypress.io) | End-to-end tests |
 | Node test runner (`node:test`) | Backend unit tests |
 | [vue-tsc](https://github.com/vuejs/language-tools) | Type-checking |

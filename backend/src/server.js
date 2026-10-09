@@ -15,6 +15,7 @@ import apiRoutes from './routes/api.js'
 import adminRoutes from './routes/admin.js'
 import emailRoutes from './routes/email.js'
 import webhookRoutes from './routes/webhooks.js'
+import seoRoutes from './routes/seo.js'
 import { useForwardedClientIp, vercelForwardedIp } from './middleware/clientIp.js'
 import { sanitizeHtmlInput, sanitizeXSS } from './middleware/security.js'
 import { securityLogger, securityMonitor } from './middleware/securityLogger.js'
@@ -172,6 +173,12 @@ const uploadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 })
+
+/**
+ * Page descriptions for the Vercel middleware (search engines, link previews). Ahead of
+ * the general limiter and bot checks; it has its own per-visitor limit (routes/seo.js).
+ */
+app.use('/api/seo', seoRoutes)
 
 app.use(generalLimiter)
 

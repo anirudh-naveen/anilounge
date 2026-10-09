@@ -1,7 +1,8 @@
 /**
  * router/index.ts — client-side routing (router).
  *
- * Declares catalog, auth, and protected account routes. Guards
+ * Declares catalog, auth, and protected account routes. Detail pages take an optional
+ * readable `:slug` after the id (utils/slug.ts); only the id picks the page. Guards
  * `meta.requiresAuth` pages and clears catalog scroll positions when
  * navigating between top-level sections.
  */
@@ -45,7 +46,7 @@ const router = createRouter({
       component: () => import('@/views/Forum.vue'),
     },
     {
-      path: '/forum/post/:id',
+      path: '/forum/post/:id/:slug?',
       name: 'forumPost',
       component: () => import('@/views/ForumPost.vue'),
     },
@@ -147,32 +148,32 @@ const router = createRouter({
       component: () => import('@/views/Register.vue'),
     },
     {
-      path: '/movie/:id',
+      path: '/movie/:id/:slug?',
       name: 'MovieDetails',
       component: () => import('@/views/MovieDetails.vue'),
     },
     {
-      path: '/tv-show/:id',
+      path: '/tv-show/:id/:slug?',
       name: 'TVShowDetails',
       component: () => import('@/views/TVShowDetails.vue'),
     },
     {
-      path: '/character/:id',
+      path: '/character/:id/:slug?',
       name: 'CharacterDetails',
       component: () => import('@/views/CharacterDetails.vue'),
     },
     {
-      path: '/voice-actor/:id',
+      path: '/voice-actor/:id/:slug?',
       name: 'VoiceActorDetails',
       component: () => import('@/views/VoiceActorDetails.vue'),
     },
     {
-      path: '/franchise/:id',
+      path: '/franchise/:id/:slug?',
       name: 'FranchiseDetails',
       component: () => import('@/views/FranchiseDetails.vue'),
     },
     {
-      path: '/studio/:id',
+      path: '/studio/:id/:slug?',
       name: 'StudioDetails',
       component: () => import('@/views/StudioDetails.vue'),
     },
