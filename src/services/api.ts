@@ -93,6 +93,9 @@ export const setAccessToken = (token: string | null) => {
   accessToken = token
 }
 
+/** The current in-memory access token (for requests sent outside axios). */
+export const getAccessToken = () => accessToken
+
 /** Be told when a background refresh renews or ends the session. Returns an unsubscribe. */
 export const onSessionChange = (listener: (session: RefreshedSession) => void) => {
   sessionListeners.add(listener)
@@ -408,6 +411,9 @@ export const adminAPI = {
   }) => api.put('/admin/links/role', body),
 
   getLog: (params: { month?: string; category?: string }) => api.get('/admin/log', { params }),
+
+  /** Users, views, visitors, clicks, and top lists for the last `days` days. */
+  getMetrics: (days: number) => api.get('/admin/metrics', { params: { days } }),
 
   /** Feedback page submissions (bugs, feature requests); admins only. */
   listFeedback: (params: { type?: string; page?: number }) => api.get('/feedback', { params }),
