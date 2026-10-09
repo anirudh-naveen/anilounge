@@ -90,7 +90,8 @@ app.get('/health', (req, res) => {
 /**
  * Lightweight readiness payload (no sync details). `clientIp` is the address rate limits
  * and IP bans use for the caller: request this through the live site and it should be
- * your own IP. If it is a Vercel/Railway address instead, adjust TRUST_PROXY.
+ * your own IP. Through the Vercel `/api` rewrite it is Vercel's address; calling the API
+ * on its own domain shows the real one. See trustProxySetting.
  */
 app.get('/api/status', (req, res) => {
   res.json({
@@ -119,7 +120,7 @@ process.env.PG_STATEMENT_TIMEOUT_MS ??= '60000'
 connectPostgres()
 
 // Trust the proxy hops in front of the app so req.ip (and rate limits) reflect the
-// client, not the proxy. TRUST_PROXY overrides the default of one hop.
+// client, not the proxy. TRUST_PROXY overrides the default of two hops.
 app.set('trust proxy', trustProxySetting())
 
 // Helmet: CSP and CORP are off so the SPA on a different origin can call the API.
