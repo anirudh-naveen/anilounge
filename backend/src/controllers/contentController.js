@@ -20,7 +20,9 @@ import {
   applyContentRatingChange,
   applyListDetails,
   getEffectiveUserRating,
+  lockCompletedProgress,
   progressLimits,
+  reopenCompletedProgress,
   setWatchedEpisode,
   stampListDates,
   syncLegacyUserRating,
@@ -427,9 +429,12 @@ export const addToWatchlist = async (req, res) => {
     const unitsBefore = existingItem ? watchUnits({ ...existingItem, content }) : 0
 
     if (existingItem) {
+      const { status: statusBefore, currentEpisode: episodeBefore } = existingItem
       existingItem.status = status || existingItem.status
       existingItem.rating = rating !== undefined ? rating : existingItem.rating
       setWatchedEpisode(existingItem, currentEpisode)
+      lockCompletedProgress(existingItem, maxEpisodes)
+      reopenCompletedProgress(existingItem, statusBefore, episodeBefore)
       existingItem.currentSeason =
         currentSeason !== undefined ? currentSeason : existingItem.currentSeason
       existingItem.totalEpisodes = maxEpisodes
@@ -455,6 +460,7 @@ export const addToWatchlist = async (req, res) => {
         addedAt: new Date(),
         updatedAt: new Date(),
       })
+      lockCompletedProgress(user.watchlist[user.watchlist.length - 1], maxEpisodes)
       stampListDates(user.watchlist[user.watchlist.length - 1])
     }
 
@@ -641,10 +647,13 @@ export const updateWatchlistItem = async (req, res) => {
 
     const previousRating = getEffectiveUserRating(user, contentId)
     const unitsBefore = watchUnits({ ...watchlistItem, content })
+    const { status: statusBefore, currentEpisode: episodeBefore } = watchlistItem
 
     if (status) watchlistItem.status = status
     if (rating !== undefined) watchlistItem.rating = rating
     setWatchedEpisode(watchlistItem, currentEpisode)
+    lockCompletedProgress(watchlistItem, maxEpisodes)
+    reopenCompletedProgress(watchlistItem, statusBefore, episodeBefore)
     if (currentSeason !== undefined) watchlistItem.currentSeason = currentSeason
     if (notes !== undefined) watchlistItem.notes = notes
     applyListDetails(watchlistItem, req.body)
