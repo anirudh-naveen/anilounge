@@ -28,6 +28,7 @@ import Content from '../models/Content.js'
 import { isAdminUser } from '../middleware/adminOnly.js'
 import { HttpError } from '../utils/httpError.js'
 import { stripFormatting } from '../utils/richText.js'
+import { queuePost } from './indexNowService.js'
 import { cleanUserText } from '../utils/userText.js'
 import { logAction, quoteValue } from './adminLog.js'
 import { escapeLike } from '../db/mongoFilter.js'
@@ -506,10 +507,9 @@ export async function createPost(user, input) {
     await insertTags(rows[0].id, fields.tags)
     return rows[0].id
   })
-  return {
-    post: postEntry(await loadPost(postId, user), { full: true, viewer: user }),
-    warning: screened.warning,
-  }
+  const post = postEntry(await loadPost(postId, user), { full: true, viewer: user })
+  queuePost(post)
+  return { post, warning: screened.warning }
 }
 
 /**
@@ -556,10 +556,10 @@ export async function updatePost(user, postId, input = {}) {
       await insertTags(row.id, fields.tags)
     }
   })
-  return {
-    post: postEntry(await loadPost(row.id, user), { full: true, viewer: user }),
-    warning: screened.warning,
-  }
+  const post = postEntry(await loadPost(row.id, user), { full: true, viewer: user })
+  // A new title means a new slug: the new URL is the canonical one now.
+  queuePost(post)
+  return { post, warning: screened.warning }
 }
 
 /**
@@ -574,6 +574,8 @@ export async function deletePost(user, postId) {
   const mine = String(row.author_id) === String(user._id)
   if (!mine && !isAdminUser(user)) throw new HttpError(403, 'You can only delete your own posts.')
   await query('DELETE FROM posts WHERE id = $1', [row.id])
+  // Search engines recrawl it, see it's gone, and drop it.
+  queuePost(row)
   if (!mine) {
     await logAction(
       'moderation',

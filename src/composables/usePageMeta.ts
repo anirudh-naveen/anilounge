@@ -17,8 +17,6 @@ export interface PageMeta {
   description?: string
   /** In-site path for the canonical link (no query or hash unless it matters). */
   path?: string
-  /** Absolute image URL for link previews. */
-  image?: string | null
   /** Open Graph type; 'website' by default. */
   type?: 'website' | 'article'
   /** schema.org JSON-LD: one object, or several (e.g. the page plus its breadcrumbs). */
@@ -43,6 +41,14 @@ let defaults: { title: string; description: string } | null = null
  * unmounts, so a page only restores the defaults while it's still the owner.
  */
 let owner: symbol | null = null
+
+/**
+ * Link-preview image of a page: its 1200×630 share card, drawn by the API
+ * (backend/src/services/shareCardService.js). Same URL as `shareCardUrl` in
+ * backend/src/services/seoService.js, which the middleware writes for the first page.
+ */
+export const shareCardUrl = (path: string, origin = window.location.origin) =>
+  `${origin}/api/seo/card.png?path=${encodeURIComponent(path)}`
 
 /** Text cut to a meta-description length on a word boundary. */
 export function metaDescription(text: string, length = DESCRIPTION_MAX) {
@@ -108,17 +114,11 @@ export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
     metaTag('property', 'og:description').setAttribute('content', description)
     metaTag('property', 'og:type').setAttribute('content', value.type || 'website')
     metaTag('property', 'og:url').setAttribute('content', url)
-    metaTag('name', 'twitter:card').setAttribute(
-      'content',
-      value.image ? 'summary_large_image' : 'summary',
-    )
-    if (value.image) metaTag('property', 'og:image').setAttribute('content', value.image)
-    else {
-      document.head.querySelector(`meta[property="og:image"][${OWNED}]`)?.remove()
-      const fallback = document.head.querySelector<HTMLMetaElement>('meta[property="og:image"]')
-      if (fallback && originals.has(fallback))
-        fallback.setAttribute('content', originals.get(fallback)!)
-    }
+    metaTag('name', 'twitter:card').setAttribute('content', 'summary_large_image')
+    metaTag('property', 'og:image').setAttribute('content', shareCardUrl(new URL(url).pathname))
+    metaTag('property', 'og:image:width').setAttribute('content', '1200')
+    metaTag('property', 'og:image:height').setAttribute('content', '630')
+    metaTag('property', 'og:image:alt').setAttribute('content', value.title)
 
     const canonical = ownedElement('link', 'link[rel="canonical"]')
     canonical.rel = 'canonical'
