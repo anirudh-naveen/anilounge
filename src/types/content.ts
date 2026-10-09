@@ -60,6 +60,10 @@ export interface UnifiedContent {
     mal?: { hasData?: boolean }
   }
   franchise?: string
+  /** Nicknames of the title's franchise ("MHA"); search matches them on every member. */
+  franchiseNicknames?: string[]
+  /** Average score of the franchise's seasons (all its titles when it has no series), to the tenth. */
+  franchiseRating?: number | null
   /** `'tmdb'` or `'mal'` on external search results. */
   source?: string
   /** Present on character / voice-actor / studio search hits. */

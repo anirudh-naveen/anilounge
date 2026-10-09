@@ -81,6 +81,16 @@ describe('planSyncChanges', () => {
     assert.deepEqual(plan, { keep: { episodeCount: 12 }, notices: [] })
   })
 
+  it('never notes nicknames, which only admins set', () => {
+    const plan = planSyncChanges({
+      kind: 'series',
+      current,
+      incoming: { ...current, nicknames: ['MHA'] },
+      locked: ['nicknames'],
+    })
+    assert.deepEqual(plan, { keep: {}, notices: [] })
+  })
+
   it('works for people and studios', () => {
     const plan = planSyncChanges({
       kind: 'character',

@@ -138,3 +138,20 @@ export function tmdbSeasonNumbers(tvDetails, fallbackSeasonCount) {
   if (!Number.isFinite(count) || count < 1) return [1]
   return Array.from({ length: Math.floor(count) }, (_, index) => index + 1)
 }
+
+/**
+ * Episode and season counts a series row stores. A row with a MyAnimeList id is one
+ * MAL entry, and MAL lists each season as its own title, while TMDB lists the whole
+ * show as one. When the TMDB total runs past MAL's count, the row is one part of a
+ * longer show: it keeps MAL's count as a single season (My Hero Academia's first
+ * season is 13 episodes, not the show's 170). Otherwise the counts are unchanged.
+ * @param {{ malId?: number | null, malEpisodes?: number | null, episodeCount?: number | null,
+ *   seasonCount?: number | null }} doc
+ * @returns {{ episodeCount: number | null, seasonCount: number | null }}
+ */
+export function seriesEntryCounts({ malId, malEpisodes, episodeCount, seasonCount }) {
+  const mal = Number(malEpisodes)
+  const total = episodeCount ?? malEpisodes ?? null
+  if (malId && mal > 0 && Number(total) > mal) return { episodeCount: mal, seasonCount: 1 }
+  return { episodeCount: total, seasonCount: seasonCount ?? null }
+}

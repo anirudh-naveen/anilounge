@@ -1,6 +1,6 @@
 /**
  * Admin page operations: search and edit catalog rows (titles, characters, voice
- * actors, studios), list users, set roles, mute, and ban.
+ * actors, studios, franchises), list users, set roles, mute, and ban.
  *
  * Layer: domain service used by `controllers/adminController.js`. Throws `HttpError`
  * for expected failures. Title edits go through `Content.save` so the subtype tables
@@ -24,10 +24,12 @@ import {
 } from '../middleware/adminOnly.js'
 import {
   EDITABLE_KINDS,
+  adminAkas,
   applyAdminOverrides,
   ENTITY_KINDS,
   WATCHABLE_KINDS,
   fieldsForKind,
+  isListField,
   mergeOverrides,
   parseContentEdits,
   readEditableFields,
@@ -183,13 +185,23 @@ export async function getEditableContent(id) {
     loadManagedLinks(row.id, kind),
   ])
   const fields = fieldsForKind(kind)
+  if (fields.includes('nicknames')) {
+    values.nicknames = Array.isArray(overrides.nicknames) ? overrides.nicknames : []
+  }
   return {
     id: String(row.id),
     kind,
     contentType: WATCHABLE_KINDS.includes(kind) ? contentTypeFromKind(kind) : null,
     fields,
     values,
-    locked: fields.filter((field) => Object.prototype.hasOwnProperty.call(overrides, field)),
+    // The sync never touches franchises or nicknames, so there is nothing to lock.
+    locked:
+      kind === 'franchise'
+        ? []
+        : fields.filter(
+            (field) =>
+              !isListField(field) && Object.prototype.hasOwnProperty.call(overrides, field),
+          ),
     links,
   }
 }
@@ -233,6 +245,39 @@ async function writeEntityFields(id, kind, overrides, values) {
       `INSERT INTO content_akas (content_id, name) SELECT $1, unnest($2::text[])
        ON CONFLICT DO NOTHING`,
       [id, aliases],
+    )
+  }
+}
+
+/**
+ * Write a franchise's name and admin names. Franchises have no other source, so
+ * their akas are exactly the admin's old names and nicknames.
+ * @param {string} id
+ * @param {Record<string, unknown>} overrides - Full override set after the edit.
+ * @param {Record<string, unknown>} values - Fields changed in this edit.
+ * @returns {Promise<void>}
+ */
+async function writeFranchiseFields(id, overrides, values) {
+  if ('name' in values) {
+    // Titles join franchises by name (Content.save, buildFranchises), so names stay unique.
+    const { rows } = await query(
+      `SELECT 1 FROM content WHERE kind = 'franchise' AND id <> $1 AND lower(name) = lower($2)`,
+      [id, values.name],
+    )
+    if (rows.length)
+      throw new HttpError(409, `Another franchise is already named "${values.name}".`)
+    await query('UPDATE content SET name = $2, updated_at = now() WHERE id = $1', [id, values.name])
+  }
+  const akas = adminAkas(overrides)
+  await query('DELETE FROM content_akas WHERE content_id = $1 AND name <> ALL($2::text[])', [
+    id,
+    akas,
+  ])
+  if (akas.length) {
+    await query(
+      `INSERT INTO content_akas (content_id, name) SELECT $1, unnest($2::text[])
+       ON CONFLICT DO NOTHING`,
+      [id, akas],
     )
   }
 }
@@ -301,12 +346,23 @@ export async function updateContent(
       JSON.stringify(overrides),
     ])
 
-    if (ENTITY_KINDS.includes(kind)) {
+    if (kind === 'franchise') {
+      await writeFranchiseFields(row.id, overrides, values)
+    } else if (ENTITY_KINDS.includes(kind)) {
       await writeEntityFields(row.id, kind, overrides, values)
     } else {
       const doc = await Content.findById(row.id)
       // save() re-reads admin_overrides and applies them, including the new values.
       await doc.save()
+      // The loaded doc still lists removed nicknames among its alternative titles.
+      const kept = new Set(adminAkas(overrides))
+      const removed = adminAkas(row.admin_overrides).filter((name) => !kept.has(name))
+      if (removed.length) {
+        await query('DELETE FROM content_akas WHERE content_id = $1 AND name = ANY($2::text[])', [
+          row.id,
+          removed,
+        ])
+      }
     }
     // A hand edit answers any sync notice for the same field.
     await clearSyncNotices(row.id, Object.keys(values))
