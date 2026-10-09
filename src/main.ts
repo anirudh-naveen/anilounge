@@ -15,6 +15,7 @@ import './assets/styles/global.css'
 import './assets/styles/social.css'
 import { useAuthStore } from './stores/auth'
 import { useContentStore } from './stores/content'
+import { startMetrics } from './services/metrics'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -46,4 +47,5 @@ authStore.restoreSession().then(() => {
   if (authStore.isAuthenticated) contentStore.loadWatchlist()
 })
 
+startMetrics()
 app.mount('#app')

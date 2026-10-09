@@ -11,6 +11,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import Home from '@/views/Home.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
+import { trackPageView } from '@/services/metrics'
 
 /**
  * Wait (briefly) until the page is tall enough to scroll to `top`, so going
@@ -229,7 +230,10 @@ router.beforeEach(async (to) => {
   }
 })
 
-router.afterEach((to, from) => {
+router.afterEach((to, from, failure) => {
+  // Count a page view on every path change (not query/hash-only changes).
+  if (!failure && (to.path !== from.path || from.matched.length === 0)) trackPageView(to.path)
+
   // Clear scroll positions when navigating to different main sections
   // This ensures scroll positions are only preserved for back navigation
   const mainSections = ['/', '/forum', '/movies', '/tv', '/search', '/watchlist', '/feedback']
