@@ -63,7 +63,7 @@ async function loadShell(origin: string) {
   return html
 }
 
-async function describe(pathname: string, visitorIp: string | null) {
+async function describe(pathname: string, visitorIp: string | null, visitorAgent: string | null) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
   try {
@@ -71,8 +71,12 @@ async function describe(pathname: string, visitorIp: string | null) {
       `${API_ORIGIN}/api/seo/page?path=${encodeURIComponent(pathname)}`,
       {
         signal: controller.signal,
-        // The API rate-limits per visitor (backend/src/middleware/clientIp.js).
-        headers: visitorIp ? { 'x-vercel-forwarded-for': visitorIp } : {},
+        // The API rate-limits per visitor (backend/src/middleware/clientIp.js) and lets
+        // verified Google/Bing crawlers through (backend/src/middleware/searchCrawler.js).
+        headers: {
+          ...(visitorIp ? { 'x-vercel-forwarded-for': visitorIp } : {}),
+          ...(visitorAgent ? { 'user-agent': visitorAgent } : {}),
+        },
       },
     )
     if (response.status !== 200 && response.status !== 404) return null
@@ -107,7 +111,7 @@ export default async function middleware(request: Request) {
       request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       null
     const [result, html] = await Promise.all([
-      describe(url.pathname, visitorIp),
+      describe(url.pathname, visitorIp, request.headers.get('user-agent')),
       loadShell(url.origin),
     ])
     if (!result) return

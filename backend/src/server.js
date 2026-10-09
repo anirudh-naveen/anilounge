@@ -17,6 +17,7 @@ import emailRoutes from './routes/email.js'
 import webhookRoutes from './routes/webhooks.js'
 import seoRoutes from './routes/seo.js'
 import { useForwardedClientIp, vercelForwardedIp } from './middleware/clientIp.js'
+import { greenlightSearchCrawlers, isCrawlerExempt } from './middleware/searchCrawler.js'
 import { sanitizeHtmlInput, sanitizeXSS } from './middleware/security.js'
 import { securityLogger, securityMonitor } from './middleware/securityLogger.js'
 import {
@@ -124,6 +125,10 @@ app.set('trust proxy', trustProxySetting())
 // Vercel's own (see middleware/clientIp.js).
 app.use(useForwardedClientIp)
 
+// Verified Google/Bing crawlers (reverse + forward DNS) skip every bot check, ban, and
+// rate limit below (middleware/searchCrawler.js).
+app.use(greenlightSearchCrawlers)
+
 // Helmet: CSP and CORP are off so the SPA on a different origin can call the API.
 app.use(
   helmet({
@@ -150,8 +155,9 @@ const generalLimiter = rateLimit({
   // Avatar and upload images are static and edge-cached; a page of images shouldn't
   // spend the budget.
   skip: (req) =>
-    req.method === 'GET' &&
-    (req.path.startsWith('/api/avatars/') || req.path.startsWith('/uploads/')),
+    isCrawlerExempt(req) ||
+    (req.method === 'GET' &&
+      (req.path.startsWith('/api/avatars/') || req.path.startsWith('/uploads/'))),
   ...rateLimitStore('general'),
   message: {
     success: false,
