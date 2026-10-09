@@ -30,16 +30,16 @@ describe('slugify', () => {
 
 describe('paths', () => {
   it('builds canonical paths per kind with display names', () => {
-    assert.equal(detailPath('/forum/post', 'p1', 'Best of 2026?'), '/forum/post/p1/best-of-2026')
+    assert.equal(detailPath('/forum/post', 'p1', 'Best of 2026?'), '/forum/post/best-of-2026/p1')
     assert.equal(detailPath('/movie', 'm1', 'のんのんびより'), '/movie/m1')
-    assert.equal(contentPagePath({ kind: 'special', id: 's1', name: 'OVA' }), '/movie/s1/ova')
+    assert.equal(contentPagePath({ kind: 'special', id: 's1', name: 'OVA' }), '/movie/ova/s1')
     assert.equal(
       contentPagePath({ kind: 'series', id: 't1', name: 'Frieren' }),
-      '/tv-show/t1/frieren',
+      '/tv-show/frieren/t1',
     )
     assert.equal(
       contentPagePath({ kind: 'voice', id: 'v1', name: 'Kaji, Yuuki' }),
-      '/voice-actor/v1/yuuki-kaji',
+      '/voice-actor/yuuki-kaji/v1',
     )
     assert.equal(contentDisplayName('character', 'Natsuki, Subaru (voice)'), 'Subaru Natsuki')
   })

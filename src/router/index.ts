@@ -2,11 +2,12 @@
  * router/index.ts — client-side routing (router).
  *
  * Declares catalog, auth, and protected account routes. Detail pages take an optional
- * readable `:slug` after the id (utils/slug.ts); only the id picks the page. Guards
+ * readable `:slug` before the id (`/tv-show/the-simpsons/<id>`, utils/slug.ts); only the
+ * id picks the page. Guards
  * `meta.requiresAuth` pages and clears catalog scroll positions when
  * navigating between top-level sections.
  */
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import Home from '@/views/Home.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
@@ -25,6 +26,30 @@ const whenScrollable = (top: number, timeoutMs = 1500) =>
     }
     check()
   })
+
+/**
+ * Catalog and post ids (Postgres UUID, or a legacy 24-hex Mongo id). Detail URLs are
+ * `/<kind>/<slug>/<id>`; the id pattern is what lets the optional slug come first.
+ */
+const CATALOG_ID =
+  '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{24}'
+
+/** Detail pages: path prefix and route name. */
+const DETAIL_ROUTES: Array<[string, string]> = [
+  ['/forum/post', 'forumPost'],
+  ['/movie', 'MovieDetails'],
+  ['/tv-show', 'TVShowDetails'],
+  ['/character', 'CharacterDetails'],
+  ['/voice-actor', 'VoiceActorDetails'],
+  ['/franchise', 'FranchiseDetails'],
+  ['/studio', 'StudioDetails'],
+]
+
+/** Older `/<kind>/<id>/<slug>` links open the same page at its `/<kind>/<slug>/<id>` URL. */
+const legacySlugRoutes: RouteRecordRaw[] = DETAIL_ROUTES.map(([prefix, name]) => ({
+  path: `${prefix}/:id(${CATALOG_ID})/:legacySlug`,
+  redirect: (to) => ({ name, params: { id: to.params.id }, query: to.query, hash: to.hash }),
+}))
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -46,7 +71,7 @@ const router = createRouter({
       component: () => import('@/views/Forum.vue'),
     },
     {
-      path: '/forum/post/:id/:slug?',
+      path: `/forum/post/:slug?/:id(${CATALOG_ID})`,
       name: 'forumPost',
       component: () => import('@/views/ForumPost.vue'),
     },
@@ -148,35 +173,36 @@ const router = createRouter({
       component: () => import('@/views/Register.vue'),
     },
     {
-      path: '/movie/:id/:slug?',
+      path: `/movie/:slug?/:id(${CATALOG_ID})`,
       name: 'MovieDetails',
       component: () => import('@/views/MovieDetails.vue'),
     },
     {
-      path: '/tv-show/:id/:slug?',
+      path: `/tv-show/:slug?/:id(${CATALOG_ID})`,
       name: 'TVShowDetails',
       component: () => import('@/views/TVShowDetails.vue'),
     },
     {
-      path: '/character/:id/:slug?',
+      path: `/character/:slug?/:id(${CATALOG_ID})`,
       name: 'CharacterDetails',
       component: () => import('@/views/CharacterDetails.vue'),
     },
     {
-      path: '/voice-actor/:id/:slug?',
+      path: `/voice-actor/:slug?/:id(${CATALOG_ID})`,
       name: 'VoiceActorDetails',
       component: () => import('@/views/VoiceActorDetails.vue'),
     },
     {
-      path: '/franchise/:id/:slug?',
+      path: `/franchise/:slug?/:id(${CATALOG_ID})`,
       name: 'FranchiseDetails',
       component: () => import('@/views/FranchiseDetails.vue'),
     },
     {
-      path: '/studio/:id/:slug?',
+      path: `/studio/:slug?/:id(${CATALOG_ID})`,
       name: 'StudioDetails',
       component: () => import('@/views/StudioDetails.vue'),
     },
+    ...legacySlugRoutes,
   ],
 })
 

@@ -76,7 +76,7 @@ const isoDate = (value?: string | Date) => {
 /**
  * Meta for a movie, series, or special page.
  * @param content - The title on screen.
- * @param options.path - Its in-site path (`/movie/:id`, `/tv-show/:id`).
+ * @param options.path - Its in-site path (`/movie/<slug>/<id>`, `/tv-show/<slug>/<id>`).
  * @param options.image - Absolute poster URL, or null.
  * @param options.seasonLabel - Season being shown ("Season 2"), when not the whole show.
  */

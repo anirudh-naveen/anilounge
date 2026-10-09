@@ -99,13 +99,13 @@ describe('helpers', () => {
 })
 
 describe('canonicalRedirect', () => {
-  const canonical = 'https://www.anilounge.net/tv-show/t1/attack-on-titan'
+  const canonical = 'https://www.anilounge.net/tv-show/attack-on-titan/t1'
   it('sends missing or stale slugs to the canonical path, keeping the query', () => {
     expect(canonicalRedirect('https://www.anilounge.net/tv-show/t1?season=2', canonical)).toBe(
-      'https://www.anilounge.net/tv-show/t1/attack-on-titan?season=2',
+      'https://www.anilounge.net/tv-show/attack-on-titan/t1?season=2',
     )
     expect(canonicalRedirect('http://localhost:5174/movie/t1/old-name', canonical)).toBe(
-      'http://localhost:5174/tv-show/t1/attack-on-titan',
+      'http://localhost:5174/tv-show/attack-on-titan/t1',
     )
   })
 
