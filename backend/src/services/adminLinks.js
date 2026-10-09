@@ -217,6 +217,13 @@ export async function loadManagedLinks(id, kind) {
     ]
   }
 
+  if (kind === 'franchise') {
+    const works = await run(`SELECT ${COLS} FROM franchise_members fm
+      JOIN content c ON c.id = fm.member_id
+      WHERE fm.franchise_id = $1 ORDER BY c.name`)
+    return [{ key: 'works', label: 'Titles', items: works.map((row) => item(row)) }]
+  }
+
   const works = await run(`SELECT ${COLS} FROM studio_credits sc JOIN content c ON c.id = sc.work_id
     WHERE sc.studio_id = $1 ORDER BY c.name`)
   return [

@@ -151,7 +151,7 @@
                   <p class="social-kicker">{{ KIND_BY_ID[editor.kind].singular }}</p>
                   <h2 class="social-panel-title">{{ currentName }}</h2>
                   <router-link :to="detailsRoute(editor)" target="_blank" class="admin-link">
-                    View page ↗
+                    {{ editor.kind === 'franchise' ? 'View forum' : 'View page' }} ↗
                   </router-link>
                 </div>
               </header>
@@ -198,7 +198,12 @@
                     class="input"
                     :type="inputType(field)"
                     :min="inputType(field) === 'number' ? 0 : undefined"
+                    :placeholder="field === 'nicknames' ? 'e.g. KonoSuba, MHA' : undefined"
                   />
+                  <p v-if="field === 'nicknames'" class="social-meta">
+                    Names fans use that the sources don't list. Search finds the
+                    {{ editor.kind === 'franchise' ? "franchise's titles" : 'title' }} by them.
+                  </p>
                   <img
                     v-if="IMAGE_FIELDS.includes(field) && draft[field]"
                     :src="getImageUrl(String(draft[field]), 'w300')"
@@ -949,7 +954,7 @@ import { apiErrorMessage, profileRoute } from '@/utils/social'
 
 defineOptions({ name: 'AdminPage' })
 
-type Kind = 'movie' | 'series' | 'special' | 'character' | 'voice' | 'studio'
+type Kind = 'movie' | 'series' | 'special' | 'character' | 'voice' | 'studio' | 'franchise'
 type Page<T> = { items: T[]; page: number; pageSize: number; total: number }
 type ContentHit = {
   id: string
@@ -998,7 +1003,7 @@ type EditableContent = {
   id: string
   kind: Kind
   fields: string[]
-  values: Record<string, string | number | null>
+  values: Record<string, string | number | string[] | null>
   locked: string[]
   links: LinkGroup[]
 }
@@ -1042,6 +1047,7 @@ const KINDS: Array<{ id: Kind; singular: string; plural: string }> = [
   { id: 'character', singular: 'Character', plural: 'Characters' },
   { id: 'voice', singular: 'Voice actor', plural: 'Voice actors' },
   { id: 'studio', singular: 'Studio', plural: 'Studios' },
+  { id: 'franchise', singular: 'Franchise', plural: 'Franchises' },
 ]
 const KIND_BY_ID = Object.fromEntries(KINDS.map((kind) => [kind.id, kind])) as Record<
   Kind,
@@ -1064,8 +1070,11 @@ const FIELD_LABELS: Record<string, string> = {
   nativeName: 'Native name',
   about: 'About',
   imagePath: 'Image (URL or TMDB path)',
+  nicknames: 'Nicknames (comma-separated)',
 }
 const NUMBER_FIELDS = ['runtime', 'episodeCount', 'seasonCount']
+/** Fields holding a list of names, edited as comma-separated text. */
+const LIST_FIELDS = ['nicknames']
 const IMAGE_FIELDS = ['posterPath', 'backdropPath', 'imagePath']
 const USER_FILTERS = [
   { id: 'all', label: 'All' },
@@ -1098,7 +1107,9 @@ const isPerson = (kind: Kind) => kind === 'character' || kind === 'voice'
 const imageFor = (path: string | null | undefined) => getImageUrl(path || '', 'w185')
 const inputType = (field: string) =>
   NUMBER_FIELDS.includes(field) ? 'number' : field === 'releaseDate' ? 'date' : 'text'
-const detailsRoute = (item: { id: string; kind: Kind }) => ({
+const detailsRoute = (item: { id: string; kind: Kind }) =>
+  item.kind === 'franchise' ? { name: 'forum', query: { tag: item.id } } : titleRoute(item)
+const titleRoute = (item: { id: string; kind: Kind }) => ({
   name: getDetailsRouteName({
     contentType: item.kind === 'series' ? 'tv' : item.kind,
     entityType: item.kind === 'voice' ? 'voice_actor' : undefined,
@@ -1123,7 +1134,8 @@ let contentTimer: ReturnType<typeof setTimeout> | undefined
 let contentSeq = 0
 let editorSeq = 0
 
-const nameKey = (kind: Kind) => (isPerson(kind) || kind === 'studio' ? 'name' : 'title')
+const nameKey = (kind: Kind) =>
+  isPerson(kind) || kind === 'studio' || kind === 'franchise' ? 'name' : 'title'
 const currentName = computed(() =>
   editor.value ? String(editor.value.values[nameKey(editor.value.kind)] || 'Untitled') : '',
 )
@@ -1166,7 +1178,10 @@ watch(contentKind, () => {
 
 const resetDraft = () => {
   draft.value = Object.fromEntries(
-    Object.entries(editor.value?.values || {}).map(([key, value]) => [key, value ?? '']),
+    Object.entries(editor.value?.values || {}).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value.join(', ') : (value ?? ''),
+    ]),
   )
 }
 
@@ -1175,8 +1190,15 @@ const setEditor = (data: EditableContent) => {
   resetDraft()
 }
 
-/** Draft value in the API's shape: '' becomes null, number inputs become numbers. */
+/**
+ * Draft value in the API's shape: '' becomes null, number inputs become numbers, and
+ * list fields become arrays of trimmed names.
+ */
 const normalized = (field: string, value: unknown) => {
+  if (LIST_FIELDS.includes(field)) {
+    const items = Array.isArray(value) ? value : String(value ?? '').split(',')
+    return items.map((item) => String(item).trim()).filter(Boolean)
+  }
   if (value === '' || value === null || value === undefined) return null
   return NUMBER_FIELDS.includes(field) ? Number(value) : value
 }
@@ -1185,7 +1207,9 @@ const dirtyFields = computed(() => {
   if (!editor.value) return []
   const values = editor.value.values
   return editor.value.fields.filter(
-    (field) => normalized(field, draft.value[field]) !== normalized(field, values[field]),
+    (field) =>
+      JSON.stringify(normalized(field, draft.value[field])) !==
+      JSON.stringify(normalized(field, values[field])),
   )
 })
 

@@ -7,18 +7,22 @@
  * `{ field: value }`, and re-applied by `Content.save` / `Entity.save` (see
  * `applyAdminOverrides`) so the catalog sync cannot overwrite them. The reserved
  * `_aliases` key holds names a row had before an admin renamed it, kept as
- * alternative names so the sync still matches the row by its old name.
+ * alternative names so the sync still matches the row by its old name. `nicknames`
+ * ("KonoSuba", "MHA") are names fans use that no source lists; they are searchable
+ * like alternative names and never come from the sync.
  */
 
 import { airingFromMalStatus, malStatusFromAiring } from '../db/kinds.js'
 
 export const WATCHABLE_KINDS = ['movie', 'series', 'special']
 export const ENTITY_KINDS = ['character', 'voice', 'studio']
-export const EDITABLE_KINDS = [...WATCHABLE_KINDS, ...ENTITY_KINDS]
+/** Franchises are only named and nicknamed by hand; the sync never edits them. */
+export const EDITABLE_KINDS = [...WATCHABLE_KINDS, ...ENTITY_KINDS, 'franchise']
 export const ALIASES_KEY = '_aliases'
+export const MAX_NICKNAMES = 20
 
 /**
- * @typedef {{ type: 'text' | 'image' | 'date' | 'int' | 'enum', kinds: string[], max?: number,
+ * @typedef {{ type: 'text' | 'image' | 'date' | 'int' | 'enum' | 'list', kinds: string[], max?: number,
  *   required?: boolean, values?: string[] }} FieldSpec
  */
 
@@ -35,11 +39,13 @@ export const CONTENT_FIELDS = {
   runtime: { type: 'int', max: 10000, kinds: ['movie', 'special'] },
   episodeCount: { type: 'int', max: 100000, kinds: ['series'] },
   seasonCount: { type: 'int', max: 1000, kinds: ['series'] },
-  name: { type: 'text', max: 300, required: true, kinds: ENTITY_KINDS },
+  name: { type: 'text', max: 300, required: true, kinds: [...ENTITY_KINDS, 'franchise'] },
   englishName: { type: 'text', max: 300, kinds: ['character', 'voice'] },
   nativeName: { type: 'text', max: 300, kinds: ENTITY_KINDS },
   about: { type: 'text', max: 10000, kinds: ENTITY_KINDS },
   imagePath: { type: 'image', max: 1000, kinds: ENTITY_KINDS },
+  // `max` is per nickname.
+  nicknames: { type: 'list', max: 100, kinds: [...WATCHABLE_KINDS, 'franchise'] },
 }
 
 /**
@@ -85,6 +91,7 @@ function toDateString(value) {
  */
 function parseField(field, raw) {
   const spec = CONTENT_FIELDS[field]
+  if (spec.type === 'list') return parseList(field, raw, spec)
   const empty = raw === null || raw === undefined || (typeof raw === 'string' && !raw.trim())
   if (empty) return spec.required ? { error: `${field} is required` } : { value: null }
 
@@ -121,6 +128,33 @@ function parseField(field, raw) {
     default:
       return { error: `${field} cannot be edited` }
   }
+}
+
+/**
+ * A list field from an array or comma/newline-separated text: trimmed, empty entries
+ * dropped, duplicates (ignoring case) removed. Empty input clears the list.
+ * @param {string} field
+ * @param {unknown} raw
+ * @param {FieldSpec} spec
+ * @returns {{ value: string[] } | { error: string }}
+ */
+function parseList(field, raw, spec) {
+  if (raw === null || raw === undefined) return { value: [] }
+  const items = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/[,\n]/) : null
+  if (!items || items.some((item) => typeof item !== 'string')) {
+    return { error: `${field} must be a list of names` }
+  }
+  const seen = new Set()
+  const value = []
+  for (const item of items) {
+    const name = item.trim()
+    if (!name || seen.has(name.toLowerCase())) continue
+    if (name.length > spec.max) return { error: `each of ${field} must be ${spec.max} characters or fewer` }
+    seen.add(name.toLowerCase())
+    value.push(name)
+  }
+  if (value.length > MAX_NICKNAMES) return { error: `${field} can hold at most ${MAX_NICKNAMES} names` }
+  return { value }
 }
 
 /**
@@ -172,13 +206,15 @@ export function readEditableFields(doc, kind) {
     nativeName: doc.nativeName || null,
     about: doc.about || null,
     imagePath: doc.imagePath || null,
+    nicknames: doc.nicknames || [],
   }
   return Object.fromEntries(fieldsForKind(kind).map((field) => [field, all[field]]))
 }
 
 /**
  * Copy stored overrides onto a document before it is saved. Fields that do not
- * apply to the kind are ignored; `_aliases` are merged into the alternative names.
+ * apply to the kind are ignored; `_aliases` and `nicknames` are merged into the
+ * alternative names so search finds them.
  * @param {object} doc - Content or Entity document (mutated).
  * @param {Record<string, unknown>} overrides
  * @param {string} kind
@@ -201,12 +237,33 @@ export function applyAdminOverrides(doc, overrides, kind) {
       doc[field] = value
     }
   }
-  const aliases = Array.isArray(overrides[ALIASES_KEY]) ? overrides[ALIASES_KEY] : []
+  const aliases = adminAkas(overrides)
   if (aliases.length) {
     const key = WATCHABLE_KINDS.includes(kind) ? 'alternativeTitles' : 'alternativeNames'
     doc[key] = [...new Set([...(doc[key] || []), ...aliases])]
   }
   return doc
+}
+
+/**
+ * Names an admin attached to a row that belong in `content_akas`: old names
+ * (`_aliases`) and nicknames.
+ * @param {Record<string, unknown> | null | undefined} overrides
+ * @returns {string[]}
+ */
+export function adminAkas(overrides) {
+  const list = (value) => (Array.isArray(value) ? value : [])
+  return [...new Set([...list(overrides?.[ALIASES_KEY]), ...list(overrides?.nicknames)])]
+}
+
+/**
+ * Whether a field holds a list (nicknames). Lists are not locked against the sync,
+ * which never supplies them.
+ * @param {string} field
+ * @returns {boolean}
+ */
+export function isListField(field) {
+  return CONTENT_FIELDS[field]?.type === 'list'
 }
 
 /**
@@ -220,6 +277,9 @@ export function mergeOverrides(current, { values, unlock, kind, oldName }) {
   const next = { ...(current || {}) }
   for (const field of unlock) delete next[field]
   Object.assign(next, values)
+  for (const [field, value] of Object.entries(values)) {
+    if (isListField(field) && !value.length) delete next[field]
+  }
   const newName = values[nameField(kind)]
   if (newName && oldName && newName !== oldName) {
     const aliases = Array.isArray(next[ALIASES_KEY]) ? next[ALIASES_KEY] : []

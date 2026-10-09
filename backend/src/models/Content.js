@@ -14,6 +14,7 @@ import {
 import { compileMongoFilter, compileSort, escapeLike } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { applyAdminOverrides, readEditableFields } from '../utils/adminContent.js'
+import { seriesEntryCounts } from '../utils/episodes.js'
 import { planSyncChanges } from '../utils/syncReview.js'
 import { recordSyncNotices } from '../services/syncGuard.js'
 import catalogEvents from '../services/catalogEvents.js'
@@ -69,6 +70,8 @@ export function mapContentRow(row) {
     originCountries: row.origin_country ? [row.origin_country] : [],
     alternativeTitles: [],
     franchise: null,
+    franchiseNicknames: [],
+    franchiseRating: null,
     relationships: { sequels: [], prequels: [], related: [], franchise: null },
   }
 }
@@ -127,11 +130,32 @@ export async function attachContentRelations(docs) {
        WHERE sc.work_id = ANY($1::uuid[])`,
       [ids],
     ),
+    // Each title's franchise with its nicknames and rating: the average unified score
+    // of its series (each season rated on its own), or of all its titles when it has
+    // no series, to the tenth.
     query(
-      `SELECT fm.member_id AS content_id, f.name
-       FROM franchise_members fm
-       JOIN content f ON f.id = fm.franchise_id
-       WHERE fm.member_id = ANY($1::uuid[])`,
+      `WITH m AS (
+         SELECT member_id, franchise_id FROM franchise_members WHERE member_id = ANY($1::uuid[])
+       ), scored AS (
+         SELECT fm.franchise_id, c.kind,
+                COALESCE(mv.unified_score, s.unified_score, sp.unified_score) AS score
+         FROM franchise_members fm
+         JOIN content c ON c.id = fm.member_id
+         LEFT JOIN movies mv ON mv.content_id = c.id
+         LEFT JOIN series s ON s.content_id = c.id
+         LEFT JOIN specials sp ON sp.content_id = c.id
+         WHERE fm.franchise_id IN (SELECT franchise_id FROM m)
+       ), rated AS (
+         SELECT franchise_id,
+                COALESCE(avg(score) FILTER (WHERE kind = 'series'), avg(score)) AS rating
+         FROM scored WHERE score > 0 GROUP BY franchise_id
+       )
+       SELECT m.member_id AS content_id, f.name, round(r.rating::numeric, 1) AS rating,
+              (SELECT array_agg(k.name ORDER BY k.name) FROM content_akas k
+               WHERE k.content_id = f.id) AS nicknames
+       FROM m
+       JOIN content f ON f.id = m.franchise_id
+       LEFT JOIN rated r ON r.franchise_id = m.franchise_id`,
       [ids],
     ),
     query(
@@ -144,7 +168,7 @@ export async function attachContentRelations(docs) {
   const byGenre = groupBy(genres.rows, 'content_id')
   const byAlt = groupBy(alts.rows, 'content_id')
   const byStudio = groupBy(studios.rows, 'content_id')
-  const franchiseById = new Map(members.rows.map((row) => [String(row.content_id), row.name]))
+  const franchiseById = new Map(members.rows.map((row) => [String(row.content_id), row]))
   const relByFrom = groupBy(relations.rows, 'from_id')
 
   for (const doc of docs) {
@@ -157,7 +181,11 @@ export async function attachContentRelations(docs) {
       name: row.name,
       imagePath: row.image_path || '',
     }))
-    doc.franchise = franchiseById.get(id) || null
+    const franchise = franchiseById.get(id)
+    doc.franchise = franchise?.name || null
+    // Not saved with the title: search matches a franchise's nicknames on its members.
+    doc.franchiseNicknames = franchise?.nicknames || []
+    doc.franchiseRating = franchise?.rating != null ? Number(franchise.rating) : null
     const edges = relByFrom.get(id) || []
     doc.relationships = {
       sequels: edges.filter((row) => row.kind === 'sequel').map((row) => String(row.to_id)),
@@ -320,6 +348,12 @@ Content.prototype.save = async function save() {
   const overrides = await loadAdminOverrides(id)
   applyAdminOverrides(this, overrides, kind)
   await protectExistingValues(this, kind, overrides, incoming)
+  if (kind === 'series') {
+    // A MAL season merged with TMDB's whole show keeps its own counts (admin values win).
+    const counts = seriesEntryCounts(this)
+    if (!('episodeCount' in overrides)) this.episodeCount = counts.episodeCount
+    if (!('seasonCount' in overrides)) this.seasonCount = counts.seasonCount
+  }
   const name = this.englishTitle || this.title || 'Untitled'
   const { rowCount, rows: saved } = await query(
     `INSERT INTO content (id, kind, name, native_name, about, image_path, mal_id, tmdb_id, anilist_id, created_at, updated_at)
@@ -415,7 +449,7 @@ Content.prototype.save = async function save() {
         shared.release_date,
         shared.origin_country,
         this.seasonCount ?? null,
-        this.episodeCount ?? this.malEpisodes ?? null,
+        this.episodeCount ?? null,
         airingFromMalStatus(this.malStatus),
         this.startSeason || null,
         this.startSeasonYear ?? null,
@@ -683,8 +717,8 @@ Content.findById = function findById(id) {
 }
 
 /**
- * Ids of watchables whose name, native name, alternative title, original title, or
- * overview contains `text` (case-insensitive). Each branch is a separate lookup so the
+ * Ids of watchables whose name, native name, alternative title, original title,
+ * overview, or franchise nickname contains `text` (case-insensitive). Each branch is a separate lookup so the
  * pg_trgm indexes in `db/schema.sql` serve it; one OR across the `works` view (whose
  * original title is a COALESCE over three tables) could only scan every title.
  * @param {string} text
@@ -703,6 +737,12 @@ Content.searchIds = async function searchIds(text, { limit = 2000 } = {}) {
        UNION
        SELECT a.content_id FROM content_akas a
        JOIN content c ON c.id = a.content_id AND c.kind IN ('movie', 'series', 'special')
+       WHERE a.name ILIKE $1
+       UNION
+       SELECT fm.member_id FROM content_akas a
+       JOIN content f ON f.id = a.content_id AND f.kind = 'franchise'
+       JOIN franchise_members fm ON fm.franchise_id = f.id
+       JOIN content c ON c.id = fm.member_id AND c.kind IN ('movie', 'series', 'special')
        WHERE a.name ILIKE $1
        UNION
        SELECT content_id FROM movies WHERE original_title ILIKE $1

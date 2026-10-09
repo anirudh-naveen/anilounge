@@ -36,6 +36,7 @@ export async function logTableReady() {
  * @returns {string}
  */
 export function quoteValue(value) {
+  if (Array.isArray(value)) return value.length ? quoteValue(value.join(', ')) : '(empty)'
   if (value === null || value === undefined || value === '') return '(empty)'
   const text = String(value).replace(/\s+/g, ' ').trim()
   const short = text.length > MAX_VALUE_LENGTH ? `${text.slice(0, MAX_VALUE_LENGTH - 1)}…` : text

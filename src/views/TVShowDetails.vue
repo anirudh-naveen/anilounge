@@ -164,6 +164,9 @@
         <!-- Title: Franchise -->
         <div v-if="show.franchise" class="franchise-info">
           <h4>Part of the {{ show.franchise }} franchise</h4>
+          <p v-if="show.franchiseRating" class="franchise-rating" data-testid="franchise-rating">
+            <i class="fas fa-star"></i> {{ show.franchiseRating.toFixed(1) }} across the franchise
+          </p>
         </div>
 
         <!-- Title: Sequels -->
@@ -952,6 +955,12 @@ watch(
   margin: 0;
   color: white;
   font-size: 1.1rem;
+}
+
+.franchise-rating {
+  margin: 0.35rem 0 0;
+  color: white;
+  font-size: 0.95rem;
 }
 
 .relationship-section {

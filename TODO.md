@@ -1,14 +1,5 @@
 # TODO
 
-## Content
-
-1. Add nicknames for content/franchises
-   - more common for Japanese titles.
-   - for example, Kono Subarashi is known as KonoSuba, etc.
-2. Fix how seasons work for anime
-   - With franchises as a content, seasons should be spit up and rated seperately, with franchise taking the average rating of all the reasons combines and rounded to the nearest tenth.
-   - One such content needing fixing in the database is My Hero Academia, with season 1 having access to all seasons and 170 episodes rather than just season 1.
-
 ## Home
 1. Make sure the site can appear in search engines
    - If the user enters the site naturally without having an account, pop-up a sign-in prompt.
@@ -24,19 +15,15 @@
    - `Search.vue` sends its filters and shows one page of results; the store's local filtering and full-catalog load go away.
    - Most of the work is matching today's results (`src/utils/searchFilters.ts` and its tests). Trade-off: filtering waits on the server instead of being instant.
 
-## Watchlist
-1. Marking Status as Completed should autolock episode count to max
-   - This should also update the episodes watched timeline
-
 
 ## Profile
-
 1. Fix user avatar/image upload system
    - Move profile pictures out of Postgres (`user_avatars`) to Cloudflare R2. Set up first: run the Cloudflare agent setup (`claude plugin marketplace add cloudflare/skills`, then `claude plugin install cloudflare@cloudflare`), create an `anilounge-avatars` bucket with a public custom domain (e.g. `img.anilounge.net`) and a read/write API token, and add `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `AVATAR_PUBLIC_URL` to Railway.
    - Then: `services/avatarService.js` uploads to R2 (new key per upload, old one deleted, Postgres fallback when unset), a one-time script copies existing avatars and rewrites `users.profile_picture`, and `/api/avatars/:id` stays until old URLs stop appearing.
 
 ## Infrastructure
 0. Deploy the forum update: run `npm run db:schema` on production (it allows the new `guide`/`article` post kinds), then redeploy the Railway API. The live API is older than `main`: it doesn't save or return top tags (`/api/forum/posts` has no `top` field), so post images fall back to other tags. After deploying, submit `https://www.anilounge.net/sitemap.xml` in Google Search Console, and clear any `ip_bans` rows for search engine crawlers (Googlebot used to be banned as a bot).
+0. Fix stored season counts: after deploying, run `npm --prefix backend run db:fix-season-counts -- --dry-run` against production, check the list (e.g. My Hero Academia season 1 should go 170 → 13 episodes), then run it without `--dry-run`. It re-reads each MAL+TMDB series' episode count from MAL (needs `MAL_CLIENT_ID`). Then add nicknames (KonoSuba, MHA, …) from the admin page: titles under their kind, franchises under the new Franchises tab.
 1. Ship the scaling upgrade: run `npm run db:schema` on production **before** deploying (the code reads `posts.hot_score`, `content.catalog_score`, `content.rating_count`), then open `https://www.anilounge.net/api/status` and check `clientIp` is your own IP. If it's a Vercel/Railway address, set `TRUST_PROXY=2` and recheck, or every visitor shares one rate-limit bucket.
 2. Scale out when one instance gets busy (~5–10k daily users): 2–4 Railway replicas with `RATE_LIMIT_STORE=postgres`, and keep replicas × `PG_POOL_MAX` under Postgres `max_connections` (or add PgBouncer, ignoring `statement_timeout` and `application_name` startup params). Around ~100k daily users, add a read replica via `DATABASE_READ_URL`; beyond that, Redis for rate limits and partitioning `messages`/`watch_events` once they near ~100M rows.
 3. Watch Connections sync traffic as sign-ups grow (services/connectionSync.js).

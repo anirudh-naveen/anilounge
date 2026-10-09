@@ -929,7 +929,8 @@ export async function setCommentLike(user, commentId, liked) {
 }
 
 /**
- * Taggable catalog rows by name, for the composer's tag picker. Prefix matches first.
+ * Taggable catalog rows by name, for the composer's tag picker; titles and franchises
+ * also match by alternative name or nickname ("MHA"). Exact matches, then prefix matches first.
  * @param {unknown} term
  * @returns {Promise<Array<{ contentId: string, kind: string, name: string, imagePath: string | null, seasonCount: number | null, episodeCount: number | null, year: number | null }>>}
  */
@@ -946,8 +947,12 @@ export async function searchTags(term) {
      LEFT JOIN specials sp ON sp.content_id = c.id
      LEFT JOIN characters ch ON ch.content_id = c.id
      WHERE c.kind = ANY($1::text[])
-       AND (c.name ILIKE $2 OR c.native_name ILIKE $2 OR ch.english_name ILIKE $2)
-     ORDER BY (lower(c.name) = lower($4)) DESC, (c.name ILIKE $3) DESC,
+       AND (c.name ILIKE $2 OR c.native_name ILIKE $2 OR ch.english_name ILIKE $2
+            OR (c.kind <> 'character' AND EXISTS (
+              SELECT 1 FROM content_akas k WHERE k.content_id = c.id AND k.name ILIKE $2)))
+     ORDER BY (lower(c.name) = lower($4) OR (c.kind <> 'character' AND EXISTS (
+                SELECT 1 FROM content_akas k WHERE k.content_id = c.id AND lower(k.name) = lower($4)))) DESC,
+              (c.name ILIKE $3) DESC,
               CASE c.kind WHEN 'franchise' THEN 0 WHEN 'series' THEN 1 WHEN 'movie' THEN 2
                           WHEN 'special' THEN 3 ELSE 4 END,
               COALESCE(s.popularity, 0) DESC, c.name

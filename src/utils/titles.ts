@@ -3,7 +3,7 @@
  *
  * Picks English vs native display names, builds searchable title lists, and
  * filters leftover alternative titles. Detail views show English + native only;
- * alternatives stay searchable.
+ * alternatives and franchise nicknames stay searchable.
  */
 
 export interface TitledContent {
@@ -12,6 +12,7 @@ export interface TitledContent {
   nativeTitle?: string
   originalTitle?: string
   alternativeTitles?: string[]
+  franchiseNicknames?: string[]
 }
 
 const normalize = (value?: string | null) => (typeof value === 'string' ? value.trim() : '')
@@ -48,7 +49,7 @@ export function getNativeTitle(content?: TitledContent | null) {
 /**
  * Deduplicated title list used by client-side search matching.
  * @param content - Title fields from a catalog item (or null).
- * @returns Unique titles including alternatives, in source order.
+ * @returns Unique titles including alternatives and franchise nicknames, in source order.
  */
 export function getSearchableTitles(content?: TitledContent | null) {
   if (!content) return []
@@ -61,6 +62,7 @@ export function getSearchableTitles(content?: TitledContent | null) {
     content.nativeTitle,
     content.originalTitle,
     ...(content.alternativeTitles || []),
+    ...(content.franchiseNicknames || []),
   ]
 
   for (const value of values) {

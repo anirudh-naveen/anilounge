@@ -9,9 +9,10 @@
  * - normal progress (upcoming → airing → finished, rising episode/season counts): applied, no notice;
  * - any other change: applied, noted as "changed" (an admin can revert and lock it).
  * Scores, votes, popularity, and schedule fields are not editorial and always update.
+ * Nicknames are skipped: only admins set them.
  */
 
-import { CONTENT_FIELDS, fieldsForKind } from './adminContent.js'
+import { CONTENT_FIELDS, fieldsForKind, isListField } from './adminContent.js'
 
 const AIRING_ORDER = ['upcoming', 'airing', 'finished']
 const GROWING_FIELDS = new Set(['episodeCount', 'seasonCount'])
@@ -62,7 +63,8 @@ export function planSyncChanges({ kind, current, incoming, locked = [], accepted
   const notices = []
 
   for (const field of fieldsForKind(kind)) {
-    if (acceptedSet.has(field)) continue
+    // Nicknames are admin-only; the sync never has a value for them.
+    if (acceptedSet.has(field) || isListField(field)) continue
     const now = normalizeFieldValue(field, current[field])
     const next = normalizeFieldValue(field, incoming[field])
     if (now === next) continue
