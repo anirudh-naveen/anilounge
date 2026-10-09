@@ -1060,3 +1060,22 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   calls    INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (subject, day)
 );
+
+-- Ko-fi donations (services/donationService.js). Each payment lands once (by Ko-fi's
+-- transaction id). A donation whose email matches a verified account grants that account
+-- the Supporter badge right away; otherwise the lowercased email is kept until an account
+-- verifies it, then cleared. The donor's message and name are not stored.
+CREATE TABLE IF NOT EXISTS donations (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider        TEXT NOT NULL DEFAULT 'kofi',
+  transaction_id  TEXT NOT NULL,
+  kind            TEXT NOT NULL,
+  amount          NUMERIC(12, 2),
+  currency        TEXT,
+  email           TEXT,
+  user_id         UUID REFERENCES users (id) ON DELETE SET NULL,
+  donated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (provider, transaction_id)
+);
+CREATE INDEX IF NOT EXISTS donations_unclaimed_email_idx ON donations (email)
+  WHERE user_id IS NULL AND email IS NOT NULL;

@@ -14,6 +14,8 @@ import { connectPostgres } from '../config/postgres.js'
 import apiRoutes from './routes/api.js'
 import adminRoutes from './routes/admin.js'
 import emailRoutes from './routes/email.js'
+import webhookRoutes from './routes/webhooks.js'
+import { useForwardedClientIp, vercelForwardedIp } from './middleware/clientIp.js'
 import { sanitizeHtmlInput, sanitizeXSS } from './middleware/security.js'
 import { securityLogger, securityMonitor } from './middleware/securityLogger.js'
 import {
@@ -23,18 +25,12 @@ import {
   apiProtection,
 } from './middleware/antiBot.js'
 import { checkIPBan } from './middleware/ipBan.js'
-import {
-  startContentSyncScheduler,
-  getContentSyncStatus,
-} from './services/contentSyncScheduler.js'
+import { startContentSyncScheduler, getContentSyncStatus } from './services/contentSyncScheduler.js'
 import {
   getCatalogMaintenanceStatus,
   startCatalogMaintenance,
 } from './services/catalogMaintenance.js'
-import {
-  extraFrontendOriginsFromEnv,
-  isAllowedCorsOrigin,
-} from './utils/allowedFrontends.js'
+import { extraFrontendOriginsFromEnv, isAllowedCorsOrigin } from './utils/allowedFrontends.js'
 import { authLimiter } from './middleware/authRateLimit.js'
 import { rateLimitKey, rateLimitMax, trustProxySetting } from './middleware/rateLimitKey.js'
 import { rateLimitStore } from './middleware/pgRateLimitStore.js'
@@ -90,8 +86,8 @@ app.get('/health', (req, res) => {
 /**
  * Lightweight readiness payload (no sync details). `clientIp` is the address rate limits
  * and IP bans use for the caller: request this through the live site and it should be
- * your own IP. Through the Vercel `/api` rewrite it is Vercel's address; calling the API
- * on its own domain shows the real one. See trustProxySetting.
+ * your own IP. Registered before the client-IP middleware, so it reads the Vercel header
+ * itself (see middleware/clientIp.js and trustProxySetting).
  */
 app.get('/api/status', (req, res) => {
   res.json({
@@ -99,7 +95,7 @@ app.get('/api/status', (req, res) => {
     message: 'Find Animation API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    clientIp: req.ip,
+    clientIp: vercelForwardedIp(req) || req.ip,
     // `?proxy=1` echoes the forwarding headers this request arrived with, for checking
     // TRUST_PROXY against the real proxy chain.
     ...(req.query.proxy === '1' && {
@@ -122,6 +118,10 @@ connectPostgres()
 // Trust the proxy hops in front of the app so req.ip (and rate limits) reflect the
 // client, not the proxy. TRUST_PROXY overrides the default of two hops.
 app.set('trust proxy', trustProxySetting())
+
+// Through the Vercel `/api` rewrite, use the visitor's address Vercel forwarded, not
+// Vercel's own (see middleware/clientIp.js).
+app.use(useForwardedClientIp)
 
 // Helmet: CSP and CORP are off so the SPA on a different origin can call the API.
 app.use(
@@ -200,6 +200,12 @@ const corsOptions = {
 }
 
 app.use(cors(corsOptions))
+
+/**
+ * Payment webhooks (Ko-fi) parse their own bodies and skip the sanitizers, bot, and
+ * referer checks: they come from the provider's servers and carry a verification token.
+ */
+app.use('/api/webhooks', webhookRoutes)
 
 /** JSON/urlencoded bodies capped at 10mb; malformed JSON is a 400 (see the error handler). */
 app.use(express.json({ limit: '10mb' }))

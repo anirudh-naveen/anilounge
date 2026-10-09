@@ -23,6 +23,36 @@
         "start"
       ],
       "port": 5001
+    },
+    {
+      "name": "backend-localdb",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=postgresql://postgres:dev@localhost:5432/anilounge",
+        "CONNECTIONS_SYNC_ENABLED=false",
+        "KOFI_VERIFICATION_TOKEN=local-test-token",
+        "NODE_ENV=development",
+        "npm",
+        "--prefix",
+        "backend",
+        "run",
+        "start"
+      ],
+      "port": 5001
+    },
+    {
+      "name": "frontend-donate",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "VITE_DONATE_URL=https://ko-fi.com/anilounge",
+        "npm",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5175"
+      ],
+      "port": 5175
     }
   ]
 }

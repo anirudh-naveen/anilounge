@@ -112,6 +112,8 @@ import { getPosterUrl } from '@/services/api'
 import { getDisplayTitle } from '@/utils/titles'
 import { collectVoicedCharacters, displayPersonName } from '@/utils/entities'
 import type { CatalogEntity } from '@/types/content'
+import { usePageMeta } from '@/composables/usePageMeta'
+import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -182,6 +184,20 @@ watch(
   },
   { immediate: true },
 )
+
+usePageMeta(() => {
+  const value = voiceActor.value
+  if (!value) return null
+  return entityPageMeta(
+    'voice_actor',
+    { name: displayPersonName(value.name), nativeName: value.nativeName, about: value.about },
+    {
+      path: `/voice-actor/${route.params.id}`,
+      image: value.imagePath ? getPosterUrl(value.imagePath) : null,
+      works: [...new Set(voicedCharacters.value.map((row) => row.title).filter(Boolean))],
+    },
+  )
+})
 </script>
 
 <style scoped>

@@ -1,12 +1,5 @@
 # TODO
 
-## Home
-1. Make sure the site can appear in search engines
-   - If the user enters the site naturally without having an account, pop-up a sign-in prompt.
-      - For example, at home, have a "Join the Community" prompt
-2. Add a source for donations
-   - Grant donaters a badge
-
 ## Search
 1. Move search to the server
    - Right now the browser downloads the whole catalog (up to 10,000 titles) and filters it locally. Search is the only page that needs that download, so this removes it entirely. The search page's UI doesn't change.
@@ -24,7 +17,8 @@
 ## Infrastructure
 0. Deploy the forum update: run `npm run db:schema` on production (it allows the new `guide`/`article` post kinds), then redeploy the Railway API. The live API is older than `main`: it doesn't save or return top tags (`/api/forum/posts` has no `top` field), so post images fall back to other tags. After deploying, submit `https://www.anilounge.net/sitemap.xml` in Google Search Console, and clear any `ip_bans` rows for search engine crawlers (Googlebot used to be banned as a bot).
 0. Fix stored season counts: after deploying, run `npm --prefix backend run db:fix-season-counts -- --dry-run` against production, check the list (e.g. My Hero Academia season 1 should go 170 → 13 episodes), then run it without `--dry-run`. It re-reads each MAL+TMDB series' episode count from MAL (needs `MAL_CLIENT_ID`). Then add nicknames (KonoSuba, MHA, …) from the admin page: titles under their kind, franchises under the new Franchises tab.
-1. Ship the scaling upgrade: run `npm run db:schema` on production **before** deploying (the code reads `posts.hot_score`, `content.catalog_score`, `content.rating_count`), then open `https://www.anilounge.net/api/status` and check `clientIp` is your own IP. If it's a Vercel/Railway address, set `TRUST_PROXY=2` and recheck, or every visitor shares one rate-limit bucket.
+0. Turn on donations and the new sitemaps: run `npm run db:schema` on production (adds the `donations` table). Create the Ko-fi page, then in Ko-fi → Settings → API set the webhook URL to `https://www.anilounge.net/api/webhooks/kofi` and copy its verification token into Railway as `KOFI_VERIFICATION_TOKEN`. The donate card and footer link point at https://ko-fi.com/anilounge by default (`VITE_DONATE_URL` overrides it). Use Ko-fi's "Send Single Donation Test" to check the webhook returns 200. Then resubmit `https://www.anilounge.net/sitemap.xml` in Search Console: it's now an index pointing at `/sitemaps/*.xml` (titles, franchises, characters, voice actors, studios).
+1. Ship the scaling upgrade: run `npm run db:schema` on production **before** deploying (the code reads `posts.hot_score`, `content.catalog_score`, `content.rating_count`), then open `https://www.anilounge.net/api/status` and check `clientIp` is your own IP (the API now takes it from Vercel's `X-Vercel-Forwarded-For`; see `backend/src/middleware/clientIp.js`). Later hardening: callers hitting the Railway domain directly can fake that header, so they can pick the IP their bans and rate limits count against. Closing that needs Vercel Routing Middleware adding a shared-secret header to `/api` requests, and the API only trusting the header when the secret matches.
 2. Scale out when one instance gets busy (~5–10k daily users): 2–4 Railway replicas with `RATE_LIMIT_STORE=postgres`, and keep replicas × `PG_POOL_MAX` under Postgres `max_connections` (or add PgBouncer, ignoring `statement_timeout` and `application_name` startup params). Around ~100k daily users, add a read replica via `DATABASE_READ_URL`; beyond that, Redis for rate limits and partitioning `messages`/`watch_events` once they near ~100M rows.
 3. Watch Connections sync traffic as sign-ups grow (services/connectionSync.js).
    - Unlike apps that sync from the user's device, every AniList call here comes from our server IP, and AniList allows 30-90 requests a minute per IP, shared with catalog jobs. Polling is budgeted (default 12/min AniList, 20/min MAL, each account at most every 2 min), so it can't get us rate-limited, but with N connected accounts each one is polled roughly every N/12 minutes on AniList (~80 min at 1,000 accounts).

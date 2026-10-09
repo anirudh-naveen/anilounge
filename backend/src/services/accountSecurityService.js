@@ -10,6 +10,7 @@ import crypto from 'crypto'
 import QRCode from 'qrcode'
 import { query } from '../../config/postgres.js'
 import { generateTotpSecret, otpauthUrl, verifyTotp } from '../utils/totp.js'
+import { claimDonations } from './donationService.js'
 
 export const CODE_TTL_MS = {
   verify_email: 24 * 60 * 60 * 1000,
@@ -109,6 +110,7 @@ export async function consumeEmailCode(userId, purpose, code) {
 }
 
 /**
+ * Mark the email verified, then claim any Ko-fi donations made with it (Supporter badge).
  * @param {string} userId
  * @returns {Promise<void>}
  */
@@ -118,6 +120,7 @@ export async function markEmailVerified(userId) {
        pending_signup = false WHERE id = $1`,
     [userId],
   )
+  await claimDonations(userId)
 }
 
 // ---------------------------------------------------------------------------

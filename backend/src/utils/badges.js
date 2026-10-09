@@ -2,7 +2,8 @@
  * Badge registry: every badge a user can hold, in display order.
  *
  * Layer: utils (pure). `creator` and `admin` come from the account role; the rest are
- * granted (stored in `users.cosmetic_roles`). `emblem` badges can be picked as the one
+ * granted (stored in `users.cosmetic_roles`); `supporter` is also granted automatically
+ * for a Ko-fi donation (services/donationService.js). `emblem` badges can be picked as the one
  * emblem shown next to the username; emblem-less badges only appear in the profile's
  * Badges section. `grantable` badges are the ones admins hand out from the admin page.
  * Keep in step with the frontend copy in `src/utils/badges.ts`.
@@ -15,6 +16,7 @@ export const BADGES = [
   { id: 'developer', emblem: true, grantable: true },
   { id: 'artist', emblem: true, grantable: true },
   { id: 'influencer', emblem: true, grantable: true },
+  { id: 'supporter', emblem: true, grantable: true },
 ]
 
 const BY_ID = new Map(BADGES.map((badge) => [badge.id, badge]))

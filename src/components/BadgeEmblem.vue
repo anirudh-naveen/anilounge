@@ -2,7 +2,8 @@
   BadgeEmblem.vue — the emblem for one badge (component).
 
   Creator: sparkly gold crown. Admin: sparkly violet shield. Developer: emerald hex
-  with </>. Artist: pink palette. Influencer: sky disc with a megaphone. All glow and
+  with </>. Artist: pink palette. Influencer: sky disc with a megaphone. Supporter: coral heart with a
+  coin glint. All glow and
   catch a light sweep; only creator/admin twinkle. Badges without an emblem (future
   ones) get a plain medal, used in the profile Badges section.
 -->
@@ -77,6 +78,22 @@
         />
       </template>
 
+      <template v-else-if="kind === 'supporter'">
+        <path
+          :fill="fill"
+          d="M12 20.6s-8.4-4.9-8.4-11a4.7 4.7 0 0 1 8.4-2.9 4.7 4.7 0 0 1 8.4 2.9c0 6.1-8.4 11-8.4 11z"
+        />
+        <path
+          fill="none"
+          stroke="#fff"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          opacity="0.9"
+          d="M7.4 9.2a2.4 2.4 0 0 1 2.2-2.1"
+        />
+        <circle cx="15.2" cy="11.4" r="2.3" fill="#fff" opacity="0.92" />
+      </template>
+
       <!-- Future badges without their own emblem: a plain medal. -->
       <template v-else>
         <path :fill="fill" d="M8 2.5h3l1 4-2.6 1.2zM16 2.5h-3l-1 4 2.6 1.2z" opacity="0.7" />
@@ -109,13 +126,14 @@ const props = withDefaults(
   { size: 'sm', tooltip: true },
 )
 
-const EMBLEMS = ['creator', 'admin', 'developer', 'artist', 'influencer']
+const EMBLEMS = ['creator', 'admin', 'developer', 'artist', 'influencer', 'supporter']
 const COLORS: Record<string, string[]> = {
   creator: ['#fff3b0', '#f5b82e', '#e07a5f'],
   admin: ['#e3dcff', '#8f7ae6', '#2bbbad'],
   developer: ['#a7f3d0', '#10b981', '#0ea5e9'],
   artist: ['#fbcfe8', '#ec4899', '#8b5cf6'],
   influencer: ['#bae6fd', '#38bdf8', '#6366f1'],
+  supporter: ['#ffd8c9', '#f47b67', '#e11d48'],
   medal: ['#f1f5f9', '#94a3b8', '#64748b'],
 }
 
@@ -179,6 +197,10 @@ const fill = `url(#${gradientId})`
 
 .influencer .emblem-icon {
   filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.6));
+}
+
+.supporter .emblem-icon {
+  filter: drop-shadow(0 0 3px rgba(244, 123, 103, 0.6));
 }
 
 .medal .emblem-icon {

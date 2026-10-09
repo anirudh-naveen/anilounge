@@ -48,6 +48,7 @@ Then edit `backend/.env`:
 | `MAL_CLIENT_ID` | Catalog, search | Create a client at https://myanimelist.net/apiconfig |
 | `GEMINI_API_KEY` | AI chat | https://aistudio.google.com/apikey (optional) |
 | `CONNECTIONS_SECRET` | Linking AniList/MAL/TMDB accounts | Optional; `openssl rand -base64 48` |
+| `KOFI_VERIFICATION_TOKEN` | Ko-fi donation webhook (Supporter badge) | Optional; any string locally, sent as `verification_token` in test payloads |
 
 Everything else can stay blank. Without email keys, verification codes and other
 emails are printed to the backend console instead of sent.

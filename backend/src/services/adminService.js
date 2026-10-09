@@ -785,10 +785,15 @@ export async function setBan(actor, targetId, { banned, reason } = {}) {
   return reloadUser(target.id, owners)
 }
 
-const BADGE_LABELS = { developer: 'Developer', artist: 'Artist', influencer: 'Influencer' }
+const BADGE_LABELS = {
+  developer: 'Developer',
+  artist: 'Artist',
+  influencer: 'Influencer',
+  supporter: 'Supporter',
+}
 
 /**
- * Set the grantable badges a user holds (Developer, Artist, Influencer; admins and the
+ * Set the grantable badges a user holds (Developer, Artist, Influencer, Supporter; admins and the
  * creator, self included). Not for the demo account or banned users.
  * @param {object} actor - The signed-in admin (`req.user`).
  * @param {string} targetId

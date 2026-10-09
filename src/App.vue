@@ -271,6 +271,9 @@
     <footer class="footer">
       <div class="container">
         <p>&copy; 2026 AniLounge. Created by Anirudh Naveen.</p>
+        <p v-if="DONATE_URL" class="footer-support">
+          <a :href="DONATE_URL" target="_blank" rel="noopener noreferrer">Support AniLounge</a>
+        </p>
       </div>
     </footer>
   </div>
@@ -287,6 +290,7 @@ import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
+import { DONATE_URL } from '@/utils/donations'
 
 const router = useRouter()
 const route = useRoute()
@@ -760,6 +764,15 @@ const handleLogout = async () => {
   text-align: center;
   color: var(--text-muted);
   letter-spacing: 0.01em;
+}
+
+.footer-support {
+  margin-top: 0.4rem;
+}
+
+.footer-support a {
+  color: var(--coral-primary);
+  font-weight: 600;
 }
 
 @media (max-width: 768px) {

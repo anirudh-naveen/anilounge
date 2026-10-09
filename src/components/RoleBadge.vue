@@ -2,7 +2,7 @@
   RoleBadge.vue — the emblem next to a username (component).
 
   Shows the one badge the person picked for their name (by default their highest:
-  Creator, then Admin, Developer, Artist, Influencer), or nothing. Callers only pass
+  Creator, then Admin, Developer, Artist, Influencer, Supporter), or nothing. Callers only pass
   the username; badges come from the badges store. The full list lives in the
   profile Badges section.
 -->

@@ -6,7 +6,8 @@
   prompt for guests), a release sidebar for watchlist titles that falls back
   to trending releases, the character of the day, and forum highlights (picked
   from the watchlist when signed in; the pick refreshes every few hours).
-  Guests also get a "Join the Community" pop-up (`JoinPrompt`).
+  Guests also get a "Join the Community" pop-up (`JoinPrompt`), and everyone a Ko-fi
+  donation card (`SupportCard`) when a donation page is configured.
 -->
 <template>
   <div class="home-page">
@@ -273,6 +274,11 @@
       </div>
     </section>
 
+    <!-- Donations -->
+    <div class="container support-section">
+      <SupportCard />
+    </div>
+
     <JoinPrompt
       title="Join the Community"
       message="Sign up free to track what you watch, rate titles, and talk anime with the lounge."
@@ -287,6 +293,9 @@ import { useAuthStore } from '@/stores/auth'
 import ImportReminder from '@/components/ImportReminder.vue'
 import ForumPostCard from '@/components/ForumPostCard.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
+import SupportCard from '@/components/SupportCard.vue'
+import { usePageMeta } from '@/composables/usePageMeta'
+import { absoluteUrl } from '@/utils/pageMeta'
 import { forumAPI, getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
 import type { HomeForum } from '@/types/forum'
 import type { CatalogEntity, EntityAppearance } from '@/types/content'
@@ -466,6 +475,19 @@ onMounted(() => {
 onUnmounted(() => {
   if (clock) clearInterval(clock)
 })
+
+usePageMeta(() => ({
+  title: 'Discover, track, and discuss anime',
+  description:
+    "Find new anime and animated films, track everything you've watched, and talk about it with fans around the world.",
+  path: '/',
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'AniLounge',
+    url: absoluteUrl('/'),
+  },
+}))
 </script>
 
 <style scoped>
@@ -1058,6 +1080,10 @@ onUnmounted(() => {
 
 /* Forum */
 .forum-section {
+  margin-top: 1.5rem;
+}
+
+.support-section {
   margin-top: 1.5rem;
 }
 
