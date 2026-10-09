@@ -259,7 +259,7 @@ export const setBan = async (req, res) => {
 }
 
 /**
- * Set the badges an admin can grant (Developer, Artist, Influencer); badges only.
+ * Set the badges an admin can grant (Developer, Artist, Influencer, Supporter); badges only.
  *
  * @param {import('express').Request} req - `params.id`, `body.roles` (full list).
  * @param {import('express').Response} res - 200 `{ data: user }`, 400, 404, or 500.

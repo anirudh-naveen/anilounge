@@ -162,6 +162,11 @@
         </section>
       </div>
     </div>
+
+    <JoinPrompt
+      title="Join the Community"
+      message="Sign up free to favorite characters, track what you watch, and talk anime with the lounge."
+    />
   </div>
 </template>
 
@@ -184,6 +189,9 @@ import {
 import type { CatalogEntity, EntityVoiceCredit } from '@/types/content'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import ForumHighlights from '@/components/ForumHighlights.vue'
+import JoinPrompt from '@/components/JoinPrompt.vue'
+import { usePageMeta } from '@/composables/usePageMeta'
+import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -285,6 +293,24 @@ watch(
   },
   { immediate: true },
 )
+
+usePageMeta(() => {
+  const value = character.value
+  if (!value) return null
+  return entityPageMeta(
+    'character',
+    {
+      name: canonicalCharacterName(value.name) || value.name,
+      nativeName: value.nativeName,
+      about: value.about,
+    },
+    {
+      path: `/character/${route.params.id}`,
+      image: value.imagePath ? getPosterUrl(value.imagePath) : null,
+      works: [...new Set(appearanceTitles.value.map((row) => row.franchise || row.title))],
+    },
+  )
+})
 </script>
 
 <style scoped>
