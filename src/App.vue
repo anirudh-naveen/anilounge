@@ -296,7 +296,7 @@ const router = useRouter()
 const route = useRoute()
 /**
  * Remount the page when it shows something else, but not when only the readable slug
- * in a detail URL changes (`/movie/<id>` → `/movie/<id>/<slug>`).
+ * in a detail URL changes (`/movie/<id>` → `/movie/<slug>/<id>`).
  */
 const viewKey = computed(() =>
   route.params.id ? `${String(route.name)}:${String(route.params.id)}` : route.path,

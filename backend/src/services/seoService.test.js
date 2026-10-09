@@ -19,18 +19,25 @@ describe('parsePagePath', () => {
       prefix: '/tv-show',
       id: ID,
     })
-    assert.deepEqual(parsePagePath(`/character/${ID.toUpperCase()}/levi?x=1`), {
+    assert.deepEqual(parsePagePath(`/character/levi/${ID.toUpperCase()}?x=1`), {
       type: 'content',
       prefix: '/character',
       id: ID,
     })
-    assert.deepEqual(parsePagePath(`/forum/post/${ID}/a-title`), { type: 'post', id: ID })
+    assert.deepEqual(parsePagePath(`/forum/post/a-title/${ID}`), { type: 'post', id: ID })
+    // The older id-first form still resolves (the middleware redirects it).
+    assert.deepEqual(parsePagePath(`/tv-show/${ID}/the-simpsons`), {
+      type: 'content',
+      prefix: '/tv-show',
+      id: ID,
+    })
   })
 
   it('ignores everything else', () => {
     assert.equal(parsePagePath('/settings'), null)
     assert.equal(parsePagePath('/movie/not-an-id'), null)
-    assert.equal(parsePagePath(`/movie/${ID}/slug/extra`), null)
+    assert.equal(parsePagePath(`/movie/a/${ID}/extra`), null)
+    assert.equal(parsePagePath(`/movie/${ID}/${ID}`), null)
     assert.equal(parsePagePath(undefined), null)
   })
 })

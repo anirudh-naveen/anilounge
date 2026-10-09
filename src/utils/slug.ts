@@ -1,8 +1,9 @@
 /**
  * slug.ts — readable URL segments ("attack-on-titan") for catalog and forum pages.
  *
- * Detail URLs are `/<kind>/<id>/<slug>`; the id finds the page, so a stale or missing
- * slug still works, and each page swaps in its own (useCanonicalSlug). Keep in step
+ * Detail URLs are `/<kind>/<slug>/<id>`; the id finds the page, so a stale or missing
+ * slug still works, and each page swaps in its own (useCanonicalSlug). `/<kind>/<id>`
+ * and the older `/<kind>/<id>/<slug>` still open the page. Keep in step
  * with backend/src/utils/slug.js: the server writes the same canonical links.
  */
 
@@ -28,10 +29,10 @@ export function slugify(value?: string | null) {
 }
 
 /**
- * Canonical in-site path: `/movie/<id>/<slug>`, or without the slug when the name has none.
+ * Canonical in-site path: `/movie/<slug>/<id>`, or `/movie/<id>` when the name has no slug.
  * @param prefix - e.g. `/movie`, `/forum/post`.
  */
 export function detailPath(prefix: string, id: string, name?: string | null) {
   const slug = slugify(name)
-  return `${prefix}/${id}${slug ? `/${slug}` : ''}`
+  return slug ? `${prefix}/${slug}/${id}` : `${prefix}/${id}`
 }

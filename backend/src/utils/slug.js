@@ -1,8 +1,9 @@
 /**
  * Readable URL segments ("attack-on-titan") for catalog and forum pages.
  *
- * Layer: utils (pure). Detail URLs are `/<kind>/<id>/<slug>`; the id finds the page, so
- * the slug is decoration and a stale or missing one still works. Keep in step with the
+ * Layer: utils (pure). Detail URLs are `/<kind>/<slug>/<id>`; the id finds the page, so
+ * the slug is decoration and a stale or missing one still works (and `/<kind>/<id>` or
+ * the older `/<kind>/<id>/<slug>` redirect to the canonical form). Keep in step with the
  * frontend copy in `src/utils/slug.ts` (the canonical link must match).
  */
 
@@ -43,7 +44,8 @@ export const DETAIL_PREFIX = {
 }
 
 /**
- * Canonical in-site path of a catalog page or forum post.
+ * Canonical in-site path of a catalog page or forum post: `/movie/<slug>/<id>`, or
+ * `/movie/<id>` when the name has no slug.
  * @param {string} prefix - e.g. `/movie`, `/forum/post`.
  * @param {string} id
  * @param {unknown} name - Display name the slug is made from.
@@ -51,7 +53,7 @@ export const DETAIL_PREFIX = {
  */
 export function detailPath(prefix, id, name) {
   const slug = slugify(name)
-  return `${prefix}/${id}${slug ? `/${slug}` : ''}`
+  return slug ? `${prefix}/${slug}/${id}` : `${prefix}/${id}`
 }
 
 /**

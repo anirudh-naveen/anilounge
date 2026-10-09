@@ -26,7 +26,7 @@ describe('slugify', () => {
   })
 
   it('builds detail paths', () => {
-    expect(detailPath('/forum/post', 'p1', 'Best of 2026?')).toBe('/forum/post/p1/best-of-2026')
+    expect(detailPath('/forum/post', 'p1', 'Best of 2026?')).toBe('/forum/post/best-of-2026/p1')
     expect(detailPath('/movie', 'm1', 'のんのんびより')).toBe('/movie/m1')
   })
 })

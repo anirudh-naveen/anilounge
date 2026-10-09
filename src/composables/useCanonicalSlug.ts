@@ -2,7 +2,7 @@
  * useCanonicalSlug.ts — put the page's readable slug in the address bar.
  *
  * Links inside the app only carry the id (`/movie/<id>`); once the page knows its name
- * it replaces the URL with `/movie/<id>/<slug>` (same history entry, query and hash
+ * it replaces the URL with `/movie/<slug>/<id>` (same history entry, query and hash
  * kept), and fixes a stale slug. The view isn't remounted: App.vue keys pages by route
  * name and id.
  */

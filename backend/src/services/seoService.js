@@ -173,14 +173,19 @@ export function parsePagePath(path) {
   const clean = String(path || '').split(/[?#]/)[0]
   const pathname = clean.length > 1 ? clean.replace(/\/+$/, '') : clean
   if (STATIC_PAGES[pathname]) return { type: 'static', key: pathname }
-  const post = /^\/forum\/post\/([^/]+)(?:\/[^/]*)?$/.exec(pathname)
-  if (post) return isUuid(post[1]) ? { type: 'post', id: post[1].toLowerCase() } : null
-  const detail =
-    /^\/(movie|tv-show|character|voice-actor|studio|franchise)\/([^/]+)(?:\/[^/]*)?$/.exec(pathname)
-  if (detail && isUuid(detail[2])) {
-    return { type: 'content', prefix: `/${detail[1]}`, id: detail[2].toLowerCase() }
-  }
-  return null
+  // `/<kind>/<slug>/<id>`, `/<kind>/<id>`, or the older `/<kind>/<id>/<slug>`: the id is
+  // whichever segment is one.
+  const match =
+    /^\/(forum\/post|movie|tv-show|character|voice-actor|studio|franchise)\/([^/]+)(?:\/([^/]+))?$/.exec(
+      pathname,
+    )
+  if (!match) return null
+  const ids = [match[2], match[3]].filter((segment) => segment && isUuid(segment))
+  if (ids.length !== 1) return null
+  const id = ids[0].toLowerCase()
+  return match[1] === 'forum/post'
+    ? { type: 'post', id }
+    : { type: 'content', prefix: `/${match[1]}`, id }
 }
 
 /** Content kinds each detail route shows. */
