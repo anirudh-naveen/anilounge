@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { escapeHtml, renderNotFound, renderPage, setMeta, type SeoPage } from '../../seo/renderPage'
+import {
+  canonicalRedirect,
+  escapeHtml,
+  renderNotFound,
+  renderPage,
+  setMeta,
+  type SeoPage,
+} from '../../seo/renderPage'
 
 const SHELL = `<!doctype html>
 <html lang="en">
@@ -88,5 +95,21 @@ describe('helpers', () => {
       '<meta name="robots" content="noindex" data-page-meta />',
     )
     expect(renderNotFound(SHELL)).toContain('name="robots" content="noindex"')
+  })
+})
+
+describe('canonicalRedirect', () => {
+  const canonical = 'https://www.anilounge.net/tv-show/t1/attack-on-titan'
+  it('sends missing or stale slugs to the canonical path, keeping the query', () => {
+    expect(canonicalRedirect('https://www.anilounge.net/tv-show/t1?season=2', canonical)).toBe(
+      'https://www.anilounge.net/tv-show/t1/attack-on-titan?season=2',
+    )
+    expect(canonicalRedirect('http://localhost:5174/movie/t1/old-name', canonical)).toBe(
+      'http://localhost:5174/tv-show/t1/attack-on-titan',
+    )
+  })
+
+  it('leaves the canonical URL alone', () => {
+    expect(canonicalRedirect(`${canonical}?from=x`, canonical)).toBeNull()
   })
 })

@@ -248,6 +248,7 @@ import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI, getPosterUrl } from '@/services/api'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { HOME_CRUMB, breadcrumbList } from '@/utils/pageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
 import { detailPath } from '@/utils/slug'
 import { useAuthStore } from '@/stores/auth'
@@ -317,40 +318,45 @@ usePageMeta(() => {
     path,
     type: 'article',
     image,
-    jsonLd: {
-      '@context': 'https://schema.org',
-      '@type': 'DiscussionForumPosting',
-      headline: value.title,
-      text: value.spoiler ? description : text,
-      url: absolute(path),
-      datePublished: value.createdAt,
-      ...(value.editedAt ? { dateModified: value.editedAt } : {}),
-      author: author(value.author.username),
-      ...(image ? { image } : {}),
-      ...(about ? { about: value.tags.map((tag) => ({ '@type': 'Thing', name: tag.name })) } : {}),
-      interactionStatistic: [
-        {
-          '@type': 'InteractionCounter',
-          interactionType: 'https://schema.org/LikeAction',
-          userInteractionCount: value.likeCount,
-        },
-        {
-          '@type': 'InteractionCounter',
-          interactionType: 'https://schema.org/CommentAction',
-          userInteractionCount: value.commentCount,
-        },
-      ],
-      comment: comments.value
-        .filter((comment) => !comment.deleted && comment.author)
-        .slice(0, 50)
-        .map((comment) => ({
-          '@type': 'Comment',
-          text: comment.body,
-          datePublished: comment.createdAt,
-          author: author(comment.author!.username),
-          url: absolute(`${path}#comment-${comment.id}`),
-        })),
-    },
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'DiscussionForumPosting',
+        headline: value.title,
+        text: value.spoiler ? description : text,
+        url: absolute(path),
+        datePublished: value.createdAt,
+        ...(value.editedAt ? { dateModified: value.editedAt } : {}),
+        author: author(value.author.username),
+        ...(image ? { image } : {}),
+        ...(about
+          ? { about: value.tags.map((tag) => ({ '@type': 'Thing', name: tag.name })) }
+          : {}),
+        interactionStatistic: [
+          {
+            '@type': 'InteractionCounter',
+            interactionType: 'https://schema.org/LikeAction',
+            userInteractionCount: value.likeCount,
+          },
+          {
+            '@type': 'InteractionCounter',
+            interactionType: 'https://schema.org/CommentAction',
+            userInteractionCount: value.commentCount,
+          },
+        ],
+        comment: comments.value
+          .filter((comment) => !comment.deleted && comment.author)
+          .slice(0, 50)
+          .map((comment) => ({
+            '@type': 'Comment',
+            text: comment.body,
+            datePublished: comment.createdAt,
+            author: author(comment.author!.username),
+            url: absolute(`${path}#comment-${comment.id}`),
+          })),
+      },
+      breadcrumbList([HOME_CRUMB, { name: 'Forum', path: '/forum' }, { name: value.title, path }]),
+    ],
   }
 })
 

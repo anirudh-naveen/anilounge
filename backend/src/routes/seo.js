@@ -14,6 +14,7 @@ import rateLimit from 'express-rate-limit'
 import { describePage } from '../services/seoService.js'
 import { appUrl } from '../services/emailService.js'
 import { rateLimitStore } from '../middleware/pgRateLimitStore.js'
+import { isCrawlerExempt } from '../middleware/searchCrawler.js'
 import { sendError } from '../utils/httpError.js'
 
 const router = express.Router()
@@ -21,6 +22,7 @@ const router = express.Router()
 const seoLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 240,
+  skip: isCrawlerExempt,
   ...rateLimitStore('seo'),
   standardHeaders: true,
   legacyHeaders: false,

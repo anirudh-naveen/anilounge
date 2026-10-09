@@ -21,8 +21,8 @@ export interface PageMeta {
   image?: string | null
   /** Open Graph type; 'website' by default. */
   type?: 'website' | 'article'
-  /** schema.org JSON-LD object. */
-  jsonLd?: Record<string, unknown> | null
+  /** schema.org JSON-LD: one object, or several (e.g. the page plus its breadcrumbs). */
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[] | null
 }
 
 const SITE_NAME = 'AniLounge'

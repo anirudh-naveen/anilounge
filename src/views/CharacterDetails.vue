@@ -296,6 +296,15 @@ watch(
   { immediate: true },
 )
 
+/** Breadcrumb title for search results: the one they're a main character in, else the first. */
+const parentCrumb = computed(() => {
+  const rows = appearanceTitles.value
+  const row = rows.find((item) => item.role === 'main') || rows[0]
+  if (!row) return null
+  const prefix = row.contentType === 'tv' ? '/tv-show' : '/movie'
+  return { name: row.title, path: detailPath(prefix, row.id, row.title) }
+})
+
 usePageMeta(() => {
   const value = character.value
   if (!value) return null
@@ -310,6 +319,7 @@ usePageMeta(() => {
       path: detailPath('/character', value._id, canonicalCharacterName(value.name) || value.name),
       image: value.imagePath ? getPosterUrl(value.imagePath) : null,
       works: [...new Set(appearanceTitles.value.map((row) => row.franchise || row.title))],
+      parent: parentCrumb.value,
     },
   )
 })

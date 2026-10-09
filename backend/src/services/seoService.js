@@ -120,6 +120,49 @@ const link = (row) => ({
   label: contentDisplayName(row.kind, row.name),
 })
 
+/** Fewest AniLounge ratings before a title's schema.org data carries its average (stars). */
+export const RATING_MIN_COUNT = 3
+
+/**
+ * schema.org AggregateRating from AniLounge's own ratings (1–10), or null with too few.
+ * Only ratings made on the site count: Google's review snippets don't allow scores
+ * copied from other sites (MAL, TMDB).
+ * @param {unknown} count
+ * @param {unknown} sum
+ * @returns {object | null}
+ */
+export function aggregateRating(count, sum) {
+  const ratings = Number(count || 0)
+  if (ratings < RATING_MIN_COUNT) return null
+  return {
+    '@type': 'AggregateRating',
+    ratingValue: Math.round((Number(sum) / ratings) * 10) / 10,
+    bestRating: 10,
+    worstRating: 1,
+    ratingCount: ratings,
+  }
+}
+
+/**
+ * schema.org BreadcrumbList (shown as the path above a search result).
+ * @param {Array<{ name: string, path: string }>} items - Home first; in-site paths.
+ * @returns {object}
+ */
+export function breadcrumbList(items) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: item.path,
+    })),
+  }
+}
+
+const HOME_CRUMB = { name: SITE_NAME, path: '/' }
+
 /**
  * Which page a path is.
  * @param {unknown} path - Pathname (query and hash ignored).
@@ -235,6 +278,7 @@ async function titlePage(row) {
     }.`
   const path = contentPagePath(row)
   const image = imageUrl(row.image_path)
+  const rating = aggregateRating(row.rating_count, row.rating_sum)
   const facts = [
     year && `Released ${year}`,
     series && row.episode_count && `${row.episode_count} episodes`,
@@ -254,28 +298,38 @@ async function titlePage(row) {
       studios.length && { title: 'Studios', links: studios.map(link) },
       characters.length && { title: 'Characters', links: characters.map(link) },
     ].filter(Boolean),
-    jsonLd: {
-      '@context': 'https://schema.org',
-      '@type': series ? 'TVSeries' : 'Movie',
-      name,
-      ...(row.native_name && row.native_name !== name ? { alternateName: row.native_name } : {}),
-      url: path,
-      ...(overview ? { description: overview } : {}),
-      ...(image ? { image } : {}),
-      ...(genreNames.length ? { genre: genreNames } : {}),
-      ...(isoDate(row.release_date)
-        ? { [series ? 'startDate' : 'datePublished']: isoDate(row.release_date) }
-        : {}),
-      ...(series && row.episode_count ? { numberOfEpisodes: Number(row.episode_count) } : {}),
-      ...(studios.length
-        ? {
-            productionCompany: studios.map((studio) => ({
-              '@type': 'Organization',
-              name: contentDisplayName(studio.kind, studio.name),
-            })),
-          }
-        : {}),
-    },
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': series ? 'TVSeries' : 'Movie',
+        name,
+        ...(row.native_name && row.native_name !== name ? { alternateName: row.native_name } : {}),
+        url: path,
+        ...(overview ? { description: overview } : {}),
+        ...(image ? { image } : {}),
+        ...(genreNames.length ? { genre: genreNames } : {}),
+        ...(isoDate(row.release_date)
+          ? { [series ? 'startDate' : 'datePublished']: isoDate(row.release_date) }
+          : {}),
+        ...(series && row.episode_count ? { numberOfEpisodes: Number(row.episode_count) } : {}),
+        ...(studios.length
+          ? {
+              productionCompany: studios.map((studio) => ({
+                '@type': 'Organization',
+                name: contentDisplayName(studio.kind, studio.name),
+              })),
+            }
+          : {}),
+        ...(rating ? { aggregateRating: rating } : {}),
+      },
+      breadcrumbList([
+        HOME_CRUMB,
+        series
+          ? { name: 'Animated Series', path: '/tv' }
+          : { name: 'Animated Movies', path: '/movies' },
+        { name, path },
+      ]),
+    ],
   }
 }
 
@@ -318,6 +372,7 @@ async function entitySections(row) {
     return {
       // Grouped by franchise on the page; titles are close enough for the summary.
       works: works.map((work) => work.name),
+      parent: works[0] || null,
       sections: [
         works.length && { title: 'Appears in', links: works.map(link) },
         voices.length && { title: 'Voice actors', links: voices.map(link) },
@@ -374,7 +429,7 @@ async function entitySections(row) {
 async function entityPage(row) {
   const name = contentDisplayName(row.kind, row.name)
   const about = String(row.about || '').trim()
-  const { works, sections } = await entitySections(row)
+  const { works, sections, parent = null } = await entitySections(row)
   const path = contentPagePath(row)
   const image = imageUrl(row.image_path)
   return {
@@ -387,16 +442,25 @@ async function entityPage(row) {
     heading: name,
     intro: about,
     sections,
-    jsonLd: {
-      '@context': 'https://schema.org',
-      '@type': ENTITY_TYPE[row.kind],
-      ...(row.kind === 'character' ? { additionalType: 'FictionalCharacter' } : {}),
-      name,
-      ...(row.native_name && row.native_name !== name ? { alternateName: row.native_name } : {}),
-      url: path,
-      ...(about ? { description: about } : {}),
-      ...(image ? { image } : {}),
-    },
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': ENTITY_TYPE[row.kind],
+        ...(row.kind === 'character' ? { additionalType: 'FictionalCharacter' } : {}),
+        name,
+        ...(row.native_name && row.native_name !== name ? { alternateName: row.native_name } : {}),
+        url: path,
+        ...(about ? { description: about } : {}),
+        ...(image ? { image } : {}),
+      },
+      breadcrumbList([
+        HOME_CRUMB,
+        ...(parent
+          ? [{ name: contentDisplayName(parent.kind, parent.name), path: contentPagePath(parent) }]
+          : []),
+        { name, path },
+      ]),
+    ],
   }
 }
 
@@ -406,7 +470,7 @@ async function contentPage({ prefix, id }) {
     .map(([kind, sql]) => `WHEN '${kind}' THEN ${sql}`)
     .join(' ')
   const [row] = await rows(
-    `SELECT c.id, c.kind, c.name, c.native_name, c.about, c.image_path,
+    `SELECT c.id, c.kind, c.name, c.native_name, c.about, c.image_path, c.rating_count, c.rating_sum,
        (CASE c.kind ${indexable} ELSE false END) AS indexable,
        w.release_date, w.episode_count
      FROM content c LEFT JOIN works w ON w.id = c.id
@@ -454,42 +518,46 @@ async function postPage(id) {
     heading: post.title,
     intro: `${kind} by ${post.username}\n\n${post.spoiler ? description : text}`,
     sections: tags.length ? [{ title: 'About', links: tags.map(link) }] : [],
-    jsonLd: {
-      '@context': 'https://schema.org',
-      '@type': 'DiscussionForumPosting',
-      headline: post.title,
-      text: post.spoiler ? description : text,
-      url: path,
-      datePublished: new Date(post.created_at).toISOString(),
-      ...(post.edited_at ? { dateModified: new Date(post.edited_at).toISOString() } : {}),
-      author,
-      ...(image ? { image } : {}),
-      ...(about
-        ? {
-            about: tags.map((tag) => ({
-              '@type': 'Thing',
-              name: contentDisplayName(tag.kind, tag.name),
-            })),
-          }
-        : {}),
-      interactionStatistic: [
-        {
-          '@type': 'InteractionCounter',
-          interactionType: 'https://schema.org/LikeAction',
-          userInteractionCount: Number(post.like_count || 0),
-        },
-        {
-          '@type': 'InteractionCounter',
-          interactionType: 'https://schema.org/CommentAction',
-          userInteractionCount: Number(post.comment_count || 0),
-        },
-      ],
-    },
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'DiscussionForumPosting',
+        headline: post.title,
+        text: post.spoiler ? description : text,
+        url: path,
+        datePublished: new Date(post.created_at).toISOString(),
+        ...(post.edited_at ? { dateModified: new Date(post.edited_at).toISOString() } : {}),
+        author,
+        ...(image ? { image } : {}),
+        ...(about
+          ? {
+              about: tags.map((tag) => ({
+                '@type': 'Thing',
+                name: contentDisplayName(tag.kind, tag.name),
+              })),
+            }
+          : {}),
+        interactionStatistic: [
+          {
+            '@type': 'InteractionCounter',
+            interactionType: 'https://schema.org/LikeAction',
+            userInteractionCount: Number(post.like_count || 0),
+          },
+          {
+            '@type': 'InteractionCounter',
+            interactionType: 'https://schema.org/CommentAction',
+            userInteractionCount: Number(post.comment_count || 0),
+          },
+        ],
+      },
+      breadcrumbList([HOME_CRUMB, { name: 'Forum', path: '/forum' }, { name: post.title, path }]),
+    ],
   }
 }
 
 /**
- * Make every in-site URL in the page absolute (`url` fields in schema.org data).
+ * Make every in-site URL in the page absolute (`url` and breadcrumb `item` fields in
+ * schema.org data).
  * @param {object} page
  * @param {string} base - Site origin.
  */
@@ -500,7 +568,9 @@ function absolutize(page, base) {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
-        key === 'url' && typeof item === 'string' && item.startsWith('/') ? base + item : fix(item),
+        (key === 'url' || key === 'item') && typeof item === 'string' && item.startsWith('/')
+          ? base + item
+          : fix(item),
       ]),
     )
   }

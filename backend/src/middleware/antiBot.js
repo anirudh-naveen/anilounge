@@ -12,6 +12,7 @@ import { rateLimitKey } from './rateLimitKey.js'
 import { banIPForBot, banIPForSuspiciousActivity } from './ipBan.js'
 import { isAllowedReferer } from '../utils/allowedFrontends.js'
 import { isDemoEmail } from '../models/User.js'
+import { claimedCrawler, isCrawlerExempt } from './searchCrawler.js'
 
 /**
  * Recent request times per IP + User-Agent for the burst check. Only the last second
@@ -61,12 +62,22 @@ sweepTimer.unref?.()
  * @returns {boolean}
  */
 export function isSearchCrawlerRead(req) {
-  return READ_METHODS.has(req.method) && SEARCH_CRAWLER_USER_AGENT.test(req.get('User-Agent') || '')
+  return READ_METHODS.has(req.method) && isSearchCrawler(req)
+}
+
+/**
+ * A request with a search engine crawler's User-Agent (any method).
+ * @param {import('express').Request} req
+ * @returns {boolean}
+ */
+export function isSearchCrawler(req) {
+  return SEARCH_CRAWLER_USER_AGENT.test(req.get('User-Agent') || '')
 }
 
 /**
  * Block suspicious/minimal User-Agents (and ban the IP) and refuse more than 10 requests
- * per second per IP+UA. Search engine crawlers may read (see `isSearchCrawlerRead`).
+ * per second per IP+UA. Verified Google/Bing crawlers skip all of it
+ * (middleware/searchCrawler.js); other search engines may read (`isSearchCrawlerRead`).
  * Skipped for localhost and development.
  *
  * @param {import('express').Request} req - Uses `req.ip`, hostname, and User-Agent.
@@ -75,7 +86,7 @@ export function isSearchCrawlerRead(req) {
  * @returns {void}
  */
 export const antiBotProtection = (req, res, next) => {
-  if (isLocalRequest(req)) return next()
+  if (isLocalRequest(req) || isCrawlerExempt(req)) return next()
 
   const userAgent = req.get('User-Agent') || ''
   const ip = req.ip
@@ -99,8 +110,11 @@ export const antiBotProtection = (req, res, next) => {
   recentRequests.push(now)
   requestTimestamps.set(key, recentRequests.slice(-20)) // Keep last 20
 
-  if ((isSuspiciousUA || isMinimalUA) && !isSearchCrawlerRead(req)) {
-    banIPForBot(ip, userAgent, 'bot_detection').catch(console.error)
+  // Verified Google/Bing crawlers left above (middleware/searchCrawler.js). Something
+  // only claiming to be one is handled like a browser: no ban for its User-Agent, normal
+  // limits. Other search engines may read; their writes are refused, never banned.
+  if ((isSuspiciousUA || isMinimalUA) && !isSearchCrawlerRead(req) && !claimedCrawler(req)) {
+    if (!isSearchCrawler(req)) banIPForBot(ip, userAgent, 'bot_detection').catch(console.error)
 
     return res.status(403).json({
       success: false,
@@ -122,6 +136,7 @@ export const progressiveSlowdown = slowDown({
   maxDelayMs: 20000, // Maximum delay of 20 seconds
   skipSuccessfulRequests: true,
   skipFailedRequests: false,
+  skip: isCrawlerExempt,
   // Per account when signed in (like the general limiter), so people behind one IP
   // don't slow each other down.
   keyGenerator: rateLimitKey,
@@ -206,6 +221,8 @@ const FREE_TEXT_FIELDS = new Set([
  * @returns {void}
  */
 export const databaseProtection = (req, res, next) => {
+  // Crawlers follow any link they find; an odd query string must not ban Google or Bing.
+  if (isCrawlerExempt(req)) return next()
   /**
    * Walk a JSON-like value for dangerous patterns. Prose fields skip the word patterns,
    * so "I loved this." or "evaluate" in a post is not treated as an injection attempt.
@@ -258,7 +275,12 @@ export const databaseProtection = (req, res, next) => {
 export const apiProtection = (req, res, next) => {
   const origin = req.get('origin')
   const referer = req.get('referer') || req.get('referrer')
-  if (isLocalRequest(req) || origin?.includes('localhost') || referer?.includes('localhost')) {
+  if (
+    isLocalRequest(req) ||
+    isCrawlerExempt(req) ||
+    origin?.includes('localhost') ||
+    referer?.includes('localhost')
+  ) {
     return next()
   }
 

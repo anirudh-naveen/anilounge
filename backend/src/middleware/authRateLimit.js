@@ -7,6 +7,7 @@
  */
 
 import rateLimit from 'express-rate-limit'
+import { isCrawlerExempt } from './searchCrawler.js'
 import { isDemoEmail } from '../models/User.js'
 import { bruteForceProtection } from './antiBot.js'
 import { rateLimitStore } from './pgRateLimitStore.js'
@@ -26,6 +27,7 @@ export const authLimiter = rateLimit({
   // Profile reads are not credential attempts; the page refreshes its session on every
   // load; demo logins must always work; the unlock code is attempt-limited itself.
   skip: (req) =>
+    isCrawlerExempt(req) ||
     req.method === 'GET' ||
     (req.method === 'POST' && COOKIE_SESSION_PATHS.has(req.path)) ||
     (req.method === 'POST' && req.path === '/unlock') ||

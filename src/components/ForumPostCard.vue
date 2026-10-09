@@ -19,7 +19,7 @@
     >
       <img
         :src="getPosterUrl(cover.imagePath || '')"
-        alt=""
+        :alt="cover.name"
         loading="lazy"
         data-testid="post-cover"
         @error="coverFailed = true"

@@ -9,10 +9,11 @@
  * `noindex` for thin pages, and a short summary the app replaces when it starts.
  *
  * It fails open: if the API is slow, down, or doesn't know the path, the request goes
- * on to the plain app as before. A record that doesn't exist gets a 404 status.
+ * on to the plain app as before. A record that doesn't exist gets a 404 status, and a
+ * URL that isn't the page's canonical one (no slug, an old slug) is redirected to it.
  */
 
-import { renderNotFound, renderPage, type SeoPage } from './seo/renderPage'
+import { canonicalRedirect, renderNotFound, renderPage, type SeoPage } from './seo/renderPage'
 
 export const config = {
   matcher: [
@@ -62,7 +63,7 @@ async function loadShell(origin: string) {
   return html
 }
 
-async function describe(pathname: string, visitorIp: string | null) {
+async function describe(pathname: string, visitorIp: string | null, visitorAgent: string | null) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
   try {
@@ -70,8 +71,12 @@ async function describe(pathname: string, visitorIp: string | null) {
       `${API_ORIGIN}/api/seo/page?path=${encodeURIComponent(pathname)}`,
       {
         signal: controller.signal,
-        // The API rate-limits per visitor (backend/src/middleware/clientIp.js).
-        headers: visitorIp ? { 'x-vercel-forwarded-for': visitorIp } : {},
+        // The API rate-limits per visitor (backend/src/middleware/clientIp.js) and lets
+        // verified Google/Bing crawlers through (backend/src/middleware/searchCrawler.js).
+        headers: {
+          ...(visitorIp ? { 'x-vercel-forwarded-for': visitorIp } : {}),
+          ...(visitorAgent ? { 'user-agent': visitorAgent } : {}),
+        },
       },
     )
     if (response.status !== 200 && response.status !== 404) return null
@@ -106,11 +111,22 @@ export default async function middleware(request: Request) {
       request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       null
     const [result, html] = await Promise.all([
-      describe(url.pathname, visitorIp),
+      describe(url.pathname, visitorIp, request.headers.get('user-agent')),
       loadShell(url.origin),
     ])
     if (!result) return
     if (!result.found) return htmlResponse(renderNotFound(html), 404)
+    const redirect = canonicalRedirect(request.url, result.page.canonical)
+    if (redirect) {
+      return new Response(null, {
+        status: 308,
+        headers: {
+          Location: redirect,
+          'Cache-Control': 'public, max-age=3600',
+          ...SECURITY_HEADERS,
+        },
+      })
+    }
     return htmlResponse(renderPage(html, result.page), 200)
   } catch (error) {
     console.error('SEO middleware:', error instanceof Error ? error.message : error)
