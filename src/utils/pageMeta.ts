@@ -26,6 +26,47 @@ const yearOf = (value?: string | Date) => {
   return Number.isFinite(year) ? year : null
 }
 
+/** Fewest AniLounge ratings before a title's schema.org data carries its average (stars). */
+export const RATING_MIN_COUNT = 3
+
+/**
+ * schema.org AggregateRating from AniLounge's own ratings (1–10), or null with too few.
+ * Only ratings made on the site count (Google doesn't allow scores copied from MAL or
+ * TMDB). Same as `aggregateRating` in backend/src/services/seoService.js.
+ */
+export function aggregateRating(average?: number | null, count?: number | null) {
+  const ratings = Number(count || 0)
+  if (ratings < RATING_MIN_COUNT || average == null) return null
+  return {
+    '@type': 'AggregateRating',
+    ratingValue: Math.round(Number(average) * 10) / 10,
+    bestRating: 10,
+    worstRating: 1,
+    ratingCount: ratings,
+  }
+}
+
+export interface Crumb {
+  name: string
+  path: string
+}
+
+/** schema.org BreadcrumbList (the path shown above a search result); Home first. */
+export function breadcrumbList(items: Crumb[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: absoluteUrl(item.path),
+    })),
+  }
+}
+
+export const HOME_CRUMB: Crumb = { name: 'AniLounge', path: '/' }
+
 const isoDate = (value?: string | Date) => {
   if (!value) return undefined
   const date = new Date(value)
@@ -49,6 +90,7 @@ export function titlePageMeta(
   const noun = series ? 'anime series' : content.contentType === 'special' ? 'special' : 'movie'
   const heading = [name, seasonLabel].filter(Boolean).join(' ')
   const genres = genreNames(content)
+  const rating = aggregateRating(content.userRatingAverage, content.userRatingCount)
   const summary =
     content.overview?.trim() ||
     `${name}${year ? ` (${year})` : ''}: an animated ${noun}${genres.length ? ` · ${genres.slice(0, 3).join(', ')}` : ''}.`
@@ -57,30 +99,40 @@ export function titlePageMeta(
     description: `${summary} Track it, rate it, and discuss it on AniLounge.`,
     path,
     image,
-    jsonLd: {
-      '@context': 'https://schema.org',
-      '@type': series ? 'TVSeries' : 'Movie',
-      name,
-      ...(content.nativeTitle && content.nativeTitle !== name
-        ? { alternateName: content.nativeTitle }
-        : {}),
-      url: absoluteUrl(path),
-      ...(content.overview ? { description: content.overview } : {}),
-      ...(image ? { image } : {}),
-      ...(genres.length ? { genre: genres } : {}),
-      ...(isoDate(content.releaseDate)
-        ? { [series ? 'startDate' : 'datePublished']: isoDate(content.releaseDate) }
-        : {}),
-      ...(series && content.episodeCount ? { numberOfEpisodes: content.episodeCount } : {}),
-      ...(content.studios?.length
-        ? {
-            productionCompany: content.studios.map((studio) => ({
-              '@type': 'Organization',
-              name: studio,
-            })),
-          }
-        : {}),
-    },
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': series ? 'TVSeries' : 'Movie',
+        name,
+        ...(content.nativeTitle && content.nativeTitle !== name
+          ? { alternateName: content.nativeTitle }
+          : {}),
+        url: absoluteUrl(path),
+        ...(content.overview ? { description: content.overview } : {}),
+        ...(image ? { image } : {}),
+        ...(genres.length ? { genre: genres } : {}),
+        ...(isoDate(content.releaseDate)
+          ? { [series ? 'startDate' : 'datePublished']: isoDate(content.releaseDate) }
+          : {}),
+        ...(series && content.episodeCount ? { numberOfEpisodes: content.episodeCount } : {}),
+        ...(content.studios?.length
+          ? {
+              productionCompany: content.studios.map((studio) => ({
+                '@type': 'Organization',
+                name: studio,
+              })),
+            }
+          : {}),
+        ...(rating ? { aggregateRating: rating } : {}),
+      },
+      breadcrumbList([
+        HOME_CRUMB,
+        series
+          ? { name: 'Animated Series', path: '/tv' }
+          : { name: 'Animated Movies', path: '/movies' },
+        { name, path },
+      ]),
+    ],
   }
 }
 
@@ -114,11 +166,17 @@ const ENTITY_FALLBACK: Record<EntityPageKind, (name: string, works: string[]) =>
  * @param options.image - Absolute image URL, or null.
  * @param options.works - Titles it's known for, most notable first (for the fallback
  *   description).
+ * @param options.parent - Breadcrumb between Home and this page (a character's title).
  */
 export function entityPageMeta(
   kind: EntityPageKind,
   entity: { name: string; nativeName?: string; about?: string },
-  { path, image, works = [] }: { path: string; image: string | null; works?: string[] },
+  {
+    path,
+    image,
+    works = [],
+    parent = null,
+  }: { path: string; image: string | null; works?: string[]; parent?: Crumb | null },
 ): PageMeta {
   const about = entity.about?.trim() || ''
   // Fictional characters aren't people schema.org-wise, but Person is what search
@@ -129,17 +187,20 @@ export function entityPageMeta(
     description: about || ENTITY_FALLBACK[kind](entity.name, works),
     path,
     image,
-    jsonLd: {
-      '@context': 'https://schema.org',
-      '@type': ENTITY_TYPE[kind],
-      ...fictional,
-      name: entity.name,
-      ...(entity.nativeName && entity.nativeName !== entity.name
-        ? { alternateName: entity.nativeName }
-        : {}),
-      url: absoluteUrl(path),
-      ...(about ? { description: about } : {}),
-      ...(image ? { image } : {}),
-    },
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': ENTITY_TYPE[kind],
+        ...fictional,
+        name: entity.name,
+        ...(entity.nativeName && entity.nativeName !== entity.name
+          ? { alternateName: entity.nativeName }
+          : {}),
+        url: absoluteUrl(path),
+        ...(about ? { description: about } : {}),
+        ...(image ? { image } : {}),
+      },
+      breadcrumbList([HOME_CRUMB, ...(parent ? [parent] : []), { name: entity.name, path }]),
+    ],
   }
 }

@@ -9,10 +9,11 @@
  * `noindex` for thin pages, and a short summary the app replaces when it starts.
  *
  * It fails open: if the API is slow, down, or doesn't know the path, the request goes
- * on to the plain app as before. A record that doesn't exist gets a 404 status.
+ * on to the plain app as before. A record that doesn't exist gets a 404 status, and a
+ * URL that isn't the page's canonical one (no slug, an old slug) is redirected to it.
  */
 
-import { renderNotFound, renderPage, type SeoPage } from './seo/renderPage'
+import { canonicalRedirect, renderNotFound, renderPage, type SeoPage } from './seo/renderPage'
 
 export const config = {
   matcher: [
@@ -111,6 +112,17 @@ export default async function middleware(request: Request) {
     ])
     if (!result) return
     if (!result.found) return htmlResponse(renderNotFound(html), 404)
+    const redirect = canonicalRedirect(request.url, result.page.canonical)
+    if (redirect) {
+      return new Response(null, {
+        status: 308,
+        headers: {
+          Location: redirect,
+          'Cache-Control': 'public, max-age=3600',
+          ...SECURITY_HEADERS,
+        },
+      })
+    }
     return htmlResponse(renderPage(html, result.page), 200)
   } catch (error) {
     console.error('SEO middleware:', error instanceof Error ? error.message : error)
