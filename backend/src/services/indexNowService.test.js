@@ -8,9 +8,13 @@ import {
   submitUrls,
 } from './indexNowService.js'
 
+// Placeholder keys: repeated characters, so secret scanners (gitleaks) don't read them
+// as real credentials.
+const TEST_KEY = 'testkey-'.padEnd(16, '0')
+
 describe('indexNowKey', () => {
   it('uses INDEXNOW_KEY when valid, else a stable key derived from JWT_SECRET', () => {
-    assert.equal(indexNowKey({ INDEXNOW_KEY: 'abcDEF12-3456' }), 'abcDEF12-3456')
+    assert.equal(indexNowKey({ INDEXNOW_KEY: TEST_KEY }), TEST_KEY)
     const derived = indexNowKey({ INDEXNOW_KEY: 'bad key!', JWT_SECRET: 'secret-a' })
     assert.match(derived, /^[0-9a-f]{32}$/)
     assert.equal(indexNowKey({ JWT_SECRET: 'secret-a' }), derived)
@@ -39,7 +43,7 @@ describe('submitUrls', () => {
     const urls = Array.from({ length: BATCH_MAX + 2 }, (_, i) => `https://www.site.test/p/${i}`)
     const statuses = await submitUrls(urls, {
       base: 'https://www.site.test',
-      key: 'k12345678',
+      key: TEST_KEY,
       fetchImpl,
     })
     assert.deepEqual(statuses, [202, 202])
@@ -48,7 +52,7 @@ describe('submitUrls', () => {
       { ...calls[0].body, urlList: calls[0].body.urlList.length },
       {
         host: 'www.site.test',
-        key: 'k12345678',
+        key: TEST_KEY,
         keyLocation: 'https://www.site.test/indexnow-key.txt',
         urlList: BATCH_MAX,
       },
@@ -62,9 +66,6 @@ describe('submitUrls', () => {
       await submitUrls(['https://x.test/a'], { base: 'https://x.test', key: null, fetchImpl }),
       [],
     )
-    assert.deepEqual(
-      await submitUrls([], { base: 'https://x.test', key: 'k12345678', fetchImpl }),
-      [],
-    )
+    assert.deepEqual(await submitUrls([], { base: 'https://x.test', key: TEST_KEY, fetchImpl }), [])
   })
 })
