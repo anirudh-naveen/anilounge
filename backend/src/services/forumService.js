@@ -1161,17 +1161,21 @@ export const SITEMAP_POSTS_MAX = 20000
 
 /**
  * Posts for the sitemap: visible posts, most recently active first.
- * @returns {Promise<Array<{ id: string, lastModified: Date }>>}
+ * @returns {Promise<Array<{ id: string, title: string, lastModified: Date }>>}
  */
 export async function sitemapPosts() {
   const { rows } = await query(
-    `SELECT p.id, GREATEST(p.created_at, p.edited_at, p.last_activity_at) AS last_modified
+    `SELECT p.id, p.title, GREATEST(p.created_at, p.edited_at, p.last_activity_at) AS last_modified
      FROM posts p JOIN users u ON u.id = p.user_id
      WHERE u.banned_at IS NULL
      ORDER BY p.last_activity_at DESC
      LIMIT ${SITEMAP_POSTS_MAX}`,
   )
-  return rows.map((row) => ({ id: String(row.id), lastModified: row.last_modified }))
+  return rows.map((row) => ({
+    id: String(row.id),
+    title: row.title,
+    lastModified: row.last_modified,
+  }))
 }
 
 export default {

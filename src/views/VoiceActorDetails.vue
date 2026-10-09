@@ -113,6 +113,8 @@ import { getDisplayTitle } from '@/utils/titles'
 import { collectVoicedCharacters, displayPersonName } from '@/utils/entities'
 import type { CatalogEntity } from '@/types/content'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
+import { detailPath } from '@/utils/slug'
 import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
@@ -192,12 +194,17 @@ usePageMeta(() => {
     'voice_actor',
     { name: displayPersonName(value.name), nativeName: value.nativeName, about: value.about },
     {
-      path: `/voice-actor/${route.params.id}`,
+      path: detailPath('/voice-actor', value._id, displayPersonName(value.name)),
       image: value.imagePath ? getPosterUrl(value.imagePath) : null,
       works: [...new Set(voicedCharacters.value.map((row) => row.title).filter(Boolean))],
     },
   )
 })
+
+useCanonicalSlug(
+  () => (voiceActor.value ? displayPersonName(voiceActor.value.name) : null),
+  () => voiceActor.value?._id,
+)
 </script>
 
 <style scoped>

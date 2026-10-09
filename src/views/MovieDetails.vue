@@ -295,6 +295,8 @@ import { hideBrokenImage } from '@/utils/posters'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
+import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
@@ -479,10 +481,15 @@ watch(
 usePageMeta(() =>
   movie.value
     ? titlePageMeta(movie.value, {
-        path: `/movie/${route.params.id}`,
+        path: detailPath('/movie', movie.value._id, getDisplayTitle(movie.value)),
         image: movie.value.posterPath ? getPosterUrl(movie.value.posterPath) : null,
       })
     : null,
+)
+
+useCanonicalSlug(
+  () => (movie.value ? getDisplayTitle(movie.value) : null),
+  () => movie.value?._id,
 )
 </script>
 

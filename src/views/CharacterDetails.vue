@@ -191,6 +191,8 @@ import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import ForumHighlights from '@/components/ForumHighlights.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
+import { detailPath } from '@/utils/slug'
 import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
@@ -305,12 +307,18 @@ usePageMeta(() => {
       about: value.about,
     },
     {
-      path: `/character/${route.params.id}`,
+      path: detailPath('/character', value._id, canonicalCharacterName(value.name) || value.name),
       image: value.imagePath ? getPosterUrl(value.imagePath) : null,
       works: [...new Set(appearanceTitles.value.map((row) => row.franchise || row.title))],
     },
   )
 })
+
+useCanonicalSlug(
+  () =>
+    character.value ? canonicalCharacterName(character.value.name) || character.value.name : null,
+  () => character.value?._id,
+)
 </script>
 
 <style scoped>

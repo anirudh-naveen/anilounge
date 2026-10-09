@@ -9,6 +9,8 @@
 
 import { query } from '../../config/postgres.js'
 import { sitemapPosts } from './forumService.js'
+import { contentPagePath, detailPath } from '../utils/slug.js'
+import { indexableSql } from '../utils/seoIndexing.js'
 
 /** URLs per child sitemap (the protocol allows 50,000). */
 export const SITEMAP_CHUNK = 40000
@@ -17,18 +19,15 @@ export const SITEMAP_CHUNK = 40000
 export const SITEMAP_PAGES = ['/', '/forum', '/movies', '/tv', '/search']
 
 /**
- * Catalog sections: the content kinds each lists and the site path of a row.
- * Specials open on the movie page (see `getDetailsRouteName` in the frontend).
+ * Catalog sections and the content kinds each lists. Only pages worth indexing are
+ * listed (utils/seoIndexing.js); paths carry the readable slug (utils/slug.js).
  */
 export const SITEMAP_SECTIONS = {
-  titles: {
-    kinds: ['movie', 'series', 'special'],
-    path: (row) => `${row.kind === 'series' ? '/tv-show' : '/movie'}/${row.id}`,
-  },
-  franchises: { kinds: ['franchise'], path: (row) => `/franchise/${row.id}` },
-  characters: { kinds: ['character'], path: (row) => `/character/${row.id}` },
-  'voice-actors': { kinds: ['voice'], path: (row) => `/voice-actor/${row.id}` },
-  studios: { kinds: ['studio'], path: (row) => `/studio/${row.id}` },
+  titles: { kinds: ['movie', 'series', 'special'] },
+  franchises: { kinds: ['franchise'] },
+  characters: { kinds: ['character'] },
+  'voice-actors': { kinds: ['voice'] },
+  studios: { kinds: ['studio'] },
 }
 
 /** `&`, `<`, `>`, quotes escaped for XML text. */
@@ -104,16 +103,17 @@ export function parseSitemapFile(file) {
   return { section: match[1], chunk: Number(match[2]) }
 }
 
-/** Rows per catalog section. */
+/** Indexable rows per catalog section. */
 async function sectionCounts() {
-  const { rows } = await query('SELECT kind, count(*)::int AS count FROM content GROUP BY kind')
-  const byKind = Object.fromEntries(rows.map((row) => [row.kind, row.count]))
-  return Object.fromEntries(
-    Object.entries(SITEMAP_SECTIONS).map(([section, { kinds }]) => [
-      section,
-      kinds.reduce((sum, kind) => sum + (byKind[kind] || 0), 0),
-    ]),
-  )
+  const counts = {}
+  for (const [section, { kinds }] of Object.entries(SITEMAP_SECTIONS)) {
+    const { rows } = await query(
+      `SELECT count(*)::int AS count FROM content c WHERE c.kind = ANY ($1) AND ${indexableSql(kinds)}`,
+      [kinds],
+    )
+    counts[section] = rows[0]?.count || 0
+  }
+  return counts
 }
 
 /**
@@ -138,19 +138,23 @@ export async function buildSitemapFile(base, file) {
     const posts = await sitemapPosts()
     return urlsetXml(base, [
       ...SITEMAP_PAGES.map((path) => ({ path })),
-      ...posts.map((post) => ({ path: `/forum/post/${post.id}`, lastModified: post.lastModified })),
+      ...posts.map((post) => ({
+        path: detailPath('/forum/post', post.id, post.title),
+        lastModified: post.lastModified,
+      })),
     ])
   }
-  const section = SITEMAP_SECTIONS[parsed.section]
+  const { kinds } = SITEMAP_SECTIONS[parsed.section]
   const { rows } = await query(
-    `SELECT id, kind, updated_at FROM content WHERE kind = ANY ($1)
-     ORDER BY created_at, id LIMIT $2 OFFSET $3`,
-    [section.kinds, SITEMAP_CHUNK, (parsed.chunk - 1) * SITEMAP_CHUNK],
+    `SELECT c.id, c.kind, c.name, c.updated_at FROM content c
+     WHERE c.kind = ANY ($1) AND ${indexableSql(kinds)}
+     ORDER BY c.created_at, c.id LIMIT $2 OFFSET $3`,
+    [kinds, SITEMAP_CHUNK, (parsed.chunk - 1) * SITEMAP_CHUNK],
   )
   if (!rows.length) return null
   return urlsetXml(
     base,
-    rows.map((row) => ({ path: section.path(row), lastModified: row.updated_at })),
+    rows.map((row) => ({ path: contentPagePath(row), lastModified: row.updated_at })),
   )
 }
 

@@ -263,7 +263,7 @@
     <!-- Page -->
     <!-- Title: Router Outlet -->
     <main class="main-content">
-      <router-view :key="route.path" />
+      <router-view :key="viewKey" />
     </main>
 
     <!-- Footer -->
@@ -280,7 +280,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted, watch } from 'vue'
+import { computed, onMounted, ref, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
@@ -294,6 +294,13 @@ import { DONATE_URL } from '@/utils/donations'
 
 const router = useRouter()
 const route = useRoute()
+/**
+ * Remount the page when it shows something else, but not when only the readable slug
+ * in a detail URL changes (`/movie/<id>` → `/movie/<id>/<slug>`).
+ */
+const viewKey = computed(() =>
+  route.params.id ? `${String(route.name)}:${String(route.params.id)}` : route.path,
+)
 const authStore = useAuthStore()
 const toast = useToast()
 
@@ -321,7 +328,7 @@ onMounted(() => {
 
 // Refresh the badge on sign-in and page changes; clear it on sign-out.
 watch(
-  () => [authStore.isAuthenticated, route.path] as const,
+  () => [authStore.isAuthenticated, viewKey.value] as const,
   ([signedIn]) => {
     if (signedIn) {
       messagesStore.refresh()
