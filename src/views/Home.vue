@@ -6,6 +6,7 @@
   prompt for guests), a release sidebar for watchlist titles that falls back
   to trending releases, the character of the day, and forum highlights (picked
   from the watchlist when signed in; the pick refreshes every few hours).
+  Guests also get a "Join the Community" pop-up (`JoinPrompt`).
 -->
 <template>
   <div class="home-page">
@@ -261,6 +262,11 @@
         </p>
       </div>
     </section>
+
+    <JoinPrompt
+      title="Join the Community"
+      message="Sign up free to track what you watch, rate titles, and talk anime with the lounge."
+    />
   </div>
 </template>
 
@@ -270,6 +276,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import ImportReminder from '@/components/ImportReminder.vue'
 import ForumPostCard from '@/components/ForumPostCard.vue'
+import JoinPrompt from '@/components/JoinPrompt.vue'
 import { forumAPI, getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
 import type { HomeForum } from '@/types/forum'
 import type { CatalogEntity, EntityAppearance } from '@/types/content'

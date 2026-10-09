@@ -4,7 +4,7 @@
 
 import type { PublicUser } from './social'
 
-export type PostKind = 'discussion' | 'review'
+export type PostKind = 'discussion' | 'review' | 'guide' | 'article'
 export type PostSort = 'hot' | 'new' | 'top' | 'active'
 export type TagKind = 'movie' | 'series' | 'special' | 'franchise' | 'character'
 

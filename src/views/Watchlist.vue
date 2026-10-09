@@ -239,6 +239,10 @@
                           type="number"
                           min="0"
                           :max="getTotalEpisodes(item) || undefined"
+                          :disabled="
+                            getLocalFormData(item).status === 'completed' &&
+                            getTotalEpisodes(item) > 0
+                          "
                           class="episode-input"
                         />
                       </div>
@@ -768,6 +772,19 @@ const updateLocalFormData = (
   // Type-safe assignment
   if (field === 'status') {
     currentData.status = value as string
+    // Completed titles sit on their last episode (the server enforces the same rule).
+    const total = getTotalEpisodes(item)
+    if (value === 'completed' && total > 0) currentData.currentEpisode = total
+    // Back to watching: resume where the saved row was before it was completed.
+    const resumeAt = item.previousEpisode || 0
+    if (
+      value === 'watching' &&
+      item.status === 'completed' &&
+      resumeAt > 0 &&
+      resumeAt < currentData.currentEpisode
+    ) {
+      currentData.currentEpisode = resumeAt
+    }
   } else if (field === 'currentEpisode') {
     currentData.currentEpisode = value as number
   } else if (field === 'currentSeason') {

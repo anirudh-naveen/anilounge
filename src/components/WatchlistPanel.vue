@@ -82,6 +82,7 @@
             type="number"
             min="0"
             :max="totalEpisodes || undefined"
+            :disabled="episodesLocked"
             inputmode="numeric"
             class="field-input"
             data-testid="watchlist-panel-episodes"
@@ -89,7 +90,9 @@
           <button
             type="button"
             class="btn btn-step"
-            :disabled="Boolean(totalEpisodes) && form.currentEpisode >= totalEpisodes"
+            :disabled="
+              episodesLocked || (Boolean(totalEpisodes) && form.currentEpisode >= totalEpisodes)
+            "
             aria-label="Add one episode"
             data-testid="watchlist-panel-plus-one"
             @click="form.currentEpisode = (form.currentEpisode || 0) + 1"
@@ -230,6 +233,22 @@ const populate = () => {
 }
 
 watch(existingItem, populate, { immediate: true })
+
+/** Completed titles sit on their last episode (the server enforces the same rule). */
+const episodesLocked = computed(() => form.status === 'completed' && props.totalEpisodes > 0)
+watch(episodesLocked, (locked) => {
+  if (locked) form.currentEpisode = props.totalEpisodes
+})
+// Back to watching: resume where the saved row was before it was completed.
+watch(
+  () => form.status,
+  (status, previous) => {
+    const item = existingItem.value
+    if (previous !== 'completed' || status !== 'watching' || item?.status !== 'completed') return
+    const resumeAt = item.previousEpisode || 0
+    if (resumeAt > 0 && resumeAt < form.currentEpisode) form.currentEpisode = resumeAt
+  },
+)
 
 const add = async () => {
   saving.value = true

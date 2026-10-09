@@ -6,7 +6,7 @@
   sign-in; your own posts can't be liked. `compact` drops the preview for tight
   spots such as title-page highlights. `showImage` (Home) adds a cover picture: the
   author's top tag's, else the highest tag in the hierarchy that has one
-  (franchise, then title, then character).
+  (title, then character; franchises never supply it).
 -->
 <template>
   <article class="post-card" :class="{ compact }" :data-testid="`post-card-${post.id}`">
@@ -27,7 +27,7 @@
     </router-link>
     <header class="post-card-head">
       <span class="post-badge post-kind" :class="post.kind">
-        {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
+        {{ POST_KIND_LABELS[post.kind] }}
       </span>
       <span
         v-if="post.score !== null"
@@ -108,7 +108,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI, getPosterUrl } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumPost } from '@/types/forum'
-import { coverTag, postRoute, scoreLabel } from '@/utils/forum'
+import { coverTag, POST_KIND_LABELS, postRoute, scoreLabel } from '@/utils/forum'
 import { getRatingBadgeColors } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
@@ -205,6 +205,16 @@ const toggleLike = async () => {
 .post-kind.review {
   background: color-mix(in srgb, var(--coral-primary) 16%, transparent);
   color: var(--coral-deep);
+}
+
+.post-kind.guide {
+  background: color-mix(in srgb, var(--teal-primary) 16%, transparent);
+  color: color-mix(in srgb, var(--teal-primary) 60%, var(--text-primary));
+}
+
+.post-kind.article {
+  background: color-mix(in srgb, var(--purple-accent) 16%, transparent);
+  color: color-mix(in srgb, var(--purple-accent) 70%, var(--text-primary));
 }
 
 .post-score {

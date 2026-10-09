@@ -22,6 +22,14 @@ const requestTimestamps = new Map()
 
 const LOCAL_IPS = new Set(['::1', '127.0.0.1', 'localhost'])
 const SUSPICIOUS_USER_AGENT = /bot|crawler|spider|scraper|headless|phantom|selenium|puppeteer/i
+/**
+ * Search engines that render the app's JavaScript and so call the API to index
+ * public pages (forum posts, titles). They may only read: a faked one gets what any
+ * signed-out browser already can.
+ */
+const SEARCH_CRAWLER_USER_AGENT =
+  /\b(?:Googlebot|Google-InspectionTool|bingbot|Applebot|DuckDuckBot|YandexBot)\b/i
+const READ_METHODS = new Set(['GET', 'HEAD'])
 /** Mongo operators and script URLs, rejected in every field. */
 const OPERATOR_PATTERN = /\$(?:where|ne|gt|lt|regex|exists|in|nin|or|and)|javascript:/i
 /** Code-ish words, rejected outside prose fields (see FREE_TEXT_FIELDS). */
@@ -48,8 +56,18 @@ const sweepTimer = setInterval(() => {
 sweepTimer.unref?.()
 
 /**
+ * A search engine crawler reading (GET/HEAD) the site.
+ * @param {import('express').Request} req
+ * @returns {boolean}
+ */
+export function isSearchCrawlerRead(req) {
+  return READ_METHODS.has(req.method) && SEARCH_CRAWLER_USER_AGENT.test(req.get('User-Agent') || '')
+}
+
+/**
  * Block suspicious/minimal User-Agents (and ban the IP) and refuse more than 10 requests
- * per second per IP+UA. Skipped for localhost and development.
+ * per second per IP+UA. Search engine crawlers may read (see `isSearchCrawlerRead`).
+ * Skipped for localhost and development.
  *
  * @param {import('express').Request} req - Uses `req.ip`, hostname, and User-Agent.
  * @param {import('express').Response} res - 429 on rapid fire, 403 on bot UA.
@@ -81,7 +99,7 @@ export const antiBotProtection = (req, res, next) => {
   recentRequests.push(now)
   requestTimestamps.set(key, recentRequests.slice(-20)) // Keep last 20
 
-  if (isSuspiciousUA || isMinimalUA) {
+  if ((isSuspiciousUA || isMinimalUA) && !isSearchCrawlerRead(req)) {
     banIPForBot(ip, userAgent, 'bot_detection').catch(console.error)
 
     return res.status(403).json({

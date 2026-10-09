@@ -1,0 +1,16 @@
+# AniLounge. Public pages (titles, characters, the forum) are open to search engines.
+# /api stays crawlable: search engines run the app and need it to see page content.
+User-agent: *
+Disallow: /admin
+Disallow: /settings
+Disallow: /inbox
+Disallow: /messages
+Disallow: /friends
+Disallow: /connections
+Disallow: /import
+Disallow: /watchlist
+Disallow: /profile
+Disallow: /verify-email
+Disallow: /unlock-account
+
+Sitemap: https://www.anilounge.net/sitemap.xml

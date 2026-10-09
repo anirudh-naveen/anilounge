@@ -35,22 +35,8 @@
    - Move profile pictures out of Postgres (`user_avatars`) to Cloudflare R2. Set up first: run the Cloudflare agent setup (`claude plugin marketplace add cloudflare/skills`, then `claude plugin install cloudflare@cloudflare`), create an `anilounge-avatars` bucket with a public custom domain (e.g. `img.anilounge.net`) and a read/write API token, and add `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `AVATAR_PUBLIC_URL` to Railway.
    - Then: `services/avatarService.js` uploads to R2 (new key per upload, old one deleted, Postgres fallback when unset), a one-time script copies existing avatars and rewrites `users.profile_picture`, and `/api/avatars/:id` stays until old URLs stop appearing.
 
-## Forum
-0. Selecting a "top tag" doesn't change the image to the top tag's image. Also, remove franchises from the image consideration.
-1. Add Text features for writing forum posts
-   - bold text, italics, etc. 
-   - no specific sizes for text, preset for heading and bosy
-2. Add Forum filters for Guides and Articles
-   - These don't need a content to be attached, but can have it as an option
-3. Make sure forum posts can appear in search engines
-   - If the user enters a forum post naturally without having an account, pop-up a sign-in prompt.
-      - For example, in a forum, have a "Join the Conversation" prompt
-      - For example, at home, have a "Join the Community" prompt
-4. Fix the sort font to match the rest of the site's theme.
-
-
-
 ## Infrastructure
+0. Deploy the forum update: run `npm run db:schema` on production (it allows the new `guide`/`article` post kinds), then redeploy the Railway API. The live API is older than `main`: it doesn't save or return top tags (`/api/forum/posts` has no `top` field), so post images fall back to other tags. After deploying, submit `https://www.anilounge.net/sitemap.xml` in Google Search Console, and clear any `ip_bans` rows for search engine crawlers (Googlebot used to be banned as a bot).
 1. Ship the scaling upgrade: run `npm run db:schema` on production **before** deploying (the code reads `posts.hot_score`, `content.catalog_score`, `content.rating_count`), then open `https://www.anilounge.net/api/status` and check `clientIp` is your own IP. If it's a Vercel/Railway address, set `TRUST_PROXY=2` and recheck, or every visitor shares one rate-limit bucket.
 2. Scale out when one instance gets busy (~5–10k daily users): 2–4 Railway replicas with `RATE_LIMIT_STORE=postgres`, and keep replicas × `PG_POOL_MAX` under Postgres `max_connections` (or add PgBouncer, ignoring `statement_timeout` and `application_name` startup params). Around ~100k daily users, add a read replica via `DATABASE_READ_URL`; beyond that, Redis for rate limits and partitioning `messages`/`watch_events` once they near ~100M rows.
 3. Watch Connections sync traffic as sign-ups grow (services/connectionSync.js).

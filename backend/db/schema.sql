@@ -611,14 +611,18 @@ CREATE TABLE IF NOT EXISTS comments (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Forum (services/forumService.js). A post is a discussion or a review (reviews carry
--- a 1–10 score); `content_id` is unused, tags live in post_tags. Text is masked for
+-- Forum (services/forumService.js). A post is a discussion, a review (reviews carry
+-- a 1–10 score), a guide, or an article; `content_id` is the review's subject, tags
+-- live in post_tags. Text is masked for
 -- blocked language like direct messages, with language warnings to the author.
 -- `last_activity_at` moves on new comments so active threads sort up.
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS score NUMERIC(3, 1) CHECK (score BETWEEN 1 AND 10);
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS spoiler BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_kind_check;
+ALTER TABLE posts ADD CONSTRAINT posts_kind_check
+  CHECK (kind IN ('discussion', 'review', 'guide', 'article'));
 ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_title_length_check;
 ALTER TABLE posts ADD CONSTRAINT posts_title_length_check
   CHECK (char_length(title) BETWEEN 1 AND 150);
@@ -645,7 +649,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS post_tags_unique
   ON post_tags (post_id, content_id, COALESCE(season_number, -1), COALESCE(episode_number, -1));
 CREATE INDEX IF NOT EXISTS post_tags_content_idx ON post_tags (content_id, season_number, episode_number);
 -- The author's "top tag": highlighted on the post, and its picture is the post's image.
--- At most one per post; posts without one fall back to the highest tag with a picture.
+-- At most one per post; posts without one fall back to the highest tag with a picture
+-- (franchise pictures are never used).
 ALTER TABLE post_tags ADD COLUMN IF NOT EXISTS is_top BOOLEAN NOT NULL DEFAULT false;
 CREATE UNIQUE INDEX IF NOT EXISTS post_tags_one_top ON post_tags (post_id) WHERE is_top;
 -- A review's subject (posts.content_id): its first movie/series/special tag. Its score

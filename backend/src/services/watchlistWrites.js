@@ -66,6 +66,35 @@ export function setWatchedEpisode(item, episode) {
 }
 
 /**
+ * Completed rows sit on the title's last episode. Goes through `setWatchedEpisode` so
+ * the home feed range and watch history see the jump. No-op without a known total.
+ *
+ * @param {object} item - Watchlist row, mutated in place.
+ * @param {number} maxEpisodes - From `progressLimits(content)`.
+ * @returns {void}
+ */
+export function lockCompletedProgress(item, maxEpisodes) {
+  if (item.status !== 'completed' || !(maxEpisodes > 0)) return
+  setWatchedEpisode(item, maxEpisodes)
+}
+
+/**
+ * Moving a completed row back to watching returns it to the episode the user was on
+ * before it was completed, unless this edit set the episode itself.
+ *
+ * @param {object} item - Watchlist row after this edit's status and episode, mutated in place.
+ * @param {string} statusBefore - Row status before the edit.
+ * @param {number} episodeBefore - Row episode before the edit.
+ * @returns {void}
+ */
+export function reopenCompletedProgress(item, statusBefore, episodeBefore) {
+  if (statusBefore !== 'completed' || item.status !== 'watching') return
+  if (item.currentEpisode !== episodeBefore) return
+  const resumeAt = item.previousEpisode || 0
+  if (resumeAt > 0 && resumeAt < item.currentEpisode) setWatchedEpisode(item, resumeAt)
+}
+
+/**
  * Resolve the user's current rating for a title: watchlist rating first, then legacy `user.ratings`.
  *
  * @param {object} user - User document with `watchlist` and optional `ratings`.

@@ -76,4 +76,13 @@ describe('coverTag', () => {
     expect(coverTag(tags)?.contentId).toBe('show')
     expect(coverTag([tag('franchise', 'franchise', null)])).toBeNull()
   })
+
+  it('never uses a franchise picture', () => {
+    const tags = [
+      tag('franchise', 'franchise', 'franchise.jpg', true),
+      tag('himmel', 'character', 'himmel.jpg'),
+    ]
+    expect(coverTag(tags)?.contentId).toBe('himmel')
+    expect(coverTag([tag('franchise', 'franchise', 'franchise.jpg')])).toBeNull()
+  })
 })
