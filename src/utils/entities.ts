@@ -93,6 +93,21 @@ export function characterFranchises(entity?: CatalogEntity | null): string[] {
 }
 
 /**
+ * Franchise ids by name, through the titles a character appears in, so franchise
+ * names can link to their detail screens.
+ */
+export function characterFranchiseIds(entity?: CatalogEntity | null): Record<string, string> {
+  const ids: Record<string, string> = {}
+  for (const row of entity?.appearances || []) {
+    const content = row.content
+    if (content && typeof content === 'object' && content.franchise && content.franchiseId) {
+      ids[content.franchise] ||= content.franchiseId
+    }
+  }
+  return ids
+}
+
+/**
  * Unique voice credits for a character, Japanese first.
  */
 export function collectVoiceActors(entity?: CatalogEntity | null): EntityVoiceCredit[] {

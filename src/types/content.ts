@@ -60,6 +60,8 @@ export interface UnifiedContent {
     mal?: { hasData?: boolean }
   }
   franchise?: string
+  /** Franchise row behind `franchise`, for its detail screen. */
+  franchiseId?: string | null
   /** Nicknames of the title's franchise ("MHA"); search matches them on every member. */
   franchiseNicknames?: string[]
   /** Average score of the franchise's seasons (all its titles when it has no series), to the tenth. */
@@ -75,6 +77,17 @@ export interface UnifiedContent {
     related: string[]
     franchise: string
   }
+}
+
+/** Franchise detail screen (`GET /franchises/:id`); `works` arrive in watch order. */
+export interface FranchiseDetails {
+  _id: string
+  name: string
+  nicknames: string[]
+  about: string
+  imagePath: string
+  rating: number | null
+  works: UnifiedContent[]
 }
 
 export interface StudioRef {
@@ -152,6 +165,7 @@ export interface EntityAppearance {
         unifiedScore?: number
         malStatus?: string
         franchise?: string | null
+        franchiseId?: string | null
       }
   character?:
     | string

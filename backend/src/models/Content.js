@@ -70,6 +70,7 @@ export function mapContentRow(row) {
     originCountries: row.origin_country ? [row.origin_country] : [],
     alternativeTitles: [],
     franchise: null,
+    franchiseId: null,
     franchiseNicknames: [],
     franchiseRating: null,
     relationships: { sequels: [], prequels: [], related: [], franchise: null },
@@ -150,7 +151,7 @@ export async function attachContentRelations(docs) {
                 COALESCE(avg(score) FILTER (WHERE kind = 'series'), avg(score)) AS rating
          FROM scored WHERE score > 0 GROUP BY franchise_id
        )
-       SELECT m.member_id AS content_id, f.name, round(r.rating::numeric, 1) AS rating,
+       SELECT m.member_id AS content_id, f.id AS franchise_id, f.name, round(r.rating::numeric, 1) AS rating,
               (SELECT array_agg(k.name ORDER BY k.name) FROM content_akas k
                WHERE k.content_id = f.id) AS nicknames
        FROM m
@@ -183,6 +184,7 @@ export async function attachContentRelations(docs) {
     }))
     const franchise = franchiseById.get(id)
     doc.franchise = franchise?.name || null
+    doc.franchiseId = franchise ? String(franchise.franchise_id) : null
     // Not saved with the title: search matches a franchise's nicknames on its members.
     doc.franchiseNicknames = franchise?.nicknames || []
     doc.franchiseRating = franchise?.rating != null ? Number(franchise.rating) : null
@@ -273,6 +275,41 @@ export async function loadAdminOverrides(id) {
     if (error.code === '42703') return {}
     throw error
   }
+}
+
+/**
+ * Watchlist writes cap progress at a series' last episode and season
+ * (services/watchlistWrites.js `progressLimits`), but only on the row's next write.
+ * When a series' counts shrink (a MAL season that had TMDB's whole-show total), pull
+ * every row past the end back to it, whatever its status. `updated_at` is left alone so
+ * friends' home feeds don't report the correction as watching, and watch history
+ * keeps what was logged.
+ * @param {{ contentIds?: string[] }} [scope] - Only these series; every series when omitted.
+ * @param {{ dryRun?: boolean }} [options] - Count the rows without changing them.
+ * @returns {Promise<number>} Rows clamped (or that would be).
+ */
+export async function clampWatchlistProgress({ contentIds } = {}, { dryRun = false } = {}) {
+  const where = `s.content_id = w.content_id AND s.episode_count > 0
+    AND (w.current_episode > s.episode_count
+         OR w.current_season > GREATEST(COALESCE(s.season_count, 1), 1))
+    ${contentIds ? 'AND w.content_id = ANY($1::uuid[])' : ''}`
+  const params = contentIds ? [contentIds] : []
+  if (dryRun) {
+    const { rows } = await query(
+      `SELECT count(*)::int AS n FROM watchlist w, series s WHERE ${where}`,
+      params,
+    )
+    return rows[0].n
+  }
+  const result = await query(
+    `UPDATE watchlist w SET
+       current_episode = LEAST(w.current_episode, s.episode_count),
+       previous_episode = LEAST(w.previous_episode, s.episode_count),
+       current_season = LEAST(w.current_season, GREATEST(COALESCE(s.season_count, 1), 1))
+     FROM series s WHERE ${where}`,
+    params,
+  )
+  return result.rowCount || 0
 }
 
 /**
@@ -467,6 +504,7 @@ Content.prototype.save = async function save() {
   }
 
   await replaceChildren(this)
+  if (kind === 'series') await clampWatchlistProgress({ contentIds: [String(id)] })
   this.$isNew = false
   if (saved[0]?.inserted) catalogEvents.emit('title-added', String(id))
   return this

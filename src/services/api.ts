@@ -282,6 +282,8 @@ export const contentAPI = {
   getContentEpisodes: (id: string) => api.get(`/content/${id}/episodes`),
 
   getRelatedContent: (contentId: string) => api.get(`/content/${contentId}/related`),
+
+  getFranchise: (id: string) => api.get(`/franchises/${id}`),
 }
 
 export const aiAPI = {

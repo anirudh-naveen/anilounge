@@ -12,6 +12,7 @@ import geminiService from '../services/geminiService.js'
 import { consumeAiCall } from '../services/aiUsageService.js'
 import relationshipService from '../services/relationshipService.js'
 import { getSeasonGuide } from '../services/seasonService.js'
+import { getFranchise } from '../services/franchiseService.js'
 import {
   ingestMalRankingByTypes,
   ingestTmdbNowPlayingMovies,
@@ -853,8 +854,29 @@ export const getRelatedContent = async (req, res) => {
   }
 }
 
+/**
+ * `GET /franchises/:id` — a franchise with all its titles in watch order.
+ *
+ * @param {import('express').Request} req - Reads `params.id`.
+ * @param {import('express').Response} res
+ * @returns {Promise<void>}
+ */
+export const getFranchiseById = async (req, res) => {
+  try {
+    const franchise = await getFranchise(req.params.id)
+    if (!franchise) {
+      return res.status(404).json({ success: false, message: 'Franchise not found' })
+    }
+    res.json({ success: true, data: franchise })
+  } catch (error) {
+    console.error('Error fetching franchise:', error)
+    res.status(500).json({ success: false, message: 'Failed to load franchise' })
+  }
+}
+
 export default {
   getContent,
+  getFranchiseById,
   getContentById,
   getContentEpisodes,
   aiChat,

@@ -137,6 +137,7 @@ router.get(
   optionalAuthenticate,
   entityController.getEntityById,
 )
+router.get('/franchises/:id', validateObjectId, contentController.getFranchiseById)
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
 
 /** Homepage sections. Release updates use the watchlist when a token is present. */
