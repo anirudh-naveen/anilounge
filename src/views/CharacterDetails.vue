@@ -50,7 +50,14 @@
             <span class="franchise-label">
               {{ franchises.length === 1 ? 'Franchise' : 'Franchises' }}
             </span>
-            <span v-for="name in franchises" :key="name" class="franchise-chip">{{ name }}</span>
+            <component
+              :is="franchiseIds[name] ? 'router-link' : 'span'"
+              v-for="name in franchises"
+              :key="name"
+              :to="franchiseIds[name] ? franchiseRoute(name) : undefined"
+              class="franchise-chip"
+              >{{ name }}</component
+            >
           </div>
 
           <div class="character-actions">
@@ -119,7 +126,13 @@
           data-testid="appearance-group"
         >
           <h3 v-if="appearanceGroups.length > 1 || group.franchise" class="group-title">
-            <span v-if="group.franchise" class="franchise-chip">{{ group.franchise }}</span>
+            <component
+              :is="franchiseIds[group.franchise] ? 'router-link' : 'span'"
+              v-if="group.franchise"
+              :to="franchiseIds[group.franchise] ? franchiseRoute(group.franchise) : undefined"
+              class="franchise-chip"
+              >{{ group.franchise }}</component
+            >
             <template v-else>Other titles</template>
           </h3>
           <div class="content-grid">
@@ -163,6 +176,7 @@ import { getDetailsRouteName, getPosterUrl } from '@/services/api'
 import { getDisplayTitle } from '@/utils/titles'
 import {
   canonicalCharacterName,
+  characterFranchiseIds,
   characterFranchises,
   collectVoiceActors,
   displayPersonName,
@@ -198,6 +212,11 @@ const appearanceTitles = computed(() => {
 })
 
 const franchises = computed(() => characterFranchises(character.value))
+const franchiseIds = computed(() => characterFranchiseIds(character.value))
+const franchiseRoute = (name: string) => ({
+  name: 'FranchiseDetails',
+  params: { id: franchiseIds.value[name] },
+})
 
 // Franchises first (in the header's order), then titles outside any franchise.
 const appearanceGroups = computed(() => {
@@ -369,12 +388,18 @@ watch(
 }
 
 .franchise-chip {
+  text-decoration: none;
   padding: 0.25rem 0.7rem;
   border-radius: 999px;
   font-size: 0.85rem;
   font-weight: 600;
   color: white;
   background: linear-gradient(90deg, var(--coral-light), var(--tan-primary));
+}
+
+a.franchise-chip:hover {
+  filter: brightness(1.08);
+  text-decoration: underline;
 }
 
 .character-actions {

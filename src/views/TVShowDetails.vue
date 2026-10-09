@@ -163,7 +163,24 @@
 
         <!-- Title: Franchise -->
         <div v-if="show.franchise" class="franchise-info">
-          <h4>Part of the {{ show.franchise }} franchise</h4>
+          <h4>
+            Part of the
+            <router-link
+              v-if="show.franchiseId"
+              :to="{ name: 'FranchiseDetails', params: { id: show.franchiseId } }"
+              class="franchise-link"
+              data-testid="franchise-link"
+              >{{ show.franchise }}</router-link
+            ><template v-else>{{ show.franchise }}</template>
+            franchise
+          </h4>
+          <router-link
+            v-if="show.franchiseId"
+            :to="{ name: 'FranchiseDetails', params: { id: show.franchiseId } }"
+            class="franchise-order-link"
+          >
+            See every title in watch order <i class="fas fa-arrow-right"></i>
+          </router-link>
           <p v-if="show.franchiseRating" class="franchise-rating" data-testid="franchise-rating">
             <i class="fas fa-star"></i> {{ show.franchiseRating.toFixed(1) }} across the franchise
           </p>
@@ -955,6 +972,24 @@ watch(
   margin: 0;
   color: white;
   font-size: 1.1rem;
+}
+
+.franchise-link {
+  color: white;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.franchise-order-link {
+  display: inline-block;
+  margin-top: 0.4rem;
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.franchise-order-link:hover {
+  text-decoration: underline;
 }
 
 .franchise-rating {
