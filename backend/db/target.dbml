@@ -50,6 +50,8 @@ Enum appearance_role {
 Enum post_kind {
   discussion
   review
+  guide
+  article
 }
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,11 @@
  */
 
 import forumService from '../services/forumService.js'
+import { appUrl } from '../services/emailService.js'
 import { assertNotDemo, sendError } from '../utils/httpError.js'
+
+/** Public pages listed in the sitemap besides forum posts. */
+const SITEMAP_PAGES = ['/', '/forum', '/movies', '/tv']
 
 /**
  * Wrap a handler: run it, send `{ success, ...result }`, map errors.
@@ -146,7 +150,34 @@ export const unlikeComment = handle(
   'Error updating like',
 )
 
+/**
+ * `GET /sitemap.xml` — main pages and every visible forum post, for search engines
+ * (served at the site root through vercel.json; robots.txt points here).
+ */
+export const sitemap = async (req, res) => {
+  try {
+    const base = appUrl()
+    const posts = await forumService.sitemapPosts()
+    const url = (path, lastModified) =>
+      `  <url><loc>${base}${path}</loc>${
+        lastModified ? `<lastmod>${new Date(lastModified).toISOString()}</lastmod>` : ''
+      }</url>`
+    const xml = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      ...SITEMAP_PAGES.map((path) => url(path)),
+      ...posts.map((post) => url(`/forum/post/${post.id}`, post.lastModified)),
+      '</urlset>',
+    ].join('\n')
+    res.set('Cache-Control', 'public, max-age=3600')
+    res.type('application/xml').send(xml)
+  } catch (error) {
+    sendError(res, error, 'Error building the sitemap')
+  }
+}
+
 export default {
+  sitemap,
   listPosts,
   getPost,
   searchTags,

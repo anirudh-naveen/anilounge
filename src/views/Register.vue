@@ -94,7 +94,10 @@
         <!-- Footer -->
         <div class="register-footer">
           <p>
-            Already have an account? <router-link to="/login" class="link">Sign in</router-link>
+            Already have an account?
+            <router-link :to="{ path: '/login', query: route.query }" class="link"
+              >Sign in</router-link
+            >
           </p>
         </div>
       </div>
@@ -104,10 +107,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
@@ -138,7 +142,7 @@ const handleRegister = async () => {
   try {
     const { email } = await authStore.register(form.value)
     toast.success('Account created! Check your email for a verification code.')
-    router.push({ name: 'verifyEmail', query: { email } })
+    router.push({ name: 'verifyEmail', query: { email, redirect: route.query.redirect } })
   } catch {
     toast.error(authStore.error || 'Registration failed. Please try again.')
   }

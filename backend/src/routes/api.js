@@ -144,6 +144,9 @@ router.get('/home/updates', optionalAuthenticate, homeController.getUpdates)
 router.get('/home/character-of-the-day', homeController.getCharacterOfTheDay)
 router.get('/home/forum', optionalAuthenticate, forumController.getHomeHighlights)
 
+/** Sitemap for search engines (forum posts and main pages). */
+router.get('/sitemap.xml', forumController.sitemap)
+
 /** Forum reads (public; signed-in viewers also get their likes and edit rights). */
 router.get('/forum/posts', optionalAuthenticate, forumController.listPosts)
 router.get('/forum/posts/:id', validateObjectId, optionalAuthenticate, forumController.getPost)

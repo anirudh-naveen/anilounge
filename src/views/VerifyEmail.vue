@@ -76,6 +76,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { authAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { safeRedirect } from '@/utils/social'
 
 defineOptions({ name: 'VerifyEmailPage' })
 
@@ -97,11 +98,11 @@ const submit = async () => {
     const result = await authStore.verifyEmail(email.value, code.value.trim())
     if (result.alreadyVerified) {
       toast.info('Your email is already verified. Please sign in.')
-      router.push('/login')
+      router.push({ path: '/login', query: { redirect: route.query.redirect } })
       return
     }
     toast.success('Email verified. Welcome to AniLounge!')
-    router.push('/')
+    router.push(safeRedirect(route.query.redirect))
   } catch {
     code.value = ''
   }

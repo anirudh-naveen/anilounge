@@ -18,3 +18,11 @@ export const profileRoute = (username: string) => ({
   name: 'publicProfile',
   params: { username },
 })
+
+/**
+ * An in-site path to return to after signing in (`?redirect=`), else Home. Only
+ * `/path` values are kept, so the parameter can't send anyone to another site.
+ */
+export function safeRedirect(value: unknown) {
+  return typeof value === 'string' && /^\/(?![/\\])/.test(value) ? value : '/'
+}
