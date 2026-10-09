@@ -3,7 +3,7 @@
  */
 
 import type { ToastInterface } from 'vue-toastification'
-import type { PostTag, TagKind } from '@/types/forum'
+import type { PostKind, PostTag, TagKind } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
 
 export const TITLE_MAX = 150
@@ -18,6 +18,16 @@ export const KIND_LABELS: Record<TagKind, string> = {
   franchise: 'Franchise',
   character: 'Character',
 }
+
+export const POST_KIND_LABELS: Record<PostKind, string> = {
+  discussion: 'Discussion',
+  review: 'Review',
+  guide: 'Guide',
+  article: 'Article',
+}
+
+/** Post kinds in display order. */
+export const POST_KINDS = Object.keys(POST_KIND_LABELS) as PostKind[]
 
 /** Kinds a review can score. */
 export const REVIEWABLE_KINDS: TagKind[] = ['movie', 'series', 'special']
@@ -53,14 +63,14 @@ export function tagLevels<T extends Pick<PostTag, 'kind' | 'name' | 'season' | '
 
 /**
  * The tag whose picture represents a post: the top tag when it has one, else the
- * highest tag in the hierarchy with a picture (franchise, then title, then character).
+ * highest tag in the hierarchy with a picture (title, then character). Franchises
+ * never supply the picture, even as the top tag.
  */
 export function coverTag<
   T extends Pick<PostTag, 'kind' | 'name' | 'season' | 'episode' | 'imagePath' | 'top'>,
 >(tags: T[]) {
-  const top = tags.find((tag) => tag.top)
-  if (top?.imagePath) return top
-  return sortTags(tags).find((tag) => tag.imagePath) || null
+  const pictured = tags.filter((tag) => tag.kind !== 'franchise' && tag.imagePath)
+  return pictured.find((tag) => tag.top) || sortTags(pictured)[0] || null
 }
 
 /** `S1E5` style episode label, or '' when the tag isn't an episode. */

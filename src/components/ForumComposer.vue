@@ -1,8 +1,10 @@
 <!--
   ForumComposer.vue — write or edit a forum post (component).
 
-  Discussion or review (reviews need a 1–10 score and a tagged movie, series, or
-  special), title, body, a spoiler flag, and tags. With `post` it edits that post
+  Discussion, review (reviews need a 1–10 score and a tagged movie, series, or
+  special), guide, or article; title, body (with bold, italics, a heading preset,
+  lists, quotes, and links; see `utils/richText.ts`), a spoiler flag, and tags
+  (optional except for reviews). With `post` it edits that post
   (the kind is fixed); otherwise it creates one, optionally starting from
   `presetTags` and `presetKind`. Emits `saved` with the stored post, or `cancel`.
 
@@ -36,7 +38,7 @@
         v-model="title"
         class="input"
         :maxlength="TITLE_MAX"
-        :placeholder="kind === 'review' ? 'Sum up your take' : 'What do you want to talk about?'"
+        :placeholder="KIND_OPTIONS.find((option) => option.value === kind)?.title"
         data-testid="composer-title"
         required
       />
@@ -73,29 +75,88 @@
       </span>
     </label>
 
-    <label class="field">
+    <div class="field">
       <span class="field-label">
-        {{ kind === 'review' ? 'Review' : 'Post' }}
+        {{ kind === 'discussion' ? 'Post' : POST_KIND_LABELS[kind] }}
         <span class="social-char-count" :class="{ over: body.length >= BODY_MAX }"
           >{{ body.length }}/{{ BODY_MAX }}</span
         >
       </span>
+      <!-- Title: Formatting -->
+      <span class="format-bar" role="toolbar" aria-label="Formatting">
+        <span class="format-tools">
+          <button
+            v-for="tool in FORMAT_TOOLS"
+            :key="tool.id"
+            type="button"
+            class="format-btn"
+            :class="`format-${tool.id}`"
+            :title="tool.title"
+            :aria-label="tool.title"
+            :disabled="previewing"
+            :data-testid="`format-${tool.id}`"
+            @mousedown.prevent
+            @click="applyFormat(tool.id)"
+          >
+            {{ tool.glyph }}
+          </button>
+        </span>
+        <span class="format-modes" role="tablist" aria-label="Editor view">
+          <button
+            type="button"
+            role="tab"
+            class="format-mode"
+            :aria-selected="!previewing"
+            @click="previewing = false"
+          >
+            Write
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="format-mode"
+            :aria-selected="previewing"
+            data-testid="composer-preview-tab"
+            @click="previewing = true"
+          >
+            Preview
+          </button>
+        </span>
+      </span>
+      <div
+        v-if="previewing"
+        class="input composer-body composer-preview"
+        data-testid="composer-preview"
+      >
+        <ForumRichText v-if="body.trim()" :text="body" />
+        <p v-else class="social-meta">Nothing to preview yet.</p>
+      </div>
       <textarea
+        v-show="!previewing"
+        ref="bodyInput"
         v-model="body"
         class="input social-textarea composer-body"
         rows="8"
         :maxlength="BODY_MAX"
-        placeholder="Write it here. Mark spoilers below."
+        placeholder="Write it here. Select text and use the buttons above to format it. Mark spoilers below."
         data-testid="composer-body"
         required
+        aria-label="Post text"
+        @keydown="onBodyKeydown"
       ></textarea>
-    </label>
+    </div>
 
     <div class="field">
       <span class="field-label">
         Tags
         <span class="social-meta">
-          {{ kind === 'review' ? 'Include what you are reviewing.' : 'Optional.' }}
+          {{
+            kind === 'review'
+              ? 'Include what you are reviewing.'
+              : kind === 'discussion'
+                ? 'Optional.'
+                : 'Optional: tag the titles it covers.'
+          }}
         </span>
       </span>
       <ForumTagPicker v-model="tags" />
@@ -114,15 +175,22 @@
         :disabled="saving || !canSubmit"
         data-testid="composer-submit"
       >
-        {{ post ? 'Save changes' : kind === 'review' ? 'Post review' : 'Post' }}
+        {{
+          post
+            ? 'Save changes'
+            : kind === 'discussion'
+              ? 'Post'
+              : `Post ${POST_KIND_LABELS[kind].toLowerCase()}`
+        }}
       </button>
     </div>
   </form>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useToast } from 'vue-toastification'
+import ForumRichText from '@/components/ForumRichText.vue'
 import ForumTagPicker from '@/components/ForumTagPicker.vue'
 import { forumAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -131,17 +199,36 @@ import type { ForumPost, PostKind, PostTag } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
 import {
   BODY_MAX,
+  POST_KIND_LABELS,
   REVIEWABLE_KINDS,
   scoreLabel,
   showLanguageWarning,
   TITLE_MAX,
 } from '@/utils/forum'
 import { getRatingColor } from '@/utils/ratingColors'
+import { applyFormatting, type FormatTool } from '@/utils/richTextEditing'
 import { apiErrorMessage } from '@/utils/social'
 
-const KIND_OPTIONS: { value: PostKind; label: string; hint: string }[] = [
-  { value: 'discussion', label: 'Discussion', hint: 'Start a conversation' },
-  { value: 'review', label: 'Review', hint: 'Score and review a title' },
+const KIND_OPTIONS: { value: PostKind; label: string; hint: string; title: string }[] = [
+  {
+    value: 'discussion',
+    label: 'Discussion',
+    hint: 'Start a conversation',
+    title: 'What do you want to talk about?',
+  },
+  { value: 'review', label: 'Review', hint: 'Score and review a title', title: 'Sum up your take' },
+  {
+    value: 'guide',
+    label: 'Guide',
+    hint: 'Watch orders, tips, and how-tos',
+    title: 'What does your guide cover?',
+  },
+  {
+    value: 'article',
+    label: 'Article',
+    hint: 'Longer writing and analysis',
+    title: 'Give your article a headline',
+  },
 ]
 
 const props = defineProps<{
@@ -162,6 +249,42 @@ const score = ref<number>(props.post?.score ?? 7)
 const spoiler = ref(props.post?.spoiler || false)
 const tags = ref<PostTag[]>(props.post ? [...props.post.tags] : [...(props.presetTags || [])])
 const saving = ref(false)
+const previewing = ref(false)
+const bodyInput = ref<HTMLTextAreaElement | null>(null)
+
+const FORMAT_TOOLS: { id: FormatTool; glyph: string; title: string }[] = [
+  { id: 'bold', glyph: 'B', title: 'Bold (Ctrl/⌘+B)' },
+  { id: 'italic', glyph: 'I', title: 'Italic (Ctrl/⌘+I)' },
+  { id: 'strike', glyph: 'S', title: 'Strikethrough' },
+  { id: 'heading', glyph: 'H', title: 'Heading' },
+  { id: 'bullets', glyph: '•', title: 'Bulleted list' },
+  { id: 'numbers', glyph: '1.', title: 'Numbered list' },
+  { id: 'quote', glyph: '❝', title: 'Quote' },
+  { id: 'link', glyph: '🔗', title: 'Link' },
+]
+
+/** Format the selected text (or insert a placeholder), keeping the result selected. */
+const applyFormat = async (tool: FormatTool) => {
+  const input = bodyInput.value
+  if (!input) return
+  const result = applyFormatting(body.value, input.selectionStart, input.selectionEnd, tool)
+  if (result.text.length > BODY_MAX) {
+    toast.info(`Posts can be up to ${BODY_MAX} characters.`)
+    return
+  }
+  body.value = result.text
+  await nextTick()
+  input.focus()
+  input.setSelectionRange(result.selectionStart, result.selectionEnd)
+}
+
+const onBodyKeydown = (event: KeyboardEvent) => {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+  const key = event.key.toLowerCase()
+  if (key !== 'b' && key !== 'i') return
+  event.preventDefault()
+  applyFormat(key === 'b' ? 'bold' : 'italic')
+}
 
 /** The title a review scores: its first movie/series/special tag (as the server picks it). */
 const subject = computed(() =>
@@ -259,7 +382,7 @@ const submit = async () => {
 
 .kind-toggle {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.6rem;
 }
 
@@ -306,6 +429,90 @@ const submit = async () => {
   min-height: 10rem;
 }
 
+.format-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.format-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.format-btn {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.format-btn:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.format-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.format-bold {
+  font-weight: 800;
+}
+
+.format-italic {
+  font-style: italic;
+  font-family: var(--font-display);
+}
+
+.format-strike {
+  text-decoration: line-through;
+}
+
+.format-heading {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.format-modes {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.format-mode {
+  padding: 0.3rem 0.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.format-mode[aria-selected='true'] {
+  background: color-mix(in srgb, var(--coral-primary) 14%, transparent);
+  color: var(--coral-deep);
+}
+
+.composer-preview {
+  overflow-y: auto;
+  max-height: 32rem;
+}
+
 .score-row {
   display: flex;
   align-items: center;
@@ -336,9 +543,9 @@ const submit = async () => {
   gap: 0.6rem;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 760px) {
   .kind-toggle {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

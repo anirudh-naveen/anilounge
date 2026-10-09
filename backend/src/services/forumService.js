@@ -1,8 +1,8 @@
 /**
- * Forum: discussion and review posts, tags, comments, and likes.
+ * Forum: discussion, review, guide, and article posts, tags, comments, and likes.
  *
- * Layer: service. A post is a 'discussion' or a 'review' (reviews carry a 1–10 score)
- * and is tagged with up to TAGS_MAX catalog rows: movies, series, specials,
+ * Layer: service. A post is a 'discussion', a 'review' (reviews carry a 1–10 score),
+ * a 'guide', or an 'article', and is tagged with up to TAGS_MAX catalog rows: movies, series, specials,
  * franchises, characters, or one episode of a series (season + episode number).
  * Filtering by a franchise also finds posts tagged with its members. Comments nest
  * one level: a reply to a reply attaches to the top-level comment. Likes rank the
@@ -27,6 +27,7 @@ import { isUuid } from '../db/ids.js'
 import Content from '../models/Content.js'
 import { isAdminUser } from '../middleware/adminOnly.js'
 import { HttpError } from '../utils/httpError.js'
+import { stripFormatting } from '../utils/richText.js'
 import { cleanUserText } from '../utils/userText.js'
 import { logAction, quoteValue } from './adminLog.js'
 import { escapeLike } from '../db/mongoFilter.js'
@@ -35,7 +36,7 @@ import { getSeasonGuide } from './seasonService.js'
 import { screenText } from './languageWarningService.js'
 import { notify } from './notificationService.js'
 
-export const POST_KINDS = ['discussion', 'review']
+export const POST_KINDS = ['discussion', 'review', 'guide', 'article']
 export const TAG_KINDS = ['movie', 'series', 'special', 'franchise', 'character']
 /** Kinds a review can score. */
 export const REVIEWABLE_KINDS = ['movie', 'series', 'special']
@@ -185,7 +186,7 @@ export function excerptOf(text, length = EXCERPT_LENGTH) {
  * Client shape for a post row.
  * @param {object} row - From `postColumns`.
  * @param {{ full?: boolean, viewer?: object | null }} [options] - `full` keeps the whole
- *   body (post page); otherwise only an excerpt.
+ *   body with its formatting marks (post page); otherwise only a plain-text excerpt.
  * @returns {object}
  */
 export function postEntry(row, { full = false, viewer = null } = {}) {
@@ -194,7 +195,7 @@ export function postEntry(row, { full = false, viewer = null } = {}) {
     id: String(row.id),
     kind: row.kind,
     title: row.title,
-    ...(full ? { body: row.body } : { excerpt: excerptOf(row.body) }),
+    ...(full ? { body: row.body } : { excerpt: excerptOf(stripFormatting(row.body)) }),
     score: row.score === null || row.score === undefined ? null : Number(row.score),
     subjectId: row.subject_id ? String(row.subject_id) : null,
     spoiler: Boolean(row.spoiler),
@@ -376,7 +377,7 @@ export async function validateTags(input, { loadEpisodes = loadEpisodeKeys } = {
 export async function validatePostInput(input = {}, { partial = false, kind: fixedKind } = {}) {
   const kind = fixedKind || input.kind
   if (!POST_KINDS.includes(kind))
-    throw new HttpError(400, 'Post type must be discussion or review.')
+    throw new HttpError(400, 'Post type must be discussion, review, guide, or article.')
   const out = { kind }
 
   if (!partial || input.title !== undefined) {
@@ -1150,6 +1151,24 @@ export async function getHomeHighlights(viewer) {
   }
 }
 
+/** Most posts listed in the sitemap (search engines read up to 50,000 per file). */
+export const SITEMAP_POSTS_MAX = 20000
+
+/**
+ * Posts for the sitemap: visible posts, most recently active first.
+ * @returns {Promise<Array<{ id: string, lastModified: Date }>>}
+ */
+export async function sitemapPosts() {
+  const { rows } = await query(
+    `SELECT p.id, GREATEST(p.created_at, p.edited_at, p.last_activity_at) AS last_modified
+     FROM posts p JOIN users u ON u.id = p.user_id
+     WHERE u.banned_at IS NULL
+     ORDER BY p.last_activity_at DESC
+     LIMIT ${SITEMAP_POSTS_MAX}`,
+  )
+  return rows.map((row) => ({ id: String(row.id), lastModified: row.last_modified }))
+}
+
 export default {
   listPosts,
   getPost,
@@ -1165,6 +1184,7 @@ export default {
   contentCharacters,
   getHighlights,
   getHomeHighlights,
+  sitemapPosts,
   validatePostInput,
   validateTags,
   excerptOf,

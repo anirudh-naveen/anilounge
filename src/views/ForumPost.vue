@@ -6,6 +6,10 @@
   edit or delete it and admins can delete it. Comments nest one level: replying
   to a reply threads under the top-level comment. A deleted comment that has
   replies stays as "[deleted]" so the thread still reads.
+
+  Posts are public and indexable: the page sets its title, description, and
+  `DiscussionForumPosting` structured data (spoiler posts keep their text out of
+  the description), and signed-out visitors get a "Join the Conversation" prompt.
 -->
 <template>
   <div class="social-page">
@@ -28,7 +32,7 @@
             <div class="post-intro">
               <header class="post-head">
                 <span class="post-badge post-kind" :class="post.kind">
-                  {{ post.kind === 'review' ? 'Review' : 'Discussion' }}
+                  {{ POST_KIND_LABELS[post.kind] }}
                 </span>
                 <span
                   v-if="post.score !== null"
@@ -88,7 +92,7 @@
             <ForumIcon name="eye-off" class="spoiler-icon" />
             This post contains spoilers. Show it
           </button>
-          <div v-else class="post-body" data-testid="post-body">{{ post.body }}</div>
+          <ForumRichText v-else :text="post.body || ''" class="post-body" data-testid="post-body" />
 
           <footer class="post-actions">
             <button
@@ -221,6 +225,12 @@
         </section>
       </template>
     </div>
+
+    <JoinPrompt
+      v-if="post"
+      title="Join the Conversation"
+      message="Sign up to reply, like posts, and share your own takes on anime and animation."
+    />
   </div>
 </template>
 
@@ -230,17 +240,28 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import ForumCommentItem from '@/components/ForumCommentItem.vue'
 import ForumComposer from '@/components/ForumComposer.vue'
+import ForumRichText from '@/components/ForumRichText.vue'
 import ForumIcon from '@/components/ForumIcon.vue'
 import ForumTags from '@/components/ForumTags.vue'
+import JoinPrompt from '@/components/JoinPrompt.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI, getPosterUrl } from '@/services/api'
+import { usePageMeta } from '@/composables/usePageMeta'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumComment, ForumPost } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
-import { COMMENT_MAX, coverTag, scoreLabel, showLanguageWarning, tagRoute } from '@/utils/forum'
+import {
+  COMMENT_MAX,
+  coverTag,
+  POST_KIND_LABELS,
+  scoreLabel,
+  showLanguageWarning,
+  tagRoute,
+} from '@/utils/forum'
 import { getRatingBadgeColors } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
+import { plainText } from '@/utils/richText'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
 defineOptions({ name: 'ForumPostPage' })
@@ -268,6 +289,68 @@ const replyInput = ref<HTMLTextAreaElement[] | null>(null)
 const sending = ref(false)
 
 const postId = computed(() => String(route.params.id))
+
+/** Absolute URL of an in-site path, for structured data. */
+const absolute = (path: string) => new URL(path, window.location.origin).href
+
+usePageMeta(() => {
+  const value = post.value
+  if (!value) return null
+  const path = `/forum/post/${value.id}`
+  const text = plainText(value.body || '')
+  const about = value.tags.map((tag) => tag.name).join(', ')
+  const kind = POST_KIND_LABELS[value.kind]
+  const description = value.spoiler
+    ? `${kind} by ${value.author.username}${about ? ` about ${about}` : ''}. Contains spoilers.`
+    : text
+  const author = (username: string) => ({
+    '@type': 'Person',
+    name: username,
+    url: absolute(`/u/${encodeURIComponent(username)}`),
+  })
+  const image = cover.value?.imagePath ? getPosterUrl(cover.value.imagePath) : null
+  return {
+    title: value.title,
+    description,
+    path,
+    type: 'article',
+    image,
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'DiscussionForumPosting',
+      headline: value.title,
+      text: value.spoiler ? description : text,
+      url: absolute(path),
+      datePublished: value.createdAt,
+      ...(value.editedAt ? { dateModified: value.editedAt } : {}),
+      author: author(value.author.username),
+      ...(image ? { image } : {}),
+      ...(about ? { about: value.tags.map((tag) => ({ '@type': 'Thing', name: tag.name })) } : {}),
+      interactionStatistic: [
+        {
+          '@type': 'InteractionCounter',
+          interactionType: 'https://schema.org/LikeAction',
+          userInteractionCount: value.likeCount,
+        },
+        {
+          '@type': 'InteractionCounter',
+          interactionType: 'https://schema.org/CommentAction',
+          userInteractionCount: value.commentCount,
+        },
+      ],
+      comment: comments.value
+        .filter((comment) => !comment.deleted && comment.author)
+        .slice(0, 50)
+        .map((comment) => ({
+          '@type': 'Comment',
+          text: comment.body,
+          datePublished: comment.createdAt,
+          author: author(comment.author!.username),
+          url: absolute(`${path}#comment-${comment.id}`),
+        })),
+    },
+  }
+})
 
 /** Top-level comments, each with its replies, oldest first. */
 const threads = computed(() => {
@@ -451,6 +534,16 @@ onMounted(load)
   color: var(--coral-deep);
 }
 
+.post-kind.guide {
+  background: color-mix(in srgb, var(--teal-primary) 16%, transparent);
+  color: color-mix(in srgb, var(--teal-primary) 60%, var(--text-primary));
+}
+
+.post-kind.article {
+  background: color-mix(in srgb, var(--purple-accent) 16%, transparent);
+  color: color-mix(in srgb, var(--purple-accent) 70%, var(--text-primary));
+}
+
 .post-spoiler-flag {
   background: color-mix(in srgb, var(--error-color) 14%, transparent);
   color: var(--error-color);
@@ -540,10 +633,6 @@ onMounted(load)
 
 .post-body {
   margin-top: 1.25rem;
-  color: var(--text-primary);
-  line-height: 1.7;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .spoiler-cover {

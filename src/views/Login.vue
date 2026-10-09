@@ -4,6 +4,7 @@
   Email/password sign-in form against the auth store, followed by an
   authenticator-code step for accounts with 2FA. Unverified accounts are sent
   to email verification; locked accounts get a link to the unlock page.
+  `?redirect=/path` (an in-site path) is where signing in returns to.
 -->
 <template>
   <div class="login-page">
@@ -98,7 +99,10 @@
         <!-- Footer -->
         <div class="login-footer">
           <p>
-            Don't have an account? <router-link to="/register" class="link">Sign up</router-link>
+            Don't have an account?
+            <router-link :to="{ path: '/register', query: route.query }" class="link"
+              >Sign up</router-link
+            >
           </p>
         </div>
       </div>
@@ -108,15 +112,17 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+import { safeRedirect } from '@/utils/social'
 
 // Component name for Vue devtools
 defineOptions({
   name: 'LoginPage',
 })
 
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
@@ -132,7 +138,7 @@ const finishLogin = async () => {
   toast.success('Login successful!')
   // Wait for next tick to ensure auth state is updated
   await new Promise((resolve) => setTimeout(resolve, 100))
-  router.push('/')
+  router.push(safeRedirect(route.query.redirect))
 }
 
 const handleLogin = async () => {
