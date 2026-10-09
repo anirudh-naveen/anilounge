@@ -21,10 +21,16 @@ const base = (process.env.SITE_URL || 'https://www.anilounge.net').replace(/\/+$
 const dryRun = process.argv.includes('--dry-run')
 
 try {
-  const keyResponse = await fetch(`${base}${KEY_PATH}`)
+  // Node's default User-Agent ("node") looks like a bot to the API and gets the caller's
+  // IP banned, so name the script.
+  const keyResponse = await fetch(`${base}${KEY_PATH}`, {
+    headers: { 'User-Agent': 'AniLounge-IndexNow-Submit/1.0 (+https://www.anilounge.net)' },
+  })
   const key = (await keyResponse.text()).trim()
   if (!keyResponse.ok || !/^[a-zA-Z0-9-]{8,128}$/.test(key)) {
-    throw new Error(`${base}${KEY_PATH} didn't return a key (${keyResponse.status}). Deploy first.`)
+    throw new Error(
+      `${base}${KEY_PATH} didn't return a key (${keyResponse.status}). Is the latest backend deployed on Railway?`,
+    )
   }
   const urls = await listSitemapUrls(base)
   console.log(`${urls.length} URLs from the sitemaps (key ${key.slice(0, 6)}…).`)
