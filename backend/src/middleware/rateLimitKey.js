@@ -61,14 +61,17 @@ export function rateLimitMax(req) {
 
 /**
  * `app.set('trust proxy', …)` value from TRUST_PROXY: a hop count ("1", "2"), "true",
- * or a list of trusted proxy addresses/subnets. Defaults to 1 (Railway's edge).
- * With Vercel rewriting `/api` to Railway there may be two hops; check with
- * `GET /api/status` (it echoes the address the server sees) before changing it.
+ * or a list of trusted proxy addresses/subnets. Defaults to 2: Railway's edge replaces
+ * any client X-Forwarded-For with `<connecting ip>, <edge hop>`, so the client is two
+ * entries from the right and cannot be spoofed. Through the Vercel `/api` rewrite the
+ * connecting IP is Vercel's, not the visitor's (Vercel forwards a client-supplied
+ * X-Vercel-Forwarded-For untouched, so that header is not trusted). Check with
+ * `GET /api/status?proxy=1` before changing it.
  * @param {string | undefined} [value]
  * @returns {number | boolean | string}
  */
 export function trustProxySetting(value = process.env.TRUST_PROXY) {
-  if (value == null || value === '') return 1
+  if (value == null || value === '') return 2
   if (/^\d+$/.test(value)) return Number(value)
   if (value === 'true') return true
   if (value === 'false') return false

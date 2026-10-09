@@ -36,9 +36,9 @@ describe('rateLimitKey', () => {
 })
 
 describe('trustProxySetting', () => {
-  it('defaults to one hop and parses counts, booleans, and lists', () => {
-    assert.equal(trustProxySetting(undefined), 1)
-    assert.equal(trustProxySetting(''), 1)
+  it('defaults to two hops and parses counts, booleans, and lists', () => {
+    assert.equal(trustProxySetting(undefined), 2)
+    assert.equal(trustProxySetting(''), 2)
     assert.equal(trustProxySetting('2'), 2)
     assert.equal(trustProxySetting('true'), true)
     assert.equal(trustProxySetting('false'), false)
