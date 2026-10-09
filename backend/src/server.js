@@ -44,6 +44,7 @@ import { startConnectionSync } from './services/connectionSync.js'
 import { startSessionCleanupScheduler } from './services/sessionService.js'
 import { startHotScoreScheduler } from './services/forumService.js'
 import { startAiUsageCleanupScheduler } from './services/aiUsageService.js'
+import { KEY_PATH, indexNowKey, startIndexNow } from './services/indexNowService.js'
 import { emailProvider } from './services/emailService.js'
 
 dotenv.config()
@@ -83,6 +84,17 @@ app.get('/health', (req, res) => {
     contentSync: getContentSyncStatus(),
     catalogMaintenance: getCatalogMaintenanceStatus(),
   })
+})
+
+/**
+ * IndexNow key file (services/indexNowService.js), served at the site root through
+ * vercel.json. Search engines fetch it to confirm our URL submissions.
+ */
+app.get(`/api${KEY_PATH}`, (req, res) => {
+  const key = indexNowKey()
+  if (!key) return res.status(404).type('text/plain').send('Not configured')
+  res.set('Cache-Control', 'public, max-age=86400')
+  res.type('text/plain').send(key)
 })
 
 /**
@@ -353,6 +365,7 @@ app
     startSessionCleanupScheduler()
     startHotScoreScheduler()
     startAiUsageCleanupScheduler()
+    startIndexNow()
     console.log(`Email delivery: ${emailProvider()}`)
     ensureDemoAccount()
       .then((result) => {

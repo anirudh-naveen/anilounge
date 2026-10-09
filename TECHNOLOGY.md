@@ -57,6 +57,7 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | --- | --- |
 | [Google Search Console](https://search.google.com/search-console) | Domain verification (DNS TXT record), sitemap submission, and indexing/search reports |
 | [Bing Webmaster Tools](https://www.bing.com/webmasters) | Indexing for Bing, DuckDuckGo, Yahoo, and ChatGPT search (imported from Search Console) |
+| [IndexNow](https://www.indexnow.org) | Instant URL submission to Bing, Yandex, Naver, Seznam, and Yep when titles or forum posts are added, edited, or deleted (`services/indexNowService.js`; key at `/indexnow-key.txt`) |
 | XML sitemaps | `/sitemap.xml` index with per-section files under `/sitemaps/`, built live from the database (`services/sitemapService.js`); thin pages left out (`utils/seoIndexing.js`) |
 | [Vercel Routing Middleware](https://vercel.com/docs/routing-middleware) | Writes each public page's title, meta tags, canonical link, JSON-LD, and a text summary into the HTML before JavaScript runs (`middleware.ts`, `seo/renderPage.ts`, `GET /api/seo/page`) |
 | `robots.txt` | Crawl rules and the sitemap location (`public/robots.txt`) |

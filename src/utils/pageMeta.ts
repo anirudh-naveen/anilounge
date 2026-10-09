@@ -77,7 +77,7 @@ const isoDate = (value?: string | Date) => {
  * Meta for a movie, series, or special page.
  * @param content - The title on screen.
  * @param options.path - Its in-site path (`/movie/<slug>/<id>`, `/tv-show/<slug>/<id>`).
- * @param options.image - Absolute poster URL, or null.
+ * @param options.image - Absolute poster URL for the schema.org data, or null.
  * @param options.seasonLabel - Season being shown ("Season 2"), when not the whole show.
  */
 export function titlePageMeta(
@@ -98,7 +98,6 @@ export function titlePageMeta(
     title: year ? `${heading} (${year})` : heading,
     description: `${summary} Track it, rate it, and discuss it on AniLounge.`,
     path,
-    image,
     jsonLd: [
       {
         '@context': 'https://schema.org',
@@ -163,7 +162,7 @@ const ENTITY_FALLBACK: Record<EntityPageKind, (name: string, works: string[]) =>
  * @param entity.name - Display name.
  * @param entity.about - Biography or description, if any.
  * @param options.path - In-site path.
- * @param options.image - Absolute image URL, or null.
+ * @param options.image - Absolute image URL for the schema.org data, or null.
  * @param options.works - Titles it's known for, most notable first (for the fallback
  *   description).
  * @param options.parent - Breadcrumb between Home and this page (a character's title).
@@ -186,7 +185,6 @@ export function entityPageMeta(
     title: entity.name,
     description: about || ENTITY_FALLBACK[kind](entity.name, works),
     path,
-    image,
     jsonLd: [
       {
         '@context': 'https://schema.org',

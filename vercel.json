@@ -29,6 +29,10 @@
       "destination": "https://anilounge-production.up.railway.app/api/sitemap.xml"
     },
     {
+      "source": "/indexnow-key.txt",
+      "destination": "https://anilounge-production.up.railway.app/api/indexnow-key.txt"
+    },
+    {
       "source": "/sitemaps/:path*",
       "destination": "https://anilounge-production.up.railway.app/api/sitemaps/:path*"
     },

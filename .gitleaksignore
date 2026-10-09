@@ -1,0 +1,3 @@
+# Findings reviewed and confirmed as false positives (gitleaks fingerprint per line).
+# Placeholder IndexNow key in a unit test, not a credential:
+d95c5122318d2512ba7f063275e4f1beb34a8867:backend/src/services/indexNowService.test.js:generic-api-key:13

@@ -158,4 +158,21 @@ export async function buildSitemapFile(base, file) {
   )
 }
 
-export default { buildSitemapIndex, buildSitemapFile }
+/**
+ * Every URL in every sitemap (for one-off submissions, e.g. scripts/indexNowSubmitAll.js).
+ * @param {string} base - Site origin.
+ * @returns {Promise<string[]>}
+ */
+export async function listSitemapUrls(base) {
+  const files = sitemapFiles(await sectionCounts())
+  const urls = []
+  for (const file of files) {
+    const xml = (await buildSitemapFile(base, file)) || ''
+    for (const match of xml.matchAll(/<loc>([^<]+)<\/loc>/g)) {
+      urls.push(match[1].replace(/&amp;/g, '&'))
+    }
+  }
+  return urls
+}
+
+export default { buildSitemapIndex, buildSitemapFile, listSitemapUrls }

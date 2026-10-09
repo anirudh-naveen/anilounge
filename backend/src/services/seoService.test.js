@@ -6,6 +6,7 @@ import {
   imageUrl,
   metaDescription,
   parsePagePath,
+  shareCardUrl,
 } from './seoService.js'
 
 const ID = '8fb6b935-deab-4221-9a52-2e8e151b5906'
@@ -87,5 +88,14 @@ describe('breadcrumbList', () => {
       name: 'Forum',
       item: '/forum',
     })
+  })
+})
+
+describe('shareCardUrl', () => {
+  it('points at the card route with the path encoded', () => {
+    assert.equal(
+      shareCardUrl('https://anilounge.net', '/movie/a-b/1'),
+      'https://anilounge.net/api/seo/card.png?path=%2Fmovie%2Fa-b%2F1',
+    )
   })
 })

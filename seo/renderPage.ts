@@ -130,7 +130,13 @@ export function renderPage(html: string, page: SeoPage) {
   out = setMeta(out, 'property', 'og:description', page.description)
   out = setMeta(out, 'property', 'og:type', page.type || 'website')
   out = setMeta(out, 'property', 'og:url', page.canonical)
-  if (page.image) out = setMeta(out, 'property', 'og:image', page.image)
+  if (page.image) {
+    // The share card (backend/src/services/shareCardService.js).
+    out = setMeta(out, 'property', 'og:image', page.image)
+    out = setMeta(out, 'property', 'og:image:width', '1200')
+    out = setMeta(out, 'property', 'og:image:height', '630')
+    out = setMeta(out, 'property', 'og:image:alt', page.title)
+  }
   out = setMeta(out, 'name', 'twitter:card', page.image ? 'summary_large_image' : 'summary')
   if (page.robots) out = setMeta(out, 'name', 'robots', page.robots)
   out = beforeHeadEnd(out, `<link rel="canonical" href="${escapeHtml(page.canonical)}" ${OWNED} />`)

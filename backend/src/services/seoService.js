@@ -69,6 +69,20 @@ const HOME_SECTIONS = [
   },
 ]
 
+/** Share-card label per entity kind, and how its titles are introduced. */
+const CARD_EYEBROW = {
+  character: 'Character',
+  voice: 'Voice actor',
+  studio: 'Animation studio',
+  franchise: 'Franchise',
+}
+const CARD_WORKS_LABEL = {
+  character: 'From',
+  voice: 'In',
+  studio: 'Behind',
+  franchise: 'Including',
+}
+
 const POST_KIND_LABELS = {
   discussion: 'Discussion',
   review: 'Review',
@@ -237,6 +251,7 @@ async function staticPage(key) {
     robots: null,
     heading: page.heading,
     intro: page.description,
+    card: { eyebrow: 'AniLounge', title: page.heading, text: page.description, poster: null },
     sections,
     jsonLd:
       key === '/'
@@ -298,6 +313,16 @@ async function titlePage(row) {
     robots: null,
     heading: name,
     intro: [overview, facts.join(' · ')].filter(Boolean).join('\n\n'),
+    card: {
+      eyebrow: series ? 'Anime series' : row.kind === 'special' ? 'Special' : 'Movie',
+      title: name,
+      meta: [year, series && row.episode_count && `${row.episode_count} episodes`]
+        .filter(Boolean)
+        .join(' · '),
+      tags: genreNames,
+      rating: rating && { value: rating.ratingValue, count: rating.ratingCount },
+      poster: image,
+    },
     sections: [
       franchise.length && { title: 'Franchise', links: franchise.map(link) },
       studios.length && { title: 'Studios', links: studios.map(link) },
@@ -446,6 +471,15 @@ async function entityPage(row) {
     robots: row.indexable ? null : 'noindex',
     heading: name,
     intro: about,
+    card: {
+      eyebrow: CARD_EYEBROW[row.kind],
+      title: name,
+      meta: works.length
+        ? `${CARD_WORKS_LABEL[row.kind]} ${[...new Set(works)].slice(0, 2).join(', ')}`
+        : '',
+      text: works.length ? '' : about,
+      poster: image,
+    },
     sections,
     jsonLd: [
       {
@@ -522,6 +556,14 @@ async function postPage(id) {
     robots: null,
     heading: post.title,
     intro: `${kind} by ${post.username}\n\n${post.spoiler ? description : text}`,
+    card: {
+      eyebrow: `${kind} · ${post.username}`,
+      title: post.title,
+      text: post.spoiler ? 'Contains spoilers.' : text,
+      meta: `${Number(post.like_count || 0)} likes · ${Number(post.comment_count || 0)} comments`,
+      tags: tags.map((tag) => contentDisplayName(tag.kind, tag.name)),
+      poster: image,
+    },
     sections: tags.length ? [{ title: 'About', links: tags.map(link) }] : [],
     jsonLd: [
       {
@@ -583,8 +625,19 @@ function absolutize(page, base) {
     ...page,
     description: metaDescription(page.description),
     canonical: base + page.path,
+    image: shareCardUrl(base, page.path),
     jsonLd: page.jsonLd ? fix(page.jsonLd) : null,
   }
+}
+
+/**
+ * Link-preview image of a page: its share card (services/shareCardService.js, served by
+ * routes/seo.js). Same URL as `shareCardUrl` in src/composables/usePageMeta.ts.
+ * @param {string} base - Site origin.
+ * @param {string} path - In-site path.
+ */
+export function shareCardUrl(base, path) {
+  return `${base}/api/seo/card.png?path=${encodeURIComponent(path)}`
 }
 
 /** path → { at, value } */
@@ -615,4 +668,4 @@ export async function describePage(path, base) {
   return value
 }
 
-export default { describePage, parsePagePath, imageUrl, metaDescription }
+export default { describePage, parsePagePath, imageUrl, metaDescription, shareCardUrl }
