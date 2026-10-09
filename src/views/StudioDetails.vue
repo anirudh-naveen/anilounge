@@ -128,6 +128,8 @@ import { getDisplayTitle } from '@/utils/titles'
 import { collectStudioWorks, studioWorkYear, type StudioWork } from '@/utils/entities'
 import type { CatalogEntity } from '@/types/content'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import { usePageMeta } from '@/composables/usePageMeta'
+import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -205,6 +207,16 @@ watch(
   },
   { immediate: true },
 )
+
+usePageMeta(() => {
+  const value = studio.value
+  if (!value) return null
+  return entityPageMeta('studio', value, {
+    path: `/studio/${route.params.id}`,
+    image: value.imagePath ? getPosterUrl(value.imagePath) : null,
+    works: [...works.value.series, ...works.value.movies].map((work) => getDisplayTitle(work)),
+  })
+})
 </script>
 
 <style scoped>

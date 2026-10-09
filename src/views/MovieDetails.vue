@@ -261,6 +261,11 @@
 
       <StudioLinks :content="movie" />
     </div>
+
+    <JoinPrompt
+      title="Track this movie"
+      message="Sign up free to add it to your watchlist, rate it, and see what other fans think."
+    />
   </div>
 </template>
 
@@ -288,6 +293,9 @@ import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { isUpcoming } from '@/utils/airing'
 import { hideBrokenImage } from '@/utils/posters'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import JoinPrompt from '@/components/JoinPrompt.vue'
+import { usePageMeta } from '@/composables/usePageMeta'
+import { titlePageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -466,6 +474,15 @@ watch(
     }
   },
   { immediate: true },
+)
+
+usePageMeta(() =>
+  movie.value
+    ? titlePageMeta(movie.value, {
+        path: `/movie/${route.params.id}`,
+        image: movie.value.posterPath ? getPosterUrl(movie.value.posterPath) : null,
+      })
+    : null,
 )
 </script>
 

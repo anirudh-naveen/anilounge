@@ -1021,7 +1021,7 @@ type AdminUser = {
   muteReason: string | null
   bannedAt: string | null
   banReason: string | null
-  /** Granted badges (Developer, Artist, Influencer). */
+  /** Granted badges (Developer, Artist, Influencer, Supporter). */
   cosmeticRoles: string[]
   /** Times their text was masked for blocked language. */
   languageWarnings: number
@@ -2427,6 +2427,10 @@ onUnmounted(() => {
 
 .cosmetic-toggle.on.influencer {
   background: linear-gradient(135deg, #38bdf8, #6366f1);
+}
+
+.cosmetic-toggle.on.supporter {
+  background: linear-gradient(135deg, #f47b67, #e11d48);
 }
 
 .feedback-filters {

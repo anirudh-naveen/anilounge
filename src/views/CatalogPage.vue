@@ -143,6 +143,7 @@ import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import type { UnifiedContent } from '@/types/content'
+import { usePageMeta } from '@/composables/usePageMeta'
 import { getDisplayTitle } from '@/utils/titles'
 import {
   MOVIE_CATALOG_TABS,
@@ -254,6 +255,18 @@ onMounted(async () => {
   } catch (error) {
     console.error('Error loading the watchlist:', error)
     toast.error(`Failed to load ${copy.value.noun}. Please try again.`)
+  }
+})
+
+// One page per tab (page 1); later pages canonicalize to it.
+usePageMeta(() => {
+  const tab = activeTab.value
+  const base = props.kind === 'movie' ? '/movies' : '/tv'
+  return {
+    title:
+      tab === 'popular' ? copy.value.title : `${activeTabMeta.value.label} · ${copy.value.title}`,
+    description: activeTabMeta.value.subtitle,
+    path: tab === 'popular' ? base : `${base}?tab=${tab}`,
   }
 })
 </script>

@@ -3,7 +3,8 @@
  *
  * Every badge a user can hold, in display order. `emblem` badges can be chosen as
  * the one emblem next to a username; emblem-less badges (future ones) only appear in
- * the profile Badges section. `grantable` badges are handed out on the admin page.
+ * the profile Badges section. `grantable` badges are handed out on the admin page;
+ * Supporter is also granted automatically for a Ko-fi donation.
  */
 
 export interface BadgeDef {
@@ -47,6 +48,13 @@ export const BADGES: BadgeDef[] = [
     id: 'influencer',
     label: 'Influencer',
     description: 'Shares AniLounge with the world.',
+    emblem: true,
+    grantable: true,
+  },
+  {
+    id: 'supporter',
+    label: 'Supporter',
+    description: 'Donated to keep AniLounge running.',
     emblem: true,
     grantable: true,
   },

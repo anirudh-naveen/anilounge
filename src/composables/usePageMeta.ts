@@ -5,7 +5,8 @@
  * their own `<title>`, meta description, Open Graph tags, canonical link, and
  * optional JSON-LD structured data while they're mounted. Search engines that run
  * JavaScript (Google, Bing) read these. Leaving the page restores the defaults
- * from index.html. `null` meta (still loading) keeps the defaults.
+ * from index.html, whose Open Graph tags serve link previews (those don't run
+ * scripts). `null` meta (still loading) keeps the defaults.
  */
 
 import { onUnmounted, toValue, watchEffect, type MaybeRefOrGetter } from 'vue'
@@ -46,9 +47,18 @@ export function metaDescription(text: string, length = DESCRIPTION_MAX) {
   return `${(space > length * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`
 }
 
-/** The `<meta>` with this name/property, created (and marked as ours) when missing. */
+/** index.html's own meta tags this composable changed, with their original content. */
+const originals = new Map<HTMLMetaElement, string>()
+
+/**
+ * The `<meta>` with this name/property, created (and marked as ours) when missing.
+ * An index.html tag is remembered so leaving the page can restore it.
+ */
 function metaTag(attribute: 'name' | 'property', key: string) {
   let tag = document.head.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`)
+  if (tag && !tag.hasAttribute(OWNED) && !originals.has(tag)) {
+    originals.set(tag, tag.getAttribute('content') || '')
+  }
   if (!tag) {
     tag = document.createElement('meta')
     tag.setAttribute(attribute, key)
@@ -94,7 +104,12 @@ export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
       value.image ? 'summary_large_image' : 'summary',
     )
     if (value.image) metaTag('property', 'og:image').setAttribute('content', value.image)
-    else document.head.querySelector(`meta[property="og:image"][${OWNED}]`)?.remove()
+    else {
+      document.head.querySelector(`meta[property="og:image"][${OWNED}]`)?.remove()
+      const fallback = document.head.querySelector<HTMLMetaElement>('meta[property="og:image"]')
+      if (fallback && originals.has(fallback))
+        fallback.setAttribute('content', originals.get(fallback)!)
+    }
 
     const canonical = ownedElement('link', 'link[rel="canonical"]')
     canonical.rel = 'canonical'
@@ -116,5 +131,6 @@ export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
     document.title = defaults.title
     descriptionTag.setAttribute('content', defaults.description)
     document.head.querySelectorAll(`[${OWNED}]`).forEach((el) => el.remove())
+    originals.forEach((content, tag) => tag.setAttribute('content', content))
   })
 }

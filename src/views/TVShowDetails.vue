@@ -296,6 +296,11 @@
 
       <StudioLinks :content="show" />
     </div>
+
+    <JoinPrompt
+      title="Track this series"
+      message="Sign up free to follow new episodes, log your progress, and rate every season."
+    />
   </div>
 </template>
 
@@ -331,6 +336,9 @@ import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airin
 import { findRouteSeason, formatSeasonLabel, seasonContent } from '@/utils/episodes'
 import { hideBrokenImage } from '@/utils/posters'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import JoinPrompt from '@/components/JoinPrompt.vue'
+import { usePageMeta } from '@/composables/usePageMeta'
+import { titlePageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -640,6 +648,16 @@ watch(
     }
   },
   { immediate: true },
+)
+
+usePageMeta(() =>
+  show.value
+    ? titlePageMeta(show.value, {
+        path: `/tv-show/${route.params.id}`,
+        image: show.value.posterPath ? getPosterUrl(show.value.posterPath) : null,
+        seasonLabel: seasonLabel.value,
+      })
+    : null,
 )
 </script>
 

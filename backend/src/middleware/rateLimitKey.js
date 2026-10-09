@@ -64,9 +64,9 @@ export function rateLimitMax(req) {
  * or a list of trusted proxy addresses/subnets. Defaults to 2: Railway's edge replaces
  * any client X-Forwarded-For with `<connecting ip>, <edge hop>`, so the client is two
  * entries from the right and cannot be spoofed. Through the Vercel `/api` rewrite the
- * connecting IP is Vercel's, not the visitor's (Vercel forwards a client-supplied
- * X-Vercel-Forwarded-For untouched, so that header is not trusted). Check with
- * `GET /api/status?proxy=1` before changing it.
+ * connecting IP is Vercel's; middleware/clientIp.js then swaps in the visitor's address
+ * from X-Vercel-Forwarded-For (Vercel overwrites any value the visitor sends). Check
+ * with `GET /api/status?proxy=1` before changing it.
  * @param {string | undefined} [value]
  * @returns {number | boolean | string}
  */

@@ -14,6 +14,7 @@ import profileController from '../controllers/profileController.js'
 import friendController from '../controllers/friendController.js'
 import messageController from '../controllers/messageController.js'
 import forumController from '../controllers/forumController.js'
+import sitemapController from '../controllers/sitemapController.js'
 import inboxController from '../controllers/inboxController.js'
 import emailPreferenceController from '../controllers/emailPreferenceController.js'
 import watchlistImportController from '../controllers/watchlistImportController.js'
@@ -145,8 +146,9 @@ router.get('/home/updates', optionalAuthenticate, homeController.getUpdates)
 router.get('/home/character-of-the-day', homeController.getCharacterOfTheDay)
 router.get('/home/forum', optionalAuthenticate, forumController.getHomeHighlights)
 
-/** Sitemap for search engines (forum posts and main pages). */
-router.get('/sitemap.xml', forumController.sitemap)
+/** Sitemaps for search engines: the index, then one file per section (see sitemapService). */
+router.get('/sitemap.xml', sitemapController.sitemapIndex)
+router.get('/sitemaps/:file', sitemapController.sitemapFile)
 
 /** Forum reads (public; signed-in viewers also get their likes and edit rights). */
 router.get('/forum/posts', optionalAuthenticate, forumController.listPosts)
