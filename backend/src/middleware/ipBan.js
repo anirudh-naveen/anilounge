@@ -6,6 +6,7 @@
  */
 
 import IPBan, { normalizeIp } from '../models/IPBan.js'
+import { isCrawlerExempt } from './searchCrawler.js'
 
 // Ban windows by reason (milliseconds)
 const BAN_DURATIONS = {
@@ -33,7 +34,14 @@ export const checkIPBan = async (req, res, next) => {
   // The emailed unlock code proves account ownership, so a locked-out user can
   // always reach the unlock endpoint even from the IP their failed attempts banned.
   const isUnlock = req.method === 'POST' && req.originalUrl.split('?')[0] === '/api/auth/unlock'
-  if (!ip || isUnlock || UNCHECKED_IP.test(ip) || process.env.NODE_ENV === 'development') {
+  // Verified Google/Bing crawlers are never turned away (middleware/searchCrawler.js).
+  if (
+    !ip ||
+    isUnlock ||
+    isCrawlerExempt(req) ||
+    UNCHECKED_IP.test(ip) ||
+    process.env.NODE_ENV === 'development'
+  ) {
     return next()
   }
 

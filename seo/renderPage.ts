@@ -28,7 +28,7 @@ export interface SeoPage {
   heading: string
   intro: string
   sections: Array<{ title: string; links: PageLink[] }>
-  jsonLd: Record<string, unknown> | null
+  jsonLd: Record<string, unknown> | Record<string, unknown>[] | null
 }
 
 const SITE_NAME = 'AniLounge'
@@ -145,4 +145,19 @@ export function renderPage(html: string, page: SeoPage) {
 /** index.html for a missing record: `noindex`, so a dead link isn't kept as a page. */
 export function renderNotFound(html: string) {
   return setMeta(html, 'name', 'robots', 'noindex')
+}
+
+/**
+ * Where to send a request whose path isn't the page's canonical one (a missing or old
+ * slug, `/movie/<series id>`, a trailing slash), keeping its query; null when it already
+ * is. One URL per page, as Google recommends, instead of only a canonical tag.
+ * @param requestUrl - The requested URL.
+ * @param canonical - The page's canonical URL (its origin is ignored, so previews and
+ *   local runs redirect within themselves).
+ */
+export function canonicalRedirect(requestUrl: string, canonical: string) {
+  const request = new URL(requestUrl)
+  const target = new URL(canonical).pathname
+  if (request.pathname === target) return null
+  return `${request.origin}${target}${request.search}`
 }

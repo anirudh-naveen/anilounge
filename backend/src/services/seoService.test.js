@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { imageUrl, metaDescription, parsePagePath } from './seoService.js'
+import {
+  aggregateRating,
+  breadcrumbList,
+  imageUrl,
+  metaDescription,
+  parsePagePath,
+} from './seoService.js'
 
 const ID = '8fb6b935-deab-4221-9a52-2e8e151b5906'
 
@@ -45,5 +51,34 @@ describe('metaDescription', () => {
     const long = metaDescription('word '.repeat(60))
     assert.ok(long.length <= 161)
     assert.ok(long.endsWith('…'))
+  })
+})
+
+describe('aggregateRating', () => {
+  it('needs enough site ratings and rounds to one decimal', () => {
+    assert.equal(aggregateRating(2, 17), null)
+    assert.deepEqual(aggregateRating(3, 25), {
+      '@type': 'AggregateRating',
+      ratingValue: 8.3,
+      bestRating: 10,
+      worstRating: 1,
+      ratingCount: 3,
+    })
+  })
+})
+
+describe('breadcrumbList', () => {
+  it('numbers the trail from Home', () => {
+    const list = breadcrumbList([
+      { name: 'AniLounge', path: '/' },
+      { name: 'Forum', path: '/forum' },
+    ])
+    assert.equal(list['@type'], 'BreadcrumbList')
+    assert.deepEqual(list.itemListElement[1], {
+      '@type': 'ListItem',
+      position: 2,
+      name: 'Forum',
+      item: '/forum',
+    })
   })
 })
