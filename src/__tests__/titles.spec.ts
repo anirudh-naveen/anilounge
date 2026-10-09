@@ -30,4 +30,13 @@ describe('title display', () => {
       '香る花は凛と咲く',
     ])
   })
+
+  it('includes franchise nicknames so search finds every season by them', () => {
+    expect(
+      getSearchableTitles({
+        title: 'My Hero Academia Season 2',
+        franchiseNicknames: ['MHA', 'BNHA'],
+      }),
+    ).toEqual(['My Hero Academia Season 2', 'MHA', 'BNHA'])
+  })
 })
