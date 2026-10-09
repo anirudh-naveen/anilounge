@@ -129,6 +129,8 @@ import { collectStudioWorks, studioWorkYear, type StudioWork } from '@/utils/ent
 import type { CatalogEntity } from '@/types/content'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
+import { detailPath } from '@/utils/slug'
 import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
@@ -212,11 +214,16 @@ usePageMeta(() => {
   const value = studio.value
   if (!value) return null
   return entityPageMeta('studio', value, {
-    path: `/studio/${route.params.id}`,
+    path: detailPath('/studio', value._id, value.name),
     image: value.imagePath ? getPosterUrl(value.imagePath) : null,
     works: [...works.value.series, ...works.value.movies].map((work) => getDisplayTitle(work)),
   })
 })
+
+useCanonicalSlug(
+  () => studio.value?.name,
+  () => studio.value?._id,
+)
 </script>
 
 <style scoped>

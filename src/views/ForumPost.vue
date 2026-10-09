@@ -248,6 +248,8 @@ import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI, getPosterUrl } from '@/services/api'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
+import { detailPath } from '@/utils/slug'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumComment, ForumPost } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
@@ -296,7 +298,7 @@ const absolute = (path: string) => new URL(path, window.location.origin).href
 usePageMeta(() => {
   const value = post.value
   if (!value) return null
-  const path = `/forum/post/${value.id}`
+  const path = detailPath('/forum/post', value.id, value.title)
   const text = plainText(value.body || '')
   const about = value.tags.map((tag) => tag.name).join(', ')
   const kind = POST_KIND_LABELS[value.kind]
@@ -483,6 +485,11 @@ const removeComment = (commentId: string, removed: boolean) => {
 }
 
 onMounted(load)
+
+useCanonicalSlug(
+  () => post.value?.title,
+  () => post.value?.id,
+)
 </script>
 
 <style scoped>

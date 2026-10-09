@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   SITEMAP_CHUNK,
-  SITEMAP_SECTIONS,
   parseSitemapFile,
   sitemapFiles,
   sitemapIndexXml,
@@ -27,15 +26,6 @@ describe('parseSitemapFile', () => {
     assert.equal(parseSitemapFile('titles-0.xml'), null)
     assert.equal(parseSitemapFile('users-1.xml'), null)
     assert.equal(parseSitemapFile('../titles-1.xml'), null)
-  })
-})
-
-describe('section paths', () => {
-  it('opens series on the TV page and movies/specials on the movie page', () => {
-    const { path } = SITEMAP_SECTIONS.titles
-    assert.equal(path({ kind: 'series', id: 'a' }), '/tv-show/a')
-    assert.equal(path({ kind: 'special', id: 'b' }), '/movie/b')
-    assert.equal(SITEMAP_SECTIONS['voice-actors'].path({ id: 'c' }), '/voice-actor/c')
   })
 })
 

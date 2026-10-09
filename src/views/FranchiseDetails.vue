@@ -101,6 +101,8 @@ import { getDisplayTitle } from '@/utils/titles'
 import type { FranchiseDetails, UnifiedContent } from '@/types/content'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
+import { detailPath } from '@/utils/slug'
 import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
@@ -172,11 +174,16 @@ usePageMeta(() => {
   const value = franchise.value
   if (!value) return null
   return entityPageMeta('franchise', value, {
-    path: `/franchise/${route.params.id}`,
+    path: detailPath('/franchise', value._id, value.name),
     image: value.imagePath ? getPosterUrl(value.imagePath) : null,
     works: value.works.map((work) => getDisplayTitle(work)),
   })
 })
+
+useCanonicalSlug(
+  () => franchise.value?.name,
+  () => franchise.value?._id,
+)
 </script>
 
 <style scoped>
