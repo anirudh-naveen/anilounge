@@ -90,7 +90,9 @@
           <button
             type="button"
             class="btn btn-step"
-            :disabled="episodesLocked || (Boolean(totalEpisodes) && form.currentEpisode >= totalEpisodes)"
+            :disabled="
+              episodesLocked || (Boolean(totalEpisodes) && form.currentEpisode >= totalEpisodes)
+            "
             aria-label="Add one episode"
             data-testid="watchlist-panel-plus-one"
             @click="form.currentEpisode = (form.currentEpisode || 0) + 1"
