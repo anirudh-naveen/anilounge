@@ -1492,7 +1492,7 @@ export async function serializeEntityDetails(entity, options = {}) {
   const contentSelect =
     entity.entityType === 'studio'
       ? 'title englishTitle nativeTitle posterPath contentType releaseDate startSeasonYear unifiedScore malStatus'
-      : 'title englishTitle nativeTitle posterPath contentType franchise'
+      : 'title englishTitle nativeTitle posterPath contentType franchise franchiseId'
   await entity.populate([
     {
       path: 'appearances.content',

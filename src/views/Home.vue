@@ -166,9 +166,19 @@
                 <span class="titles-label">
                   {{ characterFranchiseNames.length === 1 ? 'Franchise' : 'Franchises' }}
                 </span>
-                <span v-for="name in characterFranchiseNames" :key="name" class="franchise-chip">
+                <component
+                  :is="characterFranchiseIds[name] ? 'router-link' : 'span'"
+                  v-for="name in characterFranchiseNames"
+                  :key="name"
+                  :to="
+                    characterFranchiseIds[name]
+                      ? { name: 'FranchiseDetails', params: { id: characterFranchiseIds[name] } }
+                      : undefined
+                  "
+                  class="franchise-chip"
+                >
                   {{ name }}
-                </span>
+                </component>
               </div>
               <div v-if="characterTitles.length" class="character-titles">
                 <span class="titles-label">Appears in</span>
@@ -283,7 +293,7 @@ import type { CatalogEntity, EntityAppearance } from '@/types/content'
 import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'
 import { getDisplayTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel } from '@/utils/watchlist'
-import { characterFranchises } from '@/utils/entities'
+import { characterFranchiseIds as franchiseIdsOf, characterFranchises } from '@/utils/entities'
 import {
   characterBlurb,
   activitySubject,
@@ -370,6 +380,7 @@ const characterRoute = computed(() => ({
 const characterBio = computed(() => characterBlurb(character.value?.about))
 
 const characterFranchiseNames = computed(() => characterFranchises(character.value))
+const characterFranchiseIds = computed(() => franchiseIdsOf(character.value))
 
 const characterTitles = computed(() => {
   const seen = new Set<string>()
@@ -949,6 +960,7 @@ onUnmounted(() => {
 }
 
 .franchise-chip {
+  text-decoration: none;
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 0.8rem;
