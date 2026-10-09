@@ -44,6 +44,7 @@ import { startConnectionSync } from './services/connectionSync.js'
 import { startSessionCleanupScheduler } from './services/sessionService.js'
 import { startHotScoreScheduler } from './services/forumService.js'
 import { startAiUsageCleanupScheduler } from './services/aiUsageService.js'
+import { startSiteEventsCleanupScheduler } from './services/metricsService.js'
 import { KEY_PATH, indexNowKey, startIndexNow } from './services/indexNowService.js'
 import { emailProvider } from './services/emailService.js'
 
@@ -365,6 +366,7 @@ app
     startSessionCleanupScheduler()
     startHotScoreScheduler()
     startAiUsageCleanupScheduler()
+    startSiteEventsCleanupScheduler()
     startIndexNow()
     console.log(`Email delivery: ${emailProvider()}`)
     ensureDemoAccount()

@@ -1079,3 +1079,18 @@ CREATE TABLE IF NOT EXISTS donations (
 );
 CREATE INDEX IF NOT EXISTS donations_unclaimed_email_idx ON donations (email)
   WHERE user_id IS NULL AND email IS NOT NULL;
+
+-- Site metrics (services/metricsService.js): page views and clicks the app reports,
+-- read on the admin Metrics tab. `visitor_id` is a random id the browser keeps in
+-- localStorage; no IP address or user agent is stored. Rows expire after 400 days.
+CREATE TABLE IF NOT EXISTS site_events (
+  id          BIGSERIAL PRIMARY KEY,
+  type        TEXT NOT NULL CHECK (type IN ('view', 'click')),
+  path        TEXT NOT NULL,
+  target      TEXT,
+  referrer    TEXT,
+  visitor_id  TEXT NOT NULL,
+  user_id     UUID,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS site_events_created_idx ON site_events (created_at);

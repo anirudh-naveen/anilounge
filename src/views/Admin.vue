@@ -6,6 +6,7 @@
   character's titles and voice actors, ...). Edited fields are locked so the hourly
   catalog sync keeps them; unlocking hands a field back to the sync.
   Users: admins mute users; the creator also adds/removes admins and bans users.
+  Metrics: users, page views, visitors, and clicks (components/AdminMetrics.vue).
   Admin-only; the server enforces every permission shown here.
 -->
 <template>
@@ -700,6 +701,9 @@
         </div>
       </section>
 
+      <!-- Title: Metrics -->
+      <AdminMetrics v-else-if="activeTab === 'metrics'" />
+
       <!-- Title: Users -->
       <section v-else class="social-panel" data-testid="admin-users">
         <div class="admin-filters">
@@ -943,6 +947,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useToast } from 'vue-toastification'
+import AdminMetrics from '@/components/AdminMetrics.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { adminAPI, getDetailsRouteName, getImageUrl } from '@/services/api'
@@ -1036,10 +1041,11 @@ const TABS = [
   { id: 'content', label: 'Content' },
   { id: 'users', label: 'Users' },
   { id: 'log', label: 'Log' },
+  { id: 'metrics', label: 'Metrics' },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 /** Developers (not admins) only get the Content tab. */
-const ADMIN_ONLY_TABS: TabId[] = ['users', 'log']
+const ADMIN_ONLY_TABS: TabId[] = ['users', 'log', 'metrics']
 const KINDS: Array<{ id: Kind; singular: string; plural: string }> = [
   { id: 'movie', singular: 'Movie', plural: 'Movies' },
   { id: 'series', singular: 'Series', plural: 'Series' },

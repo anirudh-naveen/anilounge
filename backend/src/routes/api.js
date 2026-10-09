@@ -24,6 +24,7 @@ import * as authController from '../controllers/authController.js'
 import adminOnly, { contentEditorOnly, creatorOnly } from '../middleware/adminOnly.js'
 import adminController from '../controllers/adminController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
+import metricsController from '../controllers/metricsController.js'
 import authMiddleware, {
   optionalAuthenticate,
   refreshAccessToken,
@@ -191,6 +192,9 @@ router.get('/badges', profileController.listBadges)
 /** Anyone can submit beta feedback (stored and emailed); only admins can list it (it holds emails). */
 router.post('/feedback', optionalAuthenticate, feedbackController.submitFeedback)
 router.get('/feedback', authMiddleware, adminOnly, feedbackController.getFeedback)
+
+/** Page views and clicks from the app (batched); admins read them on the Metrics tab. */
+router.post('/metrics/events', optionalAuthenticate, metricsController.recordEvents)
 
 /** All routes below require a valid Bearer access token. */
 router.use(authMiddleware)
@@ -442,6 +446,7 @@ router.put(
   adminController.reorderCast,
 )
 router.get('/admin/log', adminOnly, adminController.getLog)
+router.get('/admin/metrics', adminOnly, metricsController.getMetrics)
 router.get('/admin/sync-changes', adminOnly, adminController.listSyncChanges)
 router.get('/admin/sync-changes/count', adminOnly, adminController.countSyncChanges)
 router.post(
