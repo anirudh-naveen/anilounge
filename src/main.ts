@@ -50,4 +50,4 @@ authStore.restoreSession().then(() => {
 
 startMetrics()
 app.mount('#app')
-startNativeApp()
+startNativeApp(router)
