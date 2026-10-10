@@ -16,6 +16,10 @@ const DAY_MS = 24 * 60 * 60 * 1000
 /** MAL/AniList start dates can be a season (quarter) start, well before the premiere. */
 const START_TOLERANCE_MS = 75 * DAY_MS
 const END_TOLERANCE_MS = 30 * DAY_MS
+/** A pause between episodes this long may be a break between seasons. */
+const MIN_BREAK_MS = 28 * DAY_MS
+/** MAL dates are Japan's; TMDB's can be a day later or earlier. */
+const PREMIERE_SLACK_MS = 3 * DAY_MS
 const MIN_PREFIX_LENGTH = 6
 const MAX_ANCHORS = 3
 
@@ -81,6 +85,147 @@ function seasonSpans(seasons, episodes) {
 }
 
 /**
+ * Episode cards grouped by season number.
+ * @param {object[]} episodes
+ * @returns {Map<number, object[]>}
+ */
+function bySeasonNumber(episodes) {
+  const groups = new Map()
+  for (const episode of episodes) {
+    const list = groups.get(episode.seasonNumber)
+    if (list) list.push(episode)
+    else groups.set(episode.seasonNumber, [episode])
+  }
+  return groups
+}
+
+/**
+ * Episodes of one season in order, each with the pause since the previous one.
+ * @param {object[]} episodes - Episode cards of a single season
+ * @returns {{ episode: object, aired: number | null, gap: number | null }[]}
+ */
+function airingRun(episodes) {
+  const sorted = [...episodes].sort((left, right) => left.episodeNumber - right.episodeNumber)
+  return sorted.map((episode, index) => {
+    const aired = toTime(episode.airDate)
+    const before = index ? toTime(sorted[index - 1].airDate) : null
+    return { episode, aired, gap: aired != null && before != null ? aired - before : null }
+  })
+}
+
+/**
+ * Whether a row is a MyAnimeList/AniList entry. Those sites list each anime
+ * season (and often each cour) as its own title, which the guide follows.
+ * @param {object} [content]
+ * @returns {boolean}
+ */
+function isListedAnime(content) {
+  return Boolean(content?.malId || content?.anilistId)
+}
+
+/**
+ * Where in a season's episode run an entry premiering at `released` begins:
+ * the episode that resumes after the airing break nearest the premiere, else
+ * the first episode aired from the premiere on.
+ * @param {{ aired: number | null, gap: number | null }[]} run
+ * @param {number} released
+ * @returns {number | null} Index past the first episode, or null when none fits.
+ */
+function entryStart(run, released) {
+  let best = null
+  for (const [index, { aired, gap }] of run.entries()) {
+    if (gap == null || gap < MIN_BREAK_MS) continue
+    if (released < aired - START_TOLERANCE_MS || released > aired + END_TOLERANCE_MS) continue
+    if (best == null || Math.abs(released - aired) < Math.abs(released - run[best].aired)) {
+      best = index
+    }
+  }
+  if (best != null) return best
+  const index = run.findIndex(({ aired }) => aired != null && aired >= released - PREMIERE_SLACK_MS)
+  return index > 0 && run[index].aired <= released + END_TOLERANCE_MS ? index : null
+}
+
+/**
+ * For anime, follow MAL/AniList's seasons over TMDB's. TMDB sometimes lists a
+ * show as one long season (The Apothecary Diaries: seasons 1–3 as "Season 1",
+ * episodes 1–60) while MAL/AniList list "Season 2" and "Season 3" as titles of
+ * their own. A TMDB season is cut where another MAL/AniList TV entry of the
+ * franchise premiered inside it (`entryStart`). Seasons are then numbered in
+ * order and each part's episodes restart at 1, so the guide matches the
+ * catalog rows. Non-anime shows keep TMDB's seasons.
+ * @param {object[]} seasons - TMDB season summaries
+ * @param {object[]} episodes - Episode cards with `seasonNumber` and `airDate`
+ * @param {{ _id: unknown, tmdbId?: number, malId?: number, anilistId?: number }} anchor - The TMDB-backed row
+ * @param {object[]} candidates - Series rows from the same franchise
+ * @returns {{ seasons: object[], episodes: object[] }} Unchanged when nothing splits
+ */
+export function splitCombinedSeasons(seasons, episodes, anchor, candidates) {
+  if (!isListedAnime(anchor)) return { seasons, episodes }
+  const ordered = [...seasons].sort((left, right) => left.seasonNumber - right.seasonNumber)
+  const bySeason = bySeasonNumber(episodes)
+  const premieres = candidates
+    .filter(
+      (candidate) =>
+        isListedAnime(candidate) &&
+        String(candidate._id) !== String(anchor._id) &&
+        (candidate.contentType ?? 'tv') === 'tv' &&
+        !(candidate.tmdbId && anchor.tmdbId && Number(candidate.tmdbId) !== Number(anchor.tmdbId)),
+    )
+    .map((candidate) => toTime(candidate.releaseDate))
+    .filter((released) => released != null)
+
+  const plans = ordered.map((season) => {
+    const run = airingRun(bySeason.get(season.seasonNumber) || [])
+    const cuts = new Set()
+    for (const released of premieres) {
+      const start = entryStart(run, released)
+      if (start != null) cuts.add(start)
+    }
+    return { season, run, cuts }
+  })
+  if (plans.every(({ cuts }) => !cuts.size)) return { seasons, episodes }
+
+  const plainName = /^season\s*\d+$/i
+  const splitSeasons = []
+  const splitEpisodes = []
+  let number = 0
+  for (const { season, run, cuts } of plans) {
+    if (!run.length) {
+      number += 1
+      const name = !season.name || plainName.test(season.name) ? `Season ${number}` : season.name
+      splitSeasons.push({ ...season, seasonNumber: number, name })
+      continue
+    }
+    const starts = [0, ...[...cuts].sort((left, right) => left - right)]
+    for (const [part, start] of starts.entries()) {
+      number += 1
+      const slice = run.slice(start, starts[part + 1] ?? run.length)
+      const first = slice[0].episode.episodeNumber
+      for (const { episode } of slice) {
+        splitEpisodes.push({
+          ...episode,
+          seasonNumber: number,
+          episodeNumber: episode.episodeNumber - first + 1,
+          tmdbSeasonNumber: episode.seasonNumber,
+          tmdbEpisodeNumber: episode.episodeNumber,
+        })
+      }
+      const own = part === 0 ? season : { overview: '', posterPath: '', voteAverage: null }
+      const name =
+        part === 0 && season.name && !plainName.test(season.name) ? season.name : `Season ${number}`
+      splitSeasons.push({
+        ...own,
+        seasonNumber: number,
+        name,
+        airDate: part === 0 ? season.airDate : slice[0].episode.airDate,
+        episodeCount: starts.length > 1 ? slice.length : season.episodeCount,
+      })
+    }
+  }
+  return { seasons: splitSeasons, episodes: splitEpisodes }
+}
+
+/**
  * Assign catalog rows to TMDB seasons. The first season is the TMDB row
  * itself. Each other row goes to the latest season that started (with
  * tolerance) by its release date and had not ended; per season the row whose
@@ -128,7 +273,11 @@ export function matchSeasonsToWorks(seasons, episodes, anchor, candidates) {
       Math.abs(released - span.start),
     ]
     const current = best.get(season.seasonNumber)
-    if (!current || score[0] < current.score[0] || (score[0] === current.score[0] && score[1] < current.score[1])) {
+    if (
+      !current ||
+      score[0] < current.score[0] ||
+      (score[0] === current.score[0] && score[1] < current.score[1])
+    ) {
       best.set(season.seasonNumber, { id, score })
     }
   }
@@ -226,12 +375,16 @@ async function anchorCandidates(content) {
  * @returns {Promise<{ seriesId: string, episodes: object[], seasons: object[] }>}
  */
 async function buildGuide(anchor) {
-  const { episodes, seasons: summaries } = await unifiedContentService.getTvShowSeasonData(anchor)
-  const withEpisodes = new Set(episodes.map((episode) => episode.seasonNumber))
-  const seasons = summaries.filter(
+  const data = await unifiedContentService.getTvShowSeasonData(anchor)
+  const withEpisodes = new Set(data.episodes.map((episode) => episode.seasonNumber))
+  const listed = data.seasons.filter(
     (season) => season.episodeCount > 0 || withEpisodes.has(season.seasonNumber),
   )
-  const candidates = seasons.length > 1 ? await seasonCandidates(anchor) : []
+  const candidates =
+    listed.length > 1 || (listed.length && isListedAnime(anchor))
+      ? await seasonCandidates(anchor)
+      : []
+  const { seasons, episodes } = splitCombinedSeasons(listed, data.episodes, anchor, candidates)
   const matches = matchSeasonsToWorks(seasons, episodes, anchor, candidates)
   return {
     seriesId: String(anchor._id),
@@ -271,4 +424,30 @@ export async function getSeasonGuide(content) {
 
   const { episodes } = await unifiedContentService.getTvShowSeasonData(content)
   return { ...empty, episodes }
+}
+
+/**
+ * The catalog row and guide numbers for an episode TMDB numbers on `content`'s
+ * show (TMDB's next-episode fields). For anime TMDB lists as one long season,
+ * TMDB's "S1E50" of The Apothecary Diaries is episode 2 of the Season 3 row.
+ * @param {object} content - TMDB-backed series row
+ * @param {number} season - TMDB season number
+ * @param {number} episode - TMDB episode number
+ * @returns {Promise<{ contentId: string, seasonNumber: number, episodeNumber: number } | null>}
+ *   null when the guide has no such episode.
+ */
+export async function resolveTmdbEpisode(content, season, episode) {
+  const guide = await getSeasonGuide(content)
+  const match = guide.episodes.find(
+    (card) =>
+      (card.tmdbSeasonNumber ?? card.seasonNumber) === season &&
+      (card.tmdbEpisodeNumber ?? card.episodeNumber) === episode,
+  )
+  if (!match) return null
+  const own = guide.seasons.find((entry) => entry.seasonNumber === match.seasonNumber)
+  return {
+    contentId: own?.contentId || String(content._id),
+    seasonNumber: match.seasonNumber,
+    episodeNumber: match.episodeNumber,
+  }
 }

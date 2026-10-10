@@ -635,8 +635,15 @@ class DatabasePopulator {
     if (tmdbData.backdropPath) existingContent.backdropPath = tmdbData.backdropPath
     if (tmdbData.releaseDate) existingContent.releaseDate = tmdbData.releaseDate
     if (tmdbData.runtime != null) existingContent.runtime = tmdbData.runtime
-    if (tmdbData.episodeCount != null) existingContent.episodeCount = tmdbData.episodeCount
-    if (tmdbData.seasonCount != null) existingContent.seasonCount = tmdbData.seasonCount
+    // MAL/AniList count an anime row's own season; TMDB's totals can span the whole
+    // show, so they only fill counts the row lacks.
+    const ownCounts = Boolean(existingContent.malId || existingContent.anilistId)
+    if (tmdbData.episodeCount != null && !(ownCounts && existingContent.episodeCount)) {
+      existingContent.episodeCount = tmdbData.episodeCount
+    }
+    if (tmdbData.seasonCount != null && !(ownCounts && existingContent.seasonCount)) {
+      existingContent.seasonCount = tmdbData.seasonCount
+    }
     if (tmdbData.contentType === 'tv') {
       existingContent.nextEpisodeAirDate = tmdbData.nextEpisodeAirDate || null
       existingContent.nextEpisodeNumber = tmdbData.nextEpisodeNumber ?? null

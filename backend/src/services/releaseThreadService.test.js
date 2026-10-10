@@ -59,6 +59,18 @@ describe('megathreadText', () => {
     assert.equal(two.title, 'Frieren - Season 2 Episode 3 Discussion')
   })
 
+  it("leaves the season to a season entry's own name", () => {
+    const entry = megathreadText({
+      name: 'The Apothecary Diaries Season 3',
+      kind: 'series',
+      season_number: 3,
+      episode_number: 2,
+      season_count: 1,
+      own_entry: true,
+    })
+    assert.equal(entry.title, 'The Apothecary Diaries Season 3 - Episode 2 Discussion')
+  })
+
   it('names movies and specials', () => {
     const movie = megathreadText({
       name: 'Your Name',

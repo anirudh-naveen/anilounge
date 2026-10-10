@@ -22,8 +22,10 @@ import { query, withTransaction } from '../../config/postgres.js'
 import { withJobLock } from '../utils/jobLock.js'
 import { hashPassword } from '../utils/passwordHash.js'
 import catalogEvents from './catalogEvents.js'
+import Content from '../models/Content.js'
 import { createMegathread } from './forumService.js'
 import { queuePost } from './indexNowService.js'
+import { resolveTmdbEpisode } from './seasonService.js'
 
 export const BOT_USERNAME = 'AniLoungeBot'
 export const BOT_EMAIL = 'release-bot@anilounge.invalid'
@@ -87,7 +89,8 @@ export async function ensureBotAccount() {
 
 /**
  * Megathread title and body for one release.
- * @param {{ name: string, kind: string, season_number: number | null, episode_number: number | null, season_count: number | null }} release
+ * @param {{ name: string, kind: string, season_number: number | null, episode_number: number | null, season_count: number | null, own_entry?: boolean }} release
+ *   `own_entry`: the title is that season's own entry, so its name already says the season.
  * @returns {{ title: string, body: string }}
  */
 export function megathreadText(release) {
@@ -101,7 +104,8 @@ export function megathreadText(release) {
         'Please keep spoilers to this thread.',
     }
   }
-  const showSeason = season != null && (season > 1 || (release.season_count ?? 1) > 1)
+  const showSeason =
+    !release.own_entry && season != null && (season > 1 || (release.season_count ?? 1) > 1)
   const label = showSeason ? `Season ${season} Episode ${episode}` : `Episode ${episode}`
   return {
     title: `${name} - ${label} Discussion`,
@@ -128,6 +132,37 @@ export function megathreadTags(release) {
       top: true,
     },
   ]
+}
+
+/**
+ * Where an episode release belongs. Releases are queued with TMDB's numbering,
+ * which can run across a whole show; for anime the thread goes on the
+ * MAL/AniList entry the episode is part of, numbered within it (The Apothecary
+ * Diaries' TMDB "Episode 50" is "The Apothecary Diaries Season 3 - Episode 2").
+ * @param {{ content_id: string, kind: string, name: string, season_number: number | null, episode_number: number | null }} release
+ * @returns {Promise<object>} The release, retargeted when the season guide places it elsewhere.
+ */
+export async function placeRelease(release) {
+  if (
+    release.kind !== 'series' ||
+    release.season_number == null ||
+    release.episode_number == null
+  ) {
+    return release
+  }
+  const content = await Content.findById(release.content_id)
+  if (!content?.tmdbId) return release
+  const place = await resolveTmdbEpisode(content, release.season_number, release.episode_number)
+  if (!place) return release
+  const placed = {
+    ...release,
+    season_number: place.seasonNumber,
+    episode_number: place.episodeNumber,
+  }
+  if (place.contentId === String(release.content_id)) return placed
+  const { rows } = await query('SELECT name FROM content WHERE id = $1', [place.contentId])
+  if (!rows.length) return release
+  return { ...placed, content_id: place.contentId, name: rows[0].name, own_entry: true }
 }
 
 /**
@@ -220,10 +255,11 @@ export async function postPendingThreads({ limit = maxPerRun() } = {}) {
   let failed = 0
   for (const release of rows) {
     try {
+      const placed = await placeRelease(release)
       const post = await withTransaction(async () => {
         const created = await createMegathread(bot, {
-          ...megathreadText(release),
-          tags: megathreadTags(release),
+          ...megathreadText(placed),
+          tags: megathreadTags(placed),
         })
         await query(
           `UPDATE release_threads SET post_id = $2, posted_at = now(), attempts = attempts + 1
