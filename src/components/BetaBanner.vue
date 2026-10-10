@@ -128,6 +128,5 @@ onMounted(() => {
   .beta-text {
     font-size: 13px;
   }
-
 }
 </style>
