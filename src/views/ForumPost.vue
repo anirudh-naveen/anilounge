@@ -174,7 +174,7 @@
             </div>
           </form>
           <p v-else class="social-meta sign-in-note">
-            <router-link to="/login">Sign in</router-link> to join the conversation.
+            <router-link to="/login">Log in</router-link> to join the conversation.
           </p>
 
           <p v-if="!threads.length" class="social-empty">No comments yet.</p>

@@ -28,13 +28,13 @@
           :to="{ path: '/login', query: { redirect: route.fullPath } }"
           class="btn btn-ghost btn-small"
           data-testid="join-signin"
-          >Sign in</router-link
+          >Log in</router-link
         >
         <router-link
           :to="{ path: '/register', query: { redirect: route.fullPath } }"
           class="btn btn-primary btn-small"
           data-testid="join-signup"
-          >Sign up free</router-link
+          >Sign up</router-link
         >
       </div>
     </aside>

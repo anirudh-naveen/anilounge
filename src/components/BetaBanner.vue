@@ -89,6 +89,11 @@ onMounted(() => {
   font-size: inherit;
 }
 
+.beta-contribute {
+  display: block;
+  margin-top: 2px;
+}
+
 .feedback-link:hover {
   color: var(--tan-primary);
 }
@@ -122,11 +127,6 @@ onMounted(() => {
 
   .beta-text {
     font-size: 13px;
-  }
-
-  .beta-contribute {
-    display: block;
-    margin-top: 4px;
   }
 }
 </style>

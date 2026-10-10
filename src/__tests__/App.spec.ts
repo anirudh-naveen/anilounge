@@ -55,8 +55,8 @@ describe('App', () => {
     const wrapper = await mountApp()
     expect(wrapper.find('.logo-text').text()).toBe('AniLounge')
     expect(wrapper.find('[data-testid="page"]').exists()).toBe(true)
-    expect(wrapper.find('.auth-buttons').text()).toContain('Login')
-    expect(wrapper.find('.auth-buttons').text()).toContain('Register')
+    expect(wrapper.find('.auth-buttons').text()).toContain('Log in')
+    expect(wrapper.find('.auth-buttons').text()).toContain('Sign up')
     expect(wrapper.find('a[href="/watchlist"]').exists()).toBe(false)
   })
 

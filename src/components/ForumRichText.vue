@@ -46,7 +46,9 @@ const renderBlock = (block: Block): VNode => {
           h('span', { class: 'rich-section-chevron', 'aria-hidden': 'true' }),
           h('span', renderInline(block.summary)),
         ]),
-        h('div', { class: 'rich-section-body' }, block.blocks.map(renderBlock)),
+        block.blocks.length
+          ? h('div', { class: 'rich-section-body' }, block.blocks.map(renderBlock))
+          : null,
       ])
     case 'callout': {
       const { icon, label } = CALLOUT_LABELS[block.tone]
