@@ -3,12 +3,20 @@
  *
  * Layer: utils. Post bodies are plain text with a few Markdown-style marks
  * (`**bold**`, `*italic*`/`_italic_`, `~~strike~~`, `[text](https://link)`, and line
- * prefixes `## `, `- `/`* `, `1. `, `> `); the client renders them (see
+ * prefixes `## `, `- `/`* `, `1. `, `> `, plus the block fences `+++ Title`/`+++`
+ * and `::: tip Title`/`:::`); the client renders them (see
  * `src/utils/richText.ts`, whose patterns these match). Excerpts and page
  * descriptions use the text without the marks.
  */
 
-const LINE_MARKS = [/^#{1,3}\s+/, /^>\s?/, /^[-*]\s+/, /^\d{1,3}[.)]\s+/]
+const LINE_MARKS = [
+  /^#{1,3}\s+/,
+  /^>\s?/,
+  /^[-*]\s+/,
+  /^\d{1,3}[.)]\s+/,
+  /^\s*\+{3}(?:\s+|$)/,
+  /^\s*:{3}(?:\s*(?:note|tip|warning)\b)?\s*/i,
+]
 
 const INLINE_MARKS = [
   [/\[([^\]\n]+)\]\((https?:\/\/[^\s()<>]+)\)/g, '$1'],

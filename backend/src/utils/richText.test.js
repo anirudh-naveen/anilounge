@@ -10,6 +10,13 @@ describe('stripFormatting', () => {
     )
   })
 
+  it('removes block fences, keeping their titles', () => {
+    assert.equal(
+      stripFormatting('+++ **Fillers**\n- 26\n::: warning Skip\nall\n:::\n+++'),
+      'Fillers\n26\nSkip\nall\n\n',
+    )
+  })
+
   it('keeps text that only looks like marks', () => {
     assert.equal(stripFormatting('2 * 3 * 4 and snake_case_name'), '2 * 3 * 4 and snake_case_name')
     assert.equal(stripFormatting('[x](javascript:alert(1))'), '[x](javascript:alert(1))')

@@ -3,8 +3,8 @@
 
   A small card that slides up in the corner (a bottom sheet on phones) a few
   seconds after a signed-out visitor lands, e.g. from a search engine. It never
-  covers the page, so the content stays readable (and indexable). Sign up / Sign
-  in return to the current page afterwards (`?redirect=`). Closing it hides every
+  covers the page, so the content stays readable (and indexable). Sign in / Sign
+  up return to the current page afterwards (`?redirect=`). Closing it hides every
   prompt for the rest of the browser session.
 -->
 <template>
@@ -25,16 +25,16 @@
       <p class="join-message">{{ message }}</p>
       <div class="join-actions">
         <router-link
-          :to="{ path: '/register', query: { redirect: route.fullPath } }"
-          class="btn btn-primary btn-small"
-          data-testid="join-signup"
-          >Sign up free</router-link
-        >
-        <router-link
           :to="{ path: '/login', query: { redirect: route.fullPath } }"
           class="btn btn-ghost btn-small"
           data-testid="join-signin"
           >Sign in</router-link
+        >
+        <router-link
+          :to="{ path: '/register', query: { redirect: route.fullPath } }"
+          class="btn btn-primary btn-small"
+          data-testid="join-signup"
+          >Sign up free</router-link
         >
       </div>
     </aside>

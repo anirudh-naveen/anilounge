@@ -7,7 +7,7 @@
 <template>
   <div v-if="visible" class="import-reminder" role="status" data-testid="import-reminder">
     <p>
-      <strong>Coming from AniList, MyAnimeList, or TMDB?</strong>
+      <strong>Coming from AniList, MyAnimeList, or TMDB?</strong>{{ ' ' }}
       <router-link to="/connections">Connect your account</router-link> to import your list and keep
       it in sync.
     </p>

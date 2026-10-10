@@ -42,7 +42,7 @@ describe('ImportReminder', () => {
 
   it('points new users to the Connections page and can be dismissed for good', async () => {
     const wrapper = mountReminder()
-    expect(wrapper.text()).toContain('Connect your account')
+    expect(wrapper.text()).toMatch(/TMDB\?\s+Connect your account/)
     expect(wrapper.get('a').attributes('href')).toBe('/connections')
 
     await wrapper.get('.dismiss-btn').trigger('click')

@@ -58,6 +58,38 @@ describe('parseRichText', () => {
     expect(blocks[3]).toMatchObject({ ordered: true })
   })
 
+  it('reads collapsible sections and callouts, nested, with their own blocks', () => {
+    const blocks = parseRichText(
+      'Intro\n+++ Filler **list**\n- 26\n- 97\n::: warning Skip these\nall of them\n:::\n+++\nafter\n::: plain title\nx',
+    )
+    expect(blocks.map((block) => block.type)).toEqual([
+      'paragraph',
+      'section',
+      'paragraph',
+      'callout',
+    ])
+    expect(blocks[1]).toMatchObject({
+      summary: [{ type: 'text', text: 'Filler ' }, { type: 'bold' }],
+      blocks: [
+        { type: 'list', items: [[{ text: '26' }], [{ text: '97' }]] },
+        { type: 'callout', tone: 'warning', title: [{ text: 'Skip these' }] },
+      ],
+    })
+    // An unknown tone is a note's title; an unclosed block runs to the end.
+    expect(blocks[3]).toMatchObject({
+      tone: 'note',
+      title: [{ text: 'plain title' }],
+      blocks: [{ type: 'paragraph' }],
+    })
+    expect(parseRichText('+++\nhidden\n+++')[0]).toMatchObject({
+      summary: [{ text: 'Show more' }],
+    })
+  })
+
+  it('flattens blocks to plain text', () => {
+    expect(plainText('+++ Fillers\n- 26\n:::  tip\nskip\n:::\n+++')).toBe('Fillers\n26\nskip')
+  })
+
   it('flattens to plain text', () => {
     expect(plainText('## Big **news**\n\n- [one](https://a.test)\n- two\n> *said*')).toBe(
       'Big news\none\ntwo\nsaid',
@@ -106,5 +138,18 @@ describe('applyFormatting', () => {
     expect(applyFormatting('https://a.test', 0, 14, 'link').text).toBe(
       '[link text](https://a.test)',
     )
+  })
+
+  it('fences the selected lines, or a placeholder, as a section or callout', () => {
+    expect(applyFormatting('Fillers\n\n26, 97', 9, 15, 'section')).toEqual({
+      text: 'Fillers\n\n+++ Section title\n26, 97\n+++',
+      selectionStart: 13,
+      selectionEnd: 26,
+    })
+    expect(applyFormatting('intro\n', 6, 6, 'callout')).toEqual({
+      text: 'intro\n\n::: tip\nCallout text\n:::',
+      selectionStart: 15,
+      selectionEnd: 27,
+    })
   })
 })

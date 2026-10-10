@@ -4,7 +4,8 @@
  * Each tool edits the text around the selection and says what to select next:
  * inline marks wrap the selection (or a placeholder) and unwrap it when it is already
  * wrapped; line marks prefix every selected line and remove the prefix when all of
- * them have it already.
+ * them have it already; block tools fence the selected lines (or a placeholder) as a
+ * collapsible section or a callout box.
  */
 
 export type FormatTool =
@@ -16,6 +17,8 @@ export type FormatTool =
   | 'numbers'
   | 'quote'
   | 'link'
+  | 'section'
+  | 'callout'
 
 export interface FormatResult {
   text: string
@@ -38,6 +41,14 @@ const LINE_PREFIX: Partial<Record<FormatTool, { re: RegExp; make: (index: number
 }
 
 const LINK_PLACEHOLDER = 'https://'
+
+/** Fences of each block tool; the selection lands on `select` (the title, or the body). */
+const FENCES: Partial<
+  Record<FormatTool, { open: string; close: string; body: string; select: 'head' | 'body' }>
+> = {
+  section: { open: '+++ Section title', close: '+++', body: 'Hidden until opened', select: 'head' },
+  callout: { open: '::: tip', close: ':::', body: 'Callout text', select: 'body' },
+}
 
 function wrap(text: string, start: number, end: number, mark: string, placeholder: string) {
   const before = text.slice(0, start)
@@ -100,6 +111,30 @@ function prefixLines(
   }
 }
 
+function fence(
+  text: string,
+  start: number,
+  end: number,
+  block: { open: string; close: string; body: string; select: 'head' | 'body' },
+) {
+  const lineStart = text.lastIndexOf('\n', start - 1) + 1
+  const lastChar = end > start && text[end - 1] === '\n' ? end - 1 : end
+  const nextBreak = text.indexOf('\n', lastChar)
+  const lineEnd = nextBreak === -1 ? text.length : nextBreak
+  const selected = text.slice(lineStart, lineEnd)
+  const body = selected.trim() ? selected : block.body
+  // Keep the block apart from a paragraph above it.
+  const lead = lineStart && text[lineStart - 2] !== '\n' ? '\n' : ''
+  const head = text.slice(0, lineStart) + lead
+  const bodyStart = head.length + block.open.length + 1
+  return {
+    text: `${head}${block.open}\n${body}\n${block.close}${text.slice(lineEnd)}`,
+    selectionStart: block.select === 'head' ? head.length + 4 : bodyStart,
+    selectionEnd:
+      block.select === 'head' ? head.length + block.open.length : bodyStart + body.length,
+  }
+}
+
 function link(text: string, start: number, end: number) {
   const selected = text.slice(start, end).trim()
   if (/^https?:\/\/\S+$/.test(selected)) {
@@ -132,5 +167,7 @@ export function applyFormatting(
   if (wrapTool) return wrap(text, from, to, wrapTool.mark, wrapTool.placeholder)
   const prefix = LINE_PREFIX[tool]
   if (prefix) return prefixLines(text, from, to, prefix)
+  const block = FENCES[tool]
+  if (block) return fence(text, from, to, block)
   return link(text, from, to)
 }
