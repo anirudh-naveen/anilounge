@@ -64,6 +64,8 @@ const handleLinks = (router: Router, openUrl: (url: string) => void) => {
       if (event.defaultPrevented || event.button !== 0) return
       const link = (event.target as Element | null)?.closest?.('a[href]')
       if (!(link instanceof HTMLAnchorElement)) return
+      // Links that open another app themselves (data-open-with="app").
+      if (link.dataset.openWith === 'app') return
       const url = new URL(link.href, window.location.href)
       if (!/^https?:$/.test(url.protocol)) return
       if (url.origin === window.location.origin) {
@@ -77,6 +79,42 @@ const handleLinks = (router: Router, openUrl: (url: string) => void) => {
     },
     true,
   )
+}
+
+/**
+ * Open a link in the app it belongs to (a Crunchyroll or Netflix link opens their app
+ * when installed), else in Safari. Browsers open it in a new tab.
+ */
+export async function openInOtherApp(url: string): Promise<void> {
+  if (!isNativeApp) {
+    window.open(url, '_blank', 'noopener')
+    return
+  }
+  const { AppLauncher } = await import('@capacitor/app-launcher')
+  await AppLauncher.openUrl({ url })
+}
+
+/**
+ * Open a calendar (.ics) link. In the app it opens in the in-app browser, which offers
+ * "Add to Calendar"; browsers download or open it.
+ */
+export async function openCalendarFile(url: string): Promise<void> {
+  if (!isNativeApp) {
+    window.location.assign(url)
+    return
+  }
+  const { Browser } = await import('@capacitor/browser')
+  await Browser.open({ url })
+}
+
+/** The viewer's country (from the device language, e.g. en-GB → GB), for regional data. */
+export function viewerRegion(): string {
+  const locales = [...(navigator.languages || []), navigator.language]
+  for (const locale of locales) {
+    const region = locale?.split(/[-_]/)[1]
+    if (region && /^[A-Za-z]{2}$/.test(region)) return region.toUpperCase()
+  }
+  return 'US'
 }
 
 /**

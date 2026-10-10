@@ -40,6 +40,8 @@ vi.mock('@capacitor/filesystem', () => ({
   Encoding: { UTF8: 'utf8' },
 }))
 vi.mock('@capacitor/share', () => ({ Share: { share } }))
+const openUrl = vi.fn(() => Promise.resolve({ completed: true }))
+vi.mock('@capacitor/app-launcher', () => ({ AppLauncher: { openUrl } }))
 
 const pushListeners: Record<string, (event: never) => void> = {}
 const pushRegister = vi.fn(() => Promise.resolve())
@@ -72,10 +74,11 @@ const push = vi.fn()
 const currentRoute = { value: { fullPath: '/' } }
 
 /** Click a link and report whether the page's own navigation was cancelled. */
-const click = (href: string, target = '') => {
+const click = (href: string, target = '', openWith = '') => {
   const link = document.createElement('a')
   link.href = href
   if (target) link.target = target
+  if (openWith) link.dataset.openWith = openWith
   let cancelled = false
   // Runs after the app's capture-phase handler; then stops jsdom from navigating.
   link.addEventListener('click', (event) => {
@@ -129,6 +132,14 @@ describe('nativeApp (inside the iOS app)', () => {
     expect(click(href, '_blank')).toBe(true)
     expect(push).toHaveBeenCalledWith('/tv-show/frieren/12?tab=cast#top')
     expect(browserOpen).not.toHaveBeenCalled()
+  })
+
+  it('leaves links that open another app themselves to their own handler', async () => {
+    expect(click('https://www.crunchyroll.com/series/x', '_blank', 'app')).toBe(false)
+    expect(browserOpen).not.toHaveBeenCalled()
+    const { openInOtherApp } = await import('@/utils/nativeApp')
+    await openInOtherApp('https://www.crunchyroll.com/series/x')
+    expect(openUrl).toHaveBeenCalledWith({ url: 'https://www.crunchyroll.com/series/x' })
   })
 
   it('leaves ordinary same-site and non-web links alone', () => {

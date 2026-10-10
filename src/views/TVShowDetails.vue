@@ -107,6 +107,15 @@
           <!-- Title: Actions -->
           <div class="show-actions">
             <button @click="shareShow" class="btn-outline">Share</button>
+            <button
+              v-if="hasUpcomingEpisode"
+              type="button"
+              class="btn-outline"
+              data-testid="add-to-calendar"
+              @click="addToCalendar"
+            >
+              Add to calendar
+            </button>
           </div>
         </div>
       </div>
@@ -125,6 +134,9 @@
         <h2>Overview</h2>
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
+
+      <!-- Title: Where to Watch -->
+      <WhereToWatch :content-id="show._id" />
 
       <!-- Title: Forum -->
       <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
@@ -341,7 +353,8 @@ import { usePageMeta } from '@/composables/usePageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
 import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
-import { shareLink } from '@/utils/nativeApp'
+import { openCalendarFile, shareLink } from '@/utils/nativeApp'
+import WhereToWatch from '@/components/WhereToWatch.vue'
 import { useToast } from 'vue-toastification'
 
 const route = useRoute()
@@ -502,6 +515,20 @@ const selectSeason = (seasonNumber: number) => {
 
 const goBack = () =>
   goBackOr(router, () => returnToListing(router, route.query.from as string, contentStore))
+
+/** A next episode is scheduled (or aired within the last day), so a calendar file exists. */
+const hasUpcomingEpisode = computed(() => {
+  const next = show.value?.nextEpisodeAirDate
+  return !!next && new Date(next).getTime() > Date.now() - 24 * 60 * 60 * 1000
+})
+
+/** Upcoming episodes as an .ics file: the next one, then weekly to the season's end. */
+const addToCalendar = () => {
+  if (!show.value) return
+  openCalendarFile(`${window.location.origin}/api/content/${show.value._id}/calendar.ics`).catch(
+    () => toast.error("Couldn't open the calendar file."),
+  )
+}
 
 const shareShow = async () => {
   if (!show.value) return

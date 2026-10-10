@@ -4,8 +4,8 @@
  * and premieres for the viewer's watchlist, or trending ones).
  *
  * Layer: service. Widgets run outside the app and can't use its session cookie, so the
- * signed-in app asks for a widget token: a random secret, stored hashed, that can only
- * read this feed. Each device gets its own token; signing out on a device revokes it,
+ * signed-in app asks for a widget token: a random secret, stored hashed, that can read
+ * this feed and, for the share extension, add titles to the watchlist (shareService.js). Each device gets its own token; signing out on a device revokes it,
  * and signing out everywhere revokes them all. Without a token the feed has only
  * trending releases.
  */
@@ -203,6 +203,7 @@ export async function widgetFeedFor(req) {
 
 export default {
   widgetTokenFrom,
+  userForWidgetToken,
   issueWidgetToken,
   revokeWidgetToken,
   revokeAllWidgetTokens,
