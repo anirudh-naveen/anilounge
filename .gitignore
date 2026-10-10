@@ -32,3 +32,6 @@ deploy-recruiter-beta.sh
 *.sw?
 
 *.tsbuildinfo
+
+# Private notes (maintainer only; tasks live in GitHub issues)
+TODO.md
