@@ -5,6 +5,7 @@
  */
 
 import { Capacitor } from '@capacitor/core'
+import type { Router } from 'vue-router'
 
 export const isNativeApp = Capacitor.isNativePlatform()
 
@@ -32,8 +33,11 @@ const reloadIfRedeployed = async () => {
   }
 }
 
-/** Off-site links open in an in-app browser sheet instead of leaving the app. */
-const openExternalLinksInSheet = (openUrl: (url: string) => void) => {
+/**
+ * Off-site links open in an in-app browser sheet instead of leaving the app. The app has
+ * no tabs, so this site's new-tab links open in place (iOS would send them to Safari).
+ */
+const handleLinks = (router: Router, openUrl: (url: string) => void) => {
   document.addEventListener(
     'click',
     (event) => {
@@ -41,7 +45,13 @@ const openExternalLinksInSheet = (openUrl: (url: string) => void) => {
       const link = (event.target as Element | null)?.closest?.('a[href]')
       if (!(link instanceof HTMLAnchorElement)) return
       const url = new URL(link.href, window.location.href)
-      if (!/^https?:$/.test(url.protocol) || url.origin === window.location.origin) return
+      if (!/^https?:$/.test(url.protocol)) return
+      if (url.origin === window.location.origin) {
+        if (link.target !== '_blank') return
+        event.preventDefault()
+        router.push(url.pathname + url.search + url.hash)
+        return
+      }
       event.preventDefault()
       openUrl(url.href)
     },
@@ -50,7 +60,7 @@ const openExternalLinksInSheet = (openUrl: (url: string) => void) => {
 }
 
 /** Set up the native shell. Call once after the app mounts. */
-export async function startNativeApp(): Promise<void> {
+export async function startNativeApp(router: Router): Promise<void> {
   if (!isNativeApp) return
   const [{ App }, { Browser }, { SplashScreen }, { StatusBar, Style }] = await Promise.all([
     import('@capacitor/app'),
@@ -63,7 +73,7 @@ export async function startNativeApp(): Promise<void> {
   StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
   SplashScreen.hide().catch(() => {})
 
-  openExternalLinksInSheet((url) => {
+  handleLinks(router, (url) => {
     Browser.open({ url }).catch(() => {})
   })
 
