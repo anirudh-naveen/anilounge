@@ -110,6 +110,9 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Sign up')
 
 const route = useRoute()
 const router = useRouter()

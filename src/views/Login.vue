@@ -116,6 +116,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import { safeRedirect } from '@/utils/social'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Log in')
 
 // Component name for Vue devtools
 defineOptions({

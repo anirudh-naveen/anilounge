@@ -647,6 +647,7 @@ import type {
   PublicProfile,
   PublicWatchlistEntry,
 } from '@/types/profile'
+import { usePageTitle } from '@/composables/usePageMeta'
 
 defineOptions({ name: 'ProfilePage' })
 
@@ -687,6 +688,7 @@ const draftGenres = ref<string[]>([])
 const username = computed(() =>
   typeof route.params.username === 'string' ? route.params.username : authStore.user?.username,
 )
+usePageTitle(() => username.value ?? 'Profile')
 
 const accentStyle = computed(() => {
   const accent = profile.value?.settings.accent
