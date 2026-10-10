@@ -885,10 +885,21 @@
                   >
                     {{ user.slurWarnings }} {{ user.slurWarnings === 1 ? 'slur' : 'slurs' }}
                   </span>
-                  <span v-if="!user.emailVerified" class="admin-pill muted">Unverified</span>
+                  <span
+                    v-if="user.pendingSignup"
+                    class="admin-pill warn"
+                    title="Signed up but hasn't verified their email; removed 3 days after sign-up"
+                    data-testid="pending-signup"
+                  >
+                    Pending
+                  </span>
+                  <span v-else-if="!user.emailVerified" class="admin-pill muted">Unverified</span>
                   <span v-if="user.isDemo" class="admin-pill muted">Demo</span>
                 </div>
-                <div v-if="!user.isDemo && !user.bannedAt" class="cosmetic-toggles">
+                <div
+                  v-if="!user.isDemo && !user.bannedAt && !user.pendingSignup"
+                  class="cosmetic-toggles"
+                >
                   <button
                     v-for="role in GRANTABLE_BADGES"
                     :key="role"
@@ -913,7 +924,7 @@
               </div>
               <div class="social-actions user-actions">
                 <span v-if="user.id === authStore.user?.id" class="social-meta">That's you</span>
-                <template v-else>
+                <template v-else-if="!user.pendingSignup">
                   <template v-if="canManageRole(user)">
                     <button
                       v-if="user.role === 'admin'"
@@ -1124,6 +1135,8 @@ type AdminUser = {
   isOwner: boolean
   isAdmin: boolean
   emailVerified: boolean
+  /** Signed up but never verified; can't be moderated until they verify. */
+  pendingSignup: boolean
   isDemo: boolean
   mutedUntil: string | null
   muteReason: string | null
