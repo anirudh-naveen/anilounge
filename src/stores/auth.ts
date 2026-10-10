@@ -11,6 +11,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authAPI, onSessionChange, refreshSession, setAccessToken } from '@/services/api'
 import type { User, LoginCredentials, RegisterData, UpdateProfileData } from '@/types'
+import {
+  connectWidgets,
+  disconnectWidgets,
+  forgetPushDevice,
+  refreshPushRegistration,
+} from '@/utils/nativeApp'
 
 const DEMO_USER_EMAIL = 'demo@findanimation.com'
 
@@ -56,6 +62,10 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = userData
     token.value = authToken
     setAccessToken(authToken)
+    // In the iOS app: (re)register this device for the account's pushes if allowed, and
+    // sign the home screen widgets in.
+    refreshPushRegistration().catch(() => {})
+    connectWidgets().catch(() => {})
   }
 
   /** Forgets the session in this tab without calling the server. */
@@ -150,6 +160,7 @@ export const useAuthStore = defineStore('auth', () => {
    * Signs out this browser: revokes the session cookie server-side and clears local state.
    */
   const logout = async () => {
+    await Promise.all([forgetPushDevice(), disconnectWidgets()])
     try {
       await authAPI.logout()
     } catch (err) {
@@ -162,6 +173,7 @@ export const useAuthStore = defineStore('auth', () => {
    * Revokes every session for this account (all browsers and devices), including this one.
    */
   const signOutEverywhere = async () => {
+    await Promise.all([forgetPushDevice(), disconnectWidgets()])
     await authAPI.signOutEverywhere()
     clearSession()
   }

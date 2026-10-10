@@ -28,6 +28,7 @@ import {
 } from './friendService.js'
 import { maskLanguage, screenText } from './languageWarningService.js'
 import { blockedByViewerSql } from './blockService.js'
+import { pushToUser } from './pushService.js'
 
 export { maskLanguage }
 
@@ -318,6 +319,7 @@ export async function sendMessage(sender, otherId, body) {
      RETURNING id, sender_id, body, created_at, read_at`,
     [userId, other.id, fields.body],
   )
+  pushToUser(other.id, 'message', { actor: sender.username, actorId: userId, text: fields.body })
   return { message: messageEntry(rows[0], userId), warning }
 }
 

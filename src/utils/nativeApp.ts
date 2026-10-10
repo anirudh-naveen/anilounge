@@ -4,8 +4,9 @@
  * nothing, so plugin code is only downloaded inside the app.
  */
 
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { Router } from 'vue-router'
+import { pushAPI, widgetAPI } from '@/services/api'
 
 export const isNativeApp = Capacitor.isNativePlatform()
 
@@ -36,12 +37,17 @@ const reloadIfRedeployed = async () => {
 /** Hosts whose links open in the app (universal links; ios/App/App/App.entitlements). */
 const APP_LINK_HOSTS = new Set(['anilounge.net', 'www.anilounge.net'])
 
-/** The in-app path for a universal link, or null for any other address. */
+/**
+ * The in-app path for a universal link or a widget's `anilounge://app/<path>` link,
+ * or null for any other address.
+ */
 export function appLinkPath(address: string): string | null {
   try {
     const url = new URL(address)
-    if (url.protocol !== 'https:' || !APP_LINK_HOSTS.has(url.hostname)) return null
-    return url.pathname + url.search + url.hash
+    const universal = url.protocol === 'https:' && APP_LINK_HOSTS.has(url.hostname)
+    const widget = url.protocol === 'anilounge:' && url.hostname === 'app'
+    if (!universal && !widget) return null
+    return (url.pathname || '/') + url.search + url.hash
   } catch {
     return null
   }
@@ -155,6 +161,135 @@ export async function saveTextFile(filename: string, text: string): Promise<void
   }
 }
 
+// ---------------------------------------------------------------------------
+// Push notifications
+// ---------------------------------------------------------------------------
+
+/** This device's APNs token, once registered with the API (so sign-out can remove it). */
+const PUSH_TOKEN_KEY = 'anilounge:push-token'
+
+const storedPushToken = (): string | null => {
+  try {
+    return localStorage.getItem(PUSH_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+let pushListeners: Promise<typeof import('@capacitor/push-notifications')> | null = null
+
+/** The push plugin, with its token and tap listeners attached once. */
+const pushPlugin = (router?: Router) => {
+  pushListeners ??= import('@capacitor/push-notifications').then(async (plugin) => {
+    const { PushNotifications } = plugin
+    await PushNotifications.addListener('registration', ({ value }) => {
+      pushAPI
+        .registerDevice(value)
+        .then(() => {
+          try {
+            localStorage.setItem(PUSH_TOKEN_KEY, value)
+          } catch {
+            // Without storage, sign-out just can't unregister this device; the server
+            // drops it when the token stops working.
+          }
+        })
+        .catch(() => {})
+    })
+    // Tapping a notification opens the page it is about.
+    await PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
+      const path = (notification.data as { path?: unknown } | undefined)?.path
+      if (router && typeof path === 'string' && path.startsWith('/')) router.push(path)
+    })
+    return plugin
+  })
+  return pushListeners
+}
+
+/** Notification permission for this app: 'unavailable' outside the iOS app. */
+export async function pushPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unavailable'> {
+  if (!isNativeApp) return 'unavailable'
+  const { PushNotifications } = await pushPlugin()
+  const { receive } = await PushNotifications.checkPermissions()
+  return receive === 'granted' || receive === 'denied' ? receive : 'prompt'
+}
+
+/**
+ * Ask for notification permission (iOS shows its prompt once) and register this
+ * device for the signed-in user.
+ * @returns Whether notifications are now on.
+ */
+export async function enablePush(): Promise<boolean> {
+  if (!isNativeApp) return false
+  const { PushNotifications } = await pushPlugin()
+  const { receive } = await PushNotifications.requestPermissions()
+  if (receive !== 'granted') return false
+  await PushNotifications.register()
+  return true
+}
+
+/** Re-register when signed in with permission already given (tokens can change). */
+export async function refreshPushRegistration(): Promise<void> {
+  if ((await pushPermission()) !== 'granted') return
+  const { PushNotifications } = await pushPlugin()
+  await PushNotifications.register()
+}
+
+/** Stop pushes to this device for the account signing out. Call before signing out. */
+export async function forgetPushDevice(): Promise<void> {
+  const token = isNativeApp ? storedPushToken() : null
+  if (!token) return
+  try {
+    await pushAPI.unregisterDevice(token)
+  } catch {
+    // Signing out still goes ahead; the token moves to whoever signs in next.
+  }
+  try {
+    localStorage.removeItem(PUSH_TOKEN_KEY)
+  } catch {
+    // Nothing stored to clear.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Home screen widgets
+// ---------------------------------------------------------------------------
+
+/** The app's own plugin (ios/App/App/WidgetBridgePlugin.swift). */
+interface WidgetBridgePlugin {
+  getToken(): Promise<{ token: string | null }>
+  setToken(options: { token: string }): Promise<void>
+  clearToken(): Promise<void>
+  reload(): Promise<void>
+}
+
+const WidgetBridge = registerPlugin<WidgetBridgePlugin>('WidgetBridge')
+
+/** Give the widgets a sign-in of their own, unless they already have one. */
+export async function connectWidgets(): Promise<void> {
+  if (!isNativeApp) return
+  const { token } = await WidgetBridge.getToken()
+  if (token) return
+  const response = await widgetAPI.issueToken()
+  await WidgetBridge.setToken({ token: (response.data.data as { token: string }).token })
+}
+
+/** Sign the widgets out with the account (call before signing out). */
+export async function disconnectWidgets(): Promise<void> {
+  if (!isNativeApp) return
+  try {
+    const { token } = await WidgetBridge.getToken()
+    if (token) await widgetAPI.revokeToken(token).catch(() => {})
+    await WidgetBridge.clearToken()
+  } catch {
+    // An older app build without the widget plugin: nothing to sign out.
+  }
+}
+
+/** Ask the widgets to refresh (after a watchlist change). */
+export function refreshWidgets(): void {
+  if (isNativeApp) WidgetBridge.reload().catch(() => {})
+}
+
 /** Set up the native shell. Call once after the app mounts. */
 export async function startNativeApp(router: Router): Promise<void> {
   if (!isNativeApp) return
@@ -172,6 +307,9 @@ export async function startNativeApp(router: Router): Promise<void> {
   handleLinks(router, (url) => {
     Browser.open({ url }).catch(() => {})
   })
+
+  // Attach the push tap listener early, so a tap that launched the app is handled.
+  pushPlugin(router).catch(() => {})
 
   // An anilounge.net link tapped in another app opens that page here.
   const openAppLink = (address: string | undefined) => {

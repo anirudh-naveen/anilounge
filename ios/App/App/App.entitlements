@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Push notifications. Xcode switches this to production when exporting for TestFlight/App Store. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- Shares the widget token with the home screen widgets (AniLoungeWidgets/WidgetShared.swift). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.net.anilounge.app</string>
+	</array>
 	<!-- Universal links: anilounge.net links open in the app (public/.well-known/apple-app-site-association). -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>

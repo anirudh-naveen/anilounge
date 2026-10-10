@@ -31,6 +31,10 @@ const config: CapacitorConfig = {
     scheme: 'AniLounge',
   },
   plugins: {
+    // Show pushes as banners while the app is open, too.
+    PushNotifications: {
+      presentationOptions: ['banner', 'list', 'sound'],
+    },
     SplashScreen: {
       launchShowDuration: 8000, // the site hides it sooner once it renders (utils/nativeApp.ts)
       backgroundColor: '#0f1726',
