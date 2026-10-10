@@ -60,6 +60,7 @@ export function mapContentRow(row) {
     broadcastDay: row.broadcast_day,
     nextEpisodeAirDate: row.next_episode_at,
     nextEpisodeNumber: row.next_episode_number != null ? Number(row.next_episode_number) : null,
+    nextEpisodeSeason: row.next_episode_season != null ? Number(row.next_episode_season) : null,
     startSeasonYear: row.start_year != null ? Number(row.start_year) : null,
     startSeason: row.start_season,
     createdAt: row.created_at,
@@ -376,6 +377,31 @@ async function protectExistingValues(doc, kind, overrides, incoming) {
   await recordSyncNotices(doc._id, plan.notices)
 }
 
+/**
+ * The episode that aired since the last save: the stored "next episode" is in the past
+ * and the incoming schedule has moved on from it (or the title is no longer a series).
+ * @param {{ next_episode_at: Date | null, next_episode_number: number | null, next_episode_season: number | null } | undefined} before
+ * @param {{ nextEpisodeAirDate?: unknown, nextEpisodeNumber?: number | null, nextEpisodeSeason?: number | null } | null} after
+ * @param {number} [now]
+ * @returns {{ season: number | null, episode: number, airedAt: Date } | null}
+ */
+export function airedEpisode(before, after, now = Date.now()) {
+  if (!before?.next_episode_at || before.next_episode_number == null) return null
+  const airedAt = new Date(before.next_episode_at)
+  if (!(airedAt.getTime() <= now)) return null
+  const episode = Number(before.next_episode_number)
+  const season = before.next_episode_season != null ? Number(before.next_episode_season) : null
+  if (after) {
+    const nextAt = after.nextEpisodeAirDate ? new Date(after.nextEpisodeAirDate).getTime() : null
+    const unchanged =
+      nextAt === airedAt.getTime() &&
+      (after.nextEpisodeNumber ?? null) === episode &&
+      (after.nextEpisodeSeason ?? season) === season
+    if (unchanged) return null
+  }
+  return { season, episode, airedAt }
+}
+
 Content.prototype.save = async function save() {
   const id = this._id
   const kind = kindFromContentType(this.contentType)
@@ -423,10 +449,11 @@ Content.prototype.save = async function save() {
     throw new Error(`Refusing to save ${kind} ${id}: id belongs to a non-watchable content row`)
   }
 
-  await query(
+  const { rows: previous } = await query(
     `WITH dm AS (DELETE FROM movies WHERE content_id = $1),
-          ds AS (DELETE FROM series WHERE content_id = $1)
-     DELETE FROM specials WHERE content_id = $1`,
+          dsp AS (DELETE FROM specials WHERE content_id = $1)
+     DELETE FROM series WHERE content_id = $1
+     RETURNING next_episode_at, next_episode_number, next_episode_season`,
     [id],
   )
 
@@ -476,8 +503,8 @@ Content.prototype.save = async function save() {
          content_id, original_title, tagline, backdrop_path, release_date, origin_country,
          season_count, episode_count, airing_status, start_season, start_year, broadcast_day,
          next_episode_at, next_episode_number, tmdb_score, tmdb_votes, mal_score, mal_votes,
-         popularity, unified_score
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+         popularity, unified_score, next_episode_season
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
       [
         id,
         shared.original_title,
@@ -499,6 +526,7 @@ Content.prototype.save = async function save() {
         shared.mal_votes,
         shared.popularity,
         shared.unified_score,
+        this.nextEpisodeSeason ?? null,
       ],
     )
   }
@@ -507,6 +535,8 @@ Content.prototype.save = async function save() {
   if (kind === 'series') await clampWatchlistProgress({ contentIds: [String(id)] })
   this.$isNew = false
   if (saved[0]?.inserted) catalogEvents.emit('title-added', String(id))
+  const aired = airedEpisode(previous[0], kind === 'series' ? this : null)
+  if (aired) catalogEvents.emit('episode-aired', { contentId: String(id), ...aired })
   return this
 }
 

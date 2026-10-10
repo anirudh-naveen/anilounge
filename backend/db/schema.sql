@@ -179,6 +179,8 @@ CREATE INDEX IF NOT EXISTS specials_unified_idx ON specials (unified_score DESC)
 
 ALTER TABLE movies ADD COLUMN IF NOT EXISTS airing_status TEXT;
 ALTER TABLE specials ADD COLUMN IF NOT EXISTS airing_status TEXT;
+-- TMDB season of `next_episode_number`, so release megathreads can tag the episode.
+ALTER TABLE series ADD COLUMN IF NOT EXISTS next_episode_season INTEGER;
 
 CREATE TABLE IF NOT EXISTS genres (
   id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -575,6 +577,7 @@ SELECT
   s.broadcast_day,
   s.next_episode_at,
   s.next_episode_number,
+  s.next_episode_season,
   CASE WHEN c.rating_count > 0 THEN c.rating_sum / c.rating_count END AS user_rating_average,
   c.rating_count::bigint AS user_rating_count,
   c.rating_sum AS user_rating_sum,
@@ -612,7 +615,8 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 
 -- Forum (services/forumService.js). A post is a discussion, a review (reviews carry
--- a 1–10 score), a guide, or an article; `content_id` is the review's subject, tags
+-- a 1–10 score), a guide, an article, or a megathread (only the release bot posts
+-- those, see services/releaseThreadService.js); `content_id` is the review's subject, tags
 -- live in post_tags. Text is masked for
 -- blocked language like direct messages, with language warnings to the author.
 -- `last_activity_at` moves on new comments so active threads sort up.
@@ -622,7 +626,7 @@ ALTER TABLE posts ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_kind_check;
 ALTER TABLE posts ADD CONSTRAINT posts_kind_check
-  CHECK (kind IN ('discussion', 'review', 'guide', 'article'));
+  CHECK (kind IN ('discussion', 'review', 'guide', 'article', 'megathread'));
 ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_title_length_check;
 ALTER TABLE posts ADD CONSTRAINT posts_title_length_check
   CHECK (char_length(title) BETWEEN 1 AND 150);
@@ -1122,3 +1126,23 @@ CREATE TABLE IF NOT EXISTS demo_snapshot (
   data      JSONB NOT NULL,
   taken_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Release megathreads (services/releaseThreadService.js): one row per released episode
+-- (season/episode set; season may be unknown) or movie/special (both NULL). Rows are
+-- queued when a release is seen and `posted_at` is set once the bot has opened its
+-- thread, so a release is never posted twice, even if an admin deletes the thread.
+CREATE TABLE IF NOT EXISTS release_threads (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_id      UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  season_number   INTEGER,
+  episode_number  INTEGER,
+  released_at     TIMESTAMPTZ NOT NULL,
+  post_id         UUID REFERENCES posts (id) ON DELETE SET NULL,
+  posted_at       TIMESTAMPTZ,
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS release_threads_unique
+  ON release_threads (content_id, COALESCE(season_number, -1), COALESCE(episode_number, -1));
+CREATE INDEX IF NOT EXISTS release_threads_pending_idx ON release_threads (created_at)
+  WHERE posted_at IS NULL;

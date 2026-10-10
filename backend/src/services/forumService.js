@@ -1,5 +1,5 @@
 /**
- * Forum: discussion, review, guide, and article posts, tags, comments, and likes.
+ * Forum: discussion, review, guide, article, and megathread posts, tags, comments, and likes.
  *
  * Layer: service. A post is a 'discussion', a 'review' (reviews carry a 1–10 score),
  * a 'guide', or an 'article', and is tagged with up to TAGS_MAX catalog rows: movies, series, specials,
@@ -18,6 +18,9 @@
  * author gets a language warning (`screenText`). Authors edit and delete their own
  * posts and comments; admins can delete anyone's (logged). Deleting resolves open
  * reports on it (`forumReportService`). Banned users' posts and comments are hidden. Throws `HttpError` for user-facing failures.
+ *
+ * Megathreads are only opened by the release bot (`releaseThreadService`, through
+ * `createMegathread`); people can't pick that kind when posting.
  */
 
 import cron from 'node-cron'
@@ -38,7 +41,9 @@ import { screenText } from './languageWarningService.js'
 import { notify } from './notificationService.js'
 import { resolveReports } from './forumReportService.js'
 
-export const POST_KINDS = ['discussion', 'review', 'guide', 'article']
+export const POST_KINDS = ['discussion', 'review', 'guide', 'article', 'megathread']
+/** Kinds people can post; megathreads come from the release bot. */
+export const USER_POST_KINDS = ['discussion', 'review', 'guide', 'article']
 export const TAG_KINDS = ['movie', 'series', 'special', 'franchise', 'character']
 /** Kinds a review can score. */
 export const REVIEWABLE_KINDS = ['movie', 'series', 'special']
@@ -378,7 +383,7 @@ export async function validateTags(input, { loadEpisodes = loadEpisodeKeys } = {
  */
 export async function validatePostInput(input = {}, { partial = false, kind: fixedKind } = {}) {
   const kind = fixedKind || input.kind
-  if (!POST_KINDS.includes(kind))
+  if (!(fixedKind ? POST_KINDS : USER_POST_KINDS).includes(kind))
     throw new HttpError(400, 'Post type must be discussion, review, guide, or article.')
   const out = { kind }
 
@@ -511,6 +516,23 @@ export async function createPost(user, input) {
   const post = postEntry(await loadPost(postId, user), { full: true, viewer: user })
   queuePost(post)
   return { post, warning: screened.warning }
+}
+
+/**
+ * Open a release megathread as the bot. Skips the people-facing checks (burst limit,
+ * language screening, episode-list lookup): the caller builds the text and tags from
+ * catalog rows. Runs inside the caller's transaction when there is one.
+ * @param {string} botId
+ * @param {{ title: string, body: string, tags: Array<{ contentId: string, season: number | null, episode: number | null, top?: boolean }> }} input
+ * @returns {Promise<object>} The post, as `createPost` returns it.
+ */
+export async function createMegathread(botId, { title, body, tags }) {
+  const { rows } = await query(
+    `INSERT INTO posts (user_id, kind, title, body) VALUES ($1, 'megathread', $2, $3) RETURNING id`,
+    [botId, title.slice(0, TITLE_MAX), body.slice(0, BODY_MAX)],
+  )
+  await insertTags(rows[0].id, tags.slice(0, TAGS_MAX))
+  return postEntry(await loadPost(rows[0].id, null), { full: true })
 }
 
 /**
@@ -1194,6 +1216,7 @@ export default {
   listPosts,
   getPost,
   createPost,
+  createMegathread,
   updatePost,
   deletePost,
   setPostLike,
