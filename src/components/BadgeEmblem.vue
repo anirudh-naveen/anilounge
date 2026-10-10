@@ -3,7 +3,7 @@
 
   Creator: sparkly gold crown. Admin: sparkly violet shield. Developer: emerald hex
   with </>. Artist: pink palette. Influencer: sky disc with a megaphone. Supporter: coral heart with a
-  coin glint. All glow and
+  coin glint. Bot (the release bot only): cyan robot head. All glow and
   catch a light sweep; only creator/admin twinkle. Badges without an emblem (future
   ones) get a plain medal, used in the profile Badges section.
 -->
@@ -94,6 +94,24 @@
         <circle cx="15.2" cy="11.4" r="2.3" fill="#fff" opacity="0.92" />
       </template>
 
+      <template v-else-if="kind === 'bot'">
+        <rect x="11.1" y="1.6" width="1.8" height="3.4" rx="0.9" :fill="fill" />
+        <circle cx="12" cy="2.2" r="1.5" :fill="fill" />
+        <rect x="3.6" y="5.6" width="16.8" height="14.6" rx="4.2" :fill="fill" />
+        <rect x="1.6" y="10.4" width="2.4" height="5" rx="1.2" :fill="fill" />
+        <rect x="20" y="10.4" width="2.4" height="5" rx="1.2" :fill="fill" />
+        <circle cx="8.9" cy="11.6" r="1.8" fill="#fff" />
+        <circle cx="15.1" cy="11.6" r="1.8" fill="#fff" />
+        <path
+          fill="none"
+          stroke="#fff"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          opacity="0.9"
+          d="M9 16.2h6"
+        />
+      </template>
+
       <!-- Future badges without their own emblem: a plain medal. -->
       <template v-else>
         <path :fill="fill" d="M8 2.5h3l1 4-2.6 1.2zM16 2.5h-3l-1 4 2.6 1.2z" opacity="0.7" />
@@ -126,7 +144,7 @@ const props = withDefaults(
   { size: 'sm', tooltip: true },
 )
 
-const EMBLEMS = ['creator', 'admin', 'developer', 'artist', 'influencer', 'supporter']
+const EMBLEMS = ['creator', 'admin', 'developer', 'artist', 'influencer', 'supporter', 'bot']
 const COLORS: Record<string, string[]> = {
   creator: ['#fff3b0', '#f5b82e', '#e07a5f'],
   admin: ['#e3dcff', '#8f7ae6', '#2bbbad'],
@@ -134,6 +152,7 @@ const COLORS: Record<string, string[]> = {
   artist: ['#fbcfe8', '#ec4899', '#8b5cf6'],
   influencer: ['#bae6fd', '#38bdf8', '#6366f1'],
   supporter: ['#ffd8c9', '#f47b67', '#e11d48'],
+  bot: ['#cffafe', '#22d3ee', '#475569'],
   medal: ['#f1f5f9', '#94a3b8', '#64748b'],
 }
 
@@ -201,6 +220,10 @@ const fill = `url(#${gradientId})`
 
 .supporter .emblem-icon {
   filter: drop-shadow(0 0 3px rgba(244, 123, 103, 0.6));
+}
+
+.bot .emblem-icon {
+  filter: drop-shadow(0 0 3px rgba(34, 211, 238, 0.6));
 }
 
 .medal .emblem-icon {

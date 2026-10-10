@@ -50,7 +50,15 @@ describe('RoleBadge', () => {
 
 describe('BadgeEmblem', () => {
   it('draws the known emblems and a plain medal for future badges', () => {
-    for (const id of ['creator', 'admin', 'developer', 'artist', 'influencer', 'supporter']) {
+    for (const id of [
+      'creator',
+      'admin',
+      'developer',
+      'artist',
+      'influencer',
+      'supporter',
+      'bot',
+    ]) {
       const wrapper = mount(BadgeEmblem, { props: { badge: id } })
       expect(wrapper.classes()).toContain(id)
     }

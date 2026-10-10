@@ -14,6 +14,12 @@ describe('badgesForUser', () => {
       'artist',
     ])
   })
+
+  it('gives the release bot the bot badge and nothing else', () => {
+    assert.deepEqual(badgesForUser({ role: 'admin', isBot: true, granted: ['developer'] }), ['bot'])
+    assert.deepEqual(badgesForUser({ role: 'user', granted: ['bot'] }), [])
+    assert.equal(featuredEmblem(['bot'], null), 'bot')
+  })
 })
 
 describe('featuredEmblem', () => {

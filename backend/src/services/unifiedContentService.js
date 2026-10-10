@@ -770,8 +770,14 @@ class UnifiedContentService {
       content.nextEpisodeAirDate = next?.air_date || null
       content.nextEpisodeNumber = next?.episode_number ?? null
       content.nextEpisodeSeason = next?.season_number ?? null
-      if (tmdb.number_of_episodes != null) content.episodeCount = tmdb.number_of_episodes
-      if (tmdb.number_of_seasons != null) content.seasonCount = tmdb.number_of_seasons
+      // An anime row's counts are MAL/AniList's; TMDB's span the whole show.
+      const ownCounts = Boolean(content.malId || content.anilistId)
+      if (tmdb.number_of_episodes != null && !(ownCounts && content.episodeCount)) {
+        content.episodeCount = tmdb.number_of_episodes
+      }
+      if (tmdb.number_of_seasons != null && !(ownCounts && content.seasonCount)) {
+        content.seasonCount = tmdb.number_of_seasons
+      }
       updated = true
     }
 
