@@ -319,6 +319,15 @@ export const friendsAPI = {
   remove: (userId: string) => api.delete(`/friends/${userId}`),
 }
 
+/** Blocked users. Blocking also ends any friendship or request with them. */
+export const blocksAPI = {
+  list: () => api.get('/blocks'),
+
+  block: (userId: string) => api.post(`/blocks/${userId}`, {}),
+
+  unblock: (userId: string) => api.delete(`/blocks/${userId}`),
+}
+
 export const messagesAPI = {
   list: () => api.get('/messages'),
 

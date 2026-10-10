@@ -29,6 +29,7 @@ import { cleanUserText } from '../utils/userText.js'
 import { sendFriendRequestEmail } from './emailService.js'
 import { unsubscribeUrl } from './emailPreferenceService.js'
 import { notify } from './notificationService.js'
+import { blockedEitherWaySql, isBlockedEitherWay } from './blockService.js'
 
 export const FRIEND_NOTE_MAX = 300
 export const FRIEND_REQUEST_TTL_DAYS = 7
@@ -213,8 +214,8 @@ async function loadActiveUser(userId) {
  * @param {string} toId - Recipient.
  * @param {unknown} [note] - Optional note shown with the request (max 300 chars).
  * @returns {Promise<{ relationship: 'outgoing' | 'friends', user: object }>}
- * @throws {HttpError} 400 self/too long/blocked language, 404 unknown user, 409 already
- *   linked, 429 while a re-request cooldown is running.
+ * @throws {HttpError} 400 self/too long/blocked language, 403 either user blocked the
+ *   other, 404 unknown user, 409 already linked, 429 while a re-request cooldown is running.
  */
 export async function sendFriendRequest(fromId, toId, note) {
   if (String(fromId) === String(toId)) {
@@ -228,6 +229,9 @@ export async function sendFriendRequest(fromId, toId, note) {
   if (blocked) throw new HttpError(400, blocked)
 
   const target = await loadActiveUser(toId)
+  if (await isBlockedEitherWay(fromId, toId)) {
+    throw new HttpError(403, "You can't send a friend request to this user.")
+  }
   const relationship = await relationshipBetween(fromId, toId)
   if (relationship === 'friends') throw new HttpError(409, "You're already friends.")
   if (relationship === 'outgoing') throw new HttpError(409, 'Friend request already sent.')
@@ -406,7 +410,7 @@ export async function removeFriendship(userId, otherId) {
 
 /**
  * Find users by username (prefix matches first) with the viewer's relationship to each.
- * The viewer and unfinished sign-ups are left out.
+ * The viewer, unfinished sign-ups, and anyone blocked either way are left out.
  *
  * @param {string} viewerId
  * @param {unknown} term
@@ -427,6 +431,7 @@ export async function searchUsers(viewerId, term, { limit = 10 } = {}) {
                AND ${liveLinkSql('f')}) AS links
      FROM users u
      WHERE u.id <> $1 AND NOT u.pending_signup AND u.banned_at IS NULL AND u.username ILIKE $2
+       AND NOT ${blockedEitherWaySql('$1::uuid', 'u.id')}
      ORDER BY (lower(u.username) = lower($4)) DESC, (u.username ILIKE $3) DESC, lower(u.username)
      LIMIT $5`,
     [viewerId, `%${escaped}%`, `${escaped}%`, q, capped],

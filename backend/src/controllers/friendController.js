@@ -1,10 +1,12 @@
 /**
- * HTTP handlers for friends and friend requests.
+ * HTTP handlers for friends, friend requests, and blocked users.
  *
  * Layer: controller. All routes require auth. Business rules live in
- * `services/friendService.js`; the demo account can read but not send or accept.
+ * `services/friendService.js` and `services/blockService.js`; the demo account can read
+ * but not send, accept, or block.
  */
 
+import blockService from '../services/blockService.js'
 import friendService from '../services/friendService.js'
 import { assertNotDemo, sendError } from '../utils/httpError.js'
 
@@ -105,4 +107,67 @@ export const removeFriend = async (req, res) => {
   }
 }
 
-export default { getFriends, searchUsers, sendRequest, acceptRequest, removeFriend }
+/**
+ * Users the viewer has blocked.
+ *
+ * @param {import('express').Request} req - `req.user`.
+ * @param {import('express').Response} res - 200 `{ data: users[] }` or 500.
+ * @returns {Promise<void>}
+ */
+export const getBlocked = async (req, res) => {
+  try {
+    const data = await blockService.listBlocked(req.user._id)
+    res.json({ success: true, data })
+  } catch (error) {
+    sendError(res, error, 'Error loading blocked users')
+  }
+}
+
+/**
+ * Block `params.id`. Ends any friendship or request between the two.
+ *
+ * @param {import('express').Request} req - `params.id` is the user to block.
+ * @param {import('express').Response} res - 200 `{ data: { blocked: true, relationship: 'none' } }`, 400 self, 403 demo, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const blockUser = async (req, res) => {
+  try {
+    assertNotDemo(req.user)
+    const user = await blockService.blockUser(req.user._id, req.params.id)
+    res.json({
+      success: true,
+      message: `${user.username} is blocked.`,
+      data: { blocked: true, relationship: 'none' },
+    })
+  } catch (error) {
+    sendError(res, error, 'Error blocking user')
+  }
+}
+
+/**
+ * Unblock `params.id`.
+ *
+ * @param {import('express').Request} req - `params.id` is the user to unblock.
+ * @param {import('express').Response} res - 200 `{ data: { blocked: false } }`, 403 demo, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const unblockUser = async (req, res) => {
+  try {
+    assertNotDemo(req.user)
+    await blockService.unblockUser(req.user._id, req.params.id)
+    res.json({ success: true, message: 'Unblocked.', data: { blocked: false } })
+  } catch (error) {
+    sendError(res, error, 'Error unblocking user')
+  }
+}
+
+export default {
+  getFriends,
+  searchUsers,
+  sendRequest,
+  acceptRequest,
+  removeFriend,
+  getBlocked,
+  blockUser,
+  unblockUser,
+}

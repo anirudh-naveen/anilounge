@@ -389,6 +389,11 @@ router.post('/friends/requests', blockWhenMuted(), friendController.sendRequest)
 router.post('/friends/requests/:id/accept', validateObjectId, friendController.acceptRequest)
 router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
 
+/** Blocked users. `:id` is the other user's id. */
+router.get('/blocks', friendController.getBlocked)
+router.post('/blocks/:id', validateObjectId, friendController.blockUser)
+router.delete('/blocks/:id', validateObjectId, friendController.unblockUser)
+
 /** Settings → Communication (allow profanity in private messages). */
 router.get('/account/communication', messageController.getCommunicationSettings)
 router.put('/account/communication', messageController.updateCommunicationSettings)

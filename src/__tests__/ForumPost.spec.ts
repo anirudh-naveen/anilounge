@@ -90,6 +90,26 @@ describe('ForumPost', () => {
     expect(thread.get('.reply-list').text()).toContain('Agreed!')
   })
 
+  it('hides comments from blocked users but keeps the replies to them', async () => {
+    get.mockResolvedValue({
+      data: {
+        data: {
+          post: buildPost({ commentCount: 2 }),
+          comments: [
+            buildComment({ body: '', author: null, hidden: true }),
+            buildComment({ id: 'c2', parentId: 'c1', body: 'Agreed!' }),
+          ],
+        },
+      },
+    })
+    const wrapper = await mountPost()
+    const thread = wrapper.get('.comment-thread')
+    expect(thread.get('[data-testid="comment-hidden"]').text()).toBe(
+      'Comment from someone you blocked',
+    )
+    expect(thread.get('.reply-list').text()).toContain('Agreed!')
+  })
+
   it('shows the top tag highlighted and its picture beside the post', async () => {
     get.mockResolvedValue({
       data: {

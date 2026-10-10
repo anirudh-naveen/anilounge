@@ -59,6 +59,37 @@ const handleLinks = (router: Router, openUrl: (url: string) => void) => {
   )
 }
 
+/**
+ * Save a text file. Browsers download it; the app has no downloads, so it writes the
+ * file to the app's cache and opens the share sheet (Save to Files, AirDrop, Mail, ...).
+ */
+export async function saveTextFile(filename: string, text: string): Promise<void> {
+  if (!isNativeApp) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    anchor.click()
+    URL.revokeObjectURL(url)
+    return
+  }
+  const [{ Directory, Encoding, Filesystem }, { Share }] = await Promise.all([
+    import('@capacitor/filesystem'),
+    import('@capacitor/share'),
+  ])
+  const { uri } = await Filesystem.writeFile({
+    path: filename,
+    data: text,
+    directory: Directory.Cache,
+    encoding: Encoding.UTF8,
+  })
+  try {
+    await Share.share({ title: filename, files: [uri] })
+  } catch {
+    // Closing the share sheet without picking anything rejects; nothing to do.
+  }
+}
+
 /** Set up the native shell. Call once after the app mounts. */
 export async function startNativeApp(router: Router): Promise<void> {
   if (!isNativeApp) return

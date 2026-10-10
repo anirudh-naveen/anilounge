@@ -3,11 +3,19 @@ import type { Router } from 'vue-router'
 
 const browserOpen = vi.fn(() => Promise.resolve())
 const splashHide = vi.fn(() => Promise.resolve())
+const writeFile = vi.fn(() => Promise.resolve({ uri: 'file:///cache/log.txt' }))
+const share = vi.fn(() => Promise.reject(new Error('Share canceled')))
 
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true } }))
 vi.mock('@capacitor/app', () => ({ App: { addListener: vi.fn() } }))
 vi.mock('@capacitor/browser', () => ({ Browser: { open: browserOpen } }))
 vi.mock('@capacitor/splash-screen', () => ({ SplashScreen: { hide: splashHide } }))
+vi.mock('@capacitor/filesystem', () => ({
+  Filesystem: { writeFile },
+  Directory: { Cache: 'CACHE' },
+  Encoding: { UTF8: 'utf8' },
+}))
+vi.mock('@capacitor/share', () => ({ Share: { share } }))
 vi.mock('@capacitor/status-bar', () => ({
   StatusBar: { setStyle: vi.fn(() => Promise.resolve()) },
   Style: { Dark: 'DARK' },
@@ -64,6 +72,18 @@ describe('nativeApp (inside the iOS app)', () => {
     expect(click('mailto:support@anilounge.net')).toBe(false)
     expect(push).not.toHaveBeenCalled()
     expect(browserOpen).not.toHaveBeenCalled()
+  })
+
+  it('saves text files through the share sheet, ignoring a cancelled sheet', async () => {
+    const { saveTextFile } = await import('@/utils/nativeApp')
+    await expect(saveTextFile('log.txt', 'hello')).resolves.toBeUndefined()
+    expect(writeFile).toHaveBeenCalledWith({
+      path: 'log.txt',
+      data: 'hello',
+      directory: 'CACHE',
+      encoding: 'utf8',
+    })
+    expect(share).toHaveBeenCalledWith({ title: 'log.txt', files: ['file:///cache/log.txt'] })
   })
 
   it('hides donation links', async () => {

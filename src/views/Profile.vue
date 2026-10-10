@@ -111,20 +111,30 @@
                 Share profile
               </button>
               <FriendButton
-                v-if="profile.relationship"
+                v-if="profile.relationship && !profile.blocked"
                 :user-id="profile.user.id"
                 :username="profile.user.username"
                 :relationship="profile.relationship"
                 @update:relationship="(value) => profile && (profile.relationship = value)"
               />
               <router-link
-                v-if="profile.relationship === 'friends'"
+                v-if="profile.relationship === 'friends' && !profile.blocked"
                 :to="{ name: 'friends', query: { user: profile.user.id } }"
                 class="btn btn-secondary"
                 data-testid="message-friend"
               >
                 Message
               </router-link>
+              <button
+                v-if="profile.relationship && !authStore.isDemoUser"
+                type="button"
+                class="btn btn-secondary"
+                :disabled="blocking"
+                data-testid="block-user"
+                @click="toggleBlock"
+              >
+                {{ profile.blocked ? 'Unblock' : 'Block' }}
+              </button>
               <button
                 v-if="profile.isOwner"
                 type="button"
@@ -718,6 +728,7 @@ import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import {
+  blocksAPI,
   getContentTypeDisplay,
   getDetailsRouteName,
   getPosterUrl,
@@ -1185,6 +1196,41 @@ const shareProfile = async () => {
     )
   } catch {
     window.prompt('Copy your profile link:', url)
+  }
+}
+
+const blocking = ref(false)
+
+/** Block or unblock this profile's owner. Blocking also ends any friendship or request. */
+const toggleBlock = async () => {
+  const current = profile.value
+  if (!current || blocking.value) return
+  const name = current.user.username
+  if (
+    !current.blocked &&
+    !window.confirm(
+      `Block ${name}? You'll stop being friends, neither of you can send the other a ` +
+        `request, and you won't see their forum posts or comments. They won't be told.`,
+    )
+  ) {
+    return
+  }
+  blocking.value = true
+  try {
+    if (current.blocked) {
+      await blocksAPI.unblock(current.user.id)
+      current.blocked = false
+      toast.success(`${name} is unblocked.`)
+    } else {
+      await blocksAPI.block(current.user.id)
+      current.blocked = true
+      current.relationship = 'none'
+      toast.success(`${name} is blocked.`)
+    }
+  } catch (err) {
+    toast.error(apiErrorMessage(err, `Couldn't update the block on ${name}. Try again.`))
+  } finally {
+    blocking.value = false
   }
 }
 

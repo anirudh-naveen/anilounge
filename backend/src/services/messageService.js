@@ -27,6 +27,7 @@ import {
   requestExpiresAt,
 } from './friendService.js'
 import { maskLanguage, screenText } from './languageWarningService.js'
+import { blockedByViewerSql } from './blockService.js'
 
 export { maskLanguage }
 
@@ -169,6 +170,7 @@ export async function listConversations(userId) {
      FROM latest l
      JOIN users u ON u.id = l.other_id
      LEFT JOIN unread un ON un.other_id = l.other_id
+     WHERE NOT ${blockedByViewerSql('$1', 'l.other_id')}
      ORDER BY l.created_at DESC
      LIMIT ${CONVERSATION_LIMIT}`,
     [userId],
