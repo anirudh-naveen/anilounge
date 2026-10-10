@@ -752,6 +752,7 @@ import { useBadgesStore } from '@/stores/badges'
 import { NO_EMBLEM, badgeInfo } from '@/utils/badges'
 import { ACCENT_PRESETS, accentColor, isCustomAccent, readableOn } from '@/utils/accent'
 import FriendButton from '@/components/FriendButton.vue'
+import { shareLink } from '@/utils/nativeApp'
 import ProfileForum from '@/components/ProfileForum.vue'
 import { apiErrorMessage } from '@/utils/social'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
@@ -1186,17 +1187,17 @@ const ratingPercent = (count: number) => {
 
 const shareProfile = async () => {
   if (!profile.value) return
-  const url = `${window.location.origin}/u/${encodeURIComponent(profile.value.user.username)}`
-  try {
-    await navigator.clipboard.writeText(url)
+  const { username } = profile.value.user
+  const url = `${window.location.origin}/u/${encodeURIComponent(username)}`
+  const result = await shareLink({ title: `${username} on AniLounge`, url })
+  if (result === 'copied') {
     toast.success(
       profile.value.settings.isPublic
         ? 'Profile link copied!'
         : 'Link copied. Your profile is private, so only you can open it.',
     )
-  } catch {
-    window.prompt('Copy your profile link:', url)
   }
+  if (result === 'failed') window.prompt('Copy your profile link:', url)
 }
 
 const blocking = ref(false)

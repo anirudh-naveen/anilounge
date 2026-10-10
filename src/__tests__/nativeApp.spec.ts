@@ -7,7 +7,15 @@ const writeFile = vi.fn(() => Promise.resolve({ uri: 'file:///cache/log.txt' }))
 const share = vi.fn(() => Promise.reject(new Error('Share canceled')))
 
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true } }))
-vi.mock('@capacitor/app', () => ({ App: { addListener: vi.fn() } }))
+const appListeners: Record<string, (event: { url: string }) => void> = {}
+vi.mock('@capacitor/app', () => ({
+  App: {
+    addListener: (name: string, listener: (event: { url: string }) => void) => {
+      appListeners[name] = listener
+    },
+    getLaunchUrl: () => Promise.resolve({ url: 'https://www.anilounge.net/forum?sort=new' }),
+  },
+}))
 vi.mock('@capacitor/browser', () => ({ Browser: { open: browserOpen } }))
 vi.mock('@capacitor/splash-screen', () => ({ SplashScreen: { hide: splashHide } }))
 vi.mock('@capacitor/filesystem', () => ({
@@ -22,6 +30,7 @@ vi.mock('@capacitor/status-bar', () => ({
 }))
 
 const push = vi.fn()
+const currentRoute = { value: { fullPath: '/' } }
 
 /** Click a link and report whether the page's own navigation was cancelled. */
 const click = (href: string, target = '') => {
@@ -41,9 +50,14 @@ const click = (href: string, target = '') => {
 }
 
 describe('nativeApp (inside the iOS app)', () => {
+  /** Paths opened while starting up (the launch link resolves after start returns). */
+  let launchPushes: unknown[][] = []
+
   beforeAll(async () => {
     const { startNativeApp } = await import('@/utils/nativeApp')
-    await startNativeApp({ push } as unknown as Router)
+    await startNativeApp({ push, currentRoute } as unknown as Router)
+    await new Promise((resolve) => setTimeout(resolve))
+    launchPushes = [...push.mock.calls]
   })
 
   afterEach(() => {
@@ -53,6 +67,17 @@ describe('nativeApp (inside the iOS app)', () => {
 
   it('hides the splash screen once started', () => {
     expect(splashHide).toHaveBeenCalled()
+  })
+
+  it('opens the page for a link that launched the app', () => {
+    expect(launchPushes).toEqual([['/forum?sort=new']])
+  })
+
+  it('opens anilounge.net links tapped while the app is running, ignoring others', () => {
+    appListeners.appUrlOpen!({ url: 'https://anilounge.net/u/mika#forum' })
+    appListeners.appUrlOpen!({ url: 'https://example.com/u/mika' })
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith('/u/mika#forum')
   })
 
   it('opens off-site links in the in-app browser sheet', () => {
@@ -84,6 +109,15 @@ describe('nativeApp (inside the iOS app)', () => {
       encoding: 'utf8',
     })
     expect(share).toHaveBeenCalledWith({ title: 'log.txt', files: ['file:///cache/log.txt'] })
+  })
+
+  it('shares links with the native sheet and reports a closed sheet as cancelled', async () => {
+    const { shareLink } = await import('@/utils/nativeApp')
+    share.mockResolvedValueOnce(undefined as never)
+    const link = { title: 'Frieren', url: 'https://www.anilounge.net/tv-show/frieren/12' }
+    await expect(shareLink(link)).resolves.toBe('shared')
+    expect(share).toHaveBeenLastCalledWith({ ...link, dialogTitle: 'Frieren' })
+    await expect(shareLink(link)).resolves.toBe('cancelled')
   })
 
   it('hides donation links', async () => {
