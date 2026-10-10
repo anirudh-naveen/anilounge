@@ -1,17 +1,30 @@
 /**
- * Profile picture storage in Postgres.
+ * Profile picture storage in Postgres or Cloudflare R2.
  *
- * Layer: service. Pictures are small cropped images, stored in `user_avatars` so
- * they survive redeploys (Railway disks are ephemeral) and are visible from every
- * environment sharing the database. `users.profile_picture` holds a versioned URL
- * (`/api/avatars/:userId?v=...`) that is served with long-lived caching.
+ * Layer: service. Pictures are small cropped images. By default they are stored
+ * in `user_avatars` (Postgres). If R2_* environment variables are present, they
+ * are uploaded to R2 instead, and users.profile_picture holds the R2 URL.
  */
 
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { query } from '../../config/postgres.js'
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+let s3Client = null
+if (process.env.R2_BUCKET) {
+  s3Client = new S3Client({
+    region: 'auto',
+    endpoint: process.env.R2_ENDPOINT,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    }
+  })
+}
 
 /**
  * Identify an image by its leading bytes; the uploaded MIME type is not trusted.
@@ -50,15 +63,31 @@ export function avatarUrl(userId, updatedAt = new Date()) {
  * @returns {Promise<string>} The URL to save as `users.profile_picture`.
  */
 export async function saveAvatar(userId, data, contentType) {
-  const { rows } = await query(
-    `INSERT INTO user_avatars (user_id, content_type, data, updated_at)
-     VALUES ($1, $2, $3, now())
-     ON CONFLICT (user_id) DO UPDATE
-       SET content_type = EXCLUDED.content_type, data = EXCLUDED.data, updated_at = now()
-     RETURNING updated_at`,
-    [userId, contentType, data],
-  )
-  return avatarUrl(userId, new Date(rows[0].updated_at))
+  if (s3Client && process.env.AVATAR_PUBLIC_URL) {
+    const key = `avatars/${userId}-${crypto.randomBytes(8).toString('hex')}`
+    await s3Client.send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Body: data,
+      ContentType: contentType
+    }))
+    
+    // Clean up Postgres row if one exists so we don't leave orphaned data
+    await query('DELETE FROM user_avatars WHERE user_id = $1', [userId])
+    
+    // Cloudflare public bucket URL
+    return `${process.env.AVATAR_PUBLIC_URL.replace(/\/$/, '')}/${key}`
+  } else {
+    const { rows } = await query(
+      `INSERT INTO user_avatars (user_id, content_type, data, updated_at)
+       VALUES ($1, $2, $3, now())
+       ON CONFLICT (user_id) DO UPDATE
+         SET content_type = EXCLUDED.content_type, data = EXCLUDED.data, updated_at = now()
+       RETURNING updated_at`,
+      [userId, contentType, data],
+    )
+    return avatarUrl(userId, new Date(rows[0].updated_at))
+  }
 }
 
 /**
@@ -75,15 +104,28 @@ export async function getAvatar(userId) {
 }
 
 /**
- * Delete a legacy on-disk profile picture (`/uploads/profiles/...`); database-stored
- * avatars and remote URLs are left alone. Never throws.
+ * Delete an old avatar. It deletes legacy on-disk files or remote R2 objects.
+ * Database-stored avatars are left alone (managed by DELETE cascades / queries). 
+ * Never throws.
  * @param {string | null | undefined} profilePicture - Stored `users.profile_picture`.
  * @returns {void}
  */
 export function deleteLegacyAvatarFile(profilePicture) {
-  if (!profilePicture?.startsWith('/uploads/')) return
-  const file = path.join(process.cwd(), 'uploads', 'profiles', path.basename(profilePicture))
-  fs.promises.unlink(file).catch(() => {})
+  if (!profilePicture) return
+  
+  if (profilePicture.startsWith('/uploads/')) {
+    const file = path.join(process.cwd(), 'uploads', 'profiles', path.basename(profilePicture))
+    fs.promises.unlink(file).catch(() => {})
+  } else if (s3Client && process.env.AVATAR_PUBLIC_URL && profilePicture.startsWith(process.env.AVATAR_PUBLIC_URL)) {
+    const prefix = process.env.AVATAR_PUBLIC_URL.replace(/\/$/, '') + '/'
+    const key = profilePicture.substring(prefix.length)
+    if (key) {
+      s3Client.send(new DeleteObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: key
+      })).catch((err) => console.error('Failed to delete old R2 avatar', err))
+    }
+  }
 }
 
 /**
