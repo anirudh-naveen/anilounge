@@ -421,7 +421,7 @@ const handleLogout = async () => {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.9rem 0;
   position: sticky;
-  top: 0;
+  top: var(--safe-top);
   z-index: 100;
   backdrop-filter: blur(18px);
   box-shadow: 0 10px 28px rgba(21, 34, 56, 0.18);

@@ -2108,7 +2108,7 @@ onUnmounted(() => {
 
 .admin-list-panel {
   position: sticky;
-  top: 110px;
+  top: calc(110px + var(--safe-top));
   max-height: calc(100vh - 130px);
   overflow-y: auto;
 }

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>AniLounge</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+        background: #0f1726;
+        color: #e8ecf3;
+        font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+        text-align: center;
+      }
+      img {
+        width: 72px;
+        height: 72px;
+        border-radius: 0;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 20px 0 8px;
+      }
+      p {
+        margin: 0 0 24px;
+        color: #9aa6ba;
+        line-height: 1.5;
+      }
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 28px;
+        background: #e07a5f;
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="logo.png" alt="" />
+      <h1>You're offline</h1>
+      <p>AniLounge needs a connection.<br />Check your signal or Wi-Fi and try again.</p>
+      <button type="button" onclick="location.href = 'https://www.anilounge.net'">Try again</button>
+    </main>
+  </body>
+</html>

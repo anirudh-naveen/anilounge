@@ -16,6 +16,7 @@ import './assets/styles/social.css'
 import { useAuthStore } from './stores/auth'
 import { useContentStore } from './stores/content'
 import { startMetrics } from './services/metrics'
+import { startNativeApp } from './utils/nativeApp'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -49,3 +50,4 @@ authStore.restoreSession().then(() => {
 
 startMetrics()
 app.mount('#app')
+startNativeApp()
