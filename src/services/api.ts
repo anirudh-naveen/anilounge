@@ -275,6 +275,9 @@ export const profileAPI = {
   favoriteContent: (id: string) => api.post(`/content/${id}/favorite`),
 
   unfavoriteContent: (id: string) => api.delete(`/content/${id}/favorite`),
+
+  /** Rank one category of your favorites: all of its ids, in the new order. */
+  reorderFavorites: (ids: string[]) => api.put('/favorites/order', { ids }),
 }
 
 export const contentAPI = {
@@ -386,6 +389,10 @@ export const forumAPI = {
 
   /** Leading posts and highlighted comments for a title or character page. */
   highlights: (contentId: string) => api.get(`/forum/highlights/${contentId}`),
+
+  /** A page of one user's comments, newest first, each with its post's title. */
+  userComments: (author: string, page = 1) =>
+    api.get('/forum/comments', { params: { author, page } }),
 
   /** Home's forum section; the pick refreshes every few hours. */
   home: () => api.get('/home/forum'),

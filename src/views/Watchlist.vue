@@ -326,7 +326,7 @@
                         </div>
 
                         <div class="notes-control">
-                          <label>Your Review:</label>
+                          <label>Notes:</label>
                           <textarea
                             :value="getLocalFormData(item).notes"
                             @change="

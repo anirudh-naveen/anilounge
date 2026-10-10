@@ -21,17 +21,17 @@ describe('normalizeProfileSettings', () => {
     })
     assert.equal(settings.accent, 'coral')
     assert.equal(settings.headline.length, 80)
-    assert.deepEqual(settings.tabOrder, ['stats', 'favorites', 'watchlist'])
+    assert.deepEqual(settings.tabOrder, ['stats', 'favorites', 'watchlist', 'forum'])
     assert.deepEqual(settings.hiddenTabs, [])
   })
 
   it('keeps one tab visible and moves the default tab off hidden tabs', () => {
     const settings = normalizeProfileSettings({
-      hiddenTabs: ['favorites', 'watchlist', 'stats'],
+      hiddenTabs: ['favorites', 'watchlist', 'stats', 'forum'],
       defaultTab: 'favorites',
     })
-    assert.deepEqual(settings.hiddenTabs, ['favorites', 'watchlist'])
-    assert.equal(settings.defaultTab, 'stats')
+    assert.deepEqual(settings.hiddenTabs, ['favorites', 'watchlist', 'stats'])
+    assert.equal(settings.defaultTab, 'forum')
   })
 
   it('merges a partial update over the stored settings', () => {

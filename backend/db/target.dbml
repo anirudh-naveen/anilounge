@@ -297,6 +297,7 @@ Table favorites {
   user_id uuid [not null, ref: > users.id]
   content_id uuid [not null, ref: > content.id]
   added_at timestamptz [default: `now()`]
+  position integer [note: 'Owner ranking; top 10 per category']
 
   indexes {
     (user_id, content_id) [pk]

@@ -8,6 +8,9 @@
 import Content from '../models/Content.js'
 import Entity from '../models/Entity.js'
 import { query } from '../../config/postgres.js'
+import { kindFromEntityType } from '../db/kinds.js'
+import { addFavorite } from '../services/favoriteService.js'
+import { sendError } from '../utils/httpError.js'
 import {
   ensureCharacterAbout,
   ensureCharactersForContent,
@@ -132,19 +135,14 @@ export const favoriteEntity = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Entity not found' })
     }
     // favoritesCount is counted from `favorites` when read; only the response needs bumping.
-    const { rowCount } = await query(
-      `INSERT INTO favorites (user_id, content_id) VALUES ($1, $2)
-       ON CONFLICT (user_id, content_id) DO NOTHING`,
-      [req.user._id, entity._id],
-    )
-    if (rowCount) entity.favoritesCount = (entity.favoritesCount || 0) + 1
+    const added = await addFavorite(req.user._id, entity._id, kindFromEntityType(entity.entityType))
+    if (added) entity.favoritesCount = (entity.favoritesCount || 0) + 1
     res.json({
       success: true,
       data: await serializeEntityDetails(entity, { isFavorited: true }),
     })
   } catch (error) {
-    console.error('Error favoriting entity:', error)
-    res.status(500).json({ success: false, message: 'Error updating favorite' })
+    sendError(res, error, 'Error updating favorite')
   }
 }
 

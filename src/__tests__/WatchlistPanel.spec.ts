@@ -48,13 +48,36 @@ describe('WatchlistPanel', () => {
     expect(wrapper.find('[data-testid="watchlist-add"]').exists()).toBe(false)
   })
 
-  it('adds a title with the chosen starting status', async () => {
+  it('adds a planned or dropped title in one tap', async () => {
     const wrapper = mountPanel()
-    await wrapper.get('select').setValue('watching')
+    await wrapper.get('select').setValue('dropped')
+    expect(wrapper.find('[data-testid="watchlist-panel-episodes"]').exists()).toBe(false)
     await wrapper.get('[data-testid="watchlist-add"]').trigger('click')
     await flushPromises()
 
-    expect(addToWatchlist).toHaveBeenCalledWith('tv-1', 'watching')
+    expect(addToWatchlist).toHaveBeenCalledWith('tv-1', 'dropped')
+  })
+
+  it('opens the editor for other starting statuses and adds with progress', async () => {
+    const wrapper = mountPanel()
+    await wrapper.get('select').setValue('watching')
+
+    const episodes = wrapper.get('[data-testid="watchlist-panel-episodes"]')
+    await episodes.setValue(4)
+    await wrapper.get('[data-testid="watchlist-panel-plus-one"]').trigger('click')
+    expect(wrapper.find('[data-testid="watchlist-remove"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="watchlist-add"]').trigger('click')
+    await flushPromises()
+
+    expect(addToWatchlist).toHaveBeenCalledWith('tv-1', 'watching', undefined, 5, 1, undefined, {
+      startedOn: null,
+      completedOn: null,
+      rewatchCount: 0,
+    })
+
+    // Back to Planned collapses to the one-tap add.
+    await wrapper.get('[data-testid="watchlist-panel-status-select"]').setValue('plan_to_watch')
+    expect(wrapper.find('[data-testid="watchlist-panel-episodes"]').exists()).toBe(false)
   })
 
   it('prefills a saved series and saves progress, season, and details', async () => {

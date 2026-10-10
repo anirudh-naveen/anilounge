@@ -8,6 +8,9 @@ const getPublicProfile = vi.fn()
 const updateSettings = vi.fn()
 const setFeaturedBadge = vi.fn()
 const updateProfile = vi.fn()
+const reorderFavorites = vi.fn()
+const listPosts = vi.fn()
+const userComments = vi.fn()
 const authState = { isDemoUser: false }
 
 vi.mock('vue-toastification', () => ({
@@ -23,6 +26,12 @@ vi.mock('@/services/api', async (importOriginal) => {
       getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
       updateSettings: (...args: unknown[]) => updateSettings(...args),
       setFeaturedBadge: (...args: unknown[]) => setFeaturedBadge(...args),
+      reorderFavorites: (...args: unknown[]) => reorderFavorites(...args),
+    },
+    forumAPI: {
+      ...actual.forumAPI,
+      list: (...args: unknown[]) => listPosts(...args),
+      userComments: (...args: unknown[]) => userComments(...args),
     },
   }
 })
@@ -142,6 +151,7 @@ const mountAt = async (path: string) => {
       { path: '/', component: { template: '<div />' } },
       { path: '/tv-show/:id', name: 'TVShowDetails', component: { template: '<div />' } },
       { path: '/character/:id', name: 'CharacterDetails', component: { template: '<div />' } },
+      { path: '/forum/:id', name: 'forumPost', component: { template: '<div />' } },
     ],
   })
   router.push(path)
@@ -170,6 +180,94 @@ describe('Profile', () => {
     expect(wrapper.get('[data-testid="panel-favorites"]').text()).toContain('Gurren Lagann')
     expect(wrapper.text()).toContain('Kamina')
     expect(wrapper.find('[data-testid="customize-profile"]').exists()).toBe(false)
+  })
+
+  it('shows a top 10 per category and tells the owner about extras', async () => {
+    const titles = Array.from({ length: 12 }, (_, index) => ({
+      _id: `t${index + 1}`,
+      title: `Title ${index + 1}`,
+      overview: '',
+      contentType: 'tv' as const,
+      genres: [],
+    }))
+    const profile = buildProfile({ isOwner: true })
+    profile.favorites!.content = titles
+    getPublicProfile.mockResolvedValue({ data: { data: profile } })
+    const { wrapper } = await mountAt('/profile')
+
+    const group = wrapper.get('[data-testid="favorites-content"]')
+    expect(group.findAll('[data-testid="favorite-slot"]')).toHaveLength(10)
+    expect(group.text()).toContain('12/10')
+    expect(group.text()).toContain("2 more over the top-10 limit aren't shown")
+  })
+
+  it('lets the owner reorder a category and saves it', async () => {
+    const profile = buildProfile({ isOwner: true })
+    profile.favorites!.characters = [
+      { _id: 'e1', entityType: 'character', name: 'Kamina' },
+      { _id: 'e2', entityType: 'character', name: 'Simon' },
+    ]
+    getPublicProfile.mockResolvedValue({ data: { data: profile } })
+    reorderFavorites.mockResolvedValue({ data: { data: ['e2', 'e1'] } })
+    const { wrapper } = await mountAt('/profile')
+
+    await wrapper.get('[data-testid="favorites-reorder-characters"]').trigger('click')
+    await wrapper.get('[aria-label="Move Simon earlier"]').trigger('click')
+    await wrapper.get('[data-testid="favorites-save-order"]').trigger('click')
+    await flushPromises()
+
+    expect(reorderFavorites).toHaveBeenCalledWith(['e2', 'e1'])
+    const names = wrapper
+      .get('[data-testid="favorites-characters"]')
+      .findAll('[data-testid="favorite-slot"] .card-title')
+      .map((title) => title.text())
+    expect(names).toEqual(['Simon', 'Kamina'])
+  })
+
+  it("shows the user's forum posts and comments on the Forum tab", async () => {
+    getPublicProfile.mockResolvedValue({
+      data: { data: buildProfile({ tabs: ['favorites', 'forum'] }) },
+    })
+    listPosts.mockResolvedValue({ data: { data: { items: [], page: 1, pageSize: 20, total: 0 } } })
+    userComments.mockResolvedValue({
+      data: {
+        data: {
+          items: [
+            {
+              id: 'm1',
+              postId: 'p1',
+              parentId: null,
+              body: 'Row row fight the power',
+              deleted: false,
+              createdAt: '2026-10-01T00:00:00Z',
+              editedAt: null,
+              author: null,
+              likeCount: 2,
+              liked: false,
+              canEdit: false,
+              canDelete: false,
+              postTitle: 'Best mecha opening?',
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+        },
+      },
+    })
+    const { wrapper } = await mountAt('/u/mika')
+
+    await wrapper.get('[data-testid="profile-tab-forum"]').trigger('click')
+    await flushPromises()
+    expect(listPosts).toHaveBeenCalledWith({ author: 'mika', sort: 'new', page: 1 })
+    expect(wrapper.text()).toContain('No posts yet.')
+
+    await wrapper.get('[data-testid="profile-forum-comments"]').trigger('click')
+    await flushPromises()
+    expect(userComments).toHaveBeenCalledWith('mika', 1)
+    expect(wrapper.get('[data-testid="profile-forum-comment"]').text()).toContain(
+      'Best mecha opening?',
+    )
   })
 
   it('switches to the stats tab and shows watch time', async () => {

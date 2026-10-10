@@ -66,11 +66,19 @@ export function tagLevels<T extends Pick<PostTag, 'kind' | 'name' | 'season' | '
 /**
  * The tag whose picture represents a post: the top tag when it has one, else the
  * highest tag in the hierarchy with a picture (title, then character). Franchises
- * never supply the picture, even as the top tag.
+ * never supply their own picture; a franchise that is the post's only tag shows its
+ * first title's poster (`coverPath`) instead.
  */
 export function coverTag<
-  T extends Pick<PostTag, 'kind' | 'name' | 'season' | 'episode' | 'imagePath' | 'top'>,
->(tags: T[]) {
+  T extends Pick<
+    PostTag,
+    'kind' | 'name' | 'season' | 'episode' | 'imagePath' | 'top' | 'coverPath'
+  >,
+>(tags: T[]): T | null {
+  const [only] = tags
+  if (tags.length === 1 && only?.kind === 'franchise') {
+    return only.coverPath ? { ...only, imagePath: only.coverPath } : null
+  }
   const pictured = tags.filter((tag) => tag.kind !== 'franchise' && tag.imagePath)
   return pictured.find((tag) => tag.top) || sortTags(pictured)[0] || null
 }

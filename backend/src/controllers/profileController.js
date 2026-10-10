@@ -20,6 +20,11 @@ import { relationshipBetween } from '../services/friendService.js'
 import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
 import { sendError } from '../utils/httpError.js'
 import {
+  addFavorite,
+  FAVORITE_ORDER_SQL,
+  reorderFavorites,
+} from '../services/favoriteService.js'
+import {
   normalizePreferences,
   normalizeProfileSettings,
   PROFILE_BIO_MAX,
@@ -76,7 +81,7 @@ async function loadFavoriteContent(userId) {
      FROM favorites f
      JOIN works w ON w.id = f.content_id
      WHERE f.user_id = $1
-     ORDER BY f.added_at DESC`,
+     ORDER BY ${FAVORITE_ORDER_SQL}`,
     [userId],
   )
   const docs = await attachContentRelations(rows.map(mapContentRow))
@@ -84,7 +89,7 @@ async function loadFavoriteContent(userId) {
 }
 
 /**
- * Favorited entities for a user, newest first, grouped by type.
+ * Favorited entities for a user in the owner's ranking, grouped by type.
  * @param {object} user - Loaded `User` with `favoriteEntities`.
  * @returns {Promise<{ characters: object[], voiceActors: object[], studios: object[] }>}
  */
@@ -96,7 +101,12 @@ async function loadFavoriteEntities(user) {
   if (!rows.length) return groups
   const entities = await Entity.find({ _id: { $in: rows.map((row) => row.entity) } })
   const byId = new Map(entities.map((entity) => [String(entity._id), entity]))
-  const ordered = [...rows].sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt))
+  // Same order as FAVORITE_ORDER_SQL: ranked first, then unranked newest first.
+  const ordered = [...rows].sort(
+    (a, b) =>
+      (a.position ?? Infinity) - (b.position ?? Infinity) ||
+      new Date(b.addedAt) - new Date(a.addedAt),
+  )
   for (const row of ordered) {
     const entity = byId.get(String(row.entity))
     if (!entity) continue
@@ -282,11 +292,7 @@ export const toggleContentFavorite = async (req, res) => {
 
     const isFavorited = req.method !== 'DELETE'
     if (isFavorited) {
-      await query(
-        `INSERT INTO favorites (user_id, content_id) VALUES ($1, $2)
-         ON CONFLICT (user_id, content_id) DO NOTHING`,
-        [req.user._id, contentId],
-      )
+      await addFavorite(req.user._id, contentId, rows[0].kind)
     } else {
       await query('DELETE FROM favorites WHERE user_id = $1 AND content_id = $2', [
         req.user._id,
@@ -296,8 +302,24 @@ export const toggleContentFavorite = async (req, res) => {
 
     res.json({ success: true, data: { contentId, isFavorited } })
   } catch (error) {
-    console.error('Error updating favorite title:', error)
-    res.status(500).json({ success: false, message: 'Error updating favorite' })
+    sendError(res, error, 'Error updating favorite')
+  }
+}
+
+/**
+ * Rank one category of the signed-in user's favorites (titles, characters, voice
+ * actors, or studios).
+ *
+ * @param {import('express').Request} req - `body.ids`: that category's favorites in the new order.
+ * @param {import('express').Response} res - 200 `{ data: ids }`, 400 not one whole category, or 500.
+ * @returns {Promise<void>}
+ */
+export const reorderFavoriteList = async (req, res) => {
+  try {
+    const ids = await reorderFavorites(req.user._id, req.body?.ids)
+    res.json({ success: true, data: ids })
+  } catch (error) {
+    sendError(res, error, 'Error reordering favorites')
   }
 }
 
@@ -375,4 +397,5 @@ export default {
   updateProfileSettings,
   getFavoriteContentIds,
   toggleContentFavorite,
+  reorderFavoriteList,
 }
