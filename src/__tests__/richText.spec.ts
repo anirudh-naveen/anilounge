@@ -86,6 +86,25 @@ describe('parseRichText', () => {
     })
   })
 
+  it("doesn't nest blocks of the same kind, and closes on a trailing fence", () => {
+    const blocks = parseRichText(
+      '+++ One\na\n+++ Two\n- b\n- c +++\nafter\n::: tip Hi\nsaid it :::\n+++ Three +++',
+    )
+    expect(blocks.map((block) => block.type)).toEqual([
+      'section',
+      'section',
+      'paragraph',
+      'callout',
+      'section',
+    ])
+    expect(blocks[0]).toMatchObject({ summary: [{ text: 'One' }], blocks: [{ type: 'paragraph' }] })
+    expect(blocks[1]).toMatchObject({
+      blocks: [{ type: 'list', items: [[{ text: 'b' }], [{ text: 'c' }]] }],
+    })
+    expect(blocks[3]).toMatchObject({ blocks: [{ children: [{ text: 'said it' }] }] })
+    expect(blocks[4]).toMatchObject({ summary: [{ text: 'Three' }], blocks: [] })
+  })
+
   it('flattens blocks to plain text', () => {
     expect(plainText('+++ Fillers\n- 26\n:::  tip\nskip\n:::\n+++')).toBe('Fillers\n26\nskip')
   })

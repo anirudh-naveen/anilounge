@@ -12,7 +12,7 @@
       <div class="login-container">
         <!-- Page Header -->
         <div class="login-header">
-          <h1 class="login-title">Login</h1>
+          <h1 class="login-title">Log in</h1>
           <p class="login-subtitle">Welcome back to the lobby</p>
         </div>
 
@@ -80,7 +80,7 @@
 
           <button type="submit" class="btn btn-primary btn-large" :disabled="authStore.isLoading">
             <span v-if="authStore.isLoading" class="spinner"></span>
-            {{ authStore.isLoading ? 'Signing in...' : 'Sign In' }}
+            {{ authStore.isLoading ? 'Logging in...' : 'Log in' }}
           </button>
 
           <!-- Title: Error -->
