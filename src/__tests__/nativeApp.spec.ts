@@ -6,7 +6,23 @@ const splashHide = vi.fn(() => Promise.resolve())
 const writeFile = vi.fn(() => Promise.resolve({ uri: 'file:///cache/log.txt' }))
 const share = vi.fn(() => Promise.reject(new Error('Share canceled')))
 
-vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true } }))
+const widgetState = vi.hoisted(() => ({ token: null as string | null }))
+const widgetBridge = vi.hoisted(() => ({
+  getToken: vi.fn(() => Promise.resolve({ token: widgetState.token })),
+  setToken: vi.fn(({ token }: { token: string }) => {
+    widgetState.token = token
+    return Promise.resolve()
+  }),
+  clearToken: vi.fn(() => {
+    widgetState.token = null
+    return Promise.resolve()
+  }),
+  reload: vi.fn(() => Promise.resolve()),
+}))
+vi.mock('@capacitor/core', () => ({
+  Capacitor: { isNativePlatform: () => true },
+  registerPlugin: () => widgetBridge,
+}))
 const appListeners: Record<string, (event: { url: string }) => void> = {}
 vi.mock('@capacitor/app', () => ({
   App: {
@@ -24,6 +40,29 @@ vi.mock('@capacitor/filesystem', () => ({
   Encoding: { UTF8: 'utf8' },
 }))
 vi.mock('@capacitor/share', () => ({ Share: { share } }))
+
+const pushListeners: Record<string, (event: never) => void> = {}
+const pushRegister = vi.fn(() => Promise.resolve())
+const requestPermissions = vi.fn(() => Promise.resolve({ receive: 'granted' }))
+vi.mock('@capacitor/push-notifications', () => ({
+  PushNotifications: {
+    addListener: (name: string, listener: (event: never) => void) => {
+      pushListeners[name] = listener
+      return Promise.resolve({ remove: vi.fn() })
+    },
+    checkPermissions: () => Promise.resolve({ receive: 'granted' }),
+    requestPermissions,
+    register: pushRegister,
+  },
+}))
+const registerDevice = vi.fn(() => Promise.resolve({}))
+const unregisterDevice = vi.fn(() => Promise.resolve({}))
+const issueToken = vi.fn(() => Promise.resolve({ data: { data: { token: 'widget-secret' } } }))
+const revokeToken = vi.fn(() => Promise.resolve({}))
+vi.mock('@/services/api', () => ({
+  pushAPI: { registerDevice, unregisterDevice },
+  widgetAPI: { issueToken, revokeToken },
+}))
 vi.mock('@capacitor/status-bar', () => ({
   StatusBar: { setStyle: vi.fn(() => Promise.resolve()) },
   Style: { Dark: 'DARK' },
@@ -118,6 +157,56 @@ describe('nativeApp (inside the iOS app)', () => {
     await expect(shareLink(link)).resolves.toBe('shared')
     expect(share).toHaveBeenLastCalledWith({ ...link, dialogTitle: 'Frieren' })
     await expect(shareLink(link)).resolves.toBe('cancelled')
+  })
+
+  it('opens the page a tapped notification points to', () => {
+    pushListeners.pushNotificationActionPerformed!({
+      notification: { data: { path: '/forum/post/p1#comment-c2' } },
+    } as never)
+    pushListeners.pushNotificationActionPerformed!({
+      notification: { data: { path: 'https://evil.example' } },
+    } as never)
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith('/forum/post/p1#comment-c2')
+  })
+
+  it('turns on notifications, registers the token, and forgets it on sign-out', async () => {
+    const { enablePush, forgetPushDevice } = await import('@/utils/nativeApp')
+    await expect(enablePush()).resolves.toBe(true)
+    expect(requestPermissions).toHaveBeenCalled()
+    expect(pushRegister).toHaveBeenCalled()
+
+    pushListeners.registration!({ value: 'ab'.repeat(32) } as never)
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(registerDevice).toHaveBeenCalledWith('ab'.repeat(32))
+
+    await forgetPushDevice()
+    expect(unregisterDevice).toHaveBeenCalledWith('ab'.repeat(32))
+    unregisterDevice.mockClear()
+    await forgetPushDevice()
+    expect(unregisterDevice).not.toHaveBeenCalled()
+  })
+
+  it('opens the page for a widget tap', () => {
+    appListeners.appUrlOpen!({ url: 'anilounge://app/tv-show/frieren/12?tab=cast' })
+    appListeners.appUrlOpen!({ url: 'anilounge://other/tv-show/frieren/12' })
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith('/tv-show/frieren/12?tab=cast')
+  })
+
+  it('signs the widgets in once and out again with the account', async () => {
+    const { connectWidgets, disconnectWidgets } = await import('@/utils/nativeApp')
+    await connectWidgets()
+    expect(issueToken).toHaveBeenCalledTimes(1)
+    expect(widgetBridge.setToken).toHaveBeenCalledWith({ token: 'widget-secret' })
+
+    await connectWidgets()
+    expect(issueToken).toHaveBeenCalledTimes(1)
+
+    await disconnectWidgets()
+    expect(revokeToken).toHaveBeenCalledWith('widget-secret')
+    expect(widgetBridge.clearToken).toHaveBeenCalled()
+    expect(widgetState.token).toBeNull()
   })
 
   it('hides donation links', async () => {

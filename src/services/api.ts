@@ -261,6 +261,31 @@ export const communicationAPI = {
   update: (changes: CommunicationSettings) => api.put('/account/communication', changes),
 }
 
+/** Kinds of iOS push notification (Settings → Notifications); all on by default. */
+export interface PushSettings {
+  friends: boolean
+  forum: boolean
+  messages: boolean
+  releases: boolean
+}
+
+export const pushAPI = {
+  registerDevice: (token: string) => api.post('/push/devices', { token }),
+
+  unregisterDevice: (token: string) => api.delete(`/push/devices/${encodeURIComponent(token)}`),
+
+  getSettings: () => api.get('/push/settings'),
+
+  updateSettings: (changes: Partial<PushSettings>) => api.put('/push/settings', changes),
+}
+
+/** Home screen widget sign-in (the iOS app stores the token for its widgets). */
+export const widgetAPI = {
+  issueToken: () => api.post('/widget/token', {}),
+
+  revokeToken: (token: string) => api.delete('/widget/token', { data: { token } }),
+}
+
 export const profileAPI = {
   getPublicProfile: (username: string) => api.get(`/users/${encodeURIComponent(username)}`),
 

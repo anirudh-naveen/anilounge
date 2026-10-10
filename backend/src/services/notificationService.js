@@ -1,5 +1,6 @@
 /**
- * In-site notifications for the profile-menu inbox.
+ * In-site notifications for the profile-menu inbox, also pushed to the recipient's iOS
+ * devices (services/pushService.js).
  *
  * Layer: service. Social actions (friend requests, comments, replies) and language
  * warnings call `notify`;
@@ -8,6 +9,7 @@
 
 import { query } from '../../config/postgres.js'
 import { isBlockedEitherWay } from './blockService.js'
+import { pushForNotification } from './pushService.js'
 
 export const NOTIFICATION_KINDS = [
   'friend_request',
@@ -40,6 +42,8 @@ export async function notify(
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [userId, kind, actorId, postId, commentId, detail ? JSON.stringify(detail) : null],
     )
+    // In the background: a slow or failed push never holds up the action.
+    pushForNotification(userId, kind, { actorId, postId, commentId })
   } catch (error) {
     console.error(`Notification (${kind}) failed:`, error.message)
   }
