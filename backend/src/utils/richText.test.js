@@ -15,6 +15,7 @@ describe('stripFormatting', () => {
       stripFormatting('+++ **Fillers**\n- 26\n::: warning Skip\nall\n:::\n+++'),
       'Fillers\n26\nSkip\nall\n\n',
     )
+    assert.equal(stripFormatting('- 26 +++\nsaid it :::'), '26\nsaid it')
   })
 
   it('keeps text that only looks like marks', () => {

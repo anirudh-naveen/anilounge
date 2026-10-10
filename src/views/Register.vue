@@ -12,7 +12,7 @@
       <div class="register-container">
         <!-- Page Header -->
         <div class="register-header">
-          <h1 class="register-title">Register</h1>
+          <h1 class="register-title">Sign up</h1>
           <p class="register-subtitle">Create your AniLounge account</p>
         </div>
 
@@ -96,7 +96,7 @@
           <p>
             Already have an account?
             <router-link :to="{ path: '/login', query: route.query }" class="link"
-              >Sign in</router-link
+              >Log in</router-link
             >
           </p>
         </div>

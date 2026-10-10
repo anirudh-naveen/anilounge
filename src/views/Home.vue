@@ -77,7 +77,7 @@
               </p>
               <div class="signup-actions">
                 <router-link to="/login" class="btn btn-secondary">Log in</router-link>
-                <router-link to="/register" class="btn btn-primary">Register</router-link>
+                <router-link to="/register" class="btn btn-primary">Sign up</router-link>
               </div>
             </div>
           </div>

@@ -18,6 +18,9 @@ const LINE_MARKS = [
   /^\s*:{3}(?:\s*(?:note|tip|warning)\b)?\s*/i,
 ]
 
+/** A block fence closing its block at the end of a text line (`last line +++`). */
+const TRAILING_FENCE = /\s+(?:\+{3}|:{3})\s*$/
+
 const INLINE_MARKS = [
   [/\[([^\]\n]+)\]\((https?:\/\/[^\s()<>]+)\)/g, '$1'],
   [/\*\*(?=\S)(.+?)(?<=\S)\*\*(?!\*)/g, '$1'],
@@ -49,6 +52,13 @@ function stripInline(line) {
 export function stripFormatting(text) {
   return String(text || '')
     .split('\n')
-    .map((line) => stripInline(LINE_MARKS.reduce((current, re) => current.replace(re, ''), line)))
+    .map((line) =>
+      stripInline(
+        LINE_MARKS.reduce((current, re) => current.replace(re, ''), line).replace(
+          TRAILING_FENCE,
+          '',
+        ),
+      ),
+    )
     .join('\n')
 }

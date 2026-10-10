@@ -252,8 +252,8 @@
               </div>
             </div>
             <div v-else class="auth-buttons">
-              <router-link to="/login" class="btn btn-secondary"> Login </router-link>
-              <router-link to="/register" class="btn btn-primary"> Register </router-link>
+              <router-link to="/login" class="btn btn-secondary"> Log in </router-link>
+              <router-link to="/register" class="btn btn-primary"> Sign up </router-link>
             </div>
           </div>
         </div>

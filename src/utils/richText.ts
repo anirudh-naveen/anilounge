@@ -11,7 +11,10 @@
  * - fenced blocks, which hold any of the above (and each other):
  *   `+++ Title` … `+++` is a collapsible section, closed until opened, and
  *   `::: tip Title` … `:::` is a colored callout box (`note`, `tip`, or `warning`;
- *   the title is optional). A block left open runs to the end of the post.
+ *   the title is optional). A block left open runs to the end of the post. Blocks of
+ *   the same kind don't nest: the next `+++ Title` starts a new section. A fence at
+ *   the end of a text line (`last line +++`) closes the block too, so pasted text
+ *   that lost its line breaks still reads right.
  *
  * Text has no sizes of its own: only the heading and body presets. `parseRichText`
  * builds a tree that `ForumRichText.vue` renders with Vue (never `v-html`), and
@@ -46,9 +49,11 @@ const HEADING = /^#{1,3}\s+(.*)$/
 const QUOTE = /^>\s?(.*)$/
 const BULLET = /^[-*]\s+(.*)$/
 const NUMBERED = /^\d{1,3}[.)]\s+(.*)$/
-/** Fence lines: with text they open a block, bare they close the innermost one. */
+/** Fence lines: with text they open a block, bare they close it. */
 const SECTION = /^\+{3}(?:\s+(.*))?$/
 const CALLOUT = /^:{3}(?:\s+(.*))?$/
+/** A fence closing its block at the end of a text line. */
+const TRAILING_FENCE = { section: /\s+\+{3}$/, callout: /\s+:{3}$/ }
 
 /** Summary of a section fence without its own title. */
 export const SECTION_DEFAULT_SUMMARY = 'Show more'
@@ -91,14 +96,25 @@ function joinLines(lines: string[]): Inline[] {
   ])
 }
 
-/** Lines inside the fenced block opened at `start`, and the index of its closing fence. */
-function fenced(lines: string[], start: number, fence: RegExp) {
-  let depth = 1
+/**
+ * Lines inside the fenced block opened at `start`, and the index of its last line: its
+ * closing fence, the line before the next opening fence of its kind, or the line it
+ * ends on with a trailing fence.
+ */
+function fenced(lines: string[], start: number, fence: RegExp, trailing: RegExp) {
   for (let index = start + 1; index < lines.length; index += 1) {
-    const match = fence.exec((lines[index] as string).trim())
-    if (!match) continue
-    if (match[1]?.trim()) depth += 1
-    else if (--depth === 0) return { body: lines.slice(start + 1, index), end: index }
+    const line = (lines[index] as string).trim()
+    const match = fence.exec(line)
+    if (match) {
+      if (match[1]?.trim()) return { body: lines.slice(start + 1, index), end: index - 1 }
+      return { body: lines.slice(start + 1, index), end: index }
+    }
+    if (trailing.test(line)) {
+      return {
+        body: [...lines.slice(start + 1, index), line.replace(trailing, '')],
+        end: index,
+      }
+    }
   }
   return { body: lines.slice(start + 1), end: lines.length }
 }
@@ -141,8 +157,14 @@ function parseLines(lines: string[]): Block[] {
     const callout = CALLOUT.exec(line.trim())
     if (section || callout) {
       flush()
-      const { body, end } = fenced(lines, index, section ? SECTION : CALLOUT)
-      const head = ((section || callout) as RegExpExecArray)[1]?.trim() || ''
+      const trailing = TRAILING_FENCE[section ? 'section' : 'callout']
+      let head = ((section || callout) as RegExpExecArray)[1]?.trim() || ''
+      // `+++ Title +++` is a whole block on one line.
+      const oneLine = trailing.test(head)
+      head = head.replace(trailing, '')
+      const { body, end } = oneLine
+        ? { body: [], end: index }
+        : fenced(lines, index, section ? SECTION : CALLOUT, trailing)
       if (section) {
         blocks.push({
           type: 'section',
