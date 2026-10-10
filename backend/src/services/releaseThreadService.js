@@ -19,6 +19,7 @@
 import crypto from 'node:crypto'
 import cron from 'node-cron'
 import { query, withTransaction } from '../../config/postgres.js'
+import { BOT_EMAIL, BOT_USERNAME } from '../utils/botAccount.js'
 import { withJobLock } from '../utils/jobLock.js'
 import { hashPassword } from '../utils/passwordHash.js'
 import catalogEvents from './catalogEvents.js'
@@ -27,8 +28,7 @@ import { createMegathread } from './forumService.js'
 import { queuePost } from './indexNowService.js'
 import { resolveTmdbEpisode } from './seasonService.js'
 
-export const BOT_USERNAME = 'AniLoungeBot'
-export const BOT_EMAIL = 'release-bot@anilounge.invalid'
+export { BOT_EMAIL, BOT_USERNAME }
 const DEFAULT_CRON = '*/15 * * * *'
 const DEFAULT_MAX_PER_RUN = 20
 /** Releases older than this are never queued. */
