@@ -281,7 +281,7 @@
 
     <JoinPrompt
       title="Join the Community"
-      message="Sign up free to track what you watch, rate titles, and talk anime with the lounge."
+      message="Sign up free to track what you watch, rate titles, and talk animation with the lounge."
     />
   </div>
 </template>
@@ -477,9 +477,9 @@ onUnmounted(() => {
 })
 
 usePageMeta(() => ({
-  title: 'Discover, track, and discuss anime',
+  title: 'Discover, track, and discuss animation',
   description:
-    "Find new anime and animated films, track everything you've watched, and talk about it with fans around the world.",
+    "Find new animated series and films, track everything you've watched, and talk about it with fans around the world.",
   path: '/',
   jsonLd: {
     '@context': 'https://schema.org',

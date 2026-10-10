@@ -1,7 +1,9 @@
+import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Settings from '@/views/Settings.vue'
+import { THEME_STORAGE_KEY, useTheme } from '@/composables/useTheme'
 
 const getCommunication = vi.fn()
 const updateCommunication = vi.fn()
@@ -131,11 +133,24 @@ describe('Settings save buttons', () => {
     expect(updateEmail).toHaveBeenCalledWith({ announcements: false, friend_requests: false })
   })
 
-  it('applies the theme only on Save', async () => {
+  it('previews a theme on click and keeps it only on Save', async () => {
+    useTheme().setPreference('dark')
     const wrapper = await mountSettings()
-    await wrapper.get('[data-testid="theme-dark"]').trigger('click')
-    expect(document.documentElement.dataset.theme).not.toBe('dark')
+    await wrapper.get('[data-testid="theme-dawn"]').trigger('click')
+    expect(document.documentElement.dataset.theme).toBe('dawn')
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark')
     await wrapper.get('[data-testid="save-appearance"]').trigger('click')
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dawn')
+    expect(document.documentElement.dataset.theme).toBe('dawn')
+  })
+
+  it('drops an unsaved theme preview on leaving Settings', async () => {
+    useTheme().setPreference('dark')
+    const wrapper = await mountSettings()
+    await wrapper.get('[data-testid="theme-light"]').trigger('click')
+    expect(document.documentElement.dataset.theme).toBe('light')
+    wrapper.unmount()
+    await nextTick()
     expect(document.documentElement.dataset.theme).toBe('dark')
   })
 

@@ -413,7 +413,11 @@ const handleLogout = async () => {
 
 <style scoped>
 .header {
-  background: linear-gradient(90deg, rgba(21, 34, 56, 0.97), rgba(27, 42, 74, 0.96));
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--navbar-primary) 97%, transparent),
+    color-mix(in srgb, var(--navbar-secondary) 96%, transparent)
+  );
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.9rem 0;
   position: sticky;
