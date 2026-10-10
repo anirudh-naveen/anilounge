@@ -211,6 +211,15 @@ const FREE_TEXT_FIELDS = new Set([
 ])
 
 /**
+ * The app's page-view/click reports (services/metricsService.js). Their paths and click
+ * labels are page slugs and button text ("medieval", "Evaluate"), stored as SQL parameters,
+ * so only the operator patterns apply; a word hit would drop the whole batch.
+ * @param {import('express').Request} req
+ * @returns {boolean}
+ */
+const isMetricsReport = (req) => req.method === 'POST' && req.path === '/api/metrics/events'
+
+/**
  * Recursively scan body/query/params strings for Mongo operator / eval patterns and
  * return 400 on a hit. Operator patterns also ban the IP; code-ish words alone do not,
  * since ordinary names and emails can contain them ("medieval", "this.name@...").
@@ -223,6 +232,7 @@ const FREE_TEXT_FIELDS = new Set([
 export const databaseProtection = (req, res, next) => {
   // Crawlers follow any link they find; an odd query string must not ban Google or Bing.
   if (isCrawlerExempt(req)) return next()
+  const allProse = isMetricsReport(req)
   /**
    * Walk a JSON-like value for dangerous patterns. Prose fields skip the word patterns,
    * so "I loved this." or "evaluate" in a post is not treated as an injection attempt.
@@ -235,7 +245,9 @@ export const databaseProtection = (req, res, next) => {
     if (typeof obj === 'string') {
       const field = path.slice(path.lastIndexOf('.') + 1)
       if (OPERATOR_PATTERN.test(obj)) return 'operator'
-      return !FREE_TEXT_FIELDS.has(field) && CODE_WORD_PATTERN.test(obj) ? 'word' : null
+      return !allProse && !FREE_TEXT_FIELDS.has(field) && CODE_WORD_PATTERN.test(obj)
+        ? 'word'
+        : null
     }
     if (typeof obj !== 'object' || obj === null) return null
     let worst = null
