@@ -477,7 +477,7 @@ onUnmounted(() => {
 })
 
 usePageMeta(() => ({
-  title: 'Discover, track, and discuss animation',
+  title: 'Home',
   description:
     "Find new animated series and films, track everything you've watched, and talk about it with fans around the world.",
   path: '/',

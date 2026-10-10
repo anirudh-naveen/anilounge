@@ -690,7 +690,7 @@ onMounted(() => {
 })
 
 usePageMeta({
-  title: 'Search animation',
+  title: 'Search',
   description:
     'Search animated movies, series, characters, voice actors, and studios by title, genre, year, season, and rating.',
   path: '/search',

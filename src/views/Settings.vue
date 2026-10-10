@@ -491,6 +491,9 @@ import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
 import { useTheme, type ThemePreference } from '@/composables/useTheme'
 import SettingsSaveBar from '@/components/SettingsSaveBar.vue'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Settings')
 
 // Component name for Vue devtools
 defineOptions({

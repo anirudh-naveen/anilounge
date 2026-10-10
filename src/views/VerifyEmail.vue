@@ -77,6 +77,9 @@ import { useToast } from 'vue-toastification'
 import { authAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { safeRedirect } from '@/utils/social'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Verify email')
 
 defineOptions({ name: 'VerifyEmailPage' })
 
