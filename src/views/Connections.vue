@@ -181,6 +181,9 @@ import { timeAgo } from '@/utils/homeFeed'
 import ProviderLogo from '@/components/ProviderLogo.vue'
 import WatchlistImport from '@/components/WatchlistImport.vue'
 import type { AccountConnection, ConnectionProvider } from '@/types'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Connections')
 
 // Component name for Vue devtools
 defineOptions({

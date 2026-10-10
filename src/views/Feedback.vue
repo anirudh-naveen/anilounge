@@ -28,6 +28,9 @@
 <script setup lang="ts">
 import BetaFeedback from '@/components/BetaFeedback.vue'
 import { DISCORD_INVITE_URL } from '@/utils/community'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Feedback')
 
 defineOptions({
   name: 'FeedbackPage',

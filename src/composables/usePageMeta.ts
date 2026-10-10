@@ -90,14 +90,29 @@ function ownedElement<K extends 'link' | 'script'>(tagName: K, selector: string)
   return el
 }
 
-export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
-  const id = Symbol('page-meta')
+/** index.html's title and description, read once (before any page changes them). */
+function readDefaults() {
   const descriptionTag = metaTag('name', 'description')
   defaults ??= {
     title: document.querySelector('title')?.getAttribute('data-default') ?? document.title,
     description: originals.get(descriptionTag) ?? (descriptionTag.getAttribute('content') || ''),
   }
-  const defaultDescription = defaults.description
+  return { descriptionTag, defaults }
+}
+
+/** Puts index.html's title and tags back and drops the ones a page added. */
+function restoreDefaults() {
+  const { descriptionTag, defaults: initial } = readDefaults()
+  document.title = initial.title
+  descriptionTag.setAttribute('content', initial.description)
+  document.head.querySelectorAll(`[${OWNED}]`).forEach((el) => el.remove())
+  originals.forEach((content, tag) => tag.setAttribute('content', content))
+}
+
+export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
+  const id = Symbol('page-meta')
+  const { descriptionTag, defaults: initial } = readDefaults()
+  const defaultDescription = initial.description
 
   watchEffect(() => {
     const value = toValue(meta)
@@ -135,11 +150,31 @@ export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
   })
 
   onUnmounted(() => {
-    if (owner !== id || !defaults) return
+    if (owner !== id) return
     owner = null
-    document.title = defaults.title
-    descriptionTag.setAttribute('content', defaults.description)
-    document.head.querySelectorAll(`[${OWNED}]`).forEach((el) => el.remove())
-    originals.forEach((content, tag) => tag.setAttribute('content', content))
+    restoreDefaults()
+  })
+}
+
+/**
+ * Tab title only (`<title> · AniLounge`), for pages kept out of search results
+ * (signed-in and account pages). The rest of the head stays at index.html's defaults.
+ * `null` (still loading) keeps the default title.
+ */
+export function usePageTitle(title: MaybeRefOrGetter<string | null | undefined>) {
+  const id = Symbol('page-title')
+
+  watchEffect(() => {
+    const value = toValue(title)
+    if (!value) return
+    if (owner !== id) restoreDefaults()
+    owner = id
+    document.title = `${value} · ${SITE_NAME}`
+  })
+
+  onUnmounted(() => {
+    if (owner !== id) return
+    owner = null
+    restoreDefaults()
   })
 }

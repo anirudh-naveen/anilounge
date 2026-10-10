@@ -217,6 +217,9 @@ import type { InboxCounts, InboxItem, InboxKind, InboxPage } from '@/types/inbox
 import type { Relationship } from '@/types/social'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Inbox')
 
 defineOptions({ name: 'InboxPage' })
 

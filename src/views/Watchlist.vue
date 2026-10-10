@@ -440,6 +440,9 @@ import {
 } from '@/utils/watchlist'
 import ImportReminder from '@/components/ImportReminder.vue'
 import ListSearch from '@/components/ListSearch.vue'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Watchlist')
 
 const router = useRouter()
 const contentStore = useContentStore()

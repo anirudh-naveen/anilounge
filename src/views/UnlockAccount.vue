@@ -59,6 +59,9 @@
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { authAPI } from '@/services/api'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Unlock account')
 
 defineOptions({ name: 'UnlockAccountPage' })
 

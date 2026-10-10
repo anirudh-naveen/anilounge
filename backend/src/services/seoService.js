@@ -25,7 +25,7 @@ const CACHE_MAX = 5000
 /** Pages without their own data. Keep in step with the views' `usePageMeta` calls. */
 const STATIC_PAGES = {
   '/': {
-    title: 'Discover, track, and discuss animation',
+    title: 'Home',
     description:
       "Find new animated series and films, track everything you've watched, and talk about it with fans around the world.",
     heading: 'AniLounge: discover, track, and discuss animation',
@@ -50,7 +50,7 @@ const STATIC_PAGES = {
     posts: true,
   },
   '/search': {
-    title: 'Search animation',
+    title: 'Search',
     description:
       'Search animated movies, series, characters, voice actors, and studios by title, genre, year, season, and rating.',
     heading: 'Search animation',

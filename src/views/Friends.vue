@@ -262,6 +262,9 @@ import { useMessagesStore } from '@/stores/messages'
 import type { FriendsPayload, Relationship, UserSearchHit } from '@/types/social'
 import { timeAgo, timeUntil } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Friends')
 
 defineOptions({ name: 'FriendsPage' })
 

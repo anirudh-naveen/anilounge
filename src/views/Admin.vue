@@ -1070,6 +1070,9 @@ import BadgeEmblem from '@/components/BadgeEmblem.vue'
 import { useBadgesStore } from '@/stores/badges'
 import { GRANTABLE_BADGES, badgeInfo } from '@/utils/badges'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
+import { usePageTitle } from '@/composables/usePageMeta'
+
+usePageTitle('Admin')
 
 defineOptions({ name: 'AdminPage' })
 
