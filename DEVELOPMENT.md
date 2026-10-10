@@ -92,7 +92,7 @@ npm run dev
 - API: http://localhost:5001 (health check at `/health`)
 - App: http://localhost:5174
 
-The backend restarts on file changes (nodemon); the frontend hot-reloads.
+The backend restarts on file changes using Node's built-in `--watch` flag; the frontend hot-reloads.
 
 **Sign in** with the demo account the API creates on startup:
 `demo@findanimation.com` / `DemoPassword123!`. To make your own account an admin, sign
@@ -106,7 +106,7 @@ verification code appears in the backend console.
 | `npm --prefix backend test` | Backend unit tests (Node test runner) |
 | `npm run test:unit` | Frontend unit tests (Vitest) |
 | `npm run type-check` | TypeScript checks for the frontend |
-| `npm run lint` | ESLint (fixes what it can) |
+| `npm run lint:check` | ESLint without modifying files |
 | `npm run test:e2e:dev` | Cypress end-to-end tests |
 
 ## How the pieces fit
