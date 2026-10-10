@@ -3,7 +3,8 @@
 
   Discussion, review (reviews need a 1–10 score and a tagged movie, series, or
   special), guide, or article; title, body (with bold, italics, a heading preset,
-  lists, quotes, and links; see `utils/richText.ts`), a spoiler flag, and tags
+  lists, quotes, collapsible sections, callout boxes, and links; see
+  `utils/richText.ts`), a spoiler flag, and tags
   (optional except for reviews). With `post` it edits that post
   (the kind is fixed); otherwise it creates one, optionally starting from
   `presetTags` and `presetKind`. Emits `saved` with the stored post, or `cancel`.
@@ -260,6 +261,8 @@ const FORMAT_TOOLS: { id: FormatTool; glyph: string; title: string }[] = [
   { id: 'bullets', glyph: '•', title: 'Bulleted list' },
   { id: 'numbers', glyph: '1.', title: 'Numbered list' },
   { id: 'quote', glyph: '❝', title: 'Quote' },
+  { id: 'section', glyph: '▸', title: 'Collapsible section (+++ Title … +++)' },
+  { id: 'callout', glyph: '▤', title: 'Callout box (::: note, tip, or warning … :::)' },
   { id: 'link', glyph: '🔗', title: 'Link' },
 ]
 

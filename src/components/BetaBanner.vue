@@ -1,7 +1,8 @@
 <!--
   BetaBanner.vue — site-wide beta notice (component).
 
-  Displays a dismissible preview banner with links to the feedback page and Discord.
+  Displays a dismissible preview banner with a link to the feedback page and an invite to
+  join the Discord to contribute to the open-source project.
 -->
 <template>
   <div v-if="showBanner" class="beta-banner">
@@ -10,15 +11,18 @@
       <span class="beta-badge">BETA</span>
       <span class="beta-text">
         Welcome to AniLounge Beta! This is a preview version.
-        <router-link to="/feedback" class="feedback-link">Report bugs or suggestions</router-link>
-        or
-        <a
-          :href="DISCORD_INVITE_URL"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="feedback-link"
-          >join our Discord</a
-        >
+        <router-link to="/feedback" class="feedback-link">Report bugs or suggestions</router-link>.
+        <span class="beta-contribute">
+          AniLounge is open source. Want to help build it?
+          <a
+            :href="DISCORD_INVITE_URL"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="feedback-link"
+            data-testid="beta-discord"
+            >Join our Discord to contribute</a
+          >
+        </span>
       </span>
       <button @click="dismissBanner" class="dismiss-btn" title="Dismiss">&times;</button>
     </div>
@@ -118,6 +122,11 @@ onMounted(() => {
 
   .beta-text {
     font-size: 13px;
+  }
+
+  .beta-contribute {
+    display: block;
+    margin-top: 4px;
   }
 }
 </style>
