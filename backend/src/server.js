@@ -43,6 +43,7 @@ import { startFriendRequestCleanupScheduler } from './services/friendService.js'
 import { startConnectionSync } from './services/connectionSync.js'
 import { startSessionCleanupScheduler } from './services/sessionService.js'
 import { startHotScoreScheduler } from './services/forumService.js'
+import { startReleaseThreadScheduler } from './services/releaseThreadService.js'
 import { startAiUsageCleanupScheduler } from './services/aiUsageService.js'
 import { startSiteEventsCleanupScheduler } from './services/metricsService.js'
 import { KEY_PATH, indexNowKey, startIndexNow } from './services/indexNowService.js'
@@ -365,6 +366,7 @@ app
     startConnectionSync()
     startSessionCleanupScheduler()
     startHotScoreScheduler()
+    startReleaseThreadScheduler()
     startAiUsageCleanupScheduler()
     startSiteEventsCleanupScheduler()
     startIndexNow()

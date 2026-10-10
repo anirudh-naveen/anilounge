@@ -577,6 +577,11 @@ useCanonicalSlug(
   color: color-mix(in srgb, var(--purple-accent) 70%, var(--text-primary));
 }
 
+.post-kind.megathread {
+  background: color-mix(in srgb, var(--warning-color) 18%, transparent);
+  color: color-mix(in srgb, var(--warning-color) 65%, var(--text-primary));
+}
+
 .post-spoiler-flag {
   background: color-mix(in srgb, var(--error-color) 14%, transparent);
   color: var(--error-color);

@@ -88,6 +88,7 @@ const POST_KIND_LABELS = {
   review: 'Review',
   guide: 'Guide',
   article: 'Article',
+  megathread: 'Megathread',
 }
 
 /** Text cut to a meta-description length on a word boundary. */
