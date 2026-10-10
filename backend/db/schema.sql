@@ -1130,6 +1130,18 @@ CREATE INDEX IF NOT EXISTS forum_reports_open_idx ON forum_reports (target_kind,
   WHERE resolved_at IS NULL;
 CREATE INDEX IF NOT EXISTS forum_reports_reporter_idx ON forum_reports (reporter_id, created_at);
 
+-- Blocked users (services/blockService.js). `blocker_id` blocked `blocked_id`: the two
+-- stop being friends, neither can send the other a request or reach them through
+-- notifications, and the blocker no longer sees the other's forum posts or comments.
+CREATE TABLE IF NOT EXISTS user_blocks (
+  blocker_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  blocked_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (blocker_id, blocked_id),
+  CHECK (blocker_id <> blocked_id)
+);
+CREATE INDEX IF NOT EXISTS user_blocks_blocked_idx ON user_blocks (blocked_id);
+
 -- Demo account baseline (services/demoAccount.js): the shared demo login's watchlist,
 -- ratings, favorites, and profile as saved by `npm run demo:snapshot`. A nightly job
 -- restores it, so whatever visitors change on the public demo login is undone daily.

@@ -40,6 +40,7 @@ import { getSeasonGuide } from './seasonService.js'
 import { screenText } from './languageWarningService.js'
 import { notify } from './notificationService.js'
 import { resolveReports } from './forumReportService.js'
+import { blockedByViewerSql } from './blockService.js'
 
 export const POST_KINDS = ['discussion', 'review', 'guide', 'article', 'megathread']
 /** Kinds people can post; megathreads come from the release bot. */
@@ -259,21 +260,25 @@ export function postEntry(row, { full = false, viewer = null } = {}) {
 function commentEntry(row, viewer) {
   const mine = Boolean(viewer && String(viewer._id) === String(row.user_id))
   const deleted = Boolean(row.deleted_at)
+  // From someone the viewer blocked: kept in place so replies stay threaded, but empty.
+  const hidden = !deleted && Boolean(row.author_blocked)
   return {
     id: String(row.id),
     postId: String(row.post_id),
     parentId: row.parent_id ? String(row.parent_id) : null,
-    body: deleted ? '' : row.body,
+    body: deleted || hidden ? '' : row.body,
     deleted,
+    hidden,
     createdAt: row.created_at,
     editedAt: row.edited_at || null,
-    author: deleted
-      ? null
-      : publicUser({
-          id: row.user_id,
-          username: row.username,
-          profile_picture: row.profile_picture,
-        }),
+    author:
+      deleted || hidden
+        ? null
+        : publicUser({
+            id: row.user_id,
+            username: row.username,
+            profile_picture: row.profile_picture,
+          }),
     likeCount: row.like_count || 0,
     liked: Boolean(row.liked),
     canEdit: mine && !deleted,
@@ -720,6 +725,9 @@ export async function listPosts(viewer, filters = {}) {
 
   const params = [viewer?._id || null]
   const clauses = ['u.banned_at IS NULL']
+  // Posts by people the viewer blocked. The cached total ignores this (it is shared by
+  // every viewer), so it can run a little high.
+  if (viewer) clauses.push(`NOT ${blockedByViewerSql('$1', 'p.user_id')}`)
   if (POST_KINDS.includes(filters.kind)) {
     params.push(filters.kind)
     clauses.push(`p.kind = $${params.length}`)
@@ -781,7 +789,8 @@ async function commentRows(where, params, tail = 'ORDER BY c.created_at') {
     `SELECT c.id, c.post_id, c.parent_id, c.user_id, c.body, c.created_at, c.edited_at,
             c.deleted_at, u.username, u.profile_picture,
             (SELECT count(*)::int FROM comment_likes l WHERE l.comment_id = c.id) AS like_count,
-            EXISTS (SELECT 1 FROM comment_likes l WHERE l.comment_id = c.id AND l.user_id = $1::uuid) AS liked
+            EXISTS (SELECT 1 FROM comment_likes l WHERE l.comment_id = c.id AND l.user_id = $1::uuid) AS liked,
+            ${blockedByViewerSql('$1', 'c.user_id')} AS author_blocked
      FROM comments c JOIN users u ON u.id = c.user_id
      WHERE u.banned_at IS NULL AND ${where}
      ${tail}`,

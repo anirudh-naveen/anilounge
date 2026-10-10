@@ -7,6 +7,7 @@
  */
 
 import { query } from '../../config/postgres.js'
+import { isBlockedEitherWay } from './blockService.js'
 
 export const NOTIFICATION_KINDS = [
   'friend_request',
@@ -17,7 +18,8 @@ export const NOTIFICATION_KINDS = [
 ]
 
 /**
- * Record a notification for `userId`. Self-notifications are skipped.
+ * Record a notification for `userId`. Self-notifications, and ones between users where
+ * either blocked the other, are skipped.
  *
  * @param {string} userId - Recipient.
  * @param {string} kind - One of NOTIFICATION_KINDS.
@@ -32,6 +34,7 @@ export async function notify(
 ) {
   if (!userId || (actorId && String(actorId) === String(userId))) return
   try {
+    if (actorId && (await isBlockedEitherWay(userId, actorId))) return
     await query(
       `INSERT INTO notifications (user_id, kind, actor_id, post_id, comment_id, detail)
        VALUES ($1, $2, $3, $4, $5, $6)`,

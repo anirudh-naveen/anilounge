@@ -17,6 +17,7 @@ import { loadWatchHistory } from '../services/watchEvents.js'
 import { getAvatar } from '../services/avatarService.js'
 import { moderationMessage } from '../utils/moderation.js'
 import { relationshipBetween } from '../services/friendService.js'
+import { hasBlocked } from '../services/blockService.js'
 import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
 import { sendError } from '../utils/httpError.js'
 import {
@@ -122,7 +123,8 @@ async function loadFavoriteEntities(user) {
  * Public profile for `params.username`.
  * Private profiles and hidden tabs are only returned to the owner; email and
  * watchlist notes are never included. Signed-in visitors also get their
- * `relationship` to the owner (`friends`, `outgoing`, `incoming`, or `none`).
+ * `relationship` to the owner (`friends`, `outgoing`, `incoming`, or `none`) and whether
+ * they `blocked` the owner.
  *
  * @param {import('express').Request} req - Reads `params.username`; `req.user` when signed in.
  * @param {import('express').Response} res - 200 `{ data: profile }`, 404 unknown or private, or 500.
@@ -153,14 +155,20 @@ export const getPublicProfile = async (req, res) => {
       ? await Promise.all([loadFavoriteContent(user._id), loadFavoriteEntities(user)])
       : [[], null]
 
-    const relationship =
-      req.user && !isOwner ? await relationshipBetween(req.user._id, user._id) : null
+    const [relationship, blocked] =
+      req.user && !isOwner
+        ? await Promise.all([
+            relationshipBetween(req.user._id, user._id),
+            hasBlocked(req.user._id, user._id),
+          ])
+        : [null, false]
     const history = shows('stats') ? await loadWatchHistory(user._id) : null
 
     res.json({
       success: true,
       data: {
         relationship,
+        blocked,
         user: {
           id: user._id,
           username: user.username,

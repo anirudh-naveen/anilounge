@@ -57,6 +57,8 @@ export interface ForumComment {
   body: string
   /** Deleted but kept because it has replies. */
   deleted: boolean
+  /** From someone the viewer blocked: kept for its replies, with no body or author. */
+  hidden?: boolean
   createdAt: string
   editedAt: string | null
   author: PublicUser | null
