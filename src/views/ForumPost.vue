@@ -238,7 +238,7 @@
     <JoinPrompt
       v-if="post"
       title="Join the Conversation"
-      message="Sign up to reply, like posts, and share your own takes on anime and animation."
+      message="Sign up to reply, like posts, and share your own takes on animation."
     />
   </div>
 </template>

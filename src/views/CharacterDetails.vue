@@ -165,7 +165,7 @@
 
     <JoinPrompt
       title="Join the Community"
-      message="Sign up free to favorite characters, track what you watch, and talk anime with the lounge."
+      message="Sign up free to favorite characters, track what you watch, and talk animation with the lounge."
     />
   </div>
 </template>

@@ -17,7 +17,10 @@
       data-testid="join-prompt"
     >
       <button type="button" class="join-close" aria-label="Close" @click="dismiss">×</button>
-      <p class="join-kicker">AniLounge</p>
+      <p class="join-kicker">
+        <img src="/anilounge-logo.png" alt="" class="join-mark" width="28" height="28" />
+        <span><span class="join-kicker-ani">Ani</span>Lounge</span>
+      </p>
       <h2 class="join-title">{{ title }}</h2>
       <p class="join-message">{{ message }}</p>
       <div class="join-actions">
@@ -86,11 +89,26 @@ onUnmounted(() => clearTimeout(timer))
   bottom: 1.5rem;
   z-index: 900;
   width: min(340px, calc(100vw - 2rem));
-  padding: 1.15rem 1.25rem 1.2rem;
+  overflow: hidden;
+  padding: 1.35rem 1.25rem 1.2rem;
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.2));
+  background:
+    radial-gradient(260px 140px at 100% 0%, rgba(224, 122, 95, 0.16), transparent 70%),
+    radial-gradient(220px 140px at 0% 100%, rgba(43, 187, 173, 0.12), transparent 70%),
+    var(--bg-card);
+  box-shadow: var(--shadow-lg, 0 20px 44px rgba(0, 0, 0, 0.25));
+}
+
+/* Same coral-to-teal stripe as the navbar. */
+.join-prompt::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--coral-primary), var(--teal-light));
 }
 
 .join-close {
@@ -114,21 +132,37 @@ onUnmounted(() => clearTimeout(timer))
 }
 
 .join-kicker {
-  font-size: 0.72rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.join-kicker-ani {
   color: var(--coral-deep);
 }
 
+.join-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--border-color);
+}
+
 .join-title {
-  margin-top: 0.2rem;
+  margin-top: 0.6rem;
   padding-right: 1.5rem;
   font-family: var(--font-display);
-  font-size: 1.3rem;
+  font-size: 1.35rem;
   font-weight: 650;
   line-height: 1.25;
-  color: var(--text-primary);
+  background: linear-gradient(90deg, var(--coral-primary), var(--gold-accent), var(--teal-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .join-message {

@@ -5,7 +5,7 @@
     <link rel="icon" type="image/png" href="/favicon.png?v=4" />
     <link rel="apple-touch-icon" href="/favicon.png?v=4" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#152238" />
+    <meta name="theme-color" content="#0b1220" />
     <meta
       name="description"
       content="AniLounge — settle in, discover, and track animated films and series."
@@ -27,13 +27,12 @@
     />
     <title>AniLounge</title>
     <script>
+      document.documentElement.dataset.theme = 'dark'
       // Apply the saved theme before first paint (see src/composables/useTheme.ts).
       try {
         var saved = localStorage.getItem('anilounge-theme')
-        var dark =
-          saved === 'dark' ||
-          (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        var themes = ['light', 'dawn', 'penumbra', 'dusk', 'dark']
+        document.documentElement.dataset.theme = themes.indexOf(saved) >= 0 ? saved : 'dark'
       } catch (e) {}
     </script>
   </head>
