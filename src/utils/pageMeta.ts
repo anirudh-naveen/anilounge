@@ -87,7 +87,7 @@ export function titlePageMeta(
   const name = getDisplayTitle(content)
   const series = content.contentType === 'tv'
   const year = yearOf(content.releaseDate)
-  const noun = series ? 'anime series' : content.contentType === 'special' ? 'special' : 'movie'
+  const noun = series ? 'series' : content.contentType === 'special' ? 'special' : 'movie'
   const heading = [name, seasonLabel].filter(Boolean).join(' ')
   const genres = genreNames(content)
   const rating = aggregateRating(content.userRatingAverage, content.userRatingCount)
