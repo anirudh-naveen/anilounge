@@ -2,11 +2,23 @@
  * HTTP handlers for the iOS home screen widgets.
  *
  * Layer: controller. The feed is public (signed in with a widget token, see
- * `services/widgetService.js`); issuing a token needs the app's normal sign-in.
+ * `services/widgetService.js`); issuing a token needs the app's normal sign-in. The
+ * share extension uses the same token to look up a shared link and add the title to
+ * the watchlist (`services/shareService.js`).
  */
 
+import shareService from '../services/shareService.js'
 import widgetService from '../services/widgetService.js'
-import { assertNotDemo, sendError } from '../utils/httpError.js'
+import { HttpError, assertNotDemo, sendError } from '../utils/httpError.js'
+
+/** The account behind the request's widget token, or a 401. */
+async function widgetUser(req) {
+  const userId = await widgetService.userForWidgetToken(widgetService.widgetTokenFrom(req))
+  if (!userId) {
+    throw new HttpError(401, 'Open AniLounge and sign in first.', 'WIDGET_TOKEN_INVALID')
+  }
+  return userId
+}
 
 /**
  * Both widgets' data. `Authorization: Widget <token>` adds the user's activity and
@@ -61,4 +73,38 @@ export const revokeToken = async (req, res) => {
   }
 }
 
-export default { getFeed, issueToken, revokeToken }
+/**
+ * The title behind a link shared to AniLounge.
+ *
+ * @param {import('express').Request} req - `body.url` (a URL or text with one); widget token.
+ * @param {import('express').Response} res - 200 `{ data: { id, title, contentType, path, status } }`, 400, 401, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const lookupShared = async (req, res) => {
+  try {
+    const userId = await widgetUser(req)
+    const data = await shareService.lookupSharedTitle(userId, req.body?.url)
+    res.json({ success: true, data })
+  } catch (error) {
+    sendError(res, error, 'Error looking up that link')
+  }
+}
+
+/**
+ * Add a shared title to the watchlist as Plan to Watch.
+ *
+ * @param {import('express').Request} req - `body.contentId`; widget token.
+ * @param {import('express').Response} res - 200 `{ data: { added, status } }`, 401, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const addShared = async (req, res) => {
+  try {
+    const userId = await widgetUser(req)
+    const data = await shareService.addSharedTitle(userId, req.body?.contentId)
+    res.json({ success: true, data })
+  } catch (error) {
+    sendError(res, error, 'Error adding to your watchlist')
+  }
+}
+
+export default { getFeed, issueToken, revokeToken, lookupShared, addShared }

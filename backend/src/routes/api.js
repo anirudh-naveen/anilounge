@@ -13,6 +13,7 @@ import homeController from '../controllers/homeController.js'
 import profileController from '../controllers/profileController.js'
 import pushController from '../controllers/pushController.js'
 import widgetController from '../controllers/widgetController.js'
+import titleExtrasController from '../controllers/titleExtrasController.js'
 import friendController from '../controllers/friendController.js'
 import messageController from '../controllers/messageController.js'
 import forumController from '../controllers/forumController.js'
@@ -143,6 +144,9 @@ router.get(
 )
 router.get('/franchises/:id', validateObjectId, contentController.getFranchiseById)
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
+/** Links out to other apps: streaming services, and upcoming episodes for a calendar. */
+router.get('/content/:id/where-to-watch', validateObjectId, titleExtrasController.whereToWatch)
+router.get('/content/:id/calendar.ics', validateObjectId, titleExtrasController.episodeCalendar)
 
 /** Homepage sections. Release updates use the watchlist when a token is present. */
 router.get('/home/updates', optionalAuthenticate, homeController.getUpdates)
@@ -150,6 +154,9 @@ router.get('/home/updates', optionalAuthenticate, homeController.getUpdates)
 /** iOS home screen widgets: their feed and signing them out (widget token, not session). */
 router.get('/widget/feed', widgetController.getFeed)
 router.delete('/widget/token', widgetController.revokeToken)
+/** "Share to AniLounge" (iOS share extension, widget token): find a link's title, add it. */
+router.post('/widget/share/lookup', widgetController.lookupShared)
+router.post('/widget/share/add', widgetController.addShared)
 router.get('/home/character-of-the-day', homeController.getCharacterOfTheDay)
 router.get('/home/forum', optionalAuthenticate, forumController.getHomeHighlights)
 

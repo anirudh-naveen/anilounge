@@ -102,6 +102,9 @@
         <p>{{ movie.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Where to Watch -->
+      <WhereToWatch :content-id="movie._id" />
+
       <!-- Title: Forum -->
       <ForumHighlights :content-id="movie._id" :name="getDisplayTitle(movie)" reviewable />
 
@@ -299,6 +302,7 @@ import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
 import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
 import { shareLink } from '@/utils/nativeApp'
+import WhereToWatch from '@/components/WhereToWatch.vue'
 import { useToast } from 'vue-toastification'
 
 const route = useRoute()

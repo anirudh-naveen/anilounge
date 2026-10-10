@@ -314,6 +314,10 @@ export const contentAPI = {
 
   getRelatedContent: (contentId: string) => api.get(`/content/${contentId}/related`),
 
+  /** Streaming links (AniList) and services in `region` (TMDB / JustWatch). */
+  whereToWatch: (contentId: string, region: string) =>
+    api.get(`/content/${contentId}/where-to-watch`, { params: { region } }),
+
   getFranchise: (id: string) => api.get(`/franchises/${id}`),
 }
 
