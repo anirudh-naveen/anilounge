@@ -5,6 +5,7 @@
   "main": "index.js",
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1149.0",
     "@fontsource/fraunces": "^5.3.0",
     "@fontsource/outfit": "^5.3.0",
     "@google/generative-ai": "^0.24.1",
@@ -43,6 +44,7 @@
     "db:merge-characters": "node src/scripts/mergeFranchiseCharacters.js",
     "db:reload": "node src/scripts/reloadCatalog.js",
     "db:fix-season-counts": "node src/scripts/fixSeasonCounts.js",
+    "db:migrate-avatars": "node src/scripts/migrateAvatars.js",
     "populate-unified": "node src/scripts/populateUnified.js",
     "calculate-user-ratings": "node src/scripts/calculateInitialUserRatings.js",
     "indexnow:submit-all": "node src/scripts/indexNowSubmitAll.js",
