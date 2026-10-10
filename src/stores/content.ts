@@ -14,6 +14,7 @@ import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
 import { getSearchableTitles } from '@/utils/titles'
 import type { MovieCatalogTab, TvCatalogTab } from '@/utils/catalogTabs'
+import { haptic } from '@/utils/nativeApp'
 
 export type SearchFilters = {
   type: string
@@ -476,6 +477,7 @@ export const useContentStore = defineStore('content', () => {
       })
 
       if (response.data.success) {
+        haptic()
         await loadWatchlist(true)
       }
 

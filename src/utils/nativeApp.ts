@@ -33,6 +33,20 @@ const reloadIfRedeployed = async () => {
   }
 }
 
+/** Hosts whose links open in the app (universal links; ios/App/App/App.entitlements). */
+const APP_LINK_HOSTS = new Set(['anilounge.net', 'www.anilounge.net'])
+
+/** The in-app path for a universal link, or null for any other address. */
+export function appLinkPath(address: string): string | null {
+  try {
+    const url = new URL(address)
+    if (url.protocol !== 'https:' || !APP_LINK_HOSTS.has(url.hostname)) return null
+    return url.pathname + url.search + url.hash
+  } catch {
+    return null
+  }
+}
+
 /**
  * Off-site links open in an in-app browser sheet instead of leaving the app. The app has
  * no tabs, so this site's new-tab links open in place (iOS would send them to Safari).
@@ -57,6 +71,57 @@ const handleLinks = (router: Router, openUrl: (url: string) => void) => {
     },
     true,
   )
+}
+
+/**
+ * Share a link with the system share sheet (the app's native sheet, or the browser's
+ * where it has one), falling back to copying the link.
+ * @returns What happened: `copied` means show a "link copied" note; `failed` means the
+ *   caller should offer the link another way.
+ */
+export async function shareLink(link: {
+  title: string
+  text?: string
+  url: string
+}): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
+  if (isNativeApp) {
+    const { Share } = await import('@capacitor/share')
+    try {
+      await Share.share({ ...link, dialogTitle: link.title })
+      return 'shared'
+    } catch {
+      return 'cancelled'
+    }
+  }
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share(link)
+      return 'shared'
+    } catch (error) {
+      if ((error as Error)?.name === 'AbortError') return 'cancelled'
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(link.url)
+    return 'copied'
+  } catch {
+    return 'failed'
+  }
+}
+
+/**
+ * A light tap of haptic feedback in the app (`success` for bigger moments like a new
+ * friend). Does nothing in browsers.
+ */
+export function haptic(kind: 'tap' | 'success' = 'tap'): void {
+  if (!isNativeApp) return
+  import('@capacitor/haptics')
+    .then(({ Haptics, ImpactStyle, NotificationType }) =>
+      kind === 'success'
+        ? Haptics.notification({ type: NotificationType.Success })
+        : Haptics.impact({ style: ImpactStyle.Light }),
+    )
+    .catch(() => {})
 }
 
 /**
@@ -107,6 +172,16 @@ export async function startNativeApp(router: Router): Promise<void> {
   handleLinks(router, (url) => {
     Browser.open({ url }).catch(() => {})
   })
+
+  // An anilounge.net link tapped in another app opens that page here.
+  const openAppLink = (address: string | undefined) => {
+    const path = address && appLinkPath(address)
+    if (path && path !== router.currentRoute.value.fullPath) router.push(path)
+  }
+  App.addListener('appUrlOpen', ({ url }) => openAppLink(url))
+  App.getLaunchUrl()
+    .then((launch) => openAppLink(launch?.url))
+    .catch(() => {})
 
   let backgroundedAt = 0
   App.addListener('appStateChange', ({ isActive }) => {

@@ -114,6 +114,14 @@
             </span>
             <span class="post-owner-actions">
               <button
+                type="button"
+                class="btn btn-ghost btn-small"
+                data-testid="post-share"
+                @click="sharePost"
+              >
+                Share
+              </button>
+              <button
                 v-if="post.canEdit"
                 type="button"
                 class="btn btn-ghost btn-small"
@@ -260,6 +268,7 @@ import { usePageMeta } from '@/composables/usePageMeta'
 import { HOME_CRUMB, breadcrumbList } from '@/utils/pageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
 import { detailPath } from '@/utils/slug'
+import { haptic, shareLink } from '@/utils/nativeApp'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumComment, ForumPost } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
@@ -419,11 +428,20 @@ const togglePostLike = async () => {
   try {
     const response = await forumAPI.like(post.value.id, !post.value.liked)
     Object.assign(post.value, response.data.data)
+    haptic()
   } catch (err) {
     toast.error(apiErrorMessage(err, 'Could not update the like.'))
   } finally {
     busy.value = false
   }
+}
+
+const sharePost = async () => {
+  if (!post.value) return
+  const url = `${window.location.origin}${detailPath('/forum/post', post.value.id, post.value.title)}`
+  const result = await shareLink({ title: post.value.title, url })
+  if (result === 'copied') toast.success('Link copied!')
+  if (result === 'failed') toast.error("Couldn't share this post.")
 }
 
 const deletePost = async () => {

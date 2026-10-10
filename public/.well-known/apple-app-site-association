@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.net.anilounge.app"],
+        "components": [
+          { "/": "/api/*", "exclude": true },
+          { "/": "/uploads/*", "exclude": true },
+          { "/": "/sitemap*", "exclude": true },
+          { "/": "/indexnow-key.txt", "exclude": true },
+          { "/": "/*" }
+        ]
+      }
+    ]
+  }
+}

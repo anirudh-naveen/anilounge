@@ -127,6 +127,7 @@ import type { LanguageWarning } from '@/types/social'
 import { COMMENT_MAX, reportForum, showLanguageWarning } from '@/utils/forum'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
+import { haptic } from '@/utils/nativeApp'
 
 const props = defineProps<{ comment: ForumComment }>()
 const emit = defineEmits<{
@@ -152,6 +153,7 @@ const toggleLike = async () => {
   try {
     const response = await forumAPI.likeComment(props.comment.id, !props.comment.liked)
     emit('changed', { ...props.comment, ...response.data.data })
+    haptic()
   } catch (error) {
     toast.error(apiErrorMessage(error, 'Could not update the like.'))
   } finally {

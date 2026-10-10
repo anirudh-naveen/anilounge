@@ -341,9 +341,12 @@ import { usePageMeta } from '@/composables/usePageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
 import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
+import { shareLink } from '@/utils/nativeApp'
+import { useToast } from 'vue-toastification'
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const entityStore = useEntityStore()
@@ -500,18 +503,15 @@ const selectSeason = (seasonNumber: number) => {
 const goBack = () =>
   goBackOr(router, () => returnToListing(router, route.query.from as string, contentStore))
 
-const shareShow = () => {
-  if (navigator.share && show.value) {
-    navigator.share({
-      title: getDisplayTitle(show.value),
-      text: show.value.overview,
-      url: window.location.href,
-    })
-  } else {
-    // Fallback: copy to clipboard
-    navigator.clipboard.writeText(window.location.href)
-    // You could add a toast notification here
-  }
+const shareShow = async () => {
+  if (!show.value) return
+  const result = await shareLink({
+    title: getDisplayTitle(show.value),
+    text: show.value.overview,
+    url: window.location.href,
+  })
+  if (result === 'copied') toast.success('Link copied!')
+  if (result === 'failed') toast.error("Couldn't share this page.")
 }
 
 const formatDate = (date: string | Date) => {

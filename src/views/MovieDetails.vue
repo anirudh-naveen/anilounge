@@ -298,9 +298,12 @@ import { usePageMeta } from '@/composables/usePageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
 import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
+import { shareLink } from '@/utils/nativeApp'
+import { useToast } from 'vue-toastification'
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const entityStore = useEntityStore()
@@ -390,18 +393,15 @@ const loadMovie = async (movieId: string) => {
 const goBack = () =>
   goBackOr(router, () => returnToListing(router, route.query.from as string, contentStore))
 
-const shareMovie = () => {
-  if (navigator.share && movie.value) {
-    navigator.share({
-      title: getDisplayTitle(movie.value),
-      text: movie.value.overview,
-      url: window.location.href,
-    })
-  } else {
-    // Fallback: copy to clipboard
-    navigator.clipboard.writeText(window.location.href)
-    // You could add a toast notification here
-  }
+const shareMovie = async () => {
+  if (!movie.value) return
+  const result = await shareLink({
+    title: getDisplayTitle(movie.value),
+    text: movie.value.overview,
+    url: window.location.href,
+  })
+  if (result === 'copied') toast.success('Link copied!')
+  if (result === 'failed') toast.error("Couldn't share this page.")
 }
 
 const formatDate = (date: string | Date) => {
