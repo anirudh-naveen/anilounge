@@ -30,6 +30,8 @@ APIs & Integrations --
 
 Local development -- see [DEVELOPMENT.md](DEVELOPMENT.md)
 
+Contributing -- see [CONTRIBUTING.md](CONTRIBUTING.md). Issues labelled `good first issue` are a good place to start.
+
 Deployment --
  - Frontend: Vercel
  - Backend: Railway
@@ -61,3 +63,7 @@ Deployment --
 Author: Anirudh Naveen
 
 Note: This is a beta release. Some features may be under active development.
+
+## License
+
+Copyright (C) 2025-2026 Anirudh Naveen. AniLounge is free software, licensed under the [GNU Affero General Public License v3.0](LICENSE).
