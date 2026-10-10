@@ -147,6 +147,24 @@ export function startHotScoreScheduler() {
 const TAG_LEVEL_SQL = `CASE tc.kind WHEN 'franchise' THEN 0 WHEN 'character' THEN 2 ELSE 1 END`
 
 /**
+ * A franchise tag's stand-in picture: the poster of its first title in watch order
+ * (earliest release among members with no prequel in the franchise; see
+ * utils/franchiseOrder.js), skipping titles without a poster. Null for other tags.
+ */
+const TAG_COVER_SQL = `CASE WHEN tc.kind = 'franchise' THEN (
+    SELECT w.poster_path FROM franchise_members fm JOIN works w ON w.id = fm.member_id
+    WHERE fm.franchise_id = tc.id AND w.poster_path IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM content_relations r
+        JOIN franchise_members pf ON pf.franchise_id = tc.id AND pf.member_id <> w.id
+        WHERE (r.kind = 'sequel' AND r.to_id = w.id AND r.from_id = pf.member_id)
+           OR (r.kind = 'prequel' AND r.from_id = w.id AND r.to_id = pf.member_id)
+      )
+    ORDER BY COALESCE(w.release_date, make_date(w.start_year, 1, 1)) NULLS LAST, w.title
+    LIMIT 1
+  ) END`
+
+/**
  * Columns for a post card. `$1` must be the viewer id (or null).
  * @returns {string}
  */
@@ -166,7 +184,7 @@ function postColumns() {
       SELECT json_agg(json_build_object(
         'contentId', t.content_id, 'kind', tc.kind, 'name', tc.name,
         'imagePath', tc.image_path, 'season', t.season_number, 'episode', t.episode_number,
-        'top', t.is_top
+        'top', t.is_top, 'coverPath', ${TAG_COVER_SQL}
       ) ORDER BY ${TAG_LEVEL_SQL}, tc.name, t.season_number NULLS FIRST, t.episode_number)
       FROM post_tags t JOIN content tc ON tc.id = t.content_id
       WHERE t.post_id = p.id
@@ -225,6 +243,7 @@ export function postEntry(row, { full = false, viewer = null } = {}) {
       season: tag.season ?? null,
       episode: tag.episode ?? null,
       top: Boolean(tag.top),
+      ...(tag.kind === 'franchise' ? { coverPath: tag.coverPath || null } : {}),
     })),
     canEdit: mine,
     canDelete: mine || Boolean(viewer && isAdminUser(viewer)),
@@ -772,6 +791,47 @@ async function commentRows(where, params, tail = 'ORDER BY c.created_at') {
 }
 
 /**
+ * A page of one user's comments (newest first), each with its post's title, for the
+ * Forum tab on their profile. Deleted comments and comments on posts by banned
+ * users are left out.
+ * @param {object | null} viewer
+ * @param {{ author?: unknown, page?: unknown }} [filters] - `author` is a username.
+ * @returns {Promise<{ items: object[], page: number, pageSize: number, total: number }>}
+ * @throws {HttpError} 400 when no author is given.
+ */
+export async function listComments(viewer, filters = {}) {
+  const author = typeof filters.author === 'string' ? filters.author.trim() : ''
+  if (!author) throw new HttpError(400, 'An author is required.')
+  const page = Math.max(1, intOrNull(filters.page) || 1)
+  const where = `c.deleted_at IS NULL AND lower(u.username) = lower($2)
+    AND EXISTS (SELECT 1 FROM posts p JOIN users pu ON pu.id = p.user_id
+                WHERE p.id = c.post_id AND pu.banned_at IS NULL)`
+
+  const [rows, count] = await Promise.all([
+    commentRows(
+      where,
+      [viewer?._id || null, author],
+      `ORDER BY c.created_at DESC LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
+    ),
+    query(
+      `SELECT count(*)::int AS n FROM comments c JOIN users u ON u.id = c.user_id
+       WHERE u.banned_at IS NULL AND ${where.replaceAll('$2', '$1')}`,
+      [author],
+    ),
+  ])
+  const titles = await postTitles(rows.map((row) => row.post_id))
+  return {
+    items: rows.map((row) => ({
+      ...commentEntry(row, viewer),
+      postTitle: titles.get(String(row.post_id)) || '',
+    })),
+    page,
+    pageSize: PAGE_SIZE,
+    total: count.rows[0].n,
+  }
+}
+
+/**
  * One post with its comments (oldest first; `parentId` links replies).
  * @param {object | null} viewer
  * @param {string} postId
@@ -1213,6 +1273,7 @@ export async function sitemapPosts() {
 }
 
 export default {
+  listComments,
   listPosts,
   getPost,
   createPost,

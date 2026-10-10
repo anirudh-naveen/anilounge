@@ -160,7 +160,7 @@
         <label class="check">
           <input v-model="addMissing" type="checkbox" />
           <span>
-            When importing, add anime AniLounge doesn't have yet
+            When importing, add media AniLounge doesn't have yet
             <span class="hint">Makes large imports slower.</span>
           </span>
         </label>

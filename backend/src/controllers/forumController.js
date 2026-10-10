@@ -51,6 +51,12 @@ export const getPost = handle(
   'Error loading post',
 )
 
+/** `GET /forum/comments?author=&page=` — a page of one user's comments, newest first. */
+export const listComments = handle(
+  async (req) => ({ data: await forumService.listComments(req.user || null, req.query) }),
+  'Error loading comments',
+)
+
 /** `GET /forum/tags?q=` — taggable titles, franchises, and characters. */
 export const searchTags = handle(
   async (req) => ({ data: await forumService.searchTags(req.query.q) }),
@@ -182,6 +188,7 @@ export const dismissReports = handle(
 export default {
   listPosts,
   getPost,
+  listComments,
   searchTags,
   contentCharacters,
   getHighlights,

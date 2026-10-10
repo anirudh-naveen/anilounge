@@ -3,8 +3,10 @@
 
   Inline panel for movie and series pages: a one-tap add (with a starting
   status) for titles not yet on the list, and the full progress editor (status,
-  season, episodes, rating, plus dates, rewatches, and review under "More
-  details") for titles already on it. Guests get a prompt to log in.
+  season, episodes, rating, plus dates, rewatches, and notes under "More
+  details") for titles already on it. Picking a starting status other than
+  Planned or Dropped opens the editor before adding, so progress goes in with
+  the title. Guests get a prompt to log in.
 -->
 <template>
   <section class="watchlist-panel" data-testid="watchlist-panel">
@@ -25,7 +27,7 @@
     </p>
 
     <!-- Title: Not On The List -->
-    <div v-else-if="!existingItem" class="add-row">
+    <div v-else-if="!existingItem && !addingWithProgress" class="add-row">
       <select v-model="form.status" class="field-input" aria-label="Status">
         <option
           v-for="option in WATCHLIST_STATUS_OPTIONS"
@@ -143,7 +145,7 @@
           </label>
         </div>
         <label class="field">
-          <span>Your Review</span>
+          <span>Notes</span>
           <textarea
             v-model="form.notes"
             rows="3"
@@ -153,7 +155,19 @@
         </label>
       </details>
 
-      <div class="editor-actions full">
+      <div v-if="!existingItem" class="editor-actions full">
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="saving"
+          data-testid="watchlist-add"
+          @click="add"
+        >
+          Add to Watchlist
+        </button>
+      </div>
+
+      <div v-else class="editor-actions full">
         <button
           type="button"
           class="btn btn-primary"
@@ -219,6 +233,12 @@ const form = reactive({
 })
 const saving = ref(false)
 
+/** Starting statuses with no progress to record; the rest open the editor before adding. */
+const QUICK_ADD_STATUSES: WatchlistStatus[] = ['plan_to_watch', 'dropped']
+const addingWithProgress = computed(
+  () => !existingItem.value && !QUICK_ADD_STATUSES.includes(form.status),
+)
+
 /** Copy the saved row into the form (or reset it for a title not on the list). */
 const populate = () => {
   const item = existingItem.value
@@ -250,10 +270,38 @@ watch(
   },
 )
 
+/** Rating, progress, and details from the editor, as sent on save. */
+const editorFields = () => ({
+  rating: toUserRating(form.rating),
+  notes: form.notes,
+  startedOn: form.startedOn || null,
+  completedOn: form.completedOn || null,
+  rewatchCount: Math.max(0, Number(form.rewatchCount) || 0),
+  ...(props.contentType === 'tv'
+    ? {
+        currentEpisode: Math.max(0, Number(form.currentEpisode) || 0),
+        currentSeason: form.currentSeason || 1,
+      }
+    : {}),
+})
+
 const add = async () => {
   saving.value = true
   try {
-    await contentStore.addToWatchlist(props.contentId, form.status)
+    if (addingWithProgress.value) {
+      const { rating, currentEpisode, currentSeason, notes, ...details } = editorFields()
+      await contentStore.addToWatchlist(
+        props.contentId,
+        form.status,
+        rating,
+        currentEpisode,
+        currentSeason,
+        notes || undefined,
+        details,
+      )
+    } else {
+      await contentStore.addToWatchlist(props.contentId, form.status)
+    }
     toast.success('Added to watchlist!')
   } catch (error) {
     console.error('Error adding to watchlist:', error)
@@ -268,17 +316,7 @@ const save = async () => {
   try {
     await contentStore.updateWatchlistItem(props.contentId, {
       status: form.status,
-      rating: toUserRating(form.rating),
-      notes: form.notes,
-      startedOn: form.startedOn || null,
-      completedOn: form.completedOn || null,
-      rewatchCount: Math.max(0, Number(form.rewatchCount) || 0),
-      ...(props.contentType === 'tv'
-        ? {
-            currentEpisode: Math.max(0, Number(form.currentEpisode) || 0),
-            currentSeason: form.currentSeason || 1,
-          }
-        : {}),
+      ...editorFields(),
     })
     toast.success('Watchlist updated!')
   } catch (error) {
@@ -427,10 +465,13 @@ textarea.field-input {
   padding-top: 0.75rem;
 }
 
-.more-details[open] {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+/* Margins, not flex gap: browsers don't reliably lay out <details> as a flex box. */
+.more-details > :not(summary) {
+  margin-top: 1rem;
+}
+
+.more-details > .field {
+  margin-top: 1.5rem;
 }
 
 .more-details summary {
