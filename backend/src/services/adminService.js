@@ -540,7 +540,7 @@ export async function resolveSyncChanges(actor, ids, action) {
 
 const USER_COLUMNS = `u.id, u.username, u.email, u.profile_picture, u.role, u.is_demo,
   u.email_verified_at, u.created_at, u.last_active_at, u.muted_until, u.mute_reason,
-  u.banned_at, u.ban_reason, u.cosmetic_roles,
+  u.banned_at, u.ban_reason, u.cosmetic_roles, u.pending_signup,
   (SELECT count(*)::int FROM language_warnings w WHERE w.user_id = u.id) AS language_warnings,
   (SELECT count(*)::int FROM language_warnings w
    WHERE w.user_id = u.id AND w.category = 'slur') AS slur_warnings`
@@ -568,6 +568,8 @@ function adminUserView(row, owners) {
     isOwner: isOwnerEmail(user, owners),
     isAdmin: isAdminUser(user, owners),
     emailVerified: user.emailVerified,
+    // Signed up but never verified; removed 3 days after sign-up (unverifiedAccountService.js).
+    pendingSignup: Boolean(row.pending_signup),
     isDemo: Boolean(row.is_demo),
     createdAt: row.created_at,
     lastActiveAt: row.last_active_at,
@@ -593,7 +595,7 @@ export async function listUsers({ q, filter, page } = {}) {
   const owners = parseAdminEmails()
   const current = pageNumber(page)
   const params = []
-  const clauses = ['NOT u.pending_signup']
+  const clauses = []
   if (term) {
     params.push(`%${escapeLike(term)}%`)
     clauses.push(`(u.username ILIKE $${params.length} OR u.email ILIKE $${params.length})`)
@@ -613,7 +615,7 @@ export async function listUsers({ q, filter, page } = {}) {
       `u.banned_at IS NULL AND (SELECT count(*) FROM language_warnings w WHERE w.user_id = u.id) > $${params.length}`,
     )
   }
-  const where = clauses.join(' AND ')
+  const where = clauses.join(' AND ') || 'true'
   // Flagged users: most slurs first, then most warnings.
   const order =
     filter === 'flagged'
@@ -651,10 +653,7 @@ async function loadTarget(actor, targetId) {
   if (String(actor._id) === String(targetId)) {
     throw new HttpError(400, "You can't do that to your own account.")
   }
-  const { rows } = await query(
-    `SELECT ${USER_COLUMNS}, u.pending_signup FROM users u WHERE u.id = $1`,
-    [targetId],
-  )
+  const { rows } = await query(`SELECT ${USER_COLUMNS} FROM users u WHERE u.id = $1`, [targetId])
   const target = rows[0]
   if (!target || target.pending_signup) throw new HttpError(404, 'User not found.')
   if (target.role === 'creator') throw new HttpError(403, "The creator's account can't be changed.")
@@ -805,10 +804,7 @@ export async function setCosmeticRoles(actor, targetId, roles) {
     throw new HttpError(400, `Badges must be from ${GRANTABLE_BADGES.join(', ')}.`)
   }
   if (!isUuid(String(targetId || ''))) throw new HttpError(400, 'Invalid user id.')
-  const { rows } = await query(
-    `SELECT ${USER_COLUMNS}, u.pending_signup FROM users u WHERE u.id = $1`,
-    [targetId],
-  )
+  const { rows } = await query(`SELECT ${USER_COLUMNS} FROM users u WHERE u.id = $1`, [targetId])
   const target = rows[0]
   if (!target || target.pending_signup) throw new HttpError(404, 'User not found.')
   if (target.is_demo) throw new HttpError(400, "The demo account can't have badges.")
