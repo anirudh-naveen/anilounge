@@ -38,6 +38,18 @@ describe('isAdminUser', () => {
     assert.equal(isAdminUser(user({ role: 'admin', isDemo: () => true }), none), false)
   })
 
+  it('rejects new sign-ups that are still pending, even with an admin role or owner email', () => {
+    const none = parseAdminEmails('')
+    assert.equal(isAdminUser(user({ pendingSignup: true }), admins), false)
+    assert.equal(isAdminUser(user({ role: 'admin', pendingSignup: true }), none), false)
+    assert.equal(isAdminUser(user({ role: 'creator', pendingSignup: true }), none), false)
+    assert.equal(isCreatorUser(user({ role: 'creator', pendingSignup: true })), false)
+    assert.equal(
+      canEditContent(user({ cosmeticRoles: ['developer'], pendingSignup: true }), none),
+      false,
+    )
+  })
+
   it('treats the creator as an admin and bans as no access', () => {
     const none = parseAdminEmails('')
     assert.equal(isAdminUser(user({ role: 'creator' }), none), true)

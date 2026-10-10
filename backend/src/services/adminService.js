@@ -556,6 +556,7 @@ function adminUserView(row, owners) {
     email: row.email,
     role,
     emailVerified: Boolean(row.email_verified_at),
+    pendingSignup: Boolean(row.pending_signup),
     bannedAt: row.banned_at,
     isDemo: () => Boolean(row.is_demo),
   }
@@ -569,7 +570,7 @@ function adminUserView(row, owners) {
     isAdmin: isAdminUser(user, owners),
     emailVerified: user.emailVerified,
     // Signed up but never verified; removed 3 days after sign-up (unverifiedAccountService.js).
-    pendingSignup: Boolean(row.pending_signup),
+    pendingSignup: user.pendingSignup,
     isDemo: Boolean(row.is_demo),
     createdAt: row.created_at,
     lastActiveAt: row.last_active_at,

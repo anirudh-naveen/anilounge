@@ -3,7 +3,8 @@
  *
  * Layer: middleware. Runs after `authenticateToken`. A user is an admin when their
  * `role` is 'admin' or 'creator', or their email is in the ADMIN_EMAILS allowlist, and
- * their email is verified; the demo account and banned accounts never are. The single
+ * their email is verified; the demo account, banned accounts, and new sign-ups that
+ * haven't finished verification (`pendingSignup`) never are. The single
  * creator (role 'creator') is the only one who can add/remove admins and ban users.
  * ADMIN_EMAILS accounts are "owners": the admin page cannot demote them. Holders of the
  * Developer badge may edit catalog content (`contentEditorOnly`) and nothing else.
@@ -56,12 +57,14 @@ export function isCreatorUser(user) {
 }
 
 /**
- * Verified, not the demo account, not banned.
- * @param {{ email?: string, emailVerified?: boolean, bannedAt?: unknown, isDemo?: () => boolean } | null | undefined} user
+ * Verified, past the pending sign-up stage, not the demo account, not banned.
+ * @param {{ email?: string, emailVerified?: boolean, pendingSignup?: boolean, bannedAt?: unknown, isDemo?: () => boolean } | null | undefined} user
  * @returns {boolean}
  */
 function isEligible(user) {
-  if (!user?.email || user.emailVerified === false || user.bannedAt) return false
+  if (!user?.email || user.emailVerified === false || user.pendingSignup || user.bannedAt) {
+    return false
+  }
   return !(typeof user.isDemo === 'function' && user.isDemo())
 }
 
