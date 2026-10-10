@@ -217,6 +217,11 @@ const toggleLike = async () => {
   color: color-mix(in srgb, var(--purple-accent) 70%, var(--text-primary));
 }
 
+.post-kind.megathread {
+  background: color-mix(in srgb, var(--warning-color) 18%, transparent);
+  color: color-mix(in srgb, var(--warning-color) 65%, var(--text-primary));
+}
+
 .post-score {
   letter-spacing: 0.01em;
 }

@@ -25,6 +25,7 @@ export const POST_KIND_LABELS: Record<PostKind, string> = {
   review: 'Review',
   guide: 'Guide',
   article: 'Article',
+  megathread: 'Megathread',
 }
 
 /** Post kinds in display order. */
