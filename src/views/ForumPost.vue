@@ -131,6 +131,15 @@
               >
                 Delete
               </button>
+              <button
+                v-if="authStore.isAuthenticated && !post.canEdit"
+                type="button"
+                class="btn btn-ghost btn-small"
+                data-testid="post-report"
+                @click="reportPost"
+              >
+                Report
+              </button>
             </span>
           </footer>
         </article>
@@ -258,6 +267,7 @@ import {
   COMMENT_MAX,
   coverTag,
   POST_KIND_LABELS,
+  reportForum,
   scoreLabel,
   showLanguageWarning,
   tagRoute,
@@ -424,6 +434,16 @@ const deletePost = async () => {
     router.push({ name: 'forum' })
   } catch (err) {
     toast.error(apiErrorMessage(err, 'Could not delete the post.'))
+  }
+}
+
+const reportPost = async () => {
+  if (!post.value) return
+  try {
+    if (await reportForum('post', post.value.id))
+      toast.success('Thanks. An admin will take a look.')
+  } catch (err) {
+    toast.error(apiErrorMessage(err, 'Could not send the report.'))
   }
 }
 

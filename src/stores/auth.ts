@@ -23,7 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
   const error = ref<string | null>(null)
 
   const isAuthenticated = computed(() => !!token.value)
-  /** True for the shared recruiter demo account, which cannot change its password. */
+  /** True for the shared demo account, which cannot change its password. */
   const isDemoUser = computed(
     () =>
       Boolean(user.value?.isDemoAccount) || user.value?.email?.toLowerCase() === DEMO_USER_EMAIL,

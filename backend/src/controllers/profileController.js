@@ -210,6 +210,18 @@ export const updateProfileSettings = async (req, res) => {
     }
 
     const user = req.user
+    // The demo login is public, so its profile text would be anyone's words.
+    const changesBio = bio !== undefined && bio.trim() !== (user.bio || '')
+    const changesHeadline =
+      typeof settings?.headline === 'string' &&
+      settings.headline.trim() !== normalizeProfileSettings(user.profileSettings).headline
+    if (user.isDemo() && (changesBio || changesHeadline)) {
+      return res.status(403).json({
+        success: false,
+        code: 'DEMO_READ_ONLY',
+        message: "The demo account's bio and headline can't be changed.",
+      })
+    }
     if (settings !== undefined) {
       user.profileSettings = normalizeProfileSettings(
         settings,
