@@ -16,8 +16,8 @@
  *
  * Text is public, so blocked language is always masked (no profanity opt-in) and the
  * author gets a language warning (`screenText`). Authors edit and delete their own
- * posts and comments; admins can delete anyone's (logged). Banned users' posts and
- * comments are hidden. Throws `HttpError` for user-facing failures.
+ * posts and comments; admins can delete anyone's (logged). Deleting resolves open
+ * reports on it (`forumReportService`). Banned users' posts and comments are hidden. Throws `HttpError` for user-facing failures.
  */
 
 import cron from 'node-cron'
@@ -36,6 +36,7 @@ import { publicUser } from './friendService.js'
 import { getSeasonGuide } from './seasonService.js'
 import { screenText } from './languageWarningService.js'
 import { notify } from './notificationService.js'
+import { resolveReports } from './forumReportService.js'
 
 export const POST_KINDS = ['discussion', 'review', 'guide', 'article']
 export const TAG_KINDS = ['movie', 'series', 'special', 'franchise', 'character']
@@ -573,7 +574,15 @@ export async function deletePost(user, postId) {
   const row = await loadPost(postId, user)
   const mine = String(row.author_id) === String(user._id)
   if (!mine && !isAdminUser(user)) throw new HttpError(403, 'You can only delete your own posts.')
+  const { rows: commentIds } = await query('SELECT id FROM comments WHERE post_id = $1', [row.id])
   await query('DELETE FROM posts WHERE id = $1', [row.id])
+  await resolveReports('post', [row.id], 'deleted', user)
+  await resolveReports(
+    'comment',
+    commentIds.map((comment) => comment.id),
+    'deleted',
+    user,
+  )
   // Search engines recrawl it, see it's gone, and drop it.
   queuePost(row)
   if (!mine) {
@@ -890,6 +899,7 @@ export async function deleteComment(user, commentId) {
   } else {
     await query('DELETE FROM comments WHERE id = $1', [row.id])
   }
+  await resolveReports('comment', [row.id], 'deleted', user)
   if (!mine) {
     await logAction(
       'moderation',

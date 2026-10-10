@@ -6,6 +6,7 @@
   character's titles and voice actors, ...). Edited fields are locked so the hourly
   catalog sync keeps them; unlocking hands a field back to the sync.
   Users: admins mute users; the creator also adds/removes admins and bans users.
+  Reports: forum posts and comments people flagged; admins delete them or dismiss the reports.
   Metrics: users, page views, visitors, and clicks (components/AdminMetrics.vue).
   Admin-only; the server enforces every permission shown here.
 -->
@@ -43,6 +44,12 @@
             class="tab-count"
             title="Sync changes to look at"
             >{{ syncCount }}</span
+          >
+          <span
+            v-if="tab.id === 'reports' && reportCount"
+            class="tab-count"
+            title="Reported posts and comments to review"
+            >{{ reportCount }}</span
           >
         </button>
       </div>
@@ -701,6 +708,101 @@
         </div>
       </section>
 
+      <!-- Title: Reports -->
+      <section v-else-if="activeTab === 'reports'" class="social-panel" data-testid="admin-reports">
+        <header class="social-panel-header">
+          <div>
+            <h2 class="social-panel-title">
+              Reports <span class="social-count">{{ reportCount }}</span>
+            </h2>
+            <p class="social-panel-sub">
+              Forum posts and comments people flagged, most-reported first. Delete removes it
+              (logged); dismiss keeps it and closes the reports. Mute or ban the author from the
+              Users tab.
+            </p>
+          </div>
+        </header>
+        <div v-if="reportsLoading" class="social-loading"><div class="spinner"></div></div>
+        <p v-else-if="reportsError" class="social-empty admin-error">{{ reportsError }}</p>
+        <p v-else-if="!reportResults.items.length" class="social-empty">Nothing reported.</p>
+        <ul v-else class="sync-list">
+          <li
+            v-for="item in reportResults.items"
+            :key="`${item.kind}-${item.id}`"
+            class="sync-item"
+          >
+            <div class="sync-head">
+              <span class="admin-pill danger">
+                {{ item.reportCount }} report{{ item.reportCount === 1 ? '' : 's' }}
+              </span>
+              <span class="social-meta feedback-from">
+                {{ item.kind === 'post' ? 'Post' : 'Comment' }} by
+                {{ item.author?.username || 'unknown' }} ·
+                <router-link
+                  :to="{
+                    ...postRoute(item.postId),
+                    hash: item.kind === 'comment' ? `#comment-${item.id}` : '',
+                  }"
+                  class="admin-link"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  {{ item.postTitle }}
+                </router-link>
+              </span>
+              <span class="social-meta">{{ utcStamp(item.lastReportedAt) }} UTC</span>
+            </div>
+            <p class="sync-value feedback-message">{{ excerpt(item.body) }}</p>
+            <ul v-if="item.reasons.length" class="report-reasons">
+              <li v-for="(reason, index) in item.reasons" :key="index" class="social-meta">
+                “{{ reason }}”
+              </li>
+            </ul>
+            <div class="note-actions">
+              <button
+                type="button"
+                class="btn btn-ghost btn-small"
+                :disabled="reportBusy"
+                data-testid="report-dismiss"
+                @click="dismissReport(item)"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary btn-small"
+                :disabled="reportBusy"
+                data-testid="report-delete"
+                @click="deleteReported(item)"
+              >
+                Delete {{ item.kind }}
+              </button>
+            </div>
+          </li>
+        </ul>
+        <div v-if="pageCount(reportResults) > 1" class="admin-pager">
+          <button
+            type="button"
+            class="btn btn-ghost btn-small"
+            :disabled="reportResults.page <= 1"
+            @click="loadReports(reportResults.page - 1)"
+          >
+            Previous
+          </button>
+          <span class="social-meta">
+            Page {{ reportResults.page }} of {{ pageCount(reportResults) }}
+          </span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-small"
+            :disabled="reportResults.page >= pageCount(reportResults)"
+            @click="loadReports(reportResults.page + 1)"
+          >
+            Next
+          </button>
+        </div>
+      </section>
+
       <!-- Title: Metrics -->
       <AdminMetrics v-else-if="activeTab === 'metrics'" />
 
@@ -950,7 +1052,8 @@ import { useToast } from 'vue-toastification'
 import AdminMetrics from '@/components/AdminMetrics.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import { adminAPI, getDetailsRouteName, getImageUrl } from '@/services/api'
+import { adminAPI, forumAPI, getDetailsRouteName, getImageUrl } from '@/services/api'
+import { postRoute } from '@/utils/forum'
 import { useAuthStore } from '@/stores/auth'
 import BadgeEmblem from '@/components/BadgeEmblem.vue'
 import { useBadgesStore } from '@/stores/badges'
@@ -1041,11 +1144,12 @@ const TABS = [
   { id: 'content', label: 'Content' },
   { id: 'users', label: 'Users' },
   { id: 'log', label: 'Log' },
+  { id: 'reports', label: 'Reports' },
   { id: 'metrics', label: 'Metrics' },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 /** Developers (not admins) only get the Content tab. */
-const ADMIN_ONLY_TABS: TabId[] = ['users', 'log', 'metrics']
+const ADMIN_ONLY_TABS: TabId[] = ['users', 'log', 'reports', 'metrics']
 const KINDS: Array<{ id: Kind; singular: string; plural: string }> = [
   { id: 'movie', singular: 'Movie', plural: 'Movies' },
   { id: 'series', singular: 'Series', plural: 'Series' },
@@ -1465,6 +1569,7 @@ watch([userQuery, userFilter], () => {
 
 watch(activeTab, (tab) => {
   if (tab === 'users' && !usersLoaded.value && !usersLoading.value) loadUsers(1)
+  if (tab === 'reports') loadReports(1)
   if (tab === 'log') {
     if (logCategory.value === 'feedback') loadFeedback(1)
     else loadLog()
@@ -1806,6 +1911,86 @@ const loadFeedback = async (page = 1) => {
 
 watch(feedbackType, () => loadFeedback(1))
 
+// --- Forum reports -----------------------------------------------------------
+
+type ForumReport = {
+  kind: 'post' | 'comment'
+  id: string
+  postId: string
+  postTitle: string
+  body: string
+  author: { id: string; username: string } | null
+  reportCount: number
+  reasons: string[]
+  lastReportedAt: string
+}
+
+const reportResults = ref<Page<ForumReport>>(emptyPage())
+const reportsLoading = ref(false)
+const reportsError = ref('')
+const reportBusy = ref(false)
+const reportCount = ref(0)
+let reportsSeq = 0
+
+const excerpt = (text: string) => (text.length > 400 ? `${text.slice(0, 399)}…` : text)
+
+const loadReportCount = async () => {
+  try {
+    const response = await adminAPI.countForumReports()
+    reportCount.value = response.data.data.count
+  } catch {
+    // The badge is optional.
+  }
+}
+
+const loadReports = async (page = 1) => {
+  const seq = ++reportsSeq
+  reportsLoading.value = true
+  try {
+    const response = await adminAPI.listForumReports(page)
+    if (seq !== reportsSeq) return
+    reportResults.value = response.data.data
+    reportCount.value = response.data.data.total
+    reportsError.value = ''
+  } catch (error) {
+    if (seq === reportsSeq) reportsError.value = apiErrorMessage(error, 'Could not load reports.')
+  } finally {
+    if (seq === reportsSeq) reportsLoading.value = false
+  }
+}
+
+const settleReport = async (action: () => Promise<unknown>, success: string, failure: string) => {
+  reportBusy.value = true
+  try {
+    await action()
+    toast.success(success)
+    // Step back a page when this was the last item on it.
+    const { items, page } = reportResults.value
+    await loadReports(items.length === 1 && page > 1 ? page - 1 : page)
+  } catch (error) {
+    toast.error(apiErrorMessage(error, failure))
+  } finally {
+    reportBusy.value = false
+  }
+}
+
+const dismissReport = (item: ForumReport) =>
+  settleReport(
+    () => adminAPI.dismissForumReports(item.kind, item.id),
+    'Reports dismissed.',
+    'Could not dismiss the reports.',
+  )
+
+const deleteReported = (item: ForumReport) => {
+  const what = item.kind === 'post' ? 'this post and its comments' : 'this comment'
+  if (!confirm(`Delete ${what}? This can't be undone.`)) return
+  settleReport(
+    () => (item.kind === 'post' ? forumAPI.remove(item.id) : forumAPI.removeComment(item.id)),
+    item.kind === 'post' ? 'Post deleted.' : 'Comment deleted.',
+    `Could not delete the ${item.kind}.`,
+  )
+}
+
 const monthLabel = (month: string) =>
   new Date(`${month}-01T00:00:00Z`).toLocaleDateString(undefined, {
     month: 'long',
@@ -1843,7 +2028,10 @@ const downloadLog = () => {
 
 onMounted(() => {
   loadContent(1)
-  if (authStore.isAdmin) loadSyncCount()
+  if (authStore.isAdmin) {
+    loadSyncCount()
+    loadReportCount()
+  }
 })
 onUnmounted(() => {
   clearTimeout(contentTimer)
@@ -2446,6 +2634,14 @@ onUnmounted(() => {
 .feedback-from {
   margin-right: auto;
   overflow-wrap: anywhere;
+}
+
+.report-reasons {
+  list-style: none;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
 }
 
 .feedback-message {

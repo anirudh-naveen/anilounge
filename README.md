@@ -3,9 +3,11 @@ A full-stack web application for discovering, filtering, rating, and tracking an
 
 Beta Release: https://anilounge.net
 
-For recruiters who want to explore the application:
+Want to look around without signing up? Use the shared demo account:
  - Email: demo@findanimation.com
  - Password: DemoPassword123!
+
+The demo account is shared by everyone, so it can't post in the forums, send messages, add friends, or change its name, password, picture, or bio. Anything else you change on it resets every night. Create a free account to join in.
    
 Features --
  - Search & Filter: Browse through an extensive collection of animated content
@@ -28,9 +30,9 @@ APIs & Integrations --
  - MyAnimeList API - Anime-specific content and metadata
  - Google Gemini API - AI-powered features and recommendations
 
-Local development -- see [DEVELOPMENT.md](DEVELOPMENT.md)
+Local development -- see [CONTRIBUTING.md](CONTRIBUTING.md#setting-up)
 
-Contributing -- see [CONTRIBUTING.md](CONTRIBUTING.md). Issues labelled `good first issue` are a good place to start.
+Contributing -- see [CONTRIBUTING.md](CONTRIBUTING.md) to set up the project, and [GIGS.md](GIGS.md) to find and claim a task.
 
 Deployment --
  - Frontend: Vercel

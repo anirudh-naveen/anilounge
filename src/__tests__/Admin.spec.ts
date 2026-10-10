@@ -25,6 +25,11 @@ const api = vi.hoisted(() => ({
   getLog: vi.fn(),
   setCosmeticRoles: vi.fn(),
   listFeedback: vi.fn(),
+  listForumReports: vi.fn(),
+  countForumReports: vi.fn(),
+  dismissForumReports: vi.fn(),
+  removePost: vi.fn(),
+  removeComment: vi.fn(),
 }))
 
 vi.mock('@/services/api', async (original) => ({
@@ -46,7 +51,11 @@ vi.mock('@/services/api', async (original) => ({
     getLog: api.getLog,
     setCosmeticRoles: api.setCosmeticRoles,
     listFeedback: api.listFeedback,
+    listForumReports: api.listForumReports,
+    countForumReports: api.countForumReports,
+    dismissForumReports: api.dismissForumReports,
   },
+  forumAPI: { remove: api.removePost, removeComment: api.removeComment },
   badgesAPI: { list: api.staff },
 }))
 
@@ -124,6 +133,7 @@ const mountAdmin = (role: 'admin' | 'creator' | 'developer') => {
       { path: '/voice-actor/:id', name: 'VoiceActorDetails', component: stub },
       { path: '/studio/:id', name: 'StudioDetails', component: stub },
       { path: '/u/:username', name: 'publicProfile', component: stub },
+      { path: '/forum/post/:id', name: 'forumPost', component: stub },
     ],
   })
   return mount(Admin, { global: { plugins: [pinia, router] }, attachTo: document.body })
@@ -453,5 +463,41 @@ describe('Admin page', () => {
     await flushPromises()
     expect(wrapper.get('[data-testid="log-section-title"]').text()).toBe('Content changes')
     expect(api.getLog).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'content' }))
+  })
+
+  it('lists reported forum posts and dismisses or deletes them', async () => {
+    const report = {
+      kind: 'comment',
+      id: 'comment-1',
+      postId: 'post-1',
+      postTitle: 'Best of the season',
+      body: 'Buy cheap followers here',
+      author: { id: 'user-9', username: 'spammer' },
+      reportCount: 3,
+      reasons: ['spam'],
+      lastReportedAt: '2026-10-01T09:30:00Z',
+    }
+    api.countForumReports.mockResolvedValue({ data: { data: { count: 1 } } })
+    api.listForumReports.mockResolvedValue(page([report]))
+    api.dismissForumReports.mockResolvedValue({ data: { data: { dismissed: 3 } } })
+    api.removeComment.mockResolvedValue({ data: { data: { removed: true } } })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const wrapper = mountAdmin('admin')
+    await flushPromises()
+    const tab = wrapper.findAll('.admin-tab').find((button) => button.text().startsWith('Reports'))
+    expect(tab!.text()).toContain('1')
+    await tab!.trigger('click')
+    await flushPromises()
+    const panel = wrapper.get('[data-testid="admin-reports"]')
+    expect(panel.text()).toContain('Buy cheap followers here')
+    expect(panel.text()).toContain('3 reports')
+    expect(panel.text()).toContain('spammer')
+    expect(panel.text()).toContain('spam')
+    await panel.get('[data-testid="report-dismiss"]').trigger('click')
+    await flushPromises()
+    expect(api.dismissForumReports).toHaveBeenCalledWith('comment', 'comment-1')
+    await wrapper.get('[data-testid="report-delete"]').trigger('click')
+    await flushPromises()
+    expect(api.removeComment).toHaveBeenCalledWith('comment-1')
   })
 })

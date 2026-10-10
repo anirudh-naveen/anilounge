@@ -526,6 +526,7 @@
             class="form-control"
             maxlength="80"
             placeholder="Seasonal anime enjoyer"
+            :disabled="authStore.isDemoUser"
           />
         </label>
 
@@ -539,7 +540,11 @@
             maxlength="300"
             rows="3"
             placeholder="Tell people what you like to watch"
+            :disabled="authStore.isDemoUser"
           ></textarea>
+          <small v-if="authStore.isDemoUser" class="field-note">
+            The shared demo account's headline and bio can't change.
+          </small>
         </label>
 
         <PreferencesEditor v-model:genres="draftGenres" />
@@ -1994,6 +1999,11 @@ const handleImageError = showPosterPlaceholder
 .field-label small {
   color: var(--text-muted);
   font-weight: 500;
+}
+
+.field-note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .form-control {

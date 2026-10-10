@@ -375,6 +375,10 @@ export const forumAPI = {
       ? api.put(`/forum/comments/${commentId}/like`)
       : api.delete(`/forum/comments/${commentId}/like`),
 
+  /** Flag a post or comment for admins to review. */
+  report: (kind: 'post' | 'comment', id: string, reason?: string) =>
+    api.post(`/forum/${kind === 'post' ? 'posts' : 'comments'}/${id}/report`, { reason }),
+
   searchTags: (q: string) => api.get('/forum/tags', { params: { q } }),
 
   /** Characters in a title, main cast first (tag picker). */
@@ -417,6 +421,15 @@ export const adminAPI = {
 
   /** Feedback page submissions (bugs, feature requests); admins only. */
   listFeedback: (params: { type?: string; page?: number }) => api.get('/feedback', { params }),
+
+  /** Reported forum posts and comments awaiting review, most-reported first. */
+  listForumReports: (page: number) => api.get('/admin/forum-reports', { params: { page } }),
+
+  countForumReports: () => api.get('/admin/forum-reports/count'),
+
+  /** Close a post's or comment's open reports without deleting it. */
+  dismissForumReports: (kind: 'post' | 'comment', id: string) =>
+    api.post('/admin/forum-reports/dismiss', { kind, id }),
 
   listSyncChanges: (params: { outcome?: string; page?: number }) =>
     api.get('/admin/sync-changes', { params }),

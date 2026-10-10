@@ -33,6 +33,8 @@
     "start": "node src/server.js",
     "dev": "node --watch --watch-preserve-output --env-file-if-exists=.env src/server.js",
     "db:schema": "node src/scripts/applySchema.js",
+    "demo:snapshot": "node src/scripts/snapshotDemoAccount.js",
+    "demo:reset": "node src/scripts/snapshotDemoAccount.js --reset",
     "email:test": "node src/scripts/sendTestEmail.js",
     "email:announce": "node src/scripts/sendAnnouncement.js",
     "db:drop-legacy": "node src/scripts/dropLegacyTables.js",

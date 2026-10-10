@@ -2,7 +2,7 @@
   ForumCommentItem.vue — one forum comment (component).
 
   Author, time, body, and actions: like (not your own), reply, and edit/delete
-  for the author (admins can delete). Edits happen inline. A deleted comment kept
+  for the author (admins can delete), report for other signed-in users. Edits happen inline. A deleted comment kept
   for its replies shows as "[deleted]" with no actions. Emits `reply`,
   `changed` (the updated comment), and `removed` (id, and whether it was removed
   outright rather than blanked).
@@ -95,6 +95,15 @@
         >
           Delete
         </button>
+        <button
+          v-if="authStore.isAuthenticated && !comment.canEdit"
+          type="button"
+          class="comment-action"
+          data-testid="comment-report"
+          @click="report"
+        >
+          Report
+        </button>
       </div>
     </template>
   </div>
@@ -111,7 +120,7 @@ import { forumAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import type { ForumComment } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
-import { COMMENT_MAX, showLanguageWarning } from '@/utils/forum'
+import { COMMENT_MAX, reportForum, showLanguageWarning } from '@/utils/forum'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
@@ -175,6 +184,15 @@ const remove = async () => {
     toast.error(apiErrorMessage(error, 'Could not delete the comment.'))
   } finally {
     busy.value = false
+  }
+}
+
+const report = async () => {
+  try {
+    if (await reportForum('comment', props.comment.id))
+      toast.success('Thanks. An admin will take a look.')
+  } catch (error) {
+    toast.error(apiErrorMessage(error, 'Could not send the report.'))
   }
 }
 </script>

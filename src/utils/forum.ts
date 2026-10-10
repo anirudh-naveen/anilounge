@@ -5,6 +5,7 @@
 import type { ToastInterface } from 'vue-toastification'
 import type { PostKind, PostTag, TagKind } from '@/types/forum'
 import type { LanguageWarning } from '@/types/social'
+import { forumAPI } from '@/services/api'
 
 export const TITLE_MAX = 150
 export const BODY_MAX = 10000
@@ -122,4 +123,18 @@ export function showLanguageWarning(
   warning: LanguageWarning | null | undefined,
 ) {
   if (warning) toast.warning(warning.message, { timeout: 12000 })
+}
+
+/**
+ * Ask why, then report a post or comment. Returns false when the viewer cancels.
+ * @throws The API error (caller shows it).
+ */
+export async function reportForum(kind: 'post' | 'comment', id: string) {
+  const reason = window.prompt(
+    `Report this ${kind} to the AniLounge admins? Add a reason (optional):`,
+    '',
+  )
+  if (reason === null) return false
+  await forumAPI.report(kind, id, reason.trim().slice(0, 500) || undefined)
+  return true
 }

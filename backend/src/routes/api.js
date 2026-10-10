@@ -417,6 +417,9 @@ router.patch('/forum/comments/:id', validateObjectId, blockWhenMuted(), forumCon
 router.delete('/forum/comments/:id', validateObjectId, forumController.deleteComment)
 router.put('/forum/comments/:id/like', validateObjectId, forumController.likeComment)
 router.delete('/forum/comments/:id/like', validateObjectId, forumController.unlikeComment)
+/** Flag a post or comment for admins (optional `reason`, up to 500 characters). */
+router.post('/forum/posts/:id/report', validateObjectId, forumController.reportPost)
+router.post('/forum/comments/:id/report', validateObjectId, forumController.reportComment)
 
 /**
  * Admin page. Catalog content (edit rows, links, cast order): admins and developers.
@@ -455,6 +458,9 @@ router.post(
   [body('ids').isArray({ min: 1, max: 100 })],
   adminController.resolveSyncChanges,
 )
+router.get('/admin/forum-reports', adminOnly, forumController.listReports)
+router.get('/admin/forum-reports/count', adminOnly, forumController.countReports)
+router.post('/admin/forum-reports/dismiss', adminOnly, forumController.dismissReports)
 router.get('/admin/users', adminOnly, adminController.listUsers)
 router.put(
   '/admin/users/:id/role',

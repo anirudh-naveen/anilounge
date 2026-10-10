@@ -36,7 +36,7 @@ import { extraFrontendOriginsFromEnv, isAllowedCorsOrigin } from './utils/allowe
 import { authLimiter } from './middleware/authRateLimit.js'
 import { rateLimitKey, rateLimitMax, trustProxySetting } from './middleware/rateLimitKey.js'
 import { rateLimitStore } from './middleware/pgRateLimitStore.js'
-import { ensureDemoAccount } from './services/demoAccount.js'
+import { ensureDemoAccount, startDemoResetScheduler } from './services/demoAccount.js'
 import { startInactiveAccountScheduler } from './services/inactiveAccountService.js'
 import { startUnverifiedAccountScheduler } from './services/unverifiedAccountService.js'
 import { startFriendRequestCleanupScheduler } from './services/friendService.js'
@@ -351,7 +351,7 @@ app.use((err, req, res, next) => {
 
 // Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync and
 // catalog-maintenance schedulers
-// and makes sure the README demo login exists and is unlocked.
+// and makes sure the README demo login exists and is unlocked (and resets it nightly).
 app
   .listen(PORT, () => {
     console.log(`Find Animation API server running on port ${PORT}`)
@@ -368,6 +368,7 @@ app
     startAiUsageCleanupScheduler()
     startSiteEventsCleanupScheduler()
     startIndexNow()
+    startDemoResetScheduler()
     console.log(`Email delivery: ${emailProvider()}`)
     ensureDemoAccount()
       .then((result) => {

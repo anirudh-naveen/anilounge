@@ -9,6 +9,7 @@
 
 import forumService from '../services/forumService.js'
 import { assertNotDemo, sendError } from '../utils/httpError.js'
+import forumReportService from '../services/forumReportService.js'
 
 /**
  * Wrap a handler: run it, send `{ success, ...result }`, map errors.
@@ -146,6 +147,38 @@ export const unlikeComment = handle(
   'Error updating like',
 )
 
+/** `POST /forum/posts/:id/report` — body `{ reason? }`; `{ success }`. */
+export const reportPost = write(async (req) => {
+  await forumReportService.reportTarget(req.user, 'post', req.params.id, req.body?.reason)
+  return {}
+}, 'Error reporting post')
+
+/** `POST /forum/comments/:id/report` — body `{ reason? }`; `{ success }`. */
+export const reportComment = write(async (req) => {
+  await forumReportService.reportTarget(req.user, 'comment', req.params.id, req.body?.reason)
+  return {}
+}, 'Error reporting comment')
+
+/** `GET /admin/forum-reports` (admins) — `{ data: { items, page, pageSize, total } }`. */
+export const listReports = handle(
+  async (req) => ({ data: await forumReportService.listOpenReports(req.query) }),
+  'Error loading reports',
+)
+
+/** `GET /admin/forum-reports/count` (admins) — `{ data: { count } }`. */
+export const countReports = handle(
+  async () => ({ data: { count: await forumReportService.countOpenReports() } }),
+  'Error counting reports',
+)
+
+/** `POST /admin/forum-reports/dismiss` (admins) — body `{ kind, id }`; `{ data: { dismissed } }`. */
+export const dismissReports = handle(
+  async (req) => ({
+    data: await forumReportService.dismissReports(req.user, req.body?.kind, req.body?.id),
+  }),
+  'Error dismissing reports',
+)
+
 export default {
   listPosts,
   getPost,
@@ -163,4 +196,9 @@ export default {
   deleteComment,
   likeComment,
   unlikeComment,
+  reportPost,
+  reportComment,
+  listReports,
+  countReports,
+  dismissReports,
 }

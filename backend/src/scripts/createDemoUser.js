@@ -1,5 +1,5 @@
 /**
- * One-off setup script: insert the recruiter demo account if it does not already exist.
+ * One-off setup script: insert the shared demo account if it does not already exist.
  * Run once on a fresh database (or after wiping users). Inserts a User with
  * email demo@findanimation.com, or clears a lockout when it already exists.
  * The API server also runs this check on start. Does not mutate Content.
