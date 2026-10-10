@@ -271,9 +271,6 @@
     <footer class="footer">
       <div class="container">
         <p>&copy; 2026 AniLounge. Created by Anirudh Naveen.</p>
-        <p v-if="DONATE_URL" class="footer-support">
-          <a :href="DONATE_URL" target="_blank" rel="noopener noreferrer">Support AniLounge</a>
-        </p>
         <!-- TMDB's API terms require this notice and their logo on the site. -->
         <p class="footer-attribution">
           <a
@@ -285,7 +282,36 @@
           >
             <img src="/tmdb-logo.svg" alt="TMDB" width="92" height="12" />
           </a>
-          This product uses the TMDB API but is not endorsed or certified by TMDB.
+          <a
+            href="https://anilist.co/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-logo"
+            aria-label="AniList"
+          >
+            <img src="/anilist-logo.svg" alt="AniList" width="20" height="20" />
+          </a>
+          <a
+            href="https://myanimelist.net/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-logo"
+            aria-label="MyAnimeList"
+          >
+            <img src="/mal-logo.svg" alt="MyAnimeList" width="20" height="20" />
+          </a>
+          <span>
+            This product uses the TMDB,
+            <a href="https://anilist.co/" target="_blank" rel="noopener noreferrer">AniList</a>
+            and
+            <a href="https://myanimelist.net/" target="_blank" rel="noopener noreferrer"
+              >MyAnimeList</a
+            >
+            APIs but is not endorsed or certified by TMDB, AniList or MyAnimeList.
+          </span>
+        </p>
+        <p v-if="DONATE_URL" class="footer-support">
+          <a :href="DONATE_URL" target="_blank" rel="noopener noreferrer">Support AniLounge</a>
         </p>
       </div>
     </footer>
@@ -787,7 +813,16 @@ const handleLogout = async () => {
 }
 
 .footer-support {
-  margin-top: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.footer-logo {
+  display: inline-flex;
+}
+
+.footer-attribution span a {
+  color: inherit;
+  text-decoration: underline;
 }
 
 .footer-attribution {
