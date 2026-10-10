@@ -1094,3 +1094,31 @@ CREATE TABLE IF NOT EXISTS site_events (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS site_events_created_idx ON site_events (created_at);
+
+-- Forum reports (services/forumReportService.js): a signed-in user flags a post or
+-- comment; admins review open reports on the admin Reports tab. One report per user
+-- per target. Resolved when an admin dismisses it or the target is deleted.
+CREATE TABLE IF NOT EXISTS forum_reports (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  target_kind  TEXT NOT NULL CHECK (target_kind IN ('post', 'comment')),
+  target_id    UUID NOT NULL,
+  reporter_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  reason       TEXT CHECK (char_length(reason) <= 500),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at  TIMESTAMPTZ,
+  resolved_by  UUID REFERENCES users (id) ON DELETE SET NULL,
+  resolution   TEXT CHECK (resolution IN ('dismissed', 'deleted')),
+  UNIQUE (target_kind, target_id, reporter_id)
+);
+CREATE INDEX IF NOT EXISTS forum_reports_open_idx ON forum_reports (target_kind, target_id)
+  WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS forum_reports_reporter_idx ON forum_reports (reporter_id, created_at);
+
+-- Demo account baseline (services/demoAccount.js): the shared demo login's watchlist,
+-- ratings, favorites, and profile as saved by `npm run demo:snapshot`. A nightly job
+-- restores it, so whatever visitors change on the public demo login is undone daily.
+CREATE TABLE IF NOT EXISTS demo_snapshot (
+  id        INTEGER PRIMARY KEY CHECK (id = 1),
+  data      JSONB NOT NULL,
+  taken_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

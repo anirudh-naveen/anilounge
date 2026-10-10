@@ -274,6 +274,19 @@
         <p v-if="DONATE_URL" class="footer-support">
           <a :href="DONATE_URL" target="_blank" rel="noopener noreferrer">Support AniLounge</a>
         </p>
+        <!-- TMDB's API terms require this notice and their logo on the site. -->
+        <p class="footer-attribution">
+          <a
+            href="https://www.themoviedb.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-tmdb"
+            aria-label="The Movie Database (TMDB)"
+          >
+            <img src="/tmdb-logo.svg" alt="TMDB" width="92" height="12" />
+          </a>
+          This product uses the TMDB API but is not endorsed or certified by TMDB.
+        </p>
       </div>
     </footer>
   </div>
@@ -775,6 +788,20 @@ const handleLogout = async () => {
 
 .footer-support {
   margin-top: 0.4rem;
+}
+
+.footer-attribution {
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.footer-tmdb {
+  display: inline-flex;
 }
 
 .footer-support a {
