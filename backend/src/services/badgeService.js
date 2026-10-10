@@ -2,7 +2,8 @@
  * Badges shown on usernames and profiles, and each user's pick of emblem.
  *
  * Layer: domain service. Which badges exist lives in `utils/badges.js`; creator/admin
- * badges come from the account role (and ADMIN_EMAILS), the rest from
+ * badges come from the account role (and ADMIN_EMAILS), the bot badge from the release
+ * bot's email (`utils/botAccount.js`), the rest from
  * `users.cosmetic_roles`. The public list feeds the emblem next to usernames and the
  * profile Badges section.
  */
@@ -10,6 +11,7 @@
 import { query } from '../../config/postgres.js'
 import { parseAdminEmails } from '../middleware/adminOnly.js'
 import { badgesForUser, featuredEmblem, isValidEmblemChoice } from '../utils/badges.js'
+import { BOT_EMAIL } from '../utils/botAccount.js'
 import { HttpError } from '../utils/httpError.js'
 
 /**
@@ -22,18 +24,19 @@ export async function listBadgeHolders() {
   const owners = [...parseAdminEmails()]
   const { rows } = await query(
     `SELECT id, username, role, cosmetic_roles, featured_badge,
-            lower(email) = ANY($1::text[]) AS owner
+            lower(email) = ANY($1::text[]) AS owner, email = $2 AS bot
      FROM users
      WHERE banned_at IS NULL AND NOT is_demo AND email_verified_at IS NOT NULL
        AND (role IN ('admin', 'creator') OR lower(email) = ANY($1::text[])
-            OR cardinality(cosmetic_roles) > 0)`,
-    [owners],
+            OR cardinality(cosmetic_roles) > 0 OR email = $2)`,
+    [owners, BOT_EMAIL],
   )
   return rows
     .map((row) => {
       const badges = badgesForUser({
         role: row.role,
         isStaff: row.owner,
+        isBot: row.bot,
         granted: row.cosmetic_roles,
       })
       return {
@@ -61,6 +64,7 @@ export async function setFeaturedBadge(user, choice) {
   const badges = badgesForUser({
     role: user.role,
     isStaff: owners.has(String(user.email || '').toLowerCase()),
+    isBot: user.email === BOT_EMAIL,
     granted: user.cosmeticRoles,
   })
   if (!isValidEmblemChoice(badges, normalized)) {

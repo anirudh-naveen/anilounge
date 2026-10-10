@@ -4,6 +4,7 @@
  * Every badge a user can hold, in display order. `emblem` badges can be chosen as
  * the one emblem next to a username; emblem-less badges (future ones) only appear in
  * the profile Badges section. `grantable` badges are handed out on the admin page;
+ * Bot is worn only by the release bot account;
  * Supporter is also granted automatically for a Ko-fi donation.
  */
 
@@ -57,6 +58,13 @@ export const BADGES: BadgeDef[] = [
     description: 'Donated to keep AniLounge running.',
     emblem: true,
     grantable: true,
+  },
+  {
+    id: 'bot',
+    label: 'Bot',
+    description: "AniLounge's own bot. Opens a discussion thread for every new release.",
+    emblem: true,
+    grantable: false,
   },
 ]
 
