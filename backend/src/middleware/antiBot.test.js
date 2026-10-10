@@ -1,6 +1,11 @@
 import { after, before, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { antiBotProtection, isSearchCrawler, isSearchCrawlerRead } from './antiBot.js'
+import {
+  antiBotProtection,
+  databaseProtection,
+  isSearchCrawler,
+  isSearchCrawlerRead,
+} from './antiBot.js'
 
 const request = (method, userAgent) => ({ method, get: () => userAgent })
 
@@ -66,5 +71,47 @@ describe('antiBotProtection', () => {
       passed: false,
       status: 403,
     })
+  })
+})
+
+describe('databaseProtection', () => {
+  const run = (path, body) => {
+    const req = {
+      method: 'POST',
+      path,
+      body,
+      query: {},
+      params: {},
+      ip: '203.0.113.60',
+      get: () => 'Mozilla/5.0',
+    }
+    const res = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code
+        return this
+      },
+      json() {
+        return this
+      },
+    }
+    let passed = false
+    databaseProtection(req, res, () => (passed = true))
+    return { passed, status: res.statusCode }
+  }
+  const events = (target) => ({
+    visitorId: 'abcdef12-3456',
+    events: [{ type: 'click', path: '/tv-show/42-medieval-tales', target }],
+  })
+
+  it('lets metrics reports carry code-ish words from slugs and button text', () => {
+    assert.deepEqual(run('/api/metrics/events', events('button:Evaluate')), {
+      passed: true,
+      status: 200,
+    })
+  })
+
+  it('still refuses those words elsewhere', () => {
+    assert.equal(run('/api/somewhere', events('button:Evaluate')).status, 400)
   })
 })
