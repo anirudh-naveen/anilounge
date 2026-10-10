@@ -25,10 +25,10 @@ const CACHE_MAX = 5000
 /** Pages without their own data. Keep in step with the views' `usePageMeta` calls. */
 const STATIC_PAGES = {
   '/': {
-    title: 'Discover, track, and discuss anime',
+    title: 'Discover, track, and discuss animation',
     description:
-      "Find new anime and animated films, track everything you've watched, and talk about it with fans around the world.",
-    heading: 'AniLounge: discover, track, and discuss anime',
+      "Find new animated series and films, track everything you've watched, and talk about it with fans around the world.",
+    heading: 'AniLounge: discover, track, and discuss animation',
   },
   '/movies': {
     title: 'Animated Movies',
@@ -38,22 +38,22 @@ const STATIC_PAGES = {
   },
   '/tv': {
     title: 'Animated Series',
-    description: 'Trending anime and animated series: what fans are watching now on AniLounge.',
+    description: 'Trending animated series: what fans are watching now on AniLounge.',
     heading: 'Animated Series',
     list: { title: 'Popular series', kinds: ['series'] },
   },
   '/forum': {
     title: 'Forum',
     description:
-      'Discussions, reviews, guides, and episode threads about anime and animated films.',
+      'Discussions, reviews, guides, and episode threads about animated series and films.',
     heading: 'AniLounge Forum',
     posts: true,
   },
   '/search': {
-    title: 'Search anime',
+    title: 'Search animation',
     description:
       'Search animated movies, series, characters, voice actors, and studios by title, genre, year, season, and rating.',
-    heading: 'Search anime',
+    heading: 'Search animation',
   },
 }
 
@@ -290,7 +290,7 @@ async function titlePage(row) {
   const series = row.kind === 'series'
   const year = yearOf(row.release_date)
   const genreNames = genres.map((genre) => genre.name)
-  const noun = series ? 'anime series' : row.kind === 'special' ? 'special' : 'movie'
+  const noun = series ? 'series' : row.kind === 'special' ? 'special' : 'movie'
   const overview = String(row.about || '').trim()
   const summary =
     overview ||
@@ -315,7 +315,7 @@ async function titlePage(row) {
     heading: name,
     intro: [overview, facts.join(' · ')].filter(Boolean).join('\n\n'),
     card: {
-      eyebrow: series ? 'Anime series' : row.kind === 'special' ? 'Special' : 'Movie',
+      eyebrow: series ? 'Animated series' : row.kind === 'special' ? 'Special' : 'Movie',
       title: name,
       meta: [year, series && row.episode_count && `${row.episode_count} episodes`]
         .filter(Boolean)
