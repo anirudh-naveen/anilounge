@@ -121,6 +121,8 @@ import { goBackOr } from '@/utils/navigation'
 import { hideBrokenImage } from '@/utils/posters'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useToast } from 'vue-toastification'
+import { apiErrorMessage } from '@/utils/social'
 import { useAuthStore } from '@/stores/auth'
 import { useEntityStore } from '@/stores/entities'
 import { getCardContentTypeDisplay, getDetailsRouteName, getPosterUrl } from '@/services/api'
@@ -135,6 +137,7 @@ import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const authStore = useAuthStore()
 const entityStore = useEntityStore()
 
@@ -188,6 +191,7 @@ const onToggleFavorite = async () => {
     studio.value = await entityStore.toggleFavorite(studio.value)
   } catch (err) {
     console.error('Favorite update failed:', err)
+    toast.error(apiErrorMessage(err, 'Could not update favorites'))
   }
 }
 

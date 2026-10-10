@@ -3,8 +3,8 @@
 
   Serves both `/profile` (the signed-in user) and the shareable `/u/:username`.
   A customizable hero (accent, headline, bio) sits above Favorites, Watchlist,
-  and Stats tabs whose order, default, and visibility the owner controls from
-  the Customize panel, which also edits the profile picture and favorite
+  Stats, and Forum (the user's posts and comments) tabs whose order, default,
+  and visibility the owner controls from the Customize panel, which also edits the profile picture and favorite
   genres. Favorite studios come only from hearting a studio's page. Data comes from `/users/:username`, which hides private
   profiles and hidden tabs from visitors.
 -->
@@ -175,49 +175,146 @@
             <p v-else>No favorites yet.</p>
           </div>
 
-          <div v-if="favoriteTitles.length" class="favorite-group">
-            <h3>Titles</h3>
-            <div class="poster-grid">
-              <div
-                v-for="item in favoriteTitles"
-                :key="item._id"
-                class="favorite-title-card"
-                @click="openContent(item)"
-              >
-                <div class="poster">
-                  <img
-                    :src="getPosterUrl(item.posterPath || '')"
-                    :alt="getDisplayTitle(item)"
-                    @error="handleImageError"
-                  />
-                  <FavoriteHeart :content-id="item._id" />
-                </div>
-                <span class="card-title">{{ getDisplayTitle(item) }}</span>
-                <span class="card-meta">{{ getContentTypeDisplay(item.contentType) }}</span>
+          <div
+            v-for="group in favoriteGroups"
+            :key="group.key"
+            class="favorite-group"
+            :data-testid="`favorites-${group.key}`"
+          >
+            <div class="favorite-group-head">
+              <h3>
+                {{ group.label }}
+                <span v-if="profile.isOwner" class="favorite-count"
+                  >{{ group.items.length }}/{{ FAVORITES_MAX }}</span
+                >
+              </h3>
+              <div v-if="profile.isOwner" class="favorite-group-actions">
+                <template v-if="reordering === group.key">
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-small"
+                    :disabled="savingOrder"
+                    @click="cancelReorder"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-small"
+                    :disabled="savingOrder"
+                    data-testid="favorites-save-order"
+                    @click="saveOrder(group.key)"
+                  >
+                    Save order
+                  </button>
+                </template>
+                <button
+                  v-else-if="group.items.length > 1"
+                  type="button"
+                  class="btn btn-secondary btn-small"
+                  :disabled="Boolean(reordering)"
+                  :data-testid="`favorites-reorder-${group.key}`"
+                  @click="startReorder(group.key)"
+                >
+                  Reorder
+                </button>
               </div>
             </div>
-          </div>
+            <p v-if="reordering === group.key" class="favorite-note">
+              Drag to reorder, or use the arrows.
+              <template v-if="group.items.length > FAVORITES_MAX">
+                Only the first {{ FAVORITES_MAX }} show on your profile.
+              </template>
+            </p>
+            <p
+              v-else-if="profile.isOwner && group.items.length > FAVORITES_MAX"
+              class="favorite-note"
+            >
+              {{ group.items.length - FAVORITES_MAX }} more over the top-{{ FAVORITES_MAX }} limit
+              {{ group.items.length - FAVORITES_MAX === 1 ? "isn't" : "aren't" }} shown. Reorder to
+              pick which show, or remove some.
+            </p>
 
-          <div v-for="group in entityGroups" :key="group.key" class="favorite-group">
-            <h3>{{ group.label }}</h3>
-            <div class="poster-grid entity-grid">
-              <button
-                v-for="entity in group.items"
-                :key="entity._id"
-                type="button"
-                class="favorite-entity-card"
-                :class="{ 'studio-card': group.key === 'studios' }"
-                @click="openEntity(entity)"
+            <div
+              class="favorite-grid"
+              :class="{
+                'entity-grid': group.key !== 'content',
+                reordering: reordering === group.key,
+              }"
+            >
+              <div
+                v-for="(item, index) in shownFavorites(group)"
+                :key="item._id"
+                class="favorite-slot"
+                :class="{
+                  dragging: reordering === group.key && dragIndex === index,
+                  'over-limit': index >= FAVORITES_MAX,
+                }"
+                :draggable="reordering === group.key"
+                data-testid="favorite-slot"
+                @dragstart="onDragStart(index, $event)"
+                @dragover="onDragOver(index, $event)"
+                @dragend="dragIndex = null"
               >
-                <img
-                  v-if="entity.imagePath"
-                  :src="getPosterUrl(entity.imagePath)"
-                  :alt="entity.name"
-                  referrerpolicy="no-referrer"
-                />
-                <div v-else class="favorite-entity-placeholder">{{ entity.name.charAt(0) }}</div>
-                <span class="card-title">{{ entity.name }}</span>
-              </button>
+                <div
+                  v-if="group.key === 'content'"
+                  class="favorite-title-card"
+                  @click="reordering !== group.key && openContent(asTitle(item))"
+                >
+                  <div class="poster">
+                    <img
+                      :src="getPosterUrl(asTitle(item).posterPath || '')"
+                      :alt="getDisplayTitle(asTitle(item))"
+                      @error="handleImageError"
+                    />
+                    <FavoriteHeart v-if="reordering !== group.key" :content-id="item._id" />
+                  </div>
+                  <span class="card-title">{{ getDisplayTitle(asTitle(item)) }}</span>
+                  <span class="card-meta">{{
+                    getContentTypeDisplay(asTitle(item).contentType)
+                  }}</span>
+                </div>
+                <button
+                  v-else
+                  type="button"
+                  class="favorite-entity-card"
+                  :class="{ 'studio-card': group.key === 'studios' }"
+                  @click="reordering !== group.key && openEntity(asEntity(item))"
+                >
+                  <img
+                    v-if="asEntity(item).imagePath"
+                    :src="getPosterUrl(asEntity(item).imagePath || '')"
+                    :alt="asEntity(item).name"
+                    referrerpolicy="no-referrer"
+                  />
+                  <div v-else class="favorite-entity-placeholder">
+                    {{ asEntity(item).name.charAt(0) }}
+                  </div>
+                  <span class="card-title">{{ asEntity(item).name }}</span>
+                </button>
+
+                <div v-if="reordering === group.key" class="slot-controls">
+                  <span class="slot-rank">{{ index + 1 }}</span>
+                  <button
+                    type="button"
+                    class="slot-move"
+                    :disabled="index === 0"
+                    :aria-label="`Move ${favoriteName(item)} earlier`"
+                    @click="moveFavorite(index, -1)"
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    class="slot-move"
+                    :disabled="index === orderDraft.length - 1"
+                    :aria-label="`Move ${favoriteName(item)} later`"
+                    @click="moveFavorite(index, 1)"
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -443,6 +540,11 @@
             </div>
           </div>
         </section>
+
+        <!-- Title: Forum Tab -->
+        <section v-else-if="activeTab === 'forum'" class="tab-panel" data-testid="panel-forum">
+          <ProfileForum :username="profile.user.username" />
+        </section>
       </template>
     </div>
 
@@ -639,6 +741,8 @@ import { useBadgesStore } from '@/stores/badges'
 import { NO_EMBLEM, badgeInfo } from '@/utils/badges'
 import { ACCENT_PRESETS, accentColor, isCustomAccent, readableOn } from '@/utils/accent'
 import FriendButton from '@/components/FriendButton.vue'
+import ProfileForum from '@/components/ProfileForum.vue'
+import { apiErrorMessage } from '@/utils/social'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type {
   ProfileAccent,
@@ -655,6 +759,7 @@ const TAB_LABELS: Record<ProfileTab, string> = {
   favorites: 'Favorites',
   watchlist: 'Watchlist',
   stats: 'Stats',
+  forum: 'Forum',
 }
 
 const route = useRoute()
@@ -710,7 +815,7 @@ const favoriteGenres = computed(() => profile.value?.user.preferences.favoriteGe
 // ---------------------------------------------------------------------------
 
 const isTab = (value: unknown): value is ProfileTab =>
-  value === 'favorites' || value === 'watchlist' || value === 'stats'
+  value === 'favorites' || value === 'watchlist' || value === 'stats' || value === 'forum'
 
 const loadProfile = async () => {
   if (!username.value) {
@@ -772,27 +877,109 @@ const favoriteTitles = computed(() => {
   return titles.filter((item) => favoritesStore.isFavorite(item._id))
 })
 
-const entityGroups = computed(() => {
+/** Favorites shown per category: a ranked top 10 (the server enforces the same cap). */
+const FAVORITES_MAX = 10
+
+type FavoriteKey = 'content' | 'characters' | 'voiceActors' | 'studios'
+type FavoriteItem = UnifiedContent | CatalogEntity
+interface FavoriteGroup {
+  key: FavoriteKey
+  label: string
+  items: FavoriteItem[]
+}
+
+const favoriteGroups = computed<FavoriteGroup[]>(() => {
   const favorites = profile.value?.favorites
   if (!favorites) return []
-  return [
+  const groups: FavoriteGroup[] = [
+    { key: 'content', label: 'Titles', items: favoriteTitles.value },
     { key: 'characters', label: 'Characters', items: favorites.characters },
-    {
-      key: 'voiceActors',
-      label: 'Voice Actors',
-      items: favorites.voiceActors,
-    },
-    {
-      key: 'studios',
-      label: 'Studios',
-      items: favorites.studios,
-    },
-  ].filter((group) => group.items.length)
+    { key: 'voiceActors', label: 'Voice Actors', items: favorites.voiceActors },
+    { key: 'studios', label: 'Studios', items: favorites.studios },
+  ]
+  return groups.filter((group) => group.items.length)
 })
 
-const hasAnyFavorites = computed(
-  () => favoriteTitles.value.length > 0 || entityGroups.value.length > 0,
-)
+const hasAnyFavorites = computed(() => favoriteGroups.value.length > 0)
+
+const asTitle = (item: FavoriteItem) => item as UnifiedContent
+const asEntity = (item: FavoriteItem) => item as CatalogEntity
+const favoriteName = (item: FavoriteItem) =>
+  'name' in item && item.name ? item.name : getDisplayTitle(asTitle(item))
+
+// Reordering (owner only): one category at a time, as a draft of ids until saved.
+const reordering = ref<FavoriteKey | null>(null)
+const orderDraft = ref<string[]>([])
+const dragIndex = ref<number | null>(null)
+const savingOrder = ref(false)
+
+/** The top 10, or every favorite in draft order while that category is being reordered. */
+const shownFavorites = (group: FavoriteGroup) => {
+  if (reordering.value !== group.key) return group.items.slice(0, FAVORITES_MAX)
+  const byId = new Map(group.items.map((item) => [item._id, item]))
+  return orderDraft.value.map((id) => byId.get(id)).filter((item) => item !== undefined)
+}
+
+const startReorder = (key: FavoriteKey) => {
+  const group = favoriteGroups.value.find((entry) => entry.key === key)
+  if (!group) return
+  orderDraft.value = group.items.map((item) => item._id)
+  reordering.value = key
+}
+
+const cancelReorder = () => {
+  reordering.value = null
+  dragIndex.value = null
+}
+
+const moveFavorite = (from: number, step: number) => {
+  const to = from + step
+  if (to < 0 || to >= orderDraft.value.length) return
+  const next = [...orderDraft.value]
+  const [id] = next.splice(from, 1)
+  next.splice(to, 0, id!)
+  orderDraft.value = next
+}
+
+const onDragStart = (index: number, event: DragEvent) => {
+  if (!reordering.value) return
+  dragIndex.value = index
+  event.dataTransfer?.setData('text/plain', String(index))
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+/** Live reorder: the dragged card takes the slot it's over. */
+const onDragOver = (index: number, event: DragEvent) => {
+  if (!reordering.value || dragIndex.value === null) return
+  event.preventDefault()
+  if (index === dragIndex.value) return
+  moveFavorite(dragIndex.value, index - dragIndex.value)
+  dragIndex.value = index
+}
+
+const saveOrder = async (key: FavoriteKey) => {
+  const favorites = profile.value?.favorites
+  if (!favorites) return
+  // Titles un-hearted on this page are already gone server-side; leave them out.
+  const ids = orderDraft.value.filter(
+    (id) => key !== 'content' || !favoritesStore.isLoaded || favoritesStore.isFavorite(id),
+  )
+  savingOrder.value = true
+  try {
+    await profileAPI.reorderFavorites(ids)
+    const list = favorites[key] as FavoriteItem[]
+    const byId = new Map(list.map((item) => [item._id, item]))
+    const ordered = ids.map((id) => byId.get(id)).filter((item) => item !== undefined)
+    const rest = list.filter((item) => !ids.includes(item._id))
+    ;(favorites[key] as FavoriteItem[]) = [...ordered, ...rest]
+    cancelReorder()
+    toast.success('Favorites reordered')
+  } catch (error) {
+    toast.error(apiErrorMessage(error, 'Could not save the new order'))
+  } finally {
+    savingOrder.value = false
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Watchlist
@@ -1431,11 +1618,101 @@ const handleImageError = showPosterPlaceholder
 }
 
 /* Poster grids */
+.favorite-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
 .favorite-group h3 {
-  margin: 0 0 0.9rem;
+  margin: 0;
   font-family: var(--font-display);
   font-size: 1.2rem;
   color: var(--text-primary);
+}
+
+.favorite-count {
+  margin-left: 0.35rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.favorite-group-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.favorite-note {
+  margin: -0.4rem 0 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Favorites: a ranked top 10 as a 5 by 2 grid. */
+.favorite-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.favorite-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.favorite-grid.reordering .favorite-slot {
+  cursor: grab;
+}
+
+.favorite-grid.reordering .favorite-title-card,
+.favorite-grid.reordering .favorite-entity-card {
+  cursor: grab;
+  pointer-events: none;
+}
+
+.favorite-slot.dragging {
+  opacity: 0.4;
+}
+
+.favorite-slot.over-limit {
+  opacity: 0.55;
+}
+
+.slot-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.slot-rank {
+  margin-right: auto;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--profile-accent);
+}
+
+.slot-move {
+  width: 1.9rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.slot-move:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .poster-grid {
@@ -1444,8 +1721,9 @@ const handleImageError = showPosterPlaceholder
   gap: 1rem;
 }
 
-.entity-grid {
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+/* Narrower people and studio cards: the 5 by 2 grid holds them at a smaller size. */
+.favorite-grid.entity-grid {
+  max-width: 720px;
 }
 
 .favorite-title-card,
@@ -2175,6 +2453,18 @@ textarea.form-control {
 
   .poster-grid {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+
+  .favorite-grid {
+    gap: 0.5rem;
+  }
+
+  .favorite-grid .card-title {
+    font-size: 0.75rem;
+  }
+
+  .favorite-grid .card-meta {
+    display: none;
   }
 }
 </style>

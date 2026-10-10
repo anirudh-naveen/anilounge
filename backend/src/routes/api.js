@@ -154,6 +154,7 @@ router.get('/sitemaps/:file', sitemapController.sitemapFile)
 /** Forum reads (public; signed-in viewers also get their likes and edit rights). */
 router.get('/forum/posts', optionalAuthenticate, forumController.listPosts)
 router.get('/forum/posts/:id', validateObjectId, optionalAuthenticate, forumController.getPost)
+router.get('/forum/comments', optionalAuthenticate, forumController.listComments)
 router.get('/forum/tags', forumController.searchTags)
 router.get('/forum/tags/:id/characters', validateObjectId, forumController.contentCharacters)
 router.get('/forum/highlights/:id', validateObjectId, optionalAuthenticate, forumController.getHighlights)
@@ -375,6 +376,8 @@ router.put('/profile/featured-badge', profileController.updateFeaturedBadge)
 router.get('/favorites/content', profileController.getFavoriteContentIds)
 router.post('/content/:id/favorite', validateObjectId, profileController.toggleContentFavorite)
 router.delete('/content/:id/favorite', validateObjectId, profileController.toggleContentFavorite)
+/** Rank one category of favorites (top 10 per category). */
+router.put('/favorites/order', profileController.reorderFavoriteList)
 
 /** Homepage status feed: the viewer's and accepted friends' watchlist changes. */
 router.get('/home/activity', homeController.getActivity)

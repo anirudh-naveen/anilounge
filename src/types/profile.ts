@@ -6,7 +6,7 @@ import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type { WatchlistStatus } from '@/utils/watchlist'
 import type { Relationship } from '@/types/social'
 
-export type ProfileTab = 'favorites' | 'watchlist' | 'stats'
+export type ProfileTab = 'favorites' | 'watchlist' | 'stats' | 'forum'
 export type ProfilePresetAccent = 'coral' | 'teal' | 'violet' | 'gold' | 'rose' | 'sky'
 /** A preset name, or a custom `#rrggbb` color from the color wheel. */
 export type ProfileAccent = ProfilePresetAccent | `#${string}`
@@ -66,7 +66,8 @@ export interface PublicProfile {
   isOwner: boolean
   /** Signed-in visitor's link to this user; null for the owner and guests. */
   relationship?: Relationship | null
-  /** Tabs in display order; hidden tabs are included only for the owner. */
+  /** Tabs in display order; hidden tabs are included only for the owner. The Forum
+   * tab loads its posts and comments separately (see ProfileForum.vue). */
   tabs: ProfileTab[]
   favorites: {
     content: UnifiedContent[]

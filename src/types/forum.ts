@@ -18,6 +18,8 @@ export interface PostTag {
   episode: number | null
   /** The author's top tag: highlighted, and its picture is the post's image. */
   top?: boolean
+  /** Franchises only: the poster of its first title, used when it's a post's only tag. */
+  coverPath?: string | null
 }
 
 export interface ForumPost {

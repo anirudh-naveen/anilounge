@@ -35,6 +35,7 @@ import { computed, onMounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
+import { apiErrorMessage } from '@/utils/social'
 
 const props = defineProps<{ contentId: string }>()
 
@@ -50,7 +51,7 @@ const toggle = async () => {
     toast.success(added ? 'Added to favorites' : 'Removed from favorites')
   } catch (err) {
     console.error('Failed to update favorite:', err)
-    toast.error('Could not update favorites')
+    toast.error(apiErrorMessage(err, 'Could not update favorites'))
   }
 }
 

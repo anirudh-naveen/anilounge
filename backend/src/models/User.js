@@ -146,6 +146,7 @@ async function loadUserChildren(doc) {
     kind: row.kind,
     name: row.name,
     addedAt: row.added_at,
+    position: row.position ?? null,
   }))
   rememberChildren(doc)
   return doc

@@ -595,6 +595,18 @@ CREATE TABLE IF NOT EXISTS favorites (
   PRIMARY KEY (user_id, content_id)
 );
 
+-- Favorites are a ranked top 10 per category (services/favoriteService.js). Existing
+-- rows are ranked newest first, after any rows already ranked for that user.
+ALTER TABLE favorites ADD COLUMN IF NOT EXISTS position INTEGER;
+UPDATE favorites f SET position = r.position
+FROM (
+  SELECT user_id, content_id,
+         row_number() OVER (PARTITION BY user_id ORDER BY added_at DESC)
+           + COALESCE(max(position) OVER (PARTITION BY user_id), 0) AS position
+  FROM favorites
+) r
+WHERE f.position IS NULL AND r.user_id = f.user_id AND r.content_id = f.content_id;
+
 CREATE TABLE IF NOT EXISTS posts (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,

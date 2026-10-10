@@ -85,4 +85,13 @@ describe('coverTag', () => {
     expect(coverTag(tags)?.contentId).toBe('himmel')
     expect(coverTag([tag('franchise', 'franchise', 'franchise.jpg')])).toBeNull()
   })
+
+  it("uses a sole franchise tag's first-title poster", () => {
+    const franchise = { ...tag('franchise', 'franchise', null), coverPath: 'first.jpg' }
+    expect(coverTag([franchise])).toMatchObject({ contentId: 'franchise', imagePath: 'first.jpg' })
+    // Alongside other tags, the franchise still never supplies the picture.
+    expect(coverTag([franchise, tag('himmel', 'character', 'himmel.jpg')])?.contentId).toBe(
+      'himmel',
+    )
+  })
 })

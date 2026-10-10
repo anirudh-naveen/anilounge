@@ -8,7 +8,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { contentAPI, entityAPI, watchlistAPI, matchesContentTypeFilter } from '@/services/api'
-import type { WatchlistItem } from '@/types'
+import type { WatchlistData, WatchlistItem } from '@/types'
 import type { WatchlistStatus } from '@/utils/watchlist'
 import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
@@ -452,6 +452,7 @@ export const useContentStore = defineStore('content', () => {
    * @param currentEpisode - Optional episode progress.
    * @param currentSeason - Optional season progress.
    * @param notes - Optional notes.
+   * @param details - Optional start/finish dates and rewatch count.
    * @returns `true` on success.
    */
   const addToWatchlist = async (
@@ -461,6 +462,7 @@ export const useContentStore = defineStore('content', () => {
     currentEpisode?: number,
     currentSeason?: number,
     notes?: string,
+    details?: Pick<WatchlistData, 'startedOn' | 'completedOn' | 'rewatchCount'>,
   ) => {
     try {
       const response = await watchlistAPI.addToWatchlist({
@@ -470,6 +472,7 @@ export const useContentStore = defineStore('content', () => {
         currentEpisode,
         currentSeason,
         notes,
+        ...details,
       })
 
       if (response.data.success) {
