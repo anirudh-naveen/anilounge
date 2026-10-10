@@ -94,7 +94,7 @@
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Theme</h3>
-                <p>System follows your device's light or dark setting</p>
+                <p>Pick one to preview it; Save keeps it</p>
               </div>
               <div class="setting-control">
                 <div class="theme-options" role="radiogroup" aria-label="Theme">
@@ -477,7 +477,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   communicationAPI,
@@ -511,13 +511,22 @@ const confirmPassword = ref('')
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'light', label: 'Light' },
+  { value: 'dawn', label: 'Dawn' },
+  { value: 'penumbra', label: 'Penumbra' },
+  { value: 'dusk', label: 'Dusk' },
   { value: 'dark', label: 'Dark' },
-  { value: 'system', label: 'System' },
 ]
-const { preference: themePreference, setPreference: setThemePreference } = useTheme()
-/** Theme as picked; applied when the Appearance section is saved. */
+const {
+  preference: themePreference,
+  setPreference: setThemePreference,
+  preview: previewTheme,
+} = useTheme()
+/** Theme as picked; previewed on screen right away, kept when the Appearance section is saved. */
 const themeDraft = ref<ThemePreference>(themePreference.value)
 const themeDirty = computed(() => themeDraft.value !== themePreference.value)
+watch(themeDraft, (theme) => previewTheme(theme))
+// Leaving Settings without saving drops the preview.
+onUnmounted(() => previewTheme(null))
 
 const saveTheme = () => {
   setThemePreference(themeDraft.value)
@@ -1062,6 +1071,7 @@ onMounted(() => {
 
 .theme-options {
   display: inline-flex;
+  flex-wrap: wrap;
   padding: 0.25rem;
   border: 1px solid var(--border-color);
   border-radius: 10px;

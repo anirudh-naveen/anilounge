@@ -127,6 +127,140 @@
   color-scheme: dark;
 }
 
+/* Dawn: sunrise light — warm peach canvas, plum ink. */
+:root[data-theme='dawn'] {
+  --primary-color: #f8efe8;
+  --secondary-color: #f1e2d8;
+  --accent-color: #ead6ca;
+
+  --navbar-primary: #3a2a3f;
+  --navbar-secondary: #4a3550;
+
+  --text-primary: #3a2a3f;
+  --text-secondary: #75606e;
+  --text-muted: #a38f9a;
+  --text-ink: #3a2a3f;
+
+  --bg-primary: #f8efe8;
+  --bg-secondary: #f3e5dc;
+  --bg-card: #fffaf6;
+  --bg-hover: rgba(224, 122, 95, 0.12);
+  --bg-parchment: #fffaf6;
+
+  --border-color: rgba(58, 42, 63, 0.12);
+
+  --shadow-sm: 0 2px 8px rgba(58, 42, 63, 0.07);
+  --shadow-md: 0 12px 28px rgba(58, 42, 63, 0.11);
+  --shadow-lg: 0 20px 44px rgba(58, 42, 63, 0.15);
+
+  --bg-muted: #f5e9e1;
+  --bg-muted-hover: #eedccf;
+  --text-strong: #2e2133;
+  --text-body: #66525f;
+  --text-faint: #a38f9a;
+  --border-subtle: #ecdcd2;
+  --page-background:
+    radial-gradient(720px 300px at 18% 0%, rgba(255, 214, 170, 0.55), transparent 58%),
+    radial-gradient(560px 260px at 80% 4%, rgba(242, 164, 136, 0.32), transparent 52%),
+    radial-gradient(640px 320px at 8% 88%, rgba(123, 107, 176, 0.08), transparent 50%),
+    radial-gradient(580px 280px at 96% 86%, rgba(232, 163, 23, 0.08), transparent 48%),
+    linear-gradient(180deg, #fbf3ec 0%, #f2e2d8 100%);
+
+  color-scheme: light;
+}
+
+/* Penumbra: the half-shadow between light and dark — mid slate. */
+:root[data-theme='penumbra'] {
+  --primary-color: #3a4253;
+  --secondary-color: #434c5f;
+  --accent-color: #4d576c;
+
+  --navbar-primary: #283041;
+  --navbar-secondary: #2f3849;
+
+  --coral-deep: #f4a088;
+
+  --text-primary: #f1f3f7;
+  --text-secondary: #c9cfdb;
+  --text-muted: #a0a8b8;
+  --text-ink: #f1f3f7;
+
+  --bg-primary: #3a4253;
+  --bg-secondary: #414a5d;
+  --bg-card: #485267;
+  --bg-hover: rgba(242, 164, 136, 0.16);
+  --bg-parchment: #4d576c;
+
+  --border-color: rgba(241, 243, 247, 0.12);
+  --border-hover: rgba(242, 164, 136, 0.6);
+
+  --shadow-sm: 0 2px 8px rgba(16, 20, 30, 0.22);
+  --shadow-md: 0 12px 28px rgba(16, 20, 30, 0.28);
+  --shadow-lg: 0 20px 44px rgba(16, 20, 30, 0.34);
+  --shadow-spot: 0 0 0 transparent;
+
+  --bg-muted: #525c72;
+  --bg-muted-hover: #5a657c;
+  --text-strong: #f6f7fa;
+  --text-body: #d2d7e1;
+  --text-faint: #a0a8b8;
+  --border-subtle: rgba(241, 243, 247, 0.14);
+  --poster-spot: transparent;
+  --page-background:
+    radial-gradient(720px 280px at 18% 0%, rgba(241, 243, 247, 0.08), transparent 58%),
+    radial-gradient(640px 320px at 8% 88%, rgba(224, 122, 95, 0.08), transparent 50%),
+    radial-gradient(580px 280px at 96% 86%, rgba(43, 187, 173, 0.08), transparent 48%),
+    linear-gradient(180deg, #414a5c 0%, #353d4d 100%);
+
+  color-scheme: dark;
+}
+
+/* Dusk: twilight — deep violet with a coral horizon. */
+:root[data-theme='dusk'] {
+  --primary-color: #1f1830;
+  --secondary-color: #2a2140;
+  --accent-color: #352a50;
+
+  --navbar-primary: #1a1428;
+  --navbar-secondary: #221a33;
+
+  --coral-deep: #f39a7e;
+
+  --text-primary: #f1ebf7;
+  --text-secondary: #c3b6d3;
+  --text-muted: #8f82a3;
+  --text-ink: #f1ebf7;
+
+  --bg-primary: #1f1830;
+  --bg-secondary: #261e3a;
+  --bg-card: #2b2340;
+  --bg-hover: rgba(242, 164, 136, 0.16);
+  --bg-parchment: #30274a;
+
+  --border-color: rgba(241, 235, 247, 0.1);
+  --border-hover: rgba(242, 164, 136, 0.55);
+
+  --shadow-sm: 0 2px 8px rgba(8, 4, 16, 0.35);
+  --shadow-md: 0 12px 28px rgba(8, 4, 16, 0.42);
+  --shadow-lg: 0 20px 44px rgba(8, 4, 16, 0.5);
+  --shadow-spot: 0 0 0 transparent;
+
+  --bg-muted: #342a4c;
+  --bg-muted-hover: #3c3157;
+  --text-strong: #f6f1fb;
+  --text-body: #cbbfda;
+  --text-faint: #8f82a3;
+  --border-subtle: rgba(241, 235, 247, 0.12);
+  --poster-spot: transparent;
+  --page-background:
+    radial-gradient(720px 280px at 18% 0%, rgba(155, 106, 217, 0.16), transparent 58%),
+    radial-gradient(900px 320px at 50% 108%, rgba(224, 122, 95, 0.14), transparent 60%),
+    radial-gradient(580px 280px at 96% 10%, rgba(232, 163, 23, 0.06), transparent 48%),
+    linear-gradient(180deg, #241b38 0%, #19132a 100%);
+
+  color-scheme: dark;
+}
+
 * {
   margin: 0;
   padding: 0;

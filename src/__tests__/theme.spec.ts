@@ -5,28 +5,27 @@ import { THEME_STORAGE_KEY, useTheme } from '@/composables/useTheme'
 describe('useTheme', () => {
   beforeEach(() => {
     localStorage.clear()
-    useTheme().setPreference('system')
+    useTheme().setPreference('dark')
   })
 
-  it('toggles between light and dark and saves the choice', async () => {
+  it('applies and saves the chosen theme', async () => {
     const theme = useTheme()
-    theme.setPreference('light')
+    theme.setPreference('dusk')
     await nextTick()
-    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(document.documentElement.dataset.theme).toBe('dusk')
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dusk')
+  })
 
-    theme.toggle()
+  it('previews a theme without saving it', async () => {
+    const theme = useTheme()
+    theme.preview('penumbra')
     await nextTick()
-    expect(theme.resolved.value).toBe('dark')
-    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(document.documentElement.dataset.theme).toBe('penumbra')
+    expect(theme.preference.value).toBe('dark')
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark')
-  })
 
-  it('forgets the saved choice when following the system', async () => {
-    const theme = useTheme()
-    theme.setPreference('dark')
-    theme.setPreference('system')
+    theme.preview(null)
     await nextTick()
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
-    expect(theme.preference.value).toBe('system')
+    expect(document.documentElement.dataset.theme).toBe('dark')
   })
 })
