@@ -28,9 +28,9 @@ APIs & Integrations --
  - MyAnimeList API - Anime-specific content and metadata
  - Google Gemini API - AI-powered features and recommendations
 
-Local development -- see [DEVELOPMENT.md](DEVELOPMENT.md)
+Local development -- see [CONTRIBUTING.md](CONTRIBUTING.md#setting-up)
 
-Contributing -- see [CONTRIBUTING.md](CONTRIBUTING.md). Issues labelled `good first issue` are a good place to start.
+Contributing -- see [CONTRIBUTING.md](CONTRIBUTING.md) to set up the project, and [GIGS.md](GIGS.md) to find and claim a task.
 
 Deployment --
  - Frontend: Vercel
