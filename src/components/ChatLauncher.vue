@@ -46,8 +46,8 @@ const onSearchResults = (results: UnifiedContent[]) => {
 <style scoped>
 .chat-launcher {
   position: fixed;
-  bottom: 2rem;
-  right: 2rem;
+  bottom: calc(2rem + var(--safe-bottom));
+  right: calc(2rem + var(--safe-right));
   z-index: 999;
 }
 
@@ -78,8 +78,8 @@ const onSearchResults = (results: UnifiedContent[]) => {
 
 @media (max-width: 768px) {
   .chat-launcher {
-    bottom: 1rem;
-    right: 1rem;
+    bottom: calc(1rem + var(--safe-bottom));
+    right: calc(1rem + var(--safe-right));
   }
 
   .chat-trigger {

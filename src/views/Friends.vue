@@ -416,7 +416,7 @@ onUnmounted(() => clearTimeout(searchTimer))
 
 .friends-search {
   position: sticky;
-  top: 110px;
+  top: calc(110px + var(--safe-top));
 }
 
 .search-input {

@@ -1,5 +1,5 @@
 {
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)backend' ':(exclude)*.md' ':(exclude).github' ':(exclude).claude' ':(exclude).vscode' ':(exclude)docker-compose.yml'",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)backend' ':(exclude)ios' ':(exclude)ios-shell' ':(exclude)capacitor.config.ts' ':(exclude)*.md' ':(exclude).github' ':(exclude).claude' ':(exclude).vscode' ':(exclude)docker-compose.yml'",
   "headers": [
     {
       "source": "/(.*)",

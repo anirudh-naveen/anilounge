@@ -15,6 +15,7 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | [Vue Toastification](https://github.com/Maronato/vue-toastification) | Toast notifications |
 | [Cropper.js](https://github.com/fengyuanchen/cropperjs) / [vue-cropperjs](https://github.com/Agontuk/vue-cropperjs) | Profile picture cropping |
 | [Google Fonts](https://fonts.google.com) | Fraunces (display) and Outfit (body) typefaces |
+| [Capacitor](https://capacitorjs.com) | iOS app shell (`ios/`, `capacitor.config.ts`) that loads the live site, so deploys reach the app without an App Store release; `src/utils/nativeApp.ts` handles the in-app parts |
 | Web Locks API | Coordinates session refresh across browser tabs |
 | [schema.org](https://schema.org) JSON-LD + Open Graph | Per-page structured data and link previews (`usePageMeta`, `src/utils/pageMeta.ts`) |
 

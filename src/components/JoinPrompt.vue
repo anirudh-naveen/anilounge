@@ -85,8 +85,8 @@ onUnmounted(() => clearTimeout(timer))
 <style scoped>
 .join-prompt {
   position: fixed;
-  right: 1.5rem;
-  bottom: 1.5rem;
+  right: calc(1.5rem + var(--safe-right));
+  bottom: calc(1.5rem + var(--safe-bottom));
   z-index: 900;
   width: min(340px, calc(100vw - 2rem));
   overflow: hidden;
@@ -200,6 +200,7 @@ onUnmounted(() => clearTimeout(timer))
     width: auto;
     border-radius: 16px 16px 0 0;
     border-bottom: 0;
+    padding-bottom: calc(1.2rem + var(--safe-bottom));
   }
 }
 

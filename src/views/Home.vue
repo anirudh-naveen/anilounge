@@ -556,7 +556,7 @@ usePageMeta(() => ({
 
 .home-sidebar {
   position: sticky;
-  top: 96px;
+  top: calc(96px + var(--safe-top));
   min-width: 0;
 }
 
