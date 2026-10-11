@@ -1,9 +1,9 @@
 <!--
-  TitleExtras.vue — trailer, tags, key staff, and links to other sites for a title (component).
+  TitleExtras.vue — trailer, tags, and key staff for a title (component).
 
   Used on movie, series, and season pages. The trailer loads only when asked (no
   YouTube request until then); spoiler tags stay hidden until revealed; staff open their
-  person page; other sites open in a new tab.
+  person page.
 -->
 <template>
   <div v-if="hasAny" class="title-extras" data-testid="title-extras">
@@ -80,24 +80,6 @@
         </router-link>
       </div>
     </section>
-
-    <!-- Title: Other Sites -->
-    <section v-if="links.length" class="extras-section">
-      <h3>On other sites</h3>
-      <div class="chips">
-        <a
-          v-for="link in links"
-          :key="link.source"
-          :href="link.url"
-          target="_blank"
-          rel="noopener"
-          class="chip link"
-        >
-          {{ SITE_NAMES[link.source] || link.source }}
-          <i class="fas fa-arrow-up-right-from-square"></i>
-        </a>
-      </div>
-    </section>
   </div>
 </template>
 
@@ -109,21 +91,8 @@ import { detailPath } from '@/utils/slug'
 import { hideBrokenImage } from '@/utils/posters'
 
 const props = defineProps<{
-  content: Pick<UnifiedContent, '_id' | 'trailer' | 'tags' | 'staff' | 'externalLinks'>
+  content: Pick<UnifiedContent, '_id' | 'trailer' | 'tags' | 'staff'>
 }>()
-
-const SITE_NAMES: Record<string, string> = {
-  mal: 'MyAnimeList',
-  anilist: 'AniList',
-  tmdb: 'TMDB',
-  imdb: 'IMDb',
-  tvdb: 'TheTVDB',
-  kitsu: 'Kitsu',
-  anidb: 'AniDB',
-  livechart: 'LiveChart',
-  anime_planet: 'Anime-Planet',
-  wikidata: 'Wikidata',
-}
 
 const trailerOpen = ref(false)
 const showSpoilers = ref(false)
@@ -157,13 +126,8 @@ const staffByPerson = computed(() => {
   }
   return [...people.values()]
 })
-const links = computed(() => props.content.externalLinks || [])
 const hasAny = computed(
-  () =>
-    Boolean(trailerKey.value) ||
-    tags.value.length > 0 ||
-    staffByPerson.value.length > 0 ||
-    links.value.length > 0,
+  () => Boolean(trailerKey.value) || tags.value.length > 0 || staffByPerson.value.length > 0,
 )
 </script>
 
@@ -245,8 +209,7 @@ const hasAny = computed(
   border-style: dashed;
 }
 
-.chip.toggle,
-.chip.link {
+.chip.toggle {
   cursor: pointer;
 }
 
@@ -254,12 +217,6 @@ const hasAny = computed(
   color: var(--text-muted);
 }
 
-.chip.link i {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
-
-.chip.link:hover,
 .chip.toggle:hover {
   border-color: var(--coral-primary);
 }

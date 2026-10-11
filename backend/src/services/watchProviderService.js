@@ -24,7 +24,7 @@ const cache = new Map()
 
 const STREAMING_LINKS_QUERY = `query ($id: Int, $idMal: Int) {
   Media(id: $id, idMal: $idMal, type: ANIME) {
-    externalLinks { site url type language isDisabled }
+    externalLinks { site url type language isDisabled icon color }
   }
 }`
 
@@ -51,7 +51,14 @@ export function streamingLinks(links) {
   const bySite = new Map()
   for (const link of [...usable].sort((a, b) => rank(a) - rank(b))) {
     if (!bySite.has(link.site)) {
-      bySite.set(link.site, { site: link.site, url: link.url, language: link.language || null })
+      bySite.set(link.site, {
+        site: link.site,
+        url: link.url,
+        language: link.language || null,
+        // AniList's site icon and brand color, shown as the link's logo.
+        icon: /^https:\/\//.test(link.icon || '') ? link.icon : null,
+        color: link.color || null,
+      })
     }
   }
   return [...bySite.values()]
