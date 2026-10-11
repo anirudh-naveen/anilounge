@@ -56,11 +56,11 @@ main() {
 
   echo
   echo "== 4/5 Importing seasons, episodes, tags, staff, and ids =="
-  npm run db:reload -- --phases seasons --workers 2 --fresh
+  npm run db:reload -- --phases seasons --workers 4 --fresh
 
   echo
-  echo "== 5/5 Full reload (characters, studios, cleanup, photos, new titles) =="
-  npm run db:reload -- --phases repair,anilist,import,seasons,characters,studios,cleanup,photos --workers 2
+  echo "== 5/5 Full reload (episode details, characters, studios, cleanup, photos, new titles) =="
+  npm run db:reload -- --phases repair,anilist,import,seasons,episodes,characters,studios,cleanup,photos --workers 4
 
   echo
   echo "Done. Check a few pages (e.g. Blue Box, Attack on Titan) and the Search rails."
