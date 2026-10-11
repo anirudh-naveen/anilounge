@@ -39,6 +39,7 @@ import { backupCatalog } from '../services/catalogRepair.js'
 import {
   buildAnimeSeries,
   finishSeries,
+  hasSeriesStructure,
   makeSeasons,
   removePremigrationSeasons,
 } from '../services/seriesStructure.js'
@@ -403,6 +404,10 @@ async function main() {
   const options = parseArgs(process.argv.slice(2))
   try {
     await connectPostgres()
+    if (await hasSeriesStructure()) {
+      console.log('Already migrated: series are split into seasons. Nothing to do.')
+      return
+    }
     const plan = await planShows(options)
     fs.mkdirSync(path.dirname(PLAN_PATH), { recursive: true })
     fs.writeFileSync(PLAN_PATH, JSON.stringify(plan, null, 2))
