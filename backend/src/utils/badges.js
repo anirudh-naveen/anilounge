@@ -2,7 +2,7 @@
  * Badge registry: every badge a user can hold, in display order.
  *
  * Layer: utils (pure). `creator` and `admin` come from the account role, and `bot` is
- * worn only by the release bot account (and is its only badge); the rest are
+ * worn only by the bot accounts (and is their only badge); the rest are
  * granted (stored in `users.cosmetic_roles`); `supporter` is also granted automatically
  * for a Ko-fi donation (services/donationService.js). `emblem` badges can be picked as the one
  * emblem shown next to the username; emblem-less badges only appear in the profile's
@@ -29,7 +29,7 @@ export const NO_EMBLEM = 'none'
 /**
  * Badges a user holds, in registry order.
  * @param {{ role?: string | null, isStaff?: boolean, isBot?: boolean, granted?: string[] | null }} user -
- *   `isStaff` is true for admins by role or ADMIN_EMAILS; `isBot` for the release bot.
+ *   `isStaff` is true for admins by role or ADMIN_EMAILS; `isBot` for the bot accounts.
  * @returns {string[]}
  */
 export function badgesForUser({ role, isStaff = false, isBot = false, granted = [] }) {

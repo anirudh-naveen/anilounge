@@ -11,13 +11,14 @@
  */
 
 import { query } from '../../config/postgres.js'
+import { BOT_EMAILS } from '../utils/botAccount.js'
 import { sendAnnouncementEmail } from './emailService.js'
 import { unsubscribeUrl } from './emailPreferenceService.js'
 
 const DEFAULT_DELAY_MS = 600
 
 /**
- * Accounts that should receive announcements.
+ * Accounts that should receive announcements (never the bots).
  * @returns {Promise<Array<{ id: string, email: string, username: string }>>}
  */
 export async function listAnnouncementRecipients() {
@@ -27,7 +28,9 @@ export async function listAnnouncementRecipients() {
        AND email_verified_at IS NOT NULL
        AND NOT is_demo
        AND NOT pending_signup
+       AND NOT (email = ANY($1::text[]))
      ORDER BY created_at`,
+    [BOT_EMAILS],
   )
   return result.rows
 }

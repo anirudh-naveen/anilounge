@@ -813,8 +813,8 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 
 -- Forum (services/forumService.js). A post is a discussion, a review (reviews carry
--- a 1–10 score), a guide, an article, or a megathread (only the release bot posts
--- those, see services/releaseThreadService.js); `content_id` is the review's subject, tags
+-- a 1–10 score), a guide, an article, or a megathread (only Lounge Keeper, the
+-- release bot, posts those, see services/releaseThreadService.js); `content_id` is the review's subject, tags
 -- live in post_tags. Text is masked for
 -- blocked language like direct messages, with language warnings to the author.
 -- `last_activity_at` moves on new comments so active threads sort up.

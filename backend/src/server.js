@@ -44,6 +44,7 @@ import { startConnectionSync } from './services/connectionSync.js'
 import { startSessionCleanupScheduler } from './services/sessionService.js'
 import { startHotScoreScheduler } from './services/forumService.js'
 import { startReleaseThreadScheduler } from './services/releaseThreadService.js'
+import { syncBots } from './services/botAccountService.js'
 import { startReleasePushScheduler } from './services/pushService.js'
 import { startAiUsageCleanupScheduler } from './services/aiUsageService.js'
 import { startSiteEventsCleanupScheduler } from './services/metricsService.js'
@@ -353,6 +354,7 @@ app.use((err, req, res, next) => {
 
 // Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync and
 // catalog-maintenance schedulers
+// creates/syncs the bot accounts (Lounge Keeper, Lounge Cleaner),
 // and makes sure the README demo login exists and is unlocked (and resets it nightly).
 app
   .listen(PORT, () => {
@@ -374,6 +376,7 @@ app
     startIndexNow()
     startDemoResetScheduler()
     console.log(`Email delivery: ${emailProvider()}`)
+    syncBots()
     ensureDemoAccount()
       .then((result) => {
         if (result !== 'ok') console.log(`Demo account ${result}`)

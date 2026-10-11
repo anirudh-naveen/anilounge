@@ -173,6 +173,16 @@
               </template>
 
               <span class="social-meta" :title="new Date(item.createdAt).toLocaleString()">
+                <template
+                  v-if="
+                    item.actor && (item.kind === 'announcement' || item.kind === 'language_warning')
+                  "
+                >
+                  <router-link :to="profileRoute(item.actor.username)" class="inbox-sender">{{
+                    item.actor.username
+                  }}</router-link>
+                  ·
+                </template>
                 {{ timeAgo(item.createdAt) }}
               </span>
             </div>
@@ -472,5 +482,14 @@ onMounted(load)
   display: flex;
   justify-content: center;
   margin-top: 1rem;
+}
+.inbox-sender {
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.inbox-sender:hover {
+  color: var(--coral-deep);
 }
 </style>

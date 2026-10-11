@@ -16,6 +16,7 @@ import { query } from '../../config/postgres.js'
 import { HttpError } from '../utils/httpError.js'
 import { censorText, findBlockedTerm, termCategory } from '../utils/moderation.js'
 import { logAction, quoteValue } from './adminLog.js'
+import { ensureLoungeCleaner } from './botAccountService.js'
 import { sendLanguageAlertEmail } from './emailService.js'
 import { notify } from './notificationService.js'
 
@@ -129,7 +130,10 @@ export async function recordWarning(user, { surface, term, maskedText, delivered
     const alerted = count > WARNING_LIMIT
     const message = warningMessage(count, label, delivered, category)
 
+    // Sent from Lounge Cleaner; still sent (unsigned) if the bot can't be loaded.
+    const cleanerId = await ensureLoungeCleaner().catch(() => null)
     await notify(user._id, 'language_warning', {
+      actorId: cleanerId,
       detail: {
         surface,
         excerpt: shown,
