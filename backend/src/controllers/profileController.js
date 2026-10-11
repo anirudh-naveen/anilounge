@@ -18,6 +18,7 @@ import { getAvatar } from '../services/avatarService.js'
 import { moderationMessage } from '../utils/moderation.js'
 import { relationshipBetween } from '../services/friendService.js'
 import { hasBlocked } from '../services/blockService.js'
+import { listProfileConnections } from '../services/connectionService.js'
 import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
 import { sendError } from '../utils/httpError.js'
 import {
@@ -124,7 +125,8 @@ async function loadFavoriteEntities(user) {
  * Private profiles and hidden tabs are only returned to the owner; email and
  * watchlist notes are never included. Signed-in visitors also get their
  * `relationship` to the owner (`friends`, `outgoing`, `incoming`, or `none`) and whether
- * they `blocked` the owner.
+ * they `blocked` the owner. `connections` lists the owner's linked AniList, MyAnimeList,
+ * and TMDB accounts unless `settings.showConnections` is off.
  *
  * @param {import('express').Request} req - Reads `params.username`; `req.user` when signed in.
  * @param {import('express').Response} res - 200 `{ data: profile }`, 404 unknown or private, or 500.
@@ -163,6 +165,7 @@ export const getPublicProfile = async (req, res) => {
           ])
         : [null, false]
     const history = shows('stats') ? await loadWatchHistory(user._id) : null
+    const connections = settings.showConnections ? await listProfileConnections(user._id) : []
 
     res.json({
       success: true,
@@ -178,6 +181,7 @@ export const getPublicProfile = async (req, res) => {
           preferences: normalizePreferences(user.preferences),
         },
         settings,
+        connections,
         isOwner,
         tabs: visibleTabs,
         favorites: shows('favorites')

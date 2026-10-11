@@ -96,7 +96,16 @@ const buildProfile = (overrides: Partial<PublicProfile> = {}): PublicProfile => 
     defaultTab: 'favorites',
     tabOrder: ['favorites', 'watchlist', 'stats'],
     hiddenTabs: [],
+    showConnections: true,
   },
+  connections: [
+    {
+      provider: 'anilist',
+      label: 'AniList',
+      username: 'mikabot',
+      url: 'https://anilist.co/user/mikabot',
+    },
+  ],
   isOwner: false,
   tabs: ['favorites', 'watchlist', 'stats'],
   favorites: {
@@ -189,6 +198,16 @@ describe('Profile', () => {
     expect(wrapper.get('[data-testid="panel-favorites"]').text()).toContain('Gurren Lagann')
     expect(wrapper.text()).toContain('Kamina')
     expect(wrapper.find('[data-testid="customize-profile"]').exists()).toBe(false)
+  })
+
+  it('links the connected accounts in a new tab', async () => {
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile() } })
+    const { wrapper } = await mountAt('/u/mika')
+
+    const link = wrapper.get('[data-testid="profile-connections"] a')
+    expect(link.attributes('href')).toBe('https://anilist.co/user/mikabot')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(link.text()).toBe('mikabot')
   })
 
   it('blocks a friend after confirming, removing the friend and message buttons', async () => {

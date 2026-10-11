@@ -133,7 +133,7 @@ describe('Watchlist status sections', () => {
   it("shows a series' episode count from the catalog", async () => {
     const wrapper = await mountPage()
     const progress = wrapper.get('.episode-progress').text().replace(/\s+/g, '')
-    expect(progress).toBe('4/28🆕')
+    expect(progress).toBe('4/28')
   })
 
   it('puts progress first and tucks dates and title info into collapsed sections', async () => {
