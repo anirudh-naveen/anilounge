@@ -29,7 +29,7 @@
           :aria-selected="season === activeSeason"
           @click="selectSeason(season)"
         >
-          Season {{ season }}
+          {{ seasonNames?.[season] || `Season ${season}` }}
         </button>
       </div>
 
@@ -56,7 +56,10 @@
             <div v-else class="no-still">
               <i class="fas fa-play"></i>
             </div>
-            <span class="episode-index">{{ formatEpisodeIndex(episode, multiSeason) }}</span>
+            <span class="episode-index">{{ indexLabel(episode) }}</span>
+            <span v-if="episode.isFiller || episode.isRecap" class="episode-flag">
+              {{ episode.isRecap ? 'Recap' : 'Filler' }}
+            </span>
           </div>
           <p class="episode-card-title">{{ episode.title }}</p>
         </button>
@@ -65,9 +68,8 @@
       <!-- Title: Expanded Episode -->
       <div v-if="selectedEpisode" id="episode-expanded" class="episode-expanded">
         <div class="expanded-header">
-          <h3>
-            {{ formatEpisodeIndex(selectedEpisode, multiSeason) }} · {{ selectedEpisode.title }}
-          </h3>
+          <h3>{{ indexLabel(selectedEpisode) }} · {{ selectedEpisode.title }}</h3>
+          <p v-if="otherTitles" class="expanded-titles">{{ otherTitles }}</p>
           <p v-if="expandedMeta" class="expanded-meta">{{ expandedMeta }}</p>
         </div>
         <p class="expanded-overview">
@@ -137,11 +139,17 @@ const props = withDefaults(
     show?: UnifiedContent | null
     /** Season chosen by the parent; null lets the row track its own pick. */
     selectedSeason?: number | null
+    /**
+     * Names for the season pills by guide number ("Season 3 Part 2", "Stone Wars").
+     * With them the pills say which season, so cards just number the episode.
+     */
+    seasonNames?: Record<number, string> | null
   }>(),
   {
     characters: () => [],
     show: null,
     selectedSeason: null,
+    seasonNames: null,
   },
 )
 
@@ -194,6 +202,18 @@ const expandedMeta = computed(() => {
 })
 
 const isSelected = (episode: Episode) => episodeKey(episode) === selectedKey.value
+
+const indexLabel = (episode: Episode) =>
+  formatEpisodeIndex(episode, multiSeason.value && !props.seasonNames)
+
+/** The episode's romaji and Japanese titles, when they differ from its title. */
+const otherTitles = computed(() => {
+  const episode = selectedEpisode.value
+  if (!episode) return ''
+  return [episode.titleRomaji, episode.titleNative]
+    .filter((title) => title && title !== episode.title)
+    .join(' · ')
+})
 
 const selectSeason = (season: number) => {
   ownSeason.value = season
@@ -365,6 +385,26 @@ const handleImageError = (event: Event) => {
 
 .no-still i {
   font-size: 1.4rem;
+}
+
+.episode-flag {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.expanded-titles {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
 }
 
 .episode-index {

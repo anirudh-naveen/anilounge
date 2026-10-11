@@ -4,11 +4,15 @@
  * Dedup is title/type based (external IDs are reference-only, except conflicting ids block a merge). Merges combine MAL + TMDB
  * without clobbering user ratings; unifiedScore is vote-weighted across sources.
  */
-import { connectPostgres, closePostgres } from '../../config/postgres.js'
+import { connectPostgres, closePostgres, query } from '../../config/postgres.js'
 import Content, { catalogStats } from '../models/Content.js'
 import unifiedContentService from './unifiedContentService.js'
 import relationshipService from './relationshipService.js'
 import { runCatalogMaintenance } from './catalogMaintenance.js'
+import { importSeries } from './catalogImport.js'
+import { loadFribbIndex } from './fribbService.js'
+import { attachTvEntry, hasSeriesStructure } from './seriesStructure.js'
+import { fribbEntryFor } from '../utils/fribb.js'
 import {
   ANILIST_ORIGIN_COUNTRIES,
   convertAnilistToContent,
@@ -306,6 +310,13 @@ class DatabasePopulator {
       // Prefer stable upsert by tmdbId before fuzzy title matching
       if (contentData.tmdbId) {
         const existingByTmdb = await Content.findOne({ tmdbId: contentData.tmdbId })
+        if (existingByTmdb && (await this.hasSeasons(existingByTmdb))) {
+          // A show with seasons is imported by source priority (catalogImport.js);
+          // the hourly pass only refreshes what TMDB alone says about it.
+          await this.refreshTmdbFields(existingByTmdb, contentData)
+          this.stats.updated++
+          return
+        }
         if (existingByTmdb) {
           await this.mergeTmdbIntoExisting(existingByTmdb, contentData)
           this.stats.updated++
@@ -334,6 +345,16 @@ class DatabasePopulator {
       const malOwner = anilistData?.malId
         ? await Content.findOne({ malId: anilistData.malId })
         : null
+      if (malOwner?.contentType === 'season') {
+        // TMDB's show is the season's series.
+        await query(
+          `UPDATE content SET tmdb_id = $2, updated_at = now() WHERE id = $1 AND tmdb_id IS NULL
+             AND NOT EXISTS (SELECT 1 FROM content o WHERE o.kind = 'series' AND o.tmdb_id = $2)`,
+          [malOwner.seriesId, contentData.tmdbId],
+        )
+        this.stats.merged++
+        return
+      }
       if (malOwner && !malOwner.tmdbId) {
         await this.mergeTmdbIntoExisting(malOwner, contentData, { save: false })
         await this.mergeAnilistIntoExisting(malOwner, anilistData)
@@ -373,6 +394,7 @@ class DatabasePopulator {
         const malData = anime ? unifiedContentService.convertMalToContent(anime) : null
         if (malData) await this.mergeMalIntoExisting(newContent, malData)
       }
+      await this.placeNewSeries(newContent)
       this.stats.newAdded++
       console.log(`Added TMDB ${contentType}: ${contentData.title}`)
     } catch (error) {
@@ -392,9 +414,11 @@ class DatabasePopulator {
     const titleOr = contentExactTitlesMatchOr(contentData)
     if (titleOr.length === 0) return duplicates
 
+    // A TV entry may already be stored as a season of its show.
+    const types = contentData.contentType === 'tv' ? ['tv', 'season'] : [contentData.contentType]
     const candidates = await Content.find({
       $or: titleOr,
-      contentType: contentData.contentType,
+      contentType: { $in: types },
     })
 
     for (const candidate of candidates) {
@@ -448,7 +472,8 @@ class DatabasePopulator {
       }
     }
 
-    if (newContent.contentType !== existingContent.contentType) {
+    const listedAs = (content) => (content.contentType === 'season' ? 'tv' : content.contentType)
+    if (listedAs(newContent) !== listedAs(existingContent)) {
       console.log(
         `Content type mismatch: ${newContent.title} (${newContent.contentType}) vs ${existingContent.title} (${existingContent.contentType})`,
       )
@@ -565,6 +590,7 @@ class DatabasePopulator {
           const newContent = new Content(contentWithRelationships)
           await newContent.save()
           await relationshipService.populateRelationshipsFromMAL(newContent)
+          await this.placeNewSeries(newContent)
           this.stats.newAdded++
           console.log(`Added MAL ${contentData.contentType}: ${contentData.title}`)
         }
@@ -572,6 +598,56 @@ class DatabasePopulator {
     } catch (error) {
       console.error(`Error saving MAL content:`, error.message)
       this.stats.errors++
+    }
+  }
+
+  /**
+   * Whether a row is a series with stored seasons (after the series migration).
+   * @param {object} content
+   * @returns {Promise<boolean>}
+   */
+  async hasSeasons(content) {
+    if (content.contentType !== 'tv') return false
+    const { rows } = await query('SELECT 1 FROM seasons WHERE series_id = $1 LIMIT 1', [
+      content._id,
+    ])
+    return rows.length > 0
+  }
+
+  /**
+   * Update what only TMDB says about a show with seasons: its score, votes,
+   * popularity, and backdrop.
+   * @param {object} existing - Series document
+   * @param {object} tmdbData - Converted Content-shaped TMDB object
+   * @returns {Promise<void>}
+   */
+  async refreshTmdbFields(existing, tmdbData) {
+    existing.voteAverage = tmdbData.voteAverage
+    existing.voteCount = tmdbData.voteCount
+    existing.popularity = tmdbData.popularity
+    if (tmdbData.backdropPath) existing.backdropPath = tmdbData.backdropPath
+    await existing.save()
+  }
+
+  /**
+   * Put a title this sync just added into the series structure: an anime TV entry
+   * becomes a season of its show (seriesStructure.js `attachTvEntry`), and every new
+   * show is imported with its seasons and episodes. Before the series migration this
+   * does nothing. Failures are logged, never thrown.
+   * @param {object} content - The saved document
+   * @param {{ importDetails?: boolean }} [options] - `false` skips the import (seasons,
+   *   episodes), which the six-hourly refresh or `db:reload` then fills.
+   * @returns {Promise<void>}
+   */
+  async placeNewSeries(content, { importDetails = true } = {}) {
+    if (content.contentType !== 'tv') return
+    try {
+      if (!(await hasSeriesStructure())) return
+      const entry = fribbEntryFor(await loadFribbIndex(), content)
+      const seriesId = (await attachTvEntry(String(content._id), { entry })) || String(content._id)
+      if (importDetails) await importSeries(seriesId)
+    } catch (error) {
+      console.error(`Placing ${content.title} in its series failed:`, error.message)
     }
   }
 

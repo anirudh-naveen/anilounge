@@ -1,5 +1,6 @@
 /**
- * Franchise detail page: the franchise row with every member title in watch order.
+ * Franchise detail page: the franchise row with every member title in watch order,
+ * series listed season by season.
  */
 import { query } from '../../config/postgres.js'
 import { loadWorksById } from '../models/Content.js'
@@ -22,10 +23,16 @@ export async function getFranchise(id) {
   const franchise = rows[0]
   if (!franchise) return null
 
-  const members = await query('SELECT member_id FROM franchise_members WHERE franchise_id = $1', [
-    id,
-  ])
-  const memberIds = members.rows.map((row) => String(row.member_id))
+  // A series with seasons is watched season by season (its relations to the
+  // franchise's movies are its seasons'), so its seasons stand in for it.
+  const members = await query(
+    `SELECT COALESCE(sn.content_id, fm.member_id)::text AS member_id
+     FROM franchise_members fm
+     LEFT JOIN seasons sn ON sn.series_id = fm.member_id
+     WHERE fm.franchise_id = $1`,
+    [id],
+  )
+  const memberIds = members.rows.map((row) => row.member_id)
   const worksById = await loadWorksById(memberIds)
   const works = [...worksById.values()]
   const edges = memberIds.length

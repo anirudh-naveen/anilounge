@@ -3,6 +3,7 @@
  * character of the day.
  */
 
+import { isEpisodic } from '@/utils/contentKinds'
 import type { ActivityEntry, ReleaseUpdate } from '@/types/home'
 import { getNextAirInfo, getUpcomingReleaseAt } from '@/utils/airing'
 
@@ -125,7 +126,7 @@ export function releaseLabel(update: ReleaseUpdate, now = new Date()) {
     return 'New episodes weekly'
   }
 
-  const isTv = content.contentType === 'tv'
+  const isTv = isEpisodic(content.contentType)
   const at = getUpcomingReleaseAt(content)
   if (!at) return isTv ? 'Premiere date TBA' : 'Release date TBA'
   if (at.getTime() <= now.getTime()) return isTv ? 'Just premiered' : 'Out now'

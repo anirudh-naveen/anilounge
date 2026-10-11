@@ -398,6 +398,29 @@ export async function listConnections(userId) {
   )
 }
 
+/** Public profile page on each site, from the linked account's username. */
+const PROFILE_URLS = {
+  anilist: (name) => `https://anilist.co/user/${encodeURIComponent(name)}`,
+  mal: (name) => `https://myanimelist.net/profile/${encodeURIComponent(name)}`,
+  tmdb: (name) => `https://www.themoviedb.org/u/${encodeURIComponent(name)}`,
+}
+
+/**
+ * The user's linked accounts as shown on their public profile: site, username, and a
+ * link to their page there. Accounts without a known username are left out.
+ * @param {string} userId
+ * @returns {Promise<Array<{ provider: string, label: string, username: string, url: string }>>}
+ */
+export async function listProfileConnections(userId) {
+  const rows = await loadConnections(userId)
+  return CONNECTION_PROVIDERS.flatMap((provider) => {
+    const username = rows.find((row) => row.provider === provider)?.external_name
+    if (!username) return []
+    const url = PROFILE_URLS[provider](username)
+    return [{ provider, label: providerLabel(provider), username, url }]
+  })
+}
+
 /**
  * The user's connection rows (tokens still sealed).
  * @param {string} userId

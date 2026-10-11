@@ -622,7 +622,7 @@ async function rememberTitleAnilistId(contentId, anilistId) {
   if (!contentId || !positiveId(anilistId)) return
   await query(
     `UPDATE content c SET anilist_id = $2, updated_at = now()
-     WHERE c.id = $1 AND c.anilist_id IS NULL AND c.kind IN ('movie', 'series', 'special')
+     WHERE c.id = $1 AND c.anilist_id IS NULL AND c.kind IN ('movie', 'series', 'season', 'special')
        AND NOT EXISTS (SELECT 1 FROM content o WHERE o.kind = c.kind AND o.anilist_id = $2)`,
     [String(contentId), anilistId],
   )
@@ -770,6 +770,10 @@ function needsCharacterRefresh(content, docs, malId) {
  */
 export async function ensureCharactersForContent(content, options = {}) {
   if (!content?._id) return []
+  if (content.contentType === 'tv') {
+    const cast = await seriesCharacters(content, options)
+    if (cast) return cast
+  }
   const key = String(content._id)
   if (ingestLocks.has(key)) return ingestLocks.get(key)
   const pending = loadCharactersForContent(content, options)
@@ -779,6 +783,32 @@ export async function ensureCharactersForContent(content, options = {}) {
   } finally {
     ingestLocks.delete(key)
   }
+}
+
+/**
+ * A series' characters are its seasons': its first season's cast is loaded (and
+ * ingested if needed), then every season's characters are ranked by the first's.
+ * @param {object} series
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object[] | null>} Null for a series without seasons.
+ */
+async function seriesCharacters(series, options) {
+  const { rows } = await query(
+    `SELECT content_id::text AS id FROM seasons WHERE series_id = $1
+     ORDER BY season_number, part_number`,
+    [series._id],
+  )
+  if (!rows.length) return null
+  const seasonIds = rows.map((row) => row.id)
+  const first = await Content.findById(seasonIds[0])
+  if (first) await ensureCharactersForContent(first, options)
+  const { rows: cast } = await query(
+    'SELECT DISTINCT character_id::text AS id FROM appearances WHERE work_id = ANY($1::uuid[])',
+    [seasonIds],
+  )
+  if (!cast.length) return []
+  const docs = await Entity.find({ _id: { $in: cast.map((row) => row.id) } })
+  return highlightedCharacters(docs, seasonIds[0], MAX_CHARACTERS_PER_TITLE)
 }
 
 /**
@@ -1503,7 +1533,45 @@ export async function serializeEntityDetails(entity, options = {}) {
       select: 'name englishName imagePath entityType malId',
     },
   ])
-  return serializeEntity(entity, options)
+  const serialized = serializeEntity(entity, options)
+  if (entity.entityType === 'voice_actor') serialized.staffCredits = await staffCreditsOf(entity._id)
+  return serialized
+}
+
+/**
+ * Titles a person worked on as staff (director, composer, ...), newest first, each
+ * with every role they had on it.
+ * @param {string} personId
+ * @returns {Promise<Array<{ content: object, roles: string[] }>>}
+ */
+export async function staffCreditsOf(personId) {
+  const { rows } = await query(
+    `SELECT w.id::text AS id, w.title, w.content_type, w.poster_path, w.release_date,
+            w.season_label, (SELECT name FROM content WHERE id = w.series_id) AS series_title,
+            array_agg(sc.role ORDER BY sc.position) AS roles
+     FROM staff_credits sc JOIN works w ON w.id = sc.work_id
+     WHERE sc.person_id = $1
+       -- A series repeats its first season's staff; list the seasons instead.
+       AND NOT (w.kind = 'series' AND EXISTS (
+         SELECT 1 FROM staff_credits own JOIN seasons sn ON sn.content_id = own.work_id
+         WHERE own.person_id = $1 AND sn.series_id = w.id))
+     GROUP BY w.id, w.title, w.content_type, w.poster_path, w.release_date, w.season_label,
+              w.series_id
+     ORDER BY w.release_date DESC NULLS LAST, w.title`,
+    [personId],
+  )
+  return rows.map((row) => ({
+    content: {
+      _id: row.id,
+      title: row.title,
+      contentType: row.content_type,
+      posterPath: row.poster_path || '',
+      releaseDate: row.release_date,
+      seasonLabel: row.season_label || null,
+      seriesTitle: row.series_title || null,
+    },
+    roles: [...new Set(row.roles)],
+  }))
 }
 
 export { serializeEntity }

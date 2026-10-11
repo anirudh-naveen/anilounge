@@ -9,6 +9,7 @@ import {
   catalogRouteQuery,
   catalogScrollKey,
   catalogTabHasPagination,
+  currentAnimeSeasonLabel,
   getCatalogTab,
   isMovieCatalogPath,
   isTvCatalogPath,
@@ -18,12 +19,20 @@ import {
 } from '@/utils/catalogTabs'
 
 describe('TV catalog tabs', () => {
-  it('exposes Currently Trending, Airing Right Now, and Upcoming Highlights', () => {
+  it('exposes Currently Trending, Airing Right Now, Anime of the season, and Upcoming Highlights', () => {
     expect(TV_CATALOG_TABS.map((tab) => tab.label)).toEqual([
       'Currently Trending',
       'Airing Right Now',
+      `Anime of ${currentAnimeSeasonLabel()}`,
       'Upcoming Highlights',
     ])
+  })
+
+  it('labels the current anime season in UTC quarters', () => {
+    expect(currentAnimeSeasonLabel(new Date('2026-10-11T12:00:00Z'))).toBe('Fall 2026')
+    expect(currentAnimeSeasonLabel(new Date('2027-01-01T00:00:00Z'))).toBe('Winter 2027')
+    expect(currentAnimeSeasonLabel(new Date('2026-06-30T23:59:59Z'))).toBe('Spring 2026')
+    expect(currentAnimeSeasonLabel(new Date('2026-07-01T00:00:00Z'))).toBe('Summer 2026')
   })
 
   it('normalizes unknown or missing tab values to popular', () => {
@@ -120,6 +129,7 @@ describe('Search browse type', () => {
     expect(TV_BROWSE_RAILS.map((rail) => [rail.title, rail.viewAll])).toEqual([
       ['Currently Trending', '/tv'],
       ['Airing Right Now', '/tv?tab=airing'],
+      [`Anime of ${currentAnimeSeasonLabel()}`, '/tv?tab=season'],
       ['Upcoming Highlights', '/tv?tab=upcoming'],
     ])
   })

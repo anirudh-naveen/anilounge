@@ -1,19 +1,25 @@
 /**
- * Cron wrapper around DatabasePopulator for hourly TMDB/MAL catalog refresh.
+ * Cron wrapper around DatabasePopulator for hourly TMDB/MAL catalog refresh, plus a
+ * re-import of airing shows' seasons and episodes every six hours (catalogImport.js).
  * Domain service: start/stop scheduling, overlap guard, and last-run status.
  * Mutates Content via populateDatabase with clear:false and the process PostgreSQL pool.
  */
 import cron from 'node-cron'
 import { withJobLock } from '../utils/jobLock.js'
 import DatabasePopulator from './contentSyncService.js'
+import { refreshAiringSeries } from './catalogImport.js'
+import { hasSeriesStructure } from './seriesStructure.js'
 
 const DEFAULT_CRON = '0 * * * *'
+/** Airing shows' episodes and schedules are re-imported this often. */
+const AIRING_REFRESH_MS = 6 * 60 * 60 * 1000
 const DEFAULT_TMDB_LIMIT = 40
 const DEFAULT_MAL_LIMIT = 40
 
 let isRunning = false
 let lastSync = null
 let scheduledTask = null
+let lastAiringRefresh = 0
 
 /**
  * Positive integer from env, else fallback.
@@ -93,12 +99,19 @@ export async function runContentSync(trigger = 'manual') {
       skipMal: !process.env.MAL_CLIENT_ID,
     })
 
+    let airing = null
+    if (Date.now() - lastAiringRefresh >= AIRING_REFRESH_MS && (await hasSeriesStructure())) {
+      lastAiringRefresh = Date.now()
+      airing = await refreshAiringSeries()
+    }
+
     lastSync = {
       trigger,
       status: 'success',
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
       stats,
+      airing,
     }
 
     console.log('Content sync completed:', stats)

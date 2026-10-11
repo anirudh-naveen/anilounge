@@ -53,7 +53,7 @@ const MEDIA_FIELDS = `
   season seasonYear episodes duration
   genres averageScore popularity
   description(asHtml: false)
-  coverImage { extraLarge large }
+  coverImage { extraLarge large color }
   studios { edges { isMain node { id name isAnimationStudio } } }
 `
 
@@ -68,6 +68,21 @@ const CHARACTER_FIELDS = `
     }
   }
 `
+
+/** What the catalog import adds per title (art, trailer, tags, key staff, schedule). */
+const DETAIL_FIELDS = `
+  bannerImage
+  trailer { id site }
+  source(version: 3)
+  nextAiringEpisode { airingAt episode }
+  tags { name category rank isMediaSpoiler isGeneralSpoiler isAdult }
+  staff(sort: [RELEVANCE, ID], perPage: 25) {
+    edges { role node { id name { full native } image { large } } }
+  }
+  airingSchedule(perPage: 50) { nodes { episode airingAt } }
+`
+/** Staff and schedule pages make detail queries costly; AniList caps query complexity. */
+const DETAIL_BATCH_SIZE = 5
 
 const ROLE_LABELS = { MAIN: 'Main', SUPPORTING: 'Supporting', BACKGROUND: 'Cameo' }
 const VOICE_LANGUAGES = ['Japanese', 'English']
@@ -283,6 +298,35 @@ export async function fetchAnilistMediaBatch(
         found.add(prefix === 'al' ? media.id : media.idMal)
       }
       for (const id of chunk) if (!found.has(id)) rememberMissing(`${prefix}:${id}`)
+    }
+  }
+  return results
+}
+
+/**
+ * AniList anime with the catalog import's details (`DETAIL_FIELDS`), by AniList id
+ * or MAL id. Not cached: the import runs once per title.
+ * @param {{ anilistIds?: number[], malIds?: number[] }} ids
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object[]>}
+ */
+export async function fetchAnilistDetailsBatch(
+  { anilistIds = [], malIds = [] },
+  { fetchImpl } = {},
+) {
+  const results = []
+  const groups = [
+    ['id_in', [...new Set(anilistIds.map(positiveInt).filter(Boolean))]],
+    ['idMal_in', [...new Set(malIds.map(positiveInt).filter(Boolean))]],
+  ]
+  for (const [argument, ids] of groups) {
+    for (let i = 0; i < ids.length; i += DETAIL_BATCH_SIZE) {
+      const data = await anilistRequest(
+        `query ($ids: [Int]) { Page(perPage: ${DETAIL_BATCH_SIZE}) { media(${argument}: $ids, type: ANIME) { ${MEDIA_FIELDS}${DETAIL_FIELDS} } } }`,
+        { ids: ids.slice(i, i + DETAIL_BATCH_SIZE) },
+        { fetchImpl },
+      )
+      results.push(...(data?.Page?.media || []))
     }
   }
   return results

@@ -305,7 +305,7 @@ const parentCrumb = computed(() => {
   const rows = appearanceTitles.value
   const row = rows.find((item) => item.role === 'main') || rows[0]
   if (!row) return null
-  const prefix = row.contentType === 'tv' ? '/tv-show' : '/movie'
+  const prefix = row.contentType === 'tv' || row.contentType === 'season' ? '/tv-show' : '/movie'
   return { name: row.title, path: detailPath(prefix, row.id, row.title) }
 })
 

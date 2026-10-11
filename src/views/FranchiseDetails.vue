@@ -61,14 +61,14 @@
               @error="hideBrokenImage"
             />
             <div v-else class="timeline-poster no-poster">
-              <i :class="work.contentType === 'tv' ? 'fas fa-tv' : 'fas fa-film'"></i>
+              <i :class="isEpisodic(work.contentType) ? 'fas fa-tv' : 'fas fa-film'"></i>
             </div>
             <div class="timeline-info">
-              <h3>{{ getDisplayTitle(work) }}</h3>
+              <h3>{{ workTitle(work) }}</h3>
               <p class="content-type">
                 {{ getCardContentTypeDisplay(work.contentType || 'movie') }}
                 <span v-if="workYear(work)"> · {{ workYear(work) }}</span>
-                <span v-if="work.contentType === 'tv' && work.episodeCount">
+                <span v-if="isEpisodic(work.contentType) && work.episodeCount">
                   · {{ work.episodeCount }} {{ work.episodeCount === 1 ? 'episode' : 'episodes' }}
                 </span>
               </p>
@@ -87,6 +87,7 @@
 </template>
 
 <script setup lang="ts">
+import { isEpisodic } from '@/utils/contentKinds'
 import { goBackOr } from '@/utils/navigation'
 import { hideBrokenImage } from '@/utils/posters'
 import { computed, ref, watch } from 'vue'
@@ -114,15 +115,27 @@ const error = ref('')
 
 const countsLabel = computed(() => {
   const works = franchise.value?.works || []
-  const series = works.filter((work) => work.contentType === 'tv').length
+  // Seasons stand in for their series in the watch order; count each series once.
+  const series = new Set(
+    works
+      .filter((work) => isEpisodic(work.contentType))
+      .map((work) => (work.contentType === 'season' && work.seriesId) || work._id),
+  ).size
   const movies = works.filter((work) => work.contentType === 'movie').length
-  const specials = works.length - series - movies
+  const specials = works.filter((work) => work.contentType === 'special').length
   const parts = []
   if (series) parts.push(`${series} series`)
   if (movies) parts.push(`${movies} ${movies === 1 ? 'movie' : 'movies'}`)
   if (specials) parts.push(`${specials} ${specials === 1 ? 'special' : 'specials'}`)
   return parts.length ? parts.join(' · ') : 'No catalog titles yet'
 })
+
+/** "Blue Box · Season 1" when a season's own name doesn't say which season it is. */
+const workTitle = (work: UnifiedContent) => {
+  const title = getDisplayTitle(work)
+  const label = work.contentType === 'season' ? work.seasonLabel : ''
+  return label && !title.toLowerCase().includes(label.toLowerCase()) ? `${title} · ${label}` : title
+}
 
 const workYear = (work: UnifiedContent) => {
   const date = work.releaseDate ? new Date(work.releaseDate) : null

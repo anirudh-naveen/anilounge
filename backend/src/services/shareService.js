@@ -16,7 +16,7 @@ import { HttpError } from '../utils/httpError.js'
 import { contentPagePath } from '../utils/slug.js'
 import { mirrorWatchlistChange } from './connectionSync.js'
 
-const TITLE_KINDS = ['series', 'movie', 'special']
+const TITLE_KINDS = ['series', 'season', 'movie', 'special']
 const UUID_IN_PATH = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
 
 /**

@@ -1,8 +1,9 @@
 <!--
-  VoiceActorDetails.vue — voice-actor detail view.
+  VoiceActorDetails.vue — person detail view (voice actors and staff).
 
-  Own screen for a catalog voice actor: picture, about, favorite toggle, and
-  every character they have voiced. Not a Movies/TV tab.
+  Own screen for a catalog person: picture, about, favorite toggle, every character
+  they have voiced, and the titles they worked on as staff (director, composer, ...).
+  Opened as `/voice-actor/...` or, for staff, `/staff/...`. Not a Movies/TV tab.
 -->
 <template>
   <div class="character-details">
@@ -39,7 +40,7 @@
         </div>
 
         <div class="character-info">
-          <p class="entity-kicker">Voice actor</p>
+          <p class="entity-kicker">{{ kicker }}</p>
           <h1 class="character-title">{{ displayPersonName(voiceActor.name) }}</h1>
           <p v-if="voiceActor.nativeName" class="original-title">
             Native Name: {{ voiceActor.nativeName }}
@@ -66,6 +67,34 @@
       <div class="character-description">
         <h2>About</h2>
         <p class="about-text">{{ voiceActor.about || 'No biography available.' }}</p>
+      </div>
+
+      <div v-if="staffWork.length" class="appearances" data-testid="staff-work">
+        <h2>Staff work</h2>
+        <div class="content-grid">
+          <router-link
+            v-for="row in staffWork"
+            :key="row.id"
+            :to="row.path"
+            class="content-card clickable"
+            :data-testid="`staff-work-${row.id}`"
+          >
+            <img
+              v-if="row.posterPath"
+              :src="getPosterUrl(row.posterPath)"
+              :alt="row.title"
+              referrerpolicy="no-referrer"
+              @error="hideBrokenImage"
+            />
+            <div v-else class="no-poster small">
+              <i class="fas fa-film"></i>
+            </div>
+            <div class="content-info">
+              <h5>{{ row.title }}</h5>
+              <p class="content-type">{{ row.roles }}</p>
+            </div>
+          </router-link>
+        </div>
       </div>
 
       <div v-if="voicedCharacters.length" class="appearances">
@@ -103,6 +132,7 @@
 
 <script setup lang="ts">
 import { goBackOr } from '@/utils/navigation'
+import { isEpisodic } from '@/utils/contentKinds'
 import { hideBrokenImage } from '@/utils/posters'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -142,6 +172,32 @@ const voicedCharacters = computed(() => {
     }
   })
 })
+
+/** Titles worked on as staff, each linking to its page. */
+const staffWork = computed(() =>
+  (voiceActor.value?.staffCredits || []).map(({ content, roles }) => ({
+    id: content._id,
+    // "Blue Box · Season 1" when the season's own name doesn't say which season it is.
+    title:
+      content.seasonLabel &&
+      !content.title.toLowerCase().includes(content.seasonLabel.toLowerCase())
+        ? `${content.title} · ${content.seasonLabel}`
+        : content.title,
+    posterPath: content.posterPath,
+    roles: roles.join(', '),
+    path: detailPath(
+      isEpisodic(content.contentType) ? '/tv-show' : '/movie',
+      content._id,
+      content.title,
+    ),
+  })),
+)
+
+/** Staff who never voiced a role are "Staff"; everyone else is a voice actor first. */
+const kicker = computed(() =>
+  !voicedCharacters.value.length && staffWork.value.length ? 'Staff' : 'Voice actor',
+)
+const pathPrefix = computed(() => (route.name === 'StaffDetails' ? '/staff' : '/voice-actor'))
 
 const loadVoiceActor = async (id: string) => {
   if (!id) {
@@ -198,7 +254,7 @@ usePageMeta(() => {
     'voice_actor',
     { name: displayPersonName(value.name), nativeName: value.nativeName, about: value.about },
     {
-      path: detailPath('/voice-actor', value._id, displayPersonName(value.name)),
+      path: detailPath(pathPrefix.value, value._id, displayPersonName(value.name)),
       image: value.imagePath ? getPosterUrl(value.imagePath) : null,
       works: [...new Set(voicedCharacters.value.map((row) => row.title).filter(Boolean))],
     },
@@ -340,6 +396,11 @@ useCanonicalSlug(
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 1rem;
+}
+
+a.content-card {
+  color: inherit;
+  text-decoration: none;
 }
 
 .content-card {

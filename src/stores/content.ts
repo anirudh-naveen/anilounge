@@ -129,6 +129,7 @@ export const useContentStore = defineStore('content', () => {
   const tvRails = ref({
     popular: [] as UnifiedContent[],
     airing: [] as UnifiedContent[],
+    season: [] as UnifiedContent[],
     upcoming: [] as UnifiedContent[],
   })
   const movieRailsLoading = ref(false)
@@ -236,7 +237,7 @@ export const useContentStore = defineStore('content', () => {
   }
 
   /**
-   * Loads the three Search browse rails for movies or series without overwriting
+   * Loads the Search browse rails for movies or series without overwriting
    * the paginated Movies/TV catalog lists.
    * @param contentType - Which rails to fill (`movie` or `tv`).
    * @param force - When true, refetch even if that type is already cached.
@@ -262,12 +263,13 @@ export const useContentStore = defineStore('content', () => {
     if (tvRailsLoaded.value && !force) return
     tvRailsLoading.value = true
     try {
-      const [popular, airing, upcoming] = await Promise.all([
+      const [popular, airing, season, upcoming] = await Promise.all([
         fetchCatalogList('tv'),
         fetchCatalogList('tv', 'airing'),
+        fetchCatalogList('tv', 'season'),
         fetchCatalogList('tv', 'upcoming'),
       ])
-      tvRails.value = { popular, airing, upcoming }
+      tvRails.value = { popular, airing, season, upcoming }
       tvRailsLoaded.value = true
     } finally {
       tvRailsLoading.value = false
@@ -658,6 +660,7 @@ export const useContentStore = defineStore('content', () => {
       movieRails.value.upcoming.find((item) => item._id === id) ||
       tvRails.value.popular.find((item) => item._id === id) ||
       tvRails.value.airing.find((item) => item._id === id) ||
+      tvRails.value.season.find((item) => item._id === id) ||
       tvRails.value.upcoming.find((item) => item._id === id) ||
       searchResults.value.find((item) => item._id === id) ||
       allContent.value.find((item) => item._id === id)

@@ -18,6 +18,16 @@ export interface ProfileSettings {
   defaultTab: ProfileTab
   tabOrder: ProfileTab[]
   hiddenTabs: ProfileTab[]
+  /** Show linked AniList / MyAnimeList / TMDB accounts in the hero. */
+  showConnections: boolean
+}
+
+/** A linked account shown on the profile. */
+export interface ProfileConnection {
+  provider: 'anilist' | 'mal' | 'tmdb'
+  label: string
+  username: string
+  url: string
 }
 
 export interface ProfileStats {
@@ -63,6 +73,8 @@ export interface PublicProfile {
     preferences: { favoriteGenres: string[] }
   }
   settings: ProfileSettings
+  /** Linked accounts; empty when the owner hides them. */
+  connections?: ProfileConnection[]
   isOwner: boolean
   /** Signed-in visitor's link to this user; null for the owner and guests. */
   relationship?: Relationship | null

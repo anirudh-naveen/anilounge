@@ -15,12 +15,18 @@ describe('WhereToWatch', () => {
     whereToWatch.mockReset()
   })
 
-  it('lists streaming links and regional services with the JustWatch credit', async () => {
+  it('shows one logo per service, named on hover, with the JustWatch credit', async () => {
     whereToWatch.mockResolvedValue(
       reply({
         region: 'US',
         streaming: [
-          { site: 'Crunchyroll', url: 'https://www.crunchyroll.com/series/x', language: null },
+          {
+            site: 'Crunchyroll',
+            url: 'https://www.crunchyroll.com/series/x',
+            language: null,
+            icon: 'https://s4.anilist.co/cr.png',
+            color: '#F88D1A',
+          },
           { site: 'Netflix', url: 'https://www.netflix.com/title/1', language: 'Japanese' },
         ],
         providers: {
@@ -34,13 +40,19 @@ describe('WhereToWatch', () => {
     await flushPromises()
 
     expect(whereToWatch).toHaveBeenCalledWith('c1', expect.stringMatching(/^[A-Z]{2}$/))
-    const crunchyroll = wrapper.get('[data-testid="watch-link-Crunchyroll"]')
+    const crunchyroll = wrapper.get('[data-testid="watch-logo-link-Crunchyroll"]')
     expect(crunchyroll.attributes('href')).toBe('https://www.crunchyroll.com/series/x')
-    expect(crunchyroll.attributes('data-open-with')).toBe('app')
-    expect(wrapper.get('[data-testid="watch-link-Netflix"]').text()).toContain('Japanese')
-    expect(wrapper.find('img[alt="Crunchyroll"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Buy or rent')
-    expect(wrapper.text()).toContain('Apple TV')
+    expect(crunchyroll.attributes('title')).toBe('Crunchyroll')
+    expect(crunchyroll.attributes('target')).toBe('_blank')
+    expect(crunchyroll.get('img').attributes('src')).toBe('https://s4.anilist.co/cr.png')
+    expect(wrapper.get('[data-testid="watch-logo-link-Netflix"]').attributes('title')).toBe(
+      'Netflix (Japanese)',
+    )
+    // TMDB's Crunchyroll is the direct link already; Apple TV opens TMDB's list.
+    expect(wrapper.find('[data-testid="watch-logo-provider-283"]').exists()).toBe(false)
+    const apple = wrapper.get('[data-testid="watch-logo-provider-2"]')
+    expect(apple.attributes('title')).toBe('Apple TV (buy or rent)')
+    expect(apple.attributes('href')).toBe('https://www.themoviedb.org/tv/1/watch?locale=US')
     expect(wrapper.text()).toContain('JustWatch via TMDB')
   })
 

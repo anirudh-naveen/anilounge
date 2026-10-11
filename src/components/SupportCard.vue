@@ -11,13 +11,12 @@
     <div class="support-body">
       <h2 class="support-title">Keep the lounge open</h2>
       <p class="support-text">
-        AniLounge is free and ad-free. Donations pay for the servers.
+        AniLounge is free and ad-free.
         <template v-if="authStore.isAuthenticated">
-          Donate with the email on your account and you'll get the
-          <strong>Supporter</strong> badge.
+          Donate with your account's email to get the <strong>Supporter</strong> badge.
         </template>
         <template v-else>
-          Donate with the email you sign up with to get the <strong>Supporter</strong> badge.
+          Donate with your sign-up email to get the <strong>Supporter</strong> badge.
         </template>
       </p>
     </div>

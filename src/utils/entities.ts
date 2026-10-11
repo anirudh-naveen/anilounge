@@ -2,6 +2,7 @@
  * entities.ts — helpers for character, voice-actor, and studio appearance rows.
  */
 
+import { isEpisodic } from '@/utils/contentKinds'
 import type {
   CatalogEntity,
   EntityAppearance,
@@ -179,8 +180,8 @@ export function collectStudioWorks(entity?: CatalogEntity | null): {
   }
   works.sort((left, right) => studioWorkYear(right) - studioWorkYear(left))
   return {
-    series: works.filter((work) => work.contentType === 'tv'),
-    movies: works.filter((work) => work.contentType !== 'tv'),
+    series: works.filter((work) => isEpisodic(work.contentType)),
+    movies: works.filter((work) => !isEpisodic(work.contentType)),
   }
 }
 

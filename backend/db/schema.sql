@@ -182,6 +182,154 @@ ALTER TABLE specials ADD COLUMN IF NOT EXISTS airing_status TEXT;
 -- TMDB season of `next_episode_number`, so release megathreads can tag the episode.
 ALTER TABLE series ADD COLUMN IF NOT EXISTS next_episode_season INTEGER;
 
+-- ---------------------------------------------------------------------------
+-- Series structure: franchise → movies / series / specials, series → seasons → episodes
+-- ---------------------------------------------------------------------------
+
+-- A season is a watchable of its own (`kind = 'season'`): watchlist entries, ratings,
+-- characters, studios, and forum tags attach to it. MAL and AniList list each anime
+-- season (often each cour) as its own entry, so an anime season row carries that
+-- entry's mal_id / anilist_id. A series row is the whole show and carries TMDB's id;
+-- a season reaches TMDB through its series and `tmdb_season_number` (plus
+-- `tmdb_episode_offset` when TMDB runs several seasons together as one).
+ALTER TABLE content DROP CONSTRAINT IF EXISTS content_kind_check;
+ALTER TABLE content ADD CONSTRAINT content_kind_check CHECK (kind IN (
+  'movie', 'series', 'season', 'special', 'franchise', 'character', 'voice', 'studio'
+));
+
+CREATE TABLE IF NOT EXISTS seasons (
+  content_id           UUID PRIMARY KEY REFERENCES content (id) ON DELETE CASCADE,
+  series_id            UUID NOT NULL REFERENCES series (content_id) ON DELETE CASCADE,
+  season_number        INTEGER NOT NULL CHECK (season_number >= 1),
+  -- Second cour of a season MAL lists separately ("Season 3 Part 2"): same season, part 2.
+  part_number          INTEGER NOT NULL DEFAULT 1 CHECK (part_number >= 1),
+  -- Short name on the series page ("Season 2", "The Final Season").
+  label                TEXT,
+  -- AniList/MAL format: TV, TV_SHORT, ONA.
+  format               TEXT,
+  tmdb_season_number   INTEGER,
+  tmdb_episode_offset  INTEGER NOT NULL DEFAULT 0,
+  original_title       TEXT,
+  backdrop_path        TEXT,
+  release_date         DATE,
+  end_date             DATE,
+  origin_country       CHAR(2),
+  episode_count        INTEGER,
+  episode_runtime      INTEGER,
+  airing_status        TEXT CHECK (airing_status IN ('upcoming', 'airing', 'finished')),
+  start_season         TEXT CHECK (start_season IN ('winter', 'spring', 'summer', 'fall')),
+  start_year           INTEGER,
+  broadcast_day        TEXT,
+  broadcast_time       TEXT,
+  next_episode_at      TIMESTAMPTZ,
+  next_episode_number  INTEGER,
+  tmdb_score           DOUBLE PRECISION,
+  tmdb_votes           INTEGER,
+  mal_score            DOUBLE PRECISION,
+  mal_votes            INTEGER,
+  mal_rank             INTEGER,
+  anilist_score        DOUBLE PRECISION,
+  popularity           DOUBLE PRECISION,
+  unified_score        DOUBLE PRECISION,
+  UNIQUE (series_id, season_number, part_number)
+);
+CREATE INDEX IF NOT EXISTS seasons_series_idx ON seasons (series_id, season_number, part_number);
+CREATE INDEX IF NOT EXISTS seasons_start_idx ON seasons (start_year, start_season);
+CREATE INDEX IF NOT EXISTS seasons_airing_idx ON seasons (next_episode_at)
+  WHERE airing_status = 'airing';
+
+-- Details every watchable can have: trailer, AniList banner and cover color, age
+-- rating (MAL's 'pg_13', TMDB certifications), and source material (MAL's 'manga').
+ALTER TABLE movies ADD COLUMN IF NOT EXISTS trailer_site TEXT;
+ALTER TABLE movies ADD COLUMN IF NOT EXISTS trailer_key TEXT;
+ALTER TABLE movies ADD COLUMN IF NOT EXISTS banner_path TEXT;
+ALTER TABLE movies ADD COLUMN IF NOT EXISTS cover_color TEXT;
+ALTER TABLE movies ADD COLUMN IF NOT EXISTS age_rating TEXT;
+ALTER TABLE movies ADD COLUMN IF NOT EXISTS source_material TEXT;
+ALTER TABLE series ADD COLUMN IF NOT EXISTS trailer_site TEXT;
+ALTER TABLE series ADD COLUMN IF NOT EXISTS trailer_key TEXT;
+ALTER TABLE series ADD COLUMN IF NOT EXISTS banner_path TEXT;
+ALTER TABLE series ADD COLUMN IF NOT EXISTS cover_color TEXT;
+ALTER TABLE series ADD COLUMN IF NOT EXISTS age_rating TEXT;
+ALTER TABLE series ADD COLUMN IF NOT EXISTS source_material TEXT;
+ALTER TABLE specials ADD COLUMN IF NOT EXISTS trailer_site TEXT;
+ALTER TABLE specials ADD COLUMN IF NOT EXISTS trailer_key TEXT;
+ALTER TABLE specials ADD COLUMN IF NOT EXISTS banner_path TEXT;
+ALTER TABLE specials ADD COLUMN IF NOT EXISTS cover_color TEXT;
+ALTER TABLE specials ADD COLUMN IF NOT EXISTS age_rating TEXT;
+ALTER TABLE specials ADD COLUMN IF NOT EXISTS source_material TEXT;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS trailer_site TEXT;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS trailer_key TEXT;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS banner_path TEXT;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS cover_color TEXT;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS age_rating TEXT;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS source_material TEXT;
+
+-- Episodes of a season, numbered within it (Blue Box Season 2 runs 1–12 even though
+-- TMDB numbers them 26–37 of its season 1).
+CREATE TABLE IF NOT EXISTS episodes (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  season_id        UUID NOT NULL REFERENCES seasons (content_id) ON DELETE CASCADE,
+  number           INTEGER NOT NULL CHECK (number >= 1),
+  title            TEXT,
+  title_romaji     TEXT,
+  title_native     TEXT,
+  overview         TEXT,
+  still_path       TEXT,
+  air_at           TIMESTAMPTZ,
+  runtime          INTEGER,
+  is_filler        BOOLEAN NOT NULL DEFAULT false,
+  is_recap         BOOLEAN NOT NULL DEFAULT false,
+  tmdb_episode_id  INTEGER,
+  tmdb_score       DOUBLE PRECISION,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (season_id, number)
+);
+CREATE INDEX IF NOT EXISTS episodes_air_idx ON episodes (air_at);
+
+-- Ids on other sites, beside content.mal_id / tmdb_id / anilist_id. Not unique per
+-- source: every anime season of a show shares the show's TVDB and IMDb ids.
+CREATE TABLE IF NOT EXISTS content_external_ids (
+  content_id   UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  source       TEXT NOT NULL CHECK (source IN (
+                 'imdb', 'tvdb', 'wikidata', 'kitsu', 'anidb', 'livechart', 'anime_planet'
+               )),
+  external_id  TEXT NOT NULL,
+  PRIMARY KEY (content_id, source)
+);
+CREATE INDEX IF NOT EXISTS content_external_ids_lookup_idx
+  ON content_external_ids (source, external_id);
+
+-- Each source's view of a row (utils/sourcePriority.js): the fields we map, normalized,
+-- not the raw API response. The stored columns are resolved from these by source
+-- priority (anime: AniList, MAL, TMDB; everything else: TMDB, AniList, MAL), so the
+-- priority can be re-applied without fetching again.
+CREATE TABLE IF NOT EXISTS content_source_data (
+  content_id  UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  source      TEXT NOT NULL CHECK (source IN ('anilist', 'mal', 'tmdb')),
+  data        JSONB NOT NULL,
+  fetched_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (content_id, source)
+);
+
+-- AniList tags ("Time Skip", "Iyashikei"), ranked per title; spoiler tags are hidden
+-- unless asked for.
+CREATE TABLE IF NOT EXISTS tags (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name      TEXT NOT NULL UNIQUE,
+  category  TEXT,
+  is_adult  BOOLEAN NOT NULL DEFAULT false
+);
+CREATE TABLE IF NOT EXISTS content_tags (
+  content_id  UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  tag_id      UUID NOT NULL REFERENCES tags (id) ON DELETE CASCADE,
+  rank        INTEGER NOT NULL DEFAULT 0 CHECK (rank BETWEEN 0 AND 100),
+  is_spoiler  BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (content_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS content_tags_tag_idx ON content_tags (tag_id);
+
+
 CREATE TABLE IF NOT EXISTS genres (
   id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name  TEXT NOT NULL UNIQUE
@@ -280,6 +428,17 @@ CREATE TABLE IF NOT EXISTS studio_credits (
   studio_id  UUID NOT NULL REFERENCES studios (content_id) ON DELETE CASCADE,
   PRIMARY KEY (work_id, studio_id)
 );
+
+-- Key staff (director, series composition, music, character design, original creator).
+-- People are the `voices` rows: AniList staff ids cover voice actors and staff alike.
+CREATE TABLE IF NOT EXISTS staff_credits (
+  work_id    UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  person_id  UUID NOT NULL REFERENCES voices (content_id) ON DELETE CASCADE,
+  role       TEXT NOT NULL,
+  position   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (work_id, person_id, role)
+);
+CREATE INDEX IF NOT EXISTS staff_credits_person_idx ON staff_credits (person_id);
 
 -- Admin link editing (services/adminLinks.js). Links an admin adds or reorders are
 -- marked so the catalog sync never deletes or reshuffles them; links an admin removes
@@ -557,36 +716,63 @@ SELECT
   c.anilist_id,
   c.created_at,
   c.updated_at,
-  COALESCE(m.original_title, s.original_title, sp.original_title) AS original_title,
-  COALESCE(m.tagline, s.tagline, sp.tagline) AS tagline,
-  COALESCE(m.backdrop_path, s.backdrop_path, sp.backdrop_path) AS backdrop_path,
-  COALESCE(m.release_date, s.release_date, sp.release_date) AS release_date,
-  COALESCE(m.origin_country, s.origin_country, sp.origin_country) AS origin_country,
-  COALESCE(m.runtime_minutes, sp.runtime_minutes) AS runtime,
-  s.episode_count,
-  s.season_count,
-  COALESCE(m.tmdb_score, s.tmdb_score, sp.tmdb_score) AS vote_average,
-  COALESCE(m.tmdb_votes, s.tmdb_votes, sp.tmdb_votes) AS vote_count,
-  COALESCE(m.popularity, s.popularity, sp.popularity) AS popularity,
-  COALESCE(m.unified_score, s.unified_score, sp.unified_score) AS unified_score,
-  COALESCE(m.mal_score, s.mal_score, sp.mal_score) AS mal_score,
-  COALESCE(m.mal_votes, s.mal_votes, sp.mal_votes) AS mal_votes,
-  COALESCE(s.airing_status, m.airing_status, sp.airing_status) AS airing_status,
-  s.start_season,
-  s.start_year,
-  s.broadcast_day,
-  s.next_episode_at,
-  s.next_episode_number,
-  s.next_episode_season,
+  COALESCE(m.original_title, s.original_title, sn.original_title, sp.original_title) AS original_title,
+  COALESCE(m.tagline, s.tagline, ps.tagline, sp.tagline) AS tagline,
+  COALESCE(m.backdrop_path, sn.backdrop_path, s.backdrop_path, ps.backdrop_path, sp.backdrop_path) AS backdrop_path,
+  COALESCE(m.release_date, sn.release_date, s.release_date, sp.release_date) AS release_date,
+  COALESCE(m.origin_country, sn.origin_country, s.origin_country, ps.origin_country, sp.origin_country) AS origin_country,
+  COALESCE(m.runtime_minutes, sp.runtime_minutes, sn.episode_runtime) AS runtime,
+  COALESCE(sn.episode_count, s.episode_count) AS episode_count,
+  CASE WHEN c.kind = 'season' THEN 1 ELSE s.season_count END AS season_count,
+  COALESCE(m.tmdb_score, sn.tmdb_score, s.tmdb_score, sp.tmdb_score) AS vote_average,
+  COALESCE(m.tmdb_votes, sn.tmdb_votes, s.tmdb_votes, sp.tmdb_votes) AS vote_count,
+  COALESCE(m.popularity, sn.popularity, s.popularity, sp.popularity) AS popularity,
+  COALESCE(m.unified_score, sn.unified_score, s.unified_score, sp.unified_score) AS unified_score,
+  COALESCE(m.mal_score, sn.mal_score, s.mal_score, sp.mal_score) AS mal_score,
+  COALESCE(m.mal_votes, sn.mal_votes, s.mal_votes, sp.mal_votes) AS mal_votes,
+  COALESCE(sn.airing_status, s.airing_status, m.airing_status, sp.airing_status) AS airing_status,
+  COALESCE(sn.start_season, s.start_season) AS start_season,
+  COALESCE(sn.start_year, s.start_year) AS start_year,
+  COALESCE(sn.broadcast_day, s.broadcast_day) AS broadcast_day,
+  COALESCE(sn.next_episode_at, s.next_episode_at) AS next_episode_at,
+  COALESCE(sn.next_episode_number, s.next_episode_number) AS next_episode_number,
+  CASE WHEN c.kind = 'season' THEN sn.season_number ELSE s.next_episode_season END
+    AS next_episode_season,
   CASE WHEN c.rating_count > 0 THEN c.rating_sum / c.rating_count END AS user_rating_average,
   c.rating_count::bigint AS user_rating_count,
   c.rating_sum AS user_rating_sum,
-  c.catalog_score
+  c.catalog_score,
+  sn.series_id,
+  sn.season_number,
+  sn.part_number,
+  sn.label AS season_label,
+  sn.format,
+  sn.tmdb_season_number,
+  sn.tmdb_episode_offset,
+  sn.end_date,
+  sn.broadcast_time,
+  sn.mal_rank,
+  sn.anilist_score,
+  COALESCE(m.trailer_site, sn.trailer_site, s.trailer_site, sp.trailer_site) AS trailer_site,
+  COALESCE(m.trailer_key, sn.trailer_key, s.trailer_key, sp.trailer_key) AS trailer_key,
+  COALESCE(m.banner_path, sn.banner_path, s.banner_path, sp.banner_path) AS banner_path,
+  COALESCE(m.cover_color, sn.cover_color, s.cover_color, sp.cover_color) AS cover_color,
+  COALESCE(m.age_rating, sn.age_rating, s.age_rating, sp.age_rating) AS age_rating,
+  COALESCE(m.source_material, sn.source_material, s.source_material, sp.source_material)
+    AS source_material,
+  -- A series whose seasons keep their own airing state (anime): schedule lists
+  -- (Currently Airing, Anime of [season], Upcoming) show those seasons instead of it.
+  CASE WHEN c.kind = 'series' THEN EXISTS (
+    SELECT 1 FROM seasons x WHERE x.series_id = c.id AND x.airing_status IS NOT NULL
+  ) ELSE false END AS seasons_scheduled
 FROM content c
 LEFT JOIN movies m ON m.content_id = c.id
+LEFT JOIN seasons sn ON sn.content_id = c.id
 LEFT JOIN series s ON s.content_id = c.id
+-- A season's show, for what the season inherits (tagline, backdrop, country).
+LEFT JOIN series ps ON ps.content_id = sn.series_id
 LEFT JOIN specials sp ON sp.content_id = c.id
-WHERE c.kind IN ('movie', 'series', 'special');
+WHERE c.kind IN ('movie', 'series', 'season', 'special');
 
 CREATE TABLE IF NOT EXISTS favorites (
   user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -673,7 +859,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS post_tags_one_top ON post_tags (post_id) WHERE
 -- shows the author's watchlist rating for that title.
 UPDATE posts p SET content_id = (
   SELECT t.content_id FROM post_tags t JOIN content c ON c.id = t.content_id
-  WHERE t.post_id = p.id AND c.kind IN ('movie', 'series', 'special')
+  WHERE t.post_id = p.id AND c.kind IN ('movie', 'series', 'season', 'special')
   ORDER BY t.id LIMIT 1
 ) WHERE p.kind = 'review' AND p.content_id IS NULL;
 
@@ -944,15 +1130,19 @@ CREATE TRIGGER series_catalog_score AFTER INSERT OR UPDATE OF unified_score, pop
 DROP TRIGGER IF EXISTS specials_catalog_score ON specials;
 CREATE TRIGGER specials_catalog_score AFTER INSERT OR UPDATE OF unified_score, popularity ON specials
   FOR EACH ROW EXECUTE FUNCTION watchable_catalog_score();
+DROP TRIGGER IF EXISTS seasons_catalog_score ON seasons;
+CREATE TRIGGER seasons_catalog_score AFTER INSERT OR UPDATE OF unified_score, popularity ON seasons
+  FOR EACH ROW EXECUTE FUNCTION watchable_catalog_score();
 
 CREATE OR REPLACE FUNCTION content_catalog_score() RETURNS trigger LANGUAGE plpgsql AS
   'BEGIN
-     SELECT catalog_score_of(COALESCE(m.unified_score, s.unified_score, sp.unified_score),
-                             COALESCE(m.popularity, s.popularity, sp.popularity), NEW.tmdb_id)
+     SELECT catalog_score_of(COALESCE(m.unified_score, s.unified_score, sn.unified_score, sp.unified_score),
+                             COALESCE(m.popularity, s.popularity, sn.popularity, sp.popularity), NEW.tmdb_id)
        INTO NEW.catalog_score
        FROM (SELECT 1) one
        LEFT JOIN movies m ON m.content_id = NEW.id
        LEFT JOIN series s ON s.content_id = NEW.id
+       LEFT JOIN seasons sn ON sn.content_id = NEW.id
        LEFT JOIN specials sp ON sp.content_id = NEW.id;
      RETURN NEW;
    END';
@@ -963,13 +1153,14 @@ CREATE TRIGGER content_catalog_score BEFORE UPDATE OF tmdb_id ON content
 -- Backfill (and repair drift): only rows whose stored score is wrong are written.
 UPDATE content c SET catalog_score = x.score
 FROM (
-  SELECT c2.id, catalog_score_of(COALESCE(m.unified_score, s.unified_score, sp.unified_score),
-                                 COALESCE(m.popularity, s.popularity, sp.popularity), c2.tmdb_id) AS score
+  SELECT c2.id, catalog_score_of(COALESCE(m.unified_score, s.unified_score, sn.unified_score, sp.unified_score),
+                                 COALESCE(m.popularity, s.popularity, sn.popularity, sp.popularity), c2.tmdb_id) AS score
   FROM content c2
   LEFT JOIN movies m ON m.content_id = c2.id
   LEFT JOIN series s ON s.content_id = c2.id
+  LEFT JOIN seasons sn ON sn.content_id = c2.id
   LEFT JOIN specials sp ON sp.content_id = c2.id
-  WHERE c2.kind IN ('movie', 'series', 'special')
+  WHERE c2.kind IN ('movie', 'series', 'season', 'special')
 ) x
 WHERE x.id = c.id AND c.catalog_score IS DISTINCT FROM x.score;
 
@@ -979,6 +1170,10 @@ CREATE INDEX IF NOT EXISTS content_catalog_order_idx
 CREATE INDEX IF NOT EXISTS content_catalog_order_all_idx
   ON content (catalog_score DESC NULLS LAST, id DESC NULLS LAST)
   WHERE kind IN ('movie', 'series', 'special');
+-- Seasons are listed apart from the catalog (Currently Airing, Anime of [season]).
+CREATE INDEX IF NOT EXISTS content_catalog_order_season_idx
+  ON content (catalog_score DESC NULLS LAST, id DESC NULLS LAST)
+  WHERE kind = 'season';
 
 -- Rating totals (content.rating_count / rating_sum). Statement-level, so a save that
 -- rewrites a whole list updates each title once; titles are locked in id order so two
@@ -1030,7 +1225,7 @@ UPDATE content c SET rating_count = x.n, rating_sum = x.s
 FROM (
   SELECT c2.id, count(r.score)::int AS n, coalesce(sum(r.score), 0) AS s
   FROM content c2 LEFT JOIN ratings r ON r.content_id = c2.id
-  WHERE c2.kind IN ('movie', 'series', 'special')
+  WHERE c2.kind IN ('movie', 'series', 'season', 'special')
   GROUP BY c2.id
 ) x
 WHERE x.id = c.id AND (c.rating_count <> x.n OR c.rating_sum <> x.s);

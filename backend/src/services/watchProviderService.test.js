@@ -30,14 +30,28 @@ describe('streamingLinks', () => {
         url: 'https://www.netflix.com/title/1',
         type: 'STREAMING',
         language: null,
+        icon: 'https://s4.anilist.co/file/anilistcdn/link/icon/10-rVGPom8RCiwH.png',
+        color: '#F00000',
       },
       { site: 'Twitter', url: 'https://twitter.com/x', type: 'SOCIAL' },
       { site: 'Old', url: 'https://old.example/x', type: 'STREAMING', isDisabled: true },
       { site: 'Plain', url: 'http://insecure.example/x', type: 'STREAMING' },
     ])
     assert.deepEqual(links, [
-      { site: 'Crunchyroll', url: 'https://www.crunchyroll.com/series/x', language: 'English' },
-      { site: 'Netflix', url: 'https://www.netflix.com/title/1', language: null },
+      {
+        site: 'Crunchyroll',
+        url: 'https://www.crunchyroll.com/series/x',
+        language: 'English',
+        icon: null,
+        color: null,
+      },
+      {
+        site: 'Netflix',
+        url: 'https://www.netflix.com/title/1',
+        language: null,
+        icon: 'https://s4.anilist.co/file/anilistcdn/link/icon/10-rVGPom8RCiwH.png',
+        color: '#F00000',
+      },
     ])
     assert.deepEqual(streamingLinks(null), [])
   })

@@ -85,10 +85,12 @@ export function titlePageMeta(
   { path, image, seasonLabel = '' }: { path: string; image: string | null; seasonLabel?: string },
 ): PageMeta {
   const name = getDisplayTitle(content)
-  const series = content.contentType === 'tv'
+  const series = content.contentType === 'tv' || content.contentType === 'season'
   const year = yearOf(content.releaseDate)
   const noun = series ? 'series' : content.contentType === 'special' ? 'special' : 'movie'
-  const heading = [name, seasonLabel].filter(Boolean).join(' ')
+  // A season's own name usually says which season it is ("Blue Box Season 2").
+  const labelled = seasonLabel && !name.toLowerCase().includes(seasonLabel.toLowerCase())
+  const heading = labelled ? `${name} ${seasonLabel}` : name
   const genres = genreNames(content)
   const rating = aggregateRating(content.userRatingAverage, content.userRatingCount)
   const summary =
@@ -101,7 +103,7 @@ export function titlePageMeta(
     jsonLd: [
       {
         '@context': 'https://schema.org',
-        '@type': series ? 'TVSeries' : 'Movie',
+        '@type': content.contentType === 'season' ? 'TVSeason' : series ? 'TVSeries' : 'Movie',
         name,
         ...(content.nativeTitle && content.nativeTitle !== name
           ? { alternateName: content.nativeTitle }

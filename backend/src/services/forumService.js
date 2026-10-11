@@ -37,6 +37,7 @@ import { logAction, quoteValue } from './adminLog.js'
 import { escapeLike } from '../db/mongoFilter.js'
 import { publicUser } from './friendService.js'
 import { getSeasonGuide } from './seasonService.js'
+import { guideNumberSql } from './seriesStructure.js'
 import { screenText } from './languageWarningService.js'
 import { notify } from './notificationService.js'
 import { resolveReports } from './forumReportService.js'
@@ -45,9 +46,9 @@ import { blockedByViewerSql } from './blockService.js'
 export const POST_KINDS = ['discussion', 'review', 'guide', 'article', 'megathread']
 /** Kinds people can post; megathreads come from the release bot. */
 export const USER_POST_KINDS = ['discussion', 'review', 'guide', 'article']
-export const TAG_KINDS = ['movie', 'series', 'special', 'franchise', 'character']
+export const TAG_KINDS = ['movie', 'series', 'season', 'special', 'franchise', 'character']
 /** Kinds a review can score. */
-export const REVIEWABLE_KINDS = ['movie', 'series', 'special']
+export const REVIEWABLE_KINDS = ['movie', 'series', 'season', 'special']
 export const SORTS = ['hot', 'new', 'top', 'active']
 export const TITLE_MAX = 150
 export const BODY_MAX = 10000
@@ -368,7 +369,7 @@ export async function validateTags(input, { loadEpisodes = loadEpisodeKeys } = {
       throw new HttpError(400, 'One of the tags no longer exists.')
     }
     if (tag.season !== null) {
-      if (row.kind !== 'series')
+      if (row.kind !== 'series' && row.kind !== 'season')
         throw new HttpError(400, 'Only series can be tagged with an episode.')
       if (!episodeLists.has(tag.contentId)) {
         episodeLists.set(tag.contentId, await loadEpisodes(tag.contentId))
@@ -656,12 +657,27 @@ function tagFilterSql(params, { tag, season, episode }) {
     params.push(season, episode)
     episodeSql = `AND t.season_number = $${params.length - 1} AND t.episode_number = $${params.length}`
   }
+  // A franchise covers its titles and their seasons, a series its seasons, and a
+  // season the posts tagged with its number on its series (or another of its rows).
   return `AND EXISTS (
     SELECT 1 FROM post_tags t
     WHERE t.post_id = p.id ${episodeSql}
-      AND t.content_id IN (
-        SELECT ${tagParam}::uuid
-        UNION SELECT member_id FROM franchise_members WHERE franchise_id = ${tagParam}::uuid
+      AND (
+        t.content_id IN (
+          SELECT ${tagParam}::uuid
+          UNION SELECT member_id FROM franchise_members WHERE franchise_id = ${tagParam}::uuid
+          UNION SELECT sn.content_id FROM seasons sn WHERE sn.series_id = ${tagParam}::uuid
+          UNION SELECT sn.content_id FROM seasons sn
+            JOIN franchise_members fm ON fm.member_id = sn.series_id
+            WHERE fm.franchise_id = ${tagParam}::uuid
+        )
+        OR EXISTS (
+          SELECT 1 FROM seasons me
+          JOIN seasons g ON g.series_id = me.series_id
+          WHERE me.content_id = ${tagParam}::uuid
+            AND t.content_id IN (me.series_id, g.content_id)
+            AND t.season_number = ${guideNumberSql('me.content_id')}
+        )
       )
   )`
 }
@@ -1042,10 +1058,13 @@ export async function searchTags(term) {
   if (q.length < 2) return []
   const escaped = escapeLike(q)
   const { rows } = await query(
-    `SELECT c.id, c.kind, c.name, c.image_path, s.season_count, s.episode_count,
-            EXTRACT(YEAR FROM COALESCE(m.release_date, s.release_date, sp.release_date))::int AS year
+    `SELECT c.id, c.kind, c.name, c.image_path,
+            CASE WHEN sn.content_id IS NOT NULL THEN 1 ELSE s.season_count END AS season_count,
+            COALESCE(sn.episode_count, s.episode_count) AS episode_count,
+            EXTRACT(YEAR FROM COALESCE(m.release_date, s.release_date, sn.release_date, sp.release_date))::int AS year
      FROM content c
      LEFT JOIN series s ON s.content_id = c.id
+     LEFT JOIN seasons sn ON sn.content_id = c.id
      LEFT JOIN movies m ON m.content_id = c.id
      LEFT JOIN specials sp ON sp.content_id = c.id
      LEFT JOIN characters ch ON ch.content_id = c.id
@@ -1056,9 +1075,9 @@ export async function searchTags(term) {
      ORDER BY (lower(c.name) = lower($4) OR (c.kind <> 'character' AND EXISTS (
                 SELECT 1 FROM content_akas k WHERE k.content_id = c.id AND lower(k.name) = lower($4)))) DESC,
               (c.name ILIKE $3) DESC,
-              CASE c.kind WHEN 'franchise' THEN 0 WHEN 'series' THEN 1 WHEN 'movie' THEN 2
-                          WHEN 'special' THEN 3 ELSE 4 END,
-              COALESCE(s.popularity, 0) DESC, c.name
+              CASE c.kind WHEN 'franchise' THEN 0 WHEN 'series' THEN 1 WHEN 'season' THEN 2
+                          WHEN 'movie' THEN 3 WHEN 'special' THEN 4 ELSE 5 END,
+              COALESCE(s.popularity, sn.popularity, 0) DESC, c.name
      LIMIT 12`,
     [TAG_KINDS, `%${escaped}%`, `${escaped}%`, q],
   )
