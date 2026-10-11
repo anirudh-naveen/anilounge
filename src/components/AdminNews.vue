@@ -60,7 +60,12 @@
               @mousedown.prevent
               @click="fileInput?.click()"
             >
-              {{ uploading ? '…' : '🖼' }}
+              <span v-if="uploading">…</span>
+              <svg v-else class="format-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                <circle cx="8.5" cy="9.5" r="1.6" />
+                <path d="m4 18 5.5-5.5 4 4L16 14l4 4" />
+              </svg>
             </button>
           </template>
         </RichTextEditor>
@@ -256,6 +261,16 @@ onMounted(load)
   gap: 0.5rem;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.format-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .news-file {

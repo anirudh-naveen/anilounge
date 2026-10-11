@@ -16,6 +16,8 @@ import { NEWS_DAYS, postAnnouncement } from './inboxService.js'
 
 export const MAX_NEWS_IMAGE_BYTES = 5 * 1024 * 1024
 const RECENT_LIMIT = 20
+/** Postgres: `news_images` not created yet (schema not applied). */
+const MISSING_TABLE = '42P01'
 
 /**
  * Store an uploaded picture.
@@ -32,7 +34,12 @@ export async function saveNewsImage(actor, data) {
   const { rows } = await query(
     'INSERT INTO news_images (content_type, data, uploaded_by) VALUES ($1, $2, $3) RETURNING id',
     [contentType, data, actor?._id || null],
-  )
+  ).catch((error) => {
+    if (error.code === MISSING_TABLE) {
+      throw new HttpError(503, 'Picture uploads need a database update (npm run db:schema).')
+    }
+    throw error
+  })
   const id = String(rows[0].id)
   return { id, url: `/api/news-images/${id}` }
 }
@@ -46,7 +53,10 @@ export async function getNewsImage(id) {
   const { rows } = await query(
     'SELECT content_type, data, created_at FROM news_images WHERE id = $1',
     [id],
-  )
+  ).catch((error) => {
+    if (error.code === MISSING_TABLE) return { rows: [] }
+    throw error
+  })
   if (!rows[0]) return null
   return { contentType: rows[0].content_type, data: rows[0].data, createdAt: rows[0].created_at }
 }
