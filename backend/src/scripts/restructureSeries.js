@@ -36,7 +36,12 @@ import dotenv from 'dotenv'
 import { closePostgres, connectPostgres, query, withTransaction } from '../../config/postgres.js'
 import { loadWorksById } from '../models/Content.js'
 import { backupCatalog } from '../services/catalogRepair.js'
-import { buildAnimeSeries, finishSeries, makeSeasons } from '../services/seriesStructure.js'
+import {
+  buildAnimeSeries,
+  finishSeries,
+  makeSeasons,
+  removePremigrationSeasons,
+} from '../services/seriesStructure.js'
 import { seasonCandidates } from '../services/seasonService.js'
 import unifiedContentService from '../services/unifiedContentService.js'
 import { fribbEntryFor, fribbTmdbPlacement } from '../utils/fribb.js'
@@ -367,6 +372,8 @@ export async function applyPlan(plan, { dryRun }) {
       // count as changes, the migration's would.
       await query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
       const before = await fingerprintUserData()
+      const early = await removePremigrationSeasons()
+      if (early) console.log(`Removed ${early} season rows an import made before the migration`)
       for (const show of plan.anime) {
         await (show.seriesId ? addSeasons(show) : buildAnimeSeries(show))
         counts.series += 1

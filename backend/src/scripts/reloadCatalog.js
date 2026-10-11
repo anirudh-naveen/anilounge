@@ -678,6 +678,11 @@ async function phaseCleanup() {
  * @returns {Promise<boolean>} False when some titles failed.
  */
 async function phaseSeasons(options, checkpoint) {
+  if (!(await hasSeriesStructure())) {
+    // Before the migration each MAL entry is still a `series` row, and importing it
+    // would hang TMDB's whole show under every one of them.
+    throw new Error('Run `npm run db:restructure-series` before the seasons phase')
+  }
   const { rows } = await query(
     `SELECT id::text AS id, kind FROM content WHERE kind IN ('series', 'movie', 'special')
      ORDER BY catalog_score DESC NULLS LAST, id`,

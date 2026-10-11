@@ -15,6 +15,7 @@ export const TAGS_MAX = 5
 export const KIND_LABELS: Record<TagKind, string> = {
   movie: 'Movie',
   series: 'Series',
+  season: 'Season',
   special: 'Special',
   franchise: 'Franchise',
   character: 'Character',
@@ -32,7 +33,7 @@ export const POST_KIND_LABELS: Record<PostKind, string> = {
 export const POST_KINDS = Object.keys(POST_KIND_LABELS) as PostKind[]
 
 /** Kinds a review can score. */
-export const REVIEWABLE_KINDS: TagKind[] = ['movie', 'series', 'special']
+export const REVIEWABLE_KINDS: TagKind[] = ['movie', 'series', 'season', 'special']
 
 /** Tag hierarchy level: franchise (0), then movies/series/specials (1), then characters (2). */
 export function tagLevel(kind: TagKind) {
