@@ -36,6 +36,10 @@
             <i class="fas fa-user"></i>
             <p>No image available</p>
           </div>
+          <p v-if="isTvmazeImage(character.imagePath)" class="image-credit">
+            Image from <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a>
+            (CC BY-SA)
+          </p>
         </div>
 
         <div class="character-info">
@@ -172,6 +176,7 @@
 </template>
 
 <script setup lang="ts">
+import { isTvmazeImage } from '@/utils/imageCredits'
 import { goBackOr } from '@/utils/navigation'
 import { hideBrokenImage } from '@/utils/posters'
 import { computed, ref, watch } from 'vue'
@@ -337,6 +342,16 @@ useCanonicalSlug(
 </script>
 
 <style scoped>
+.image-credit {
+  margin-top: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.image-credit a {
+  color: var(--coral-primary);
+}
+
 .character-details {
   max-width: 1100px;
   margin: 0 auto;

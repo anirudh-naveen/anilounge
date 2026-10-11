@@ -108,6 +108,23 @@
             </button>
           </div>
         </div>
+        <!-- Title: Episode Staff -->
+        <div v-if="episodeStaffGroups.length" class="expanded-staff" data-testid="episode-staff">
+          <h4>Staff</h4>
+          <dl>
+            <template v-for="group in episodeStaffGroups" :key="group.role">
+              <dt>{{ group.role }}</dt>
+              <dd>
+                <template v-for="(person, index) in group.people" :key="person._id">
+                  <router-link :to="detailPath('/staff', person._id, person.name)">{{
+                    person.name
+                  }}</router-link
+                  ><span v-if="index < group.people.length - 1">, </span>
+                </template>
+              </dd>
+            </template>
+          </dl>
+        </div>
         <StudioLinks :content="show" title="Animation studio" heading-tag="h4" />
       </div>
     </template>
@@ -128,6 +145,7 @@ import {
 import { cleanCharacterName, matchCharacterByName } from '@/utils/entities'
 import EntityCastRow from '@/components/EntityCastRow.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
+import { detailPath } from '@/utils/slug'
 
 const props = withDefaults(
   defineProps<{
@@ -202,6 +220,16 @@ const expandedMeta = computed(() => {
 })
 
 const isSelected = (episode: Episode) => episodeKey(episode) === selectedKey.value
+
+/** The open episode's staff, one line per role. */
+const episodeStaffGroups = computed(() => {
+  const groups = new Map<string, Array<{ _id: string; name: string }>>()
+  for (const person of selectedEpisode.value?.staff || []) {
+    if (!groups.has(person.role)) groups.set(person.role, [])
+    groups.get(person.role)!.push(person)
+  }
+  return [...groups].map(([role, people]) => ({ role, people }))
+})
 
 const indexLabel = (episode: Episode) =>
   formatEpisodeIndex(episode, multiSeason.value && !props.seasonNames)
@@ -385,6 +413,40 @@ const handleImageError = (event: Event) => {
 
 .no-still i {
   font-size: 1.4rem;
+}
+
+.expanded-staff {
+  margin-top: 1rem;
+}
+
+.expanded-staff h4 {
+  margin-bottom: 0.5rem;
+}
+
+.expanded-staff dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.expanded-staff dt {
+  color: var(--text-muted);
+}
+
+.expanded-staff dd {
+  margin: 0;
+}
+
+.expanded-staff a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.expanded-staff a:hover {
+  color: var(--coral-primary);
+  text-decoration: underline;
 }
 
 .episode-flag {

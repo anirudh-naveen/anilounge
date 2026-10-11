@@ -70,6 +70,15 @@ export function mapTmdbEpisode(episode, seriesCast = []) {
     runtime: Number.isFinite(Number(episode.runtime)) ? Number(episode.runtime) : null,
     tmdbEpisodeId: Number(episode.id) > 0 ? Number(episode.id) : null,
     tmdbScore: Number(episode.vote_average) > 0 ? Number(episode.vote_average) : null,
+    // Who directed, wrote, and storyboarded it (utils/staffCredits.js keeps those jobs).
+    crew: (Array.isArray(episode.crew) ? episode.crew : [])
+      .filter((member) => member?.id && member?.job)
+      .map(({ id, name, job, profile_path: profilePath }) => ({
+        id,
+        name,
+        job,
+        profile_path: profilePath || '',
+      })),
     cast: guestCast.length ? guestCast : seriesCast.slice(0, DEFAULT_CAST_LIMIT),
   }
 }

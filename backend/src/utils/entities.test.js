@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  personNameKey,
+  romajiNameKey,
   compareCharactersForContent,
   appearanceRoleRank,
   canonicalCharacterName,
@@ -59,7 +61,9 @@ describe('Jikan / TMDB mappers', () => {
             person: {
               mal_id: 8,
               name: 'Tanaka, Mayumi',
-              images: { jpg: { image_url: 'https://cdn.myanimelist.net/images/voiceactors/mayumi.jpg' } },
+              images: {
+                jpg: { image_url: 'https://cdn.myanimelist.net/images/voiceactors/mayumi.jpg' },
+              },
             },
           },
         ],
@@ -84,8 +88,19 @@ describe('Jikan / TMDB mappers', () => {
   it('groups TMDB credits by character name', () => {
     const mapped = mapTmdbCharacterCredits(
       [
-        { id: 1, name: 'Mayumi Tanaka', character: 'Monkey D. Luffy (voice)', profile_path: '/a.jpg', order: 0 },
-        { id: 2, name: 'Colleen Clinkenbeard', character: 'Monkey D. Luffy (voice)', profile_path: '/b.jpg' },
+        {
+          id: 1,
+          name: 'Mayumi Tanaka',
+          character: 'Monkey D. Luffy (voice)',
+          profile_path: '/a.jpg',
+          order: 0,
+        },
+        {
+          id: 2,
+          name: 'Colleen Clinkenbeard',
+          character: 'Monkey D. Luffy (voice)',
+          profile_path: '/b.jpg',
+        },
         { id: 3, name: 'Extra', character: 'Self' },
         { id: 4, name: 'Crowd', character: 'Additional Voices (voice)' },
         { id: 5, name: 'Nobody', character: '(voice)' },
@@ -107,7 +122,12 @@ describe('Jikan / TMDB mappers', () => {
         malId: 8,
         imagePath: 'https://cdn.myanimelist.net/images/voiceactors/mayumi.jpg',
       },
-      { contentId: 'content-1', characterName: 'Monkey D. Luffy', role: 'Main', characterId: 'char-1' },
+      {
+        contentId: 'content-1',
+        characterName: 'Monkey D. Luffy',
+        role: 'Main',
+        characterId: 'char-1',
+      },
     )
     assert.equal(mapped.name, 'Mayumi Tanaka')
     assert.equal(mapped.malId, 8)
@@ -146,7 +166,10 @@ describe('character portraits', () => {
       false,
     )
     assert.equal(isCharacterPortrait('/tmdb-profile.jpg'), false)
-    assert.equal(isCharacterPortrait('https://cdn.myanimelist.net/images/questionmark_white.gif'), false)
+    assert.equal(
+      isCharacterPortrait('https://cdn.myanimelist.net/images/questionmark_white.gif'),
+      false,
+    )
     assert.equal(characterPortraitPath('/tmdb-profile.jpg'), '')
     assert.equal(
       serializeEntity({
@@ -279,10 +302,7 @@ describe('serializeEntity', () => {
       ],
     })
     assert.equal(serialized.appearances[0].character.name, 'Monkey D. Luffy')
-    assert.equal(
-      serialized.appearances[0].character.imagePath.includes('characters'),
-      true,
-    )
+    assert.equal(serialized.appearances[0].character.imagePath.includes('characters'), true)
   })
 
   it('keeps studio names and logos as-is and trims studio search hits', () => {
@@ -402,7 +422,10 @@ describe('franchise character name merge keys', () => {
 })
 
 describe('compareCharactersForContent admin order', () => {
-  const character = (name, appearance) => ({ name, appearances: [{ content: 'w1', ...appearance }] })
+  const character = (name, appearance) => ({
+    name,
+    appearances: [{ content: 'w1', ...appearance }],
+  })
 
   it('puts admin-ordered characters first, in their order, ahead of role', () => {
     const list = [
@@ -433,5 +456,20 @@ describe('serializeEntity character names', () => {
       serializeEntity({ _id: 'c2', entityType: 'character', name: 'Natsuki, Subaru' }).name,
       'Subaru Natsuki',
     )
+  })
+})
+
+describe('person name keys', () => {
+  it('matches MAL "Last, First" with "First Last"', () => {
+    assert.equal(personNameKey('Takeuchi, Junko'), personNameKey('Junko Takeuchi'))
+    assert.notEqual(personNameKey('Junko Takeuchi'), personNameKey('Junko Takeda'))
+  })
+
+  it('folds romanization and word order for same-show matching', () => {
+    assert.equal(romajiNameKey('Yuuichirou Yano'), romajiNameKey('Yuichiro Yano'))
+    assert.equal(romajiNameKey('Yano, Yuuichirou'), romajiNameKey('Yuichiro Yano'))
+    assert.equal(romajiNameKey('Kouji Miura'), romajiNameKey('Koji Miura'))
+    assert.equal(romajiNameKey('Oono Yuuko'), romajiNameKey('Yuko Ono'))
+    assert.notEqual(romajiNameKey('Miho Tanino'), romajiNameKey('Miho Tanaka'))
   })
 })

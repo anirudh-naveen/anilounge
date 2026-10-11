@@ -303,6 +303,7 @@ class UnifiedContentService {
             'external_ids',
             'videos',
             movie ? 'release_dates' : 'content_ratings',
+            movie ? 'credits' : 'aggregate_credits',
           ].join(','),
         },
       })

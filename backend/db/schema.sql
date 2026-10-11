@@ -291,12 +291,15 @@ CREATE INDEX IF NOT EXISTS episodes_air_idx ON episodes (air_at);
 -- source: every anime season of a show shares the show's TVDB and IMDb ids.
 CREATE TABLE IF NOT EXISTS content_external_ids (
   content_id   UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
-  source       TEXT NOT NULL CHECK (source IN (
-                 'imdb', 'tvdb', 'wikidata', 'kitsu', 'anidb', 'livechart', 'anime_planet'
-               )),
+  source       TEXT NOT NULL,
   external_id  TEXT NOT NULL,
   PRIMARY KEY (content_id, source)
 );
+-- TVmaze (character images for western shows) joined the sources.
+ALTER TABLE content_external_ids DROP CONSTRAINT IF EXISTS content_external_ids_source_check;
+ALTER TABLE content_external_ids ADD CONSTRAINT content_external_ids_source_check CHECK (source IN (
+  'imdb', 'tvdb', 'wikidata', 'kitsu', 'anidb', 'livechart', 'anime_planet', 'tvmaze'
+));
 CREATE INDEX IF NOT EXISTS content_external_ids_lookup_idx
   ON content_external_ids (source, external_id);
 
@@ -439,6 +442,16 @@ CREATE TABLE IF NOT EXISTS staff_credits (
   PRIMARY KEY (work_id, person_id, role)
 );
 CREATE INDEX IF NOT EXISTS staff_credits_person_idx ON staff_credits (person_id);
+
+-- Who worked on each episode (episode director, storyboard, script, animation director),
+-- from AniList's episode notes ("Animation Director (eps 3, 7)") or TMDB's episode crew.
+CREATE TABLE IF NOT EXISTS episode_credits (
+  episode_id  UUID NOT NULL REFERENCES episodes (id) ON DELETE CASCADE,
+  person_id   UUID NOT NULL REFERENCES voices (content_id) ON DELETE CASCADE,
+  role        TEXT NOT NULL,
+  PRIMARY KEY (episode_id, person_id, role)
+);
+CREATE INDEX IF NOT EXISTS episode_credits_person_idx ON episode_credits (person_id);
 
 -- Admin link editing (services/adminLinks.js). Links an admin adds or reorders are
 -- marked so the catalog sync never deletes or reshuffles them; links an admin removes
