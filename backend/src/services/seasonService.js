@@ -146,6 +146,21 @@ function entryStart(run, released) {
 }
 
 /**
+ * An episode's title after it is renumbered. TMDB names episodes it has no title
+ * for yet "Episode 27" after their place in its own numbering; those follow the
+ * new number, and real titles are kept.
+ * @param {string} title
+ * @param {number} tmdbNumber - The episode's number on TMDB
+ * @param {number} number - The episode's number in the guide
+ * @returns {string}
+ */
+export function renumberedTitle(title, tmdbNumber, number) {
+  const placeholder = /^episode\s*0*(\d+)$/i.exec(String(title || '').trim())
+  if (!title || (placeholder && Number(placeholder[1]) === tmdbNumber)) return `Episode ${number}`
+  return title
+}
+
+/**
  * For anime, follow MAL/AniList's seasons over TMDB's. TMDB sometimes lists a
  * show as one long season (The Apothecary Diaries: seasons 1–3 as "Season 1",
  * episodes 1–60) while MAL/AniList list "Season 2" and "Season 3" as titles of
@@ -202,10 +217,12 @@ export function splitCombinedSeasons(seasons, episodes, anchor, candidates) {
       const slice = run.slice(start, starts[part + 1] ?? run.length)
       const first = slice[0].episode.episodeNumber
       for (const { episode } of slice) {
+        const episodeNumber = episode.episodeNumber - first + 1
         splitEpisodes.push({
           ...episode,
+          title: renumberedTitle(episode.title, episode.episodeNumber, episodeNumber),
           seasonNumber: number,
-          episodeNumber: episode.episodeNumber - first + 1,
+          episodeNumber,
           tmdbSeasonNumber: episode.seasonNumber,
           tmdbEpisodeNumber: episode.episodeNumber,
         })

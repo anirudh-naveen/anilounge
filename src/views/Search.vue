@@ -3,7 +3,7 @@
   Search.vue — catalog browse and search view.
 
   Movies/Series toggle, search field, collapsible filters, and horizontal
-  catalog rails (trending, in theatres / airing, upcoming). Search results
+  catalog rails (trending, in theatres / airing + this season, upcoming). Search results
   replace the rails. Backed by the content store. Hosts the floating AI
   assistant, which can also fill these results.
 -->
@@ -514,6 +514,7 @@ const yearFilterOptions = computed(() => buildYearFilterOptions(contentStore.all
 const railItems = (id: string): UnifiedContent[] => {
   if (browseType.value === 'tv') {
     if (id === 'airing') return contentStore.tvRails.airing
+    if (id === 'season') return contentStore.tvRails.season
     if (id === 'upcoming') return contentStore.tvRails.upcoming
     return contentStore.tvRails.popular
   }
@@ -525,6 +526,7 @@ const railItems = (id: string): UnifiedContent[] => {
 const railEmptyText = (id: string) => {
   if (browseType.value === 'tv') {
     if (id === 'airing') return 'Nothing is airing right now.'
+    if (id === 'season') return 'No anime from this season yet.'
     if (id === 'upcoming') return 'No upcoming series to highlight yet.'
     return 'No trending series right now.'
   }

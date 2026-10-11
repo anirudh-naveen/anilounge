@@ -6,6 +6,20 @@
  * (popular) is a single page.
  */
 
+import { ANIME_SEASONS, ANIME_SEASON_LABELS } from '@/utils/searchFilters'
+
+/**
+ * Anime broadcast season (MAL/AniList quarters) containing a date, in UTC to
+ * match the backend `season` tab, e.g. "Fall 2026".
+ * @param from - Clock to read.
+ */
+export function currentAnimeSeasonLabel(from = new Date()) {
+  const season = ANIME_SEASONS[Math.floor(from.getUTCMonth() / 3)]!
+  return `${ANIME_SEASON_LABELS[season]} ${from.getUTCFullYear()}`
+}
+
+const SEASON_LABEL = `Anime of ${currentAnimeSeasonLabel()}`
+
 export const TV_CATALOG_TABS = [
   {
     id: 'popular',
@@ -20,6 +34,13 @@ export const TV_CATALOG_TABS = [
     subtitle: 'Series broadcasting new episodes right now',
     emptyTitle: 'No currently airing shows',
     emptyBody: 'Nothing is marked as currently airing right now. Check back soon.',
+  },
+  {
+    id: 'season',
+    label: SEASON_LABEL,
+    subtitle: 'Anime series that premiered this season',
+    emptyTitle: 'No anime this season yet',
+    emptyBody: 'No anime series from this season are in the catalog yet. Check back soon.',
   },
   {
     id: 'upcoming',
@@ -218,6 +239,11 @@ export const TV_BROWSE_RAILS = [
     id: 'airing' as const,
     title: 'Airing Right Now',
     viewAll: catalogPath('tv', 'airing', 1),
+  },
+  {
+    id: 'season' as const,
+    title: SEASON_LABEL,
+    viewAll: catalogPath('tv', 'season', 1),
   },
   {
     id: 'upcoming' as const,
