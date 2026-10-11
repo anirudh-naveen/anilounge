@@ -12,5 +12,7 @@ Disallow: /watchlist
 Disallow: /profile
 Disallow: /verify-email
 Disallow: /unlock-account
+# Search results for a query are endless variations of /search (their canonical page).
+Disallow: /search?
 
 Sitemap: https://www.anilounge.net/sitemap.xml

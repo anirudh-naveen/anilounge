@@ -14,6 +14,7 @@ import { query } from '../../config/postgres.js'
 import { isUuid } from '../db/ids.js'
 import { stripFormatting } from '../utils/richText.js'
 import { INDEXABLE_SQL } from '../utils/seoIndexing.js'
+import { movedTo } from './contentMoves.js'
 import { contentDisplayName, contentPagePath, detailPath } from '../utils/slug.js'
 
 const SITE_NAME = 'AniLounge'
@@ -54,6 +55,18 @@ const STATIC_PAGES = {
     description:
       'Search animated movies, series, characters, voice actors, and studios by title, genre, year, season, and rating.',
     heading: 'Search animation',
+  },
+  '/privacy': {
+    title: 'Privacy policy',
+    description:
+      'What AniLounge collects, why, who it shares data with, and how to get a copy of your data or delete your account. AniLounge is free, has no ads, and does not sell your data.',
+    heading: 'AniLounge privacy policy',
+  },
+  '/support': {
+    title: 'Support',
+    description:
+      'Get help with the AniLounge website and iOS app: contact options, bug reports, and answers to common account questions.',
+    heading: 'AniLounge support',
   },
 }
 
@@ -505,7 +518,8 @@ async function entityPage(row) {
 }
 
 async function contentPage({ prefix, id }) {
-  const kinds = ROUTE_KINDS[prefix]
+  // No prefix (a merge target): any kind; the page's canonical path has the right one.
+  const kinds = ROUTE_KINDS[prefix] || Object.keys(INDEXABLE_SQL)
   const indexable = Object.entries(INDEXABLE_SQL)
     .map(([kind, sql]) => `WHEN '${kind}' THEN ${sql}`)
     .join(' ')
@@ -661,7 +675,14 @@ export async function describePage(path, base) {
   let page = null
   if (parsed.type === 'static') page = await staticPage(parsed.key)
   else if (parsed.type === 'post') page = await postPage(parsed.id)
-  else page = await contentPage(parsed)
+  else {
+    page = await contentPage(parsed)
+    // A merged page shows (and so redirects to) the page it was merged into.
+    if (!page) {
+      const target = await movedTo(parsed.id).catch(() => null)
+      if (target) page = await contentPage({ ...parsed, id: target, prefix: null })
+    }
+  }
   const value = page ? { found: true, page: absolutize(page, base) } : { found: false }
 
   if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value)

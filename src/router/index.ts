@@ -214,6 +214,12 @@ const router = createRouter({
       component: () => import('@/views/StudioDetails.vue'),
     },
     ...legacySlugRoutes,
+    {
+      // Keep in step with APP_ROUTES in middleware.ts, which sends a 404 for anything else.
+      path: '/:pathMatch(.*)*',
+      name: 'notFound',
+      component: () => import('@/views/NotFound.vue'),
+    },
   ],
 })
 
