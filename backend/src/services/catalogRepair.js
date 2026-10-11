@@ -173,6 +173,12 @@ async function carryExternalIds(toId, source) {
  */
 export async function mergeDuplicateWork(fromId, toId) {
   if (!fromId || !toId || String(fromId) === String(toId)) return
+  // A series with seasons is never merged away: its seasons would go with it.
+  const { rows: parent } = await query(
+    'SELECT 1 FROM seasons WHERE series_id = ANY($1::uuid[]) LIMIT 1',
+    [[String(fromId), String(toId)]],
+  )
+  if (parent.length) return
   await withTransaction(async () => {
     const { rows } = await query(
       `SELECT mal_id, tmdb_id, anilist_id FROM content
@@ -219,6 +225,16 @@ export async function mergeDuplicateTitles(isSame) {
      JOIN content ca ON ca.id = a.id
      JOIN content cb ON cb.id = b.id
      WHERE a.key <> ''
+       -- Series with seasons share their first season's name and carry no MAL id.
+       AND NOT EXISTS (SELECT 1 FROM seasons sn WHERE sn.series_id IN (a.id, b.id))
+       -- Two seasons of one show are different seasons whatever their names (TMDB can
+       -- name two seasons alike), and a season without a MAL/AniList id has nothing
+       -- to tell it apart.
+       AND NOT (a.kind = 'season' AND (
+         (ca.mal_id IS NULL AND ca.anilist_id IS NULL)
+         OR (cb.mal_id IS NULL AND cb.anilist_id IS NULL)
+         OR (SELECT series_id FROM seasons WHERE content_id = a.id)
+            = (SELECT series_id FROM seasons WHERE content_id = b.id)))
        AND (ca.mal_id IS NULL OR cb.mal_id IS NULL OR ca.mal_id = cb.mal_id)
        AND (ca.tmdb_id IS NULL OR cb.tmdb_id IS NULL OR ca.tmdb_id = cb.tmdb_id)
        AND (ca.anilist_id IS NULL OR cb.anilist_id IS NULL OR ca.anilist_id = cb.anilist_id)`,
@@ -566,6 +582,21 @@ export async function enforceSchemaLinks() {
       'studio_credits_on_non_watchable',
       `DELETE FROM studio_credits sc USING content c
        WHERE c.id = sc.work_id AND c.kind NOT IN ${WATCHABLE}`,
+    )
+    // A season is in its series' franchise, never a member itself: its series takes
+    // the membership (first season's, when the series has none) and the season drops it.
+    await run(
+      'franchise_members_series_from_seasons',
+      `INSERT INTO franchise_members (franchise_id, member_id)
+       SELECT DISTINCT ON (sn.series_id) fm.franchise_id, sn.series_id
+       FROM franchise_members fm JOIN seasons sn ON sn.content_id = fm.member_id
+       WHERE NOT EXISTS (SELECT 1 FROM franchise_members x WHERE x.member_id = sn.series_id)
+       ORDER BY sn.series_id, sn.season_number, sn.part_number
+       ON CONFLICT DO NOTHING`,
+    )
+    await run(
+      'franchise_members_seasons',
+      `DELETE FROM franchise_members fm USING seasons sn WHERE sn.content_id = fm.member_id`,
     )
     await run(
       'franchise_members_non_watchable',
