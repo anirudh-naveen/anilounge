@@ -8,11 +8,12 @@
 #   3. (asks to continue)
 #   4. db:restructure-series         backs up to a backup_<stamp> schema, applies, commits
 #   5. db:reload --phases seasons    imports every title by source priority (long: hours)
-#   6. db:reload --phases characters,photos   characters (TVmaze images for western
-#                                    shows) and photos for people without one
+#   6. full db:reload                repair, AniList links, new popular titles (with their
+#                                    seasons), characters (TVmaze images), studios,
+#                                    cleanup, and photos; titles step 5 imported are skipped
 #
 # Deploy the new code before running this. Uses DATABASE_URL from the environment, else
-# backend/.env. Step 5 can be stopped and rerun; it resumes from its checkpoint.
+# backend/.env. Steps 5 and 6 can be stopped and rerun; they resume from a checkpoint.
 #
 # Usage: bash backend/src/scripts/run-series-migration.sh
 set -euo pipefail
@@ -54,8 +55,8 @@ echo "== 4/5 Importing seasons, episodes, tags, staff, and ids =="
 npm run db:reload -- --phases seasons --workers 2 --fresh
 
 echo
-echo "== 5/5 Characters (TVmaze images) and people's photos =="
-npm run db:reload -- --phases characters,photos --workers 2
+echo "== 5/5 Full reload (characters, studios, cleanup, photos, new titles) =="
+npm run db:reload -- --phases repair,anilist,import,seasons,characters,studios,cleanup,photos --workers 2
 
 echo
 echo "Done. Check a few pages (e.g. Blue Box, Attack on Titan) and the Search rails."
