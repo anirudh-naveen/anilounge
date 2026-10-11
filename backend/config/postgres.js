@@ -207,16 +207,23 @@ export async function startSession() {
  * @template T
  */
 export async function withTransaction(fn) {
-  const session = await startSession()
+  const client = await getPool().connect()
+  const outer = txContext.getStore() || []
   try {
-    await session.startTransaction()
-    const result = await fn()
-    await session.commitTransaction()
+    await client.query('BEGIN')
+    // `run` scopes the client to `fn` and what it awaits; the caller's later queries
+    // go back to the pool (`enterWith` would leave them on this released client).
+    const result = await txContext.run([...outer, client], fn)
+    await client.query('COMMIT')
     return result
   } catch (error) {
-    await session.abortTransaction()
+    try {
+      await client.query('ROLLBACK')
+    } catch {
+      // Connection already aborted.
+    }
     throw error
   } finally {
-    session.endSession()
+    client.release()
   }
 }

@@ -90,8 +90,22 @@ const ALL_PHASES = [
   'studios',
   'cleanup',
 ]
-/** Phases a plain run leaves out; they run only when named in --phases. */
-const NAMED_ONLY_PHASES = ['seasons', 'photos']
+/**
+ * Order phases run in: seasons (and new titles' seasons) before characters and cleanup.
+ * A plain run (no --phases) runs ALL_PHASES; `seasons` and `photos` run only when named.
+ */
+const PHASE_ORDER = [
+  'backup',
+  'repair',
+  'anilist',
+  'import',
+  'titles',
+  'seasons',
+  'characters',
+  'studios',
+  'cleanup',
+  'photos',
+]
 const FAMILY_KINDS = [
   'sequel',
   'prequel',
@@ -131,10 +145,9 @@ function parseArgs() {
       options.fresh = true
     }
   }
-  const known = [...ALL_PHASES, ...NAMED_ONLY_PHASES]
-  const unknown = options.phases.filter((phase) => !known.includes(phase))
+  const unknown = options.phases.filter((phase) => !PHASE_ORDER.includes(phase))
   if (unknown.length) throw new Error(`Unknown phase(s): ${unknown.join(', ')}`)
-  options.phases = known.filter((phase) => options.phases.includes(phase))
+  options.phases = PHASE_ORDER.filter((phase) => options.phases.includes(phase))
   return options
 }
 
