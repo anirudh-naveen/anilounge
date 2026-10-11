@@ -5,6 +5,7 @@
 import { query } from '../../config/postgres.js'
 import { asId } from '../db/ids.js'
 import Entity from '../models/Entity.js'
+import { recordMove } from './contentMoves.js'
 import {
   canonicalCharacterName,
   canonicalCharacterNameKey,
@@ -456,6 +457,7 @@ export async function mergeCharacterPair(primary, secondary, homeIds) {
     [toId, englishName],
   )
   if (!leftover[0]) {
+    await recordMove(fromId, toId)
     await query(`DELETE FROM content WHERE id = $1 AND kind = 'character'`, [fromId])
   }
 
@@ -515,9 +517,7 @@ export async function mergeFranchiseCharactersForWork(workId, knownHomeIds) {
  */
 export async function mergeAllFranchiseCharacters({ onProgress } = {}) {
   homeCharacterCache.clear()
-  const { rows: workRows } = await query(
-    `SELECT DISTINCT work_id::text AS id FROM appearances`,
-  )
+  const { rows: workRows } = await query(`SELECT DISTINCT work_id::text AS id FROM appearances`)
   const seen = new Set()
   let merged = 0
   for (const [index, row] of workRows.entries()) {
