@@ -1303,7 +1303,8 @@ CREATE INDEX IF NOT EXISTS donations_unclaimed_email_idx ON donations (email)
 
 -- Site metrics (services/metricsService.js): page views and clicks the app reports,
 -- read on the admin Metrics tab. `visitor_id` is a random id the browser keeps in
--- localStorage; no IP address or user agent is stored. Rows expire after 400 days.
+-- localStorage; no IP address or user agent is stored (only a bot's name, below).
+-- Rows expire after 400 days.
 CREATE TABLE IF NOT EXISTS site_events (
   id          BIGSERIAL PRIMARY KEY,
   type        TEXT NOT NULL CHECK (type IN ('view', 'click')),
@@ -1315,6 +1316,9 @@ CREATE TABLE IF NOT EXISTS site_events (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS site_events_created_idx ON site_events (created_at);
+-- Bots and crawlers that report events (utils/botAgents.js): the bot's name, NULL for
+-- a person. Counted apart from visitors on the Metrics tab. Not the User-Agent itself.
+ALTER TABLE site_events ADD COLUMN IF NOT EXISTS bot TEXT;
 
 -- Forum reports (services/forumReportService.js): a signed-in user flags a post or
 -- comment; admins review open reports on the admin Reports tab. One report per user

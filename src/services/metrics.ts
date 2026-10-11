@@ -4,7 +4,9 @@
  * Views come from the router (`trackPageView`); clicks from one document listener
  * that records links, buttons, and anything marked `data-track="label"` (mark an area
  * `data-no-track` to skip it). Events are batched and sent to `POST /api/metrics/events`
- * with a random visitor id kept in localStorage. Admin pages are not tracked.
+ * with a random visitor id kept in localStorage, plus whether the browser is under
+ * automation (`navigator.webdriver`), so the server can count bots apart from people.
+ * Admin pages are not tracked.
  */
 
 import { API_BASE_URL, getAccessToken } from './api'
@@ -58,7 +60,11 @@ function flush() {
       'X-Requested-With': 'XMLHttpRequest',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ visitorId: getVisitorId(), events }),
+    body: JSON.stringify({
+      visitorId: getVisitorId(),
+      events,
+      automated: typeof navigator !== 'undefined' && navigator.webdriver === true,
+    }),
   }).catch(() => {})
 }
 
