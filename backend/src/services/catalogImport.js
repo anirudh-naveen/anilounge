@@ -24,6 +24,7 @@ import {
   anilistSnapshot,
   compactSnapshot,
   malSnapshot,
+  isPlaceholderTitle,
   mergeEpisodes,
   tmdbSeasonSnapshot,
   tmdbSnapshot,
@@ -41,17 +42,22 @@ const MAX_JIKAN_EPISODE_PAGES = 15
  * Each source's snapshot of a watchable. Seasons skip TMDB's show (their series
  * holds it); AniList is looked up by MAL id when the row has no AniList id.
  * @param {object} doc - Content document
+ * @param {{ anilist?: object | null }} [options] - The row's AniList media when already
+ *   fetched (null: AniList has none); fetched here otherwise.
  * @returns {Promise<{ snapshots: Record<string, object>, schedule: object[] }>}
  *   `schedule`: AniList airing times by episode.
  */
-export async function fetchSnapshots(doc) {
+export async function fetchSnapshots(doc, { anilist } = {}) {
   const snapshots = {}
   let schedule = []
 
   if (doc.anilistId || doc.malId) {
-    const [media] = await fetchAnilistDetailsBatch(
-      doc.anilistId ? { anilistIds: [doc.anilistId] } : { malIds: [doc.malId] },
-    )
+    const [media] =
+      anilist !== undefined
+        ? [anilist]
+        : await fetchAnilistDetailsBatch(
+            doc.anilistId ? { anilistIds: [doc.anilistId] } : { malIds: [doc.malId] },
+          )
     if (media) {
       snapshots.anilist = compactSnapshot(anilistSnapshot(media))
       schedule = media.airingSchedule?.nodes || []
@@ -505,35 +511,44 @@ export async function fetchJikanEpisodes(malId) {
  */
 export async function writeEpisodes(seasonId, episodes) {
   if (!episodes.length) return
-  for (const episode of episodes) {
-    await query(
-      `INSERT INTO episodes (season_id, number, title, title_romaji, title_native, overview,
-         still_path, air_at, runtime, is_filler, is_recap, tmdb_episode_id, tmdb_score, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
-       ON CONFLICT (season_id, number) DO UPDATE SET
-         title = EXCLUDED.title, title_romaji = EXCLUDED.title_romaji,
-         title_native = EXCLUDED.title_native, overview = EXCLUDED.overview,
-         still_path = EXCLUDED.still_path, air_at = EXCLUDED.air_at, runtime = EXCLUDED.runtime,
-         is_filler = EXCLUDED.is_filler, is_recap = EXCLUDED.is_recap,
-         tmdb_episode_id = EXCLUDED.tmdb_episode_id, tmdb_score = EXCLUDED.tmdb_score,
-         updated_at = now()`,
-      [
-        seasonId,
-        episode.number,
-        episode.title,
-        episode.titleRomaji,
-        episode.titleNative,
-        episode.overview,
-        episode.stillPath,
-        episode.airAt,
-        episode.runtime,
-        episode.isFiller,
-        episode.isRecap,
-        episode.tmdbEpisodeId,
-        episode.tmdbScore,
-      ],
-    )
-  }
+  // One statement for the whole season: each round trip to the database counts.
+  await query(
+    `INSERT INTO episodes (season_id, number, title, title_romaji, title_native, overview,
+       still_path, air_at, runtime, is_filler, is_recap, tmdb_episode_id, tmdb_score, updated_at)
+     SELECT $1, e.number, e.title, e.title_romaji, e.title_native, e.overview, e.still_path,
+            e.air_at, e.runtime, coalesce(e.is_filler, false), coalesce(e.is_recap, false),
+            e.tmdb_episode_id, e.tmdb_score, now()
+     FROM jsonb_to_recordset($2::jsonb) AS e(
+       number int, title text, title_romaji text, title_native text, overview text,
+       still_path text, air_at timestamptz, runtime int, is_filler boolean, is_recap boolean,
+       tmdb_episode_id int, tmdb_score float8)
+     ON CONFLICT (season_id, number) DO UPDATE SET
+       title = EXCLUDED.title, title_romaji = EXCLUDED.title_romaji,
+       title_native = EXCLUDED.title_native, overview = EXCLUDED.overview,
+       still_path = EXCLUDED.still_path, air_at = EXCLUDED.air_at, runtime = EXCLUDED.runtime,
+       is_filler = EXCLUDED.is_filler, is_recap = EXCLUDED.is_recap,
+       tmdb_episode_id = EXCLUDED.tmdb_episode_id, tmdb_score = EXCLUDED.tmdb_score,
+       updated_at = now()`,
+    [
+      seasonId,
+      JSON.stringify(
+        episodes.map((episode) => ({
+          number: episode.number,
+          title: episode.title,
+          title_romaji: episode.titleRomaji,
+          title_native: episode.titleNative,
+          overview: episode.overview,
+          still_path: episode.stillPath,
+          air_at: episode.airAt,
+          runtime: episode.runtime,
+          is_filler: episode.isFiller,
+          is_recap: episode.isRecap,
+          tmdb_episode_id: episode.tmdbEpisodeId,
+          tmdb_score: episode.tmdbScore,
+        })),
+      ),
+    ],
+  )
   await query('DELETE FROM episodes WHERE season_id = $1 AND number > $2', [
     seasonId,
     Math.max(...episodes.map((episode) => episode.number)),
@@ -644,9 +659,9 @@ export function seriesTotals(seasons) {
  */
 export async function importSeason(
   season,
-  { siblings, tmdb = null, seriesTmdbId = null, save = {} },
+  { siblings, tmdb = null, seriesTmdbId = null, save = {}, anilist, details = true },
 ) {
-  const { snapshots, schedule } = await fetchSnapshots(season)
+  const { snapshots, schedule } = await fetchSnapshots(season, { anilist })
   if (season.tmdbSeasonNumber == null && tmdb) {
     // A season the airing dates couldn't place (announced, or added later): Fribb's
     // placement, when it fits TMDB's seasons.
@@ -678,22 +693,84 @@ export async function importSeason(
   })
 
   const tmdbEpisodes = tmdb ? tmdbEpisodesForSeason(season, siblings, tmdb.episodes) : []
-  const jikan = season.malId ? await fetchJikanEpisodes(season.malId) : []
+  const jikan = details && season.malId ? await fetchJikanEpisodes(season.malId) : []
   await writeEpisodes(
     String(season._id),
     mergeEpisodes({ anime, count: season.episodeCount, tmdb: tmdbEpisodes, jikan, schedule }),
   )
-  // Who worked on each episode: AniList's episode notes for anime (they often cover only
-  // some episodes), TMDB's crew for the episodes AniList doesn't credit.
+  if (details) await importEpisodeCredits(season, tmdbEpisodes)
+  return season
+}
+
+/**
+ * Who worked on each episode of a season: AniList's episode notes for anime (they often
+ * cover only some episodes), TMDB's crew for the episodes AniList doesn't credit.
+ * @param {object} season - Season document
+ * @param {object[]} tmdbEpisodes - The season's TMDB episodes (`tmdbEpisodesForSeason`)
+ * @returns {Promise<number>} Credits written
+ */
+export async function importEpisodeCredits(season, tmdbEpisodes) {
   const anilistCredits = season.anilistId
     ? anilistEpisodeCredits(await fetchAnilistStaffCredits(season.anilistId))
     : []
   const credited = new Set(anilistCredits.map((credit) => credit.episode))
-  await writeEpisodeCredits(String(season._id), [
+  return writeEpisodeCredits(String(season._id), [
     ...anilistCredits,
     ...tmdbEpisodeCredits(tmdbEpisodes).filter((credit) => !credited.has(credit.episode)),
   ])
-  return season
+}
+
+/**
+ * The slow, per-episode details of a series' seasons, apart from `importSeries`:
+ * MAL episode titles, romaji/Japanese titles, and filler/recap flags (Jikan), and who
+ * worked on each episode (AniList staff pages, TMDB crew). Episodes it has no row for
+ * are left alone.
+ * @param {string} seriesId
+ * @returns {Promise<{ seasons: number, credits: number }>}
+ */
+export async function importEpisodeDetails(seriesId) {
+  const series = await Content.findById(seriesId)
+  if (!series || series.contentType !== 'tv') return { seasons: 0, credits: 0 }
+  const seasons = await loadSeasons(seriesId)
+  const tmdb = series.tmdbId
+    ? await unifiedContentService.fetchTmdbSeasonData(series.tmdbId, series.seasonCount)
+    : null
+  let credits = 0
+  for (const season of seasons) {
+    const anime = Boolean(season.malId || season.anilistId)
+    const jikan = season.malId ? await fetchJikanEpisodes(season.malId) : []
+    for (const episode of jikan) {
+      const number = Number(episode?.mal_id)
+      if (!(number > 0)) continue
+      const title = isPlaceholderTitle(episode.title) ? null : String(episode.title).trim()
+      await query(
+        `UPDATE episodes SET
+           title = CASE WHEN $3::text IS NOT NULL AND ($7 OR title ~* '^episode \\d+$')
+                        THEN $3 ELSE title END,
+           title_romaji = COALESCE($4, title_romaji),
+           title_native = COALESCE($5, title_native),
+           is_filler = $6, is_recap = $8,
+           air_at = COALESCE(air_at, $9::timestamptz),
+           updated_at = now()
+         WHERE season_id = $1 AND number = $2`,
+        [
+          String(season._id),
+          number,
+          title,
+          episode.title_romanji || null,
+          episode.title_japanese || null,
+          Boolean(episode.filler),
+          anime,
+          Boolean(episode.recap),
+          episode.aired || null,
+        ],
+      )
+    }
+    const tmdbEpisodes = tmdb ? tmdbEpisodesForSeason(season, seasons, tmdb.episodes) : []
+    credits += await importEpisodeCredits(season, tmdbEpisodes)
+  }
+  await mergeShowPeople(seriesId)
+  return { seasons: seasons.length, credits }
 }
 
 /**
@@ -743,7 +820,7 @@ export async function writeEpisodeCredits(seasonId, credits) {
  * @param {{ save?: object }} [options] - Passed to `Content.save`
  * @returns {Promise<object | null>} The series document
  */
-export async function importSeries(seriesId, { save = {} } = {}) {
+export async function importSeries(seriesId, { save = {}, details = true } = {}) {
   const series = await Content.findById(seriesId)
   if (!series || series.contentType !== 'tv') return null
   let seasons = await loadSeasons(seriesId)
@@ -773,8 +850,27 @@ export async function importSeries(seriesId, { save = {} } = {}) {
     }
   }
 
+  // Every season's AniList details in one request (AniList allows 30-90 a minute).
+  const media = await fetchAnilistDetailsBatch({
+    anilistIds: seasons.map((season) => season.anilistId).filter(Boolean),
+    malIds: seasons.filter((season) => !season.anilistId).map((season) => season.malId),
+  })
+  const anilistFor = (season) =>
+    media.find(
+      (item) =>
+        (season.anilistId && Number(item.id) === Number(season.anilistId)) ||
+        (season.malId && Number(item.idMal) === Number(season.malId)),
+    ) || null
   for (const season of seasons) {
-    await importSeason(season, { siblings: seasons, tmdb, seriesTmdbId: series.tmdbId, save })
+    await importSeason(season, {
+      siblings: seasons,
+      tmdb,
+      seriesTmdbId: series.tmdbId,
+      save,
+      details,
+      // Seasons this import just made (TMDB-only) have no AniList entry to look up.
+      anilist: season.anilistId || season.malId ? anilistFor(season) : undefined,
+    })
   }
   seasons = await loadSeasons(seriesId)
 
