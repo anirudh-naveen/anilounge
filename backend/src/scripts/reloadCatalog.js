@@ -110,7 +110,10 @@ function parseArgs() {
   for (let i = 0; i < args.length; i += 1) {
     const next = args[i + 1]
     if (args[i] === '--phases' && next) {
-      options.phases = next.split(',').map((value) => value.trim()).filter(Boolean)
+      options.phases = next
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
       i += 1
     } else if (args[i] === '--workers' && next) {
       options.workers = Math.max(1, parseInt(next, 10) || 1)
@@ -325,7 +328,11 @@ async function reloadTitle(id, populator, byMal) {
 
   if (content.tmdbId && unifiedContentService.hasTmdbKey) {
     const types =
-      content.contentType === 'movie' ? ['movie'] : content.contentType === 'tv' ? ['tv'] : ['movie', 'tv']
+      content.contentType === 'movie'
+        ? ['movie']
+        : content.contentType === 'tv'
+          ? ['tv']
+          : ['movie', 'tv']
     for (const type of types) {
       const details = await unifiedContentService.getTmdbContentDetails(content.tmdbId, type)
       if (!details) continue
