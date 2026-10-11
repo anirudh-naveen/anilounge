@@ -56,9 +56,9 @@
     </section>
 
     <!-- Title: Staff -->
-    <section v-if="staffByPerson.length" class="extras-section">
+    <section v-if="staffByPerson.length || episodeStaff.length" class="extras-section">
       <h3>Staff</h3>
-      <div class="staff-list">
+      <div v-if="staffByPerson.length" class="staff-list">
         <router-link
           v-for="person in staffByPerson"
           :key="person._id"
@@ -79,6 +79,33 @@
           </div>
         </router-link>
       </div>
+      <template v-if="episodeStaff.length">
+        <h4 class="staff-subheading">Episode staff</h4>
+        <div class="staff-list" data-testid="episode-staff-list">
+          <router-link
+            v-for="person in episodeStaff"
+            :key="`${person._id}-${person.role}`"
+            :to="detailPath('/staff', person._id, person.name)"
+            class="staff-card"
+          >
+            <img
+              v-if="person.imagePath"
+              :src="getProfileUrl(person.imagePath)"
+              :alt="person.name"
+              @error="hideBrokenImage"
+            />
+            <div v-else class="no-photo"><i class="fas fa-user"></i></div>
+            <div>
+              <p class="staff-name">{{ person.name }}</p>
+              <p class="staff-role">
+                {{ person.role }} · {{ person.episodes }} episode{{
+                  person.episodes === 1 ? '' : 's'
+                }}
+              </p>
+            </div>
+          </router-link>
+        </div>
+      </template>
     </section>
   </div>
 </template>
@@ -91,7 +118,7 @@ import { detailPath } from '@/utils/slug'
 import { hideBrokenImage } from '@/utils/posters'
 
 const props = defineProps<{
-  content: Pick<UnifiedContent, '_id' | 'trailer' | 'tags' | 'staff'>
+  content: Pick<UnifiedContent, '_id' | 'trailer' | 'tags' | 'staff' | 'episodeStaff'>
 }>()
 
 const trailerOpen = ref(false)
@@ -126,8 +153,13 @@ const staffByPerson = computed(() => {
   }
   return [...people.values()]
 })
+const episodeStaff = computed(() => props.content.episodeStaff || [])
 const hasAny = computed(
-  () => Boolean(trailerKey.value) || tags.value.length > 0 || staffByPerson.value.length > 0,
+  () =>
+    Boolean(trailerKey.value) ||
+    tags.value.length > 0 ||
+    staffByPerson.value.length > 0 ||
+    episodeStaff.value.length > 0,
 )
 </script>
 
@@ -219,6 +251,12 @@ const hasAny = computed(
 
 .chip.toggle:hover {
   border-color: var(--coral-primary);
+}
+
+.staff-subheading {
+  margin: 1rem 0 0.6rem;
+  font-size: 1rem;
+  color: var(--text-muted);
 }
 
 .staff-list {

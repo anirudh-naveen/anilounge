@@ -57,6 +57,7 @@ async function loadEntityChildren(docs) {
        SELECT o.owner_id, a.*, json_agg(
          json_build_object(
            'name', vc.name,
+           'imagePath', vc.image_path,
            'language', v.language,
            'entity', v.voice_id
          )

@@ -68,6 +68,8 @@ export interface UnifiedContent {
   sourceMaterial?: string | null
   tags?: TitleTag[]
   staff?: StaffCredit[]
+  /** Everyone credited on its episodes, with how many episodes. */
+  episodeStaff?: Array<StaffCredit & { episodes: number }>
   externalLinks?: ExternalLink[]
   alternativeTitles?: string[]
   tmdbId?: number
@@ -138,6 +140,8 @@ export interface Episode {
   titleNative?: string
   isFiller?: boolean
   isRecap?: boolean
+  /** Who directed, storyboarded, wrote, and animation-directed it. */
+  staff?: Array<{ _id: string; name: string; role: string }>
 }
 
 /** One TMDB season of a show, linked to the catalog title for that season when stored. */

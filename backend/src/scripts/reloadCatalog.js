@@ -27,6 +27,8 @@
  *               services/catalogImport.js: source snapshots, fields by source
  *               priority, tags, key staff, ids on other sites. Run after
  *               `npm run db:restructure-series`.
+ *   photos      (Only when named.) Photos for people without one: TMDB's profile
+ *               photo, else their Wikidata image (services/personPhotos.js).
  *
  * Usage:
  *   npm run db:reload
@@ -69,6 +71,7 @@ import { applyFranchisePlan, loadFranchisePlan } from '../services/franchiseBuil
 import * as repair from '../services/catalogRepair.js'
 import { importSeries, importStandalone } from '../services/catalogImport.js'
 import { hasSeriesStructure } from '../services/seriesStructure.js'
+import { fillPersonPhotos } from '../services/personPhotos.js'
 
 dotenv.config()
 // The pool is created on first query, so this applies to the whole run.
@@ -88,7 +91,7 @@ const ALL_PHASES = [
   'cleanup',
 ]
 /** Phases a plain run leaves out; they run only when named in --phases. */
-const NAMED_ONLY_PHASES = ['seasons']
+const NAMED_ONLY_PHASES = ['seasons', 'photos']
 const FAMILY_KINDS = [
   'sequel',
   'prequel',
@@ -730,6 +733,10 @@ async function run() {
     studios: () => phaseStudios(options, checkpoint),
     cleanup: () => phaseCleanup(),
     seasons: () => phaseSeasons(options, checkpoint),
+    photos: async () => {
+      const result = await fillPersonPhotos({ limit: options.limit || 20000 })
+      console.log(`  Photos: ${result.filled} of ${result.checked} people without one`)
+    },
   }
   let incomplete = false
   for (const phase of options.phases) {

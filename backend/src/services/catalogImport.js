@@ -14,8 +14,10 @@ import { query } from '../../config/postgres.js'
 import Content, { loadWorksById } from '../models/Content.js'
 import { malStatusFromAiring } from '../db/kinds.js'
 import unifiedContentService from './unifiedContentService.js'
-import { fetchAnilistDetailsBatch } from './anilistService.js'
+import { fetchAnilistDetailsBatch, fetchAnilistStaffCredits } from './anilistService.js'
+import { anilistEpisodeCredits, tmdbEpisodeCredits } from '../utils/staffCredits.js'
 import { jikanGet } from './entityService.js'
+import { mergeVoiceInto } from './catalogRepair.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 import { isAnime, resolveFields } from '../utils/sourcePriority.js'
 import {
@@ -30,6 +32,7 @@ import { fribbEntryFor, fribbTmdbPlacement } from '../utils/fribb.js'
 import { loadFribbIndex } from './fribbService.js'
 import { seasonRowName } from '../utils/seasonPlan.js'
 import { uniqueTitles } from '../utils/titles.js'
+import { personNameKey, romajiNameKey } from '../utils/entities.js'
 
 /** Jikan lists 100 episodes a page; long shows (One Piece) need many pages. */
 const MAX_JIKAN_EPISODE_PAGES = 15
@@ -210,36 +213,227 @@ async function writeTags(workId, tags) {
 }
 
 /**
- * Person row (`voices`) for an AniList staff member: by AniList id, else a new row.
- * @param {{ anilistId: number, name: string, nativeName?: string, imagePath?: string }} staff
- * @returns {Promise<string>}
+ * A show's rows: a season's series and every season of it, a series and its seasons,
+ * or just the title itself.
+ * @param {string} workId
+ * @returns {Promise<string[]>}
  */
-async function upsertPerson(staff) {
+async function showWorkIds(workId) {
   const { rows } = await query(
-    `SELECT id FROM content WHERE kind = 'voice' AND anilist_id = $1 LIMIT 1`,
-    [staff.anilistId],
+    `WITH show AS (
+       SELECT COALESCE((SELECT series_id FROM seasons WHERE content_id = $1), $1) AS id
+     )
+     SELECT id::text AS id FROM show
+     UNION SELECT content_id::text FROM seasons WHERE series_id = (SELECT id FROM show)
+     UNION SELECT $1::text`,
+    [workId],
   )
-  if (rows[0]) return String(rows[0].id)
+  return rows.map((row) => row.id)
+}
+
+/**
+ * People already credited on a show (voice, staff, or episode credits).
+ * @param {string[]} workIds
+ * @returns {Promise<object[]>}
+ */
+async function peopleOnShow(workIds) {
+  const { rows } = await query(
+    `SELECT DISTINCT p.id::text AS id, p.name, p.native_name, p.mal_id, p.anilist_id, p.tmdb_id
+     FROM content p
+     WHERE p.kind = 'voice' AND p.id IN (
+       SELECT person_id FROM staff_credits WHERE work_id = ANY($1::uuid[])
+       UNION
+       SELECT ec.person_id FROM episode_credits ec JOIN episodes e ON e.id = ec.episode_id
+       WHERE e.season_id = ANY($1::uuid[])
+       UNION
+       SELECT vc.voice_id FROM voice_credits vc JOIN appearances a ON a.id = vc.appearance_id
+       WHERE a.work_id = ANY($1::uuid[])
+     )`,
+    [workIds],
+  )
+  return rows
+}
+
+/**
+ * Whether a stored person can be the incoming one: no source id that differs, and
+ * native names (when both have one) the same.
+ * @param {object} row - `content` row
+ * @param {{ anilistId?: number | null, tmdbId?: number | null, nativeName?: string }} staff
+ * @returns {boolean}
+ */
+function samePersonPossible(row, staff) {
+  if (staff.anilistId && row.anilist_id && Number(row.anilist_id) !== staff.anilistId) return false
+  if (staff.tmdbId && row.tmdb_id && Number(row.tmdb_id) !== staff.tmdbId) return false
+  const native = (value) => String(value || '').replace(/\s+/g, '')
+  return !(
+    native(row.native_name) &&
+    native(staff.nativeName) &&
+    native(row.native_name) !== native(staff.nativeName)
+  )
+}
+
+/**
+ * Merge people on a show who are one person listed twice (AniList's "Yuuko Kakihara"
+ * and TMDB's "Yuko Kakihara"): same name with romanization and order folded, and no
+ * source id that differs. The row with a MAL id, else an AniList id, else the most
+ * credits, is kept and takes the others' ids and credits.
+ * @param {string} workId - Any row of the show
+ * @returns {Promise<number>} People merged away
+ */
+export async function mergeShowPeople(workId) {
+  const people = await peopleOnShow(await showWorkIds(workId))
+  const groups = new Map()
+  for (const person of people) {
+    const key = romajiNameKey(person.name)
+    if (!key) continue
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(person)
+  }
+  let merged = 0
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    group.sort(
+      (left, right) =>
+        Number(right.mal_id != null) - Number(left.mal_id != null) ||
+        Number(right.anilist_id != null) - Number(left.anilist_id != null),
+    )
+    const [primary, ...rest] = group
+    for (const row of rest) {
+      const ids = {
+        anilistId: row.anilist_id ? Number(row.anilist_id) : null,
+        tmdbId: row.tmdb_id ? Number(row.tmdb_id) : null,
+        nativeName: row.native_name,
+      }
+      const malClash = primary.mal_id && row.mal_id && Number(primary.mal_id) !== Number(row.mal_id)
+      if (malClash || !samePersonPossible(primary, ids)) continue
+      await mergeVoiceInto(row.id, primary.id)
+      for (const column of ['mal_id', 'anilist_id', 'tmdb_id']) {
+        if (primary[column] != null || row[column] == null) continue
+        await query(
+          `UPDATE content SET ${column} = $2, updated_at = now() WHERE id = $1 AND ${column} IS NULL`,
+          [primary.id, row[column]],
+        )
+        primary[column] = row[column]
+      }
+      merged += 1
+    }
+  }
+  return merged
+}
+
+/**
+ * Person row (`voices`) for a staff member, so the same person from AniList, MAL, and
+ * TMDB is one row: by AniList id, then TMDB id; then by name among people already
+ * credited on the same show (romanization and name order folded: TMDB's "Yuichiro
+ * Yano" is AniList's "Yuuichirou Yano"); then, for an AniList person, the one MAL-only
+ * person with that exact name. A match gains the ids and photo it lacked; otherwise a
+ * new row.
+ * @param {{ anilistId?: number, tmdbId?: number, name: string, nativeName?: string,
+ *   imagePath?: string }} staff
+ * @param {{ workIds?: string[], show?: object[] }} [context] - The show's rows, or the
+ *   people already on it (`peopleOnShow`), for name matching.
+ * @returns {Promise<string | null>} Null when the person has no id to find them by.
+ */
+export async function upsertPerson(staff, { workIds = [], show = null } = {}) {
+  const incoming = {
+    ...staff,
+    anilistId: Number(staff.anilistId) > 0 ? Number(staff.anilistId) : null,
+    tmdbId: Number(staff.tmdbId) > 0 ? Number(staff.tmdbId) : null,
+  }
+  if (!incoming.anilistId && !incoming.tmdbId) return null
+
+  const { rows: byId } = await query(
+    `SELECT id::text AS id, name, native_name, mal_id, anilist_id, tmdb_id, image_path
+     FROM content WHERE kind = 'voice' AND (anilist_id = $1 OR tmdb_id = $2)
+     ORDER BY (anilist_id = $1) DESC NULLS LAST LIMIT 1`,
+    [incoming.anilistId, incoming.tmdbId],
+  )
+  let match = byId[0] || null
+
+  if (!match) {
+    const people = show || (workIds.length ? await peopleOnShow(workIds) : [])
+    const key = romajiNameKey(incoming.name)
+    match =
+      people.find((row) => romajiNameKey(row.name) === key && samePersonPossible(row, incoming)) ||
+      null
+  }
+  if (!match && incoming.anilistId) {
+    const display = personNameKey(incoming.name)
+    const { rows } = await query(
+      `SELECT id::text AS id, name, native_name, mal_id, anilist_id, tmdb_id, image_path
+       FROM content WHERE kind = 'voice' AND anilist_id IS NULL AND mal_id IS NOT NULL
+         AND lower(name) IN (lower($1), lower($2))`,
+      [incoming.name, incoming.name.split(' ').reverse().join(', ')],
+    )
+    const same = rows.filter(
+      (row) => personNameKey(row.name) === display && samePersonPossible(row, incoming),
+    )
+    if (same.length === 1) match = same[0]
+  }
+
+  if (match) {
+    // Fill what the stored row lacks, unless another person already holds that id.
+    for (const [column, value] of [
+      ['anilist_id', incoming.anilistId],
+      ['tmdb_id', incoming.tmdbId],
+    ]) {
+      if (!value || match[column] != null) continue
+      await query(
+        `UPDATE content SET ${column} = $2, updated_at = now()
+         WHERE id = $1 AND ${column} IS NULL
+           AND NOT EXISTS (SELECT 1 FROM content o WHERE o.kind = 'voice' AND o.${column} = $2)`,
+        [match.id, value],
+      )
+    }
+    if (!match.image_path && incoming.imagePath) {
+      await query(
+        `UPDATE content SET image_path = $2, updated_at = now()
+         WHERE id = $1 AND coalesce(image_path, '') = ''`,
+        [match.id, incoming.imagePath],
+      )
+    }
+    if (show && !show.some((row) => row.id === match.id)) show.push(match)
+    return match.id
+  }
+
   const id = crypto.randomUUID()
   await query(
-    `INSERT INTO content (id, kind, name, native_name, image_path, anilist_id)
-     VALUES ($1, 'voice', $2, $3, $4, $5)`,
-    [id, staff.name, staff.nativeName || null, staff.imagePath || null, staff.anilistId],
+    `INSERT INTO content (id, kind, name, native_name, image_path, anilist_id, tmdb_id)
+     VALUES ($1, 'voice', $2, $3, $4, $5, $6)`,
+    [
+      id,
+      incoming.name,
+      incoming.nativeName || null,
+      incoming.imagePath || null,
+      incoming.anilistId,
+      incoming.tmdbId,
+    ],
   )
-  await query('INSERT INTO voices (content_id, english_name) VALUES ($1, $2)', [id, staff.name])
+  await query('INSERT INTO voices (content_id, english_name) VALUES ($1, $2)', [id, incoming.name])
+  if (show) {
+    show.push({
+      id,
+      name: incoming.name,
+      native_name: incoming.nativeName || null,
+      anilist_id: incoming.anilistId,
+      tmdb_id: incoming.tmdbId,
+    })
+  }
   return id
 }
 
 /**
  * Replace a work's key staff.
  * @param {string} workId
- * @param {object[]} staff - From `anilistKeyStaff`
+ * @param {object[]} staff - From `anilistKeyStaff` or `tmdbKeyStaff`
  * @returns {Promise<void>}
  */
 async function writeStaff(workId, staff) {
   await query('DELETE FROM staff_credits WHERE work_id = $1', [workId])
+  const show = await peopleOnShow(await showWorkIds(workId))
   for (const [position, member] of staff.entries()) {
-    const personId = await upsertPerson(member)
+    const personId = await upsertPerson(member, { show })
+    if (!personId) continue
     await query(
       `INSERT INTO staff_credits (work_id, person_id, role, position) VALUES ($1, $2, $3, $4)
        ON CONFLICT DO NOTHING`,
@@ -489,7 +683,56 @@ export async function importSeason(
     String(season._id),
     mergeEpisodes({ anime, count: season.episodeCount, tmdb: tmdbEpisodes, jikan, schedule }),
   )
+  // Who worked on each episode: AniList's episode notes for anime (they often cover only
+  // some episodes), TMDB's crew for the episodes AniList doesn't credit.
+  const anilistCredits = season.anilistId
+    ? anilistEpisodeCredits(await fetchAnilistStaffCredits(season.anilistId))
+    : []
+  const credited = new Set(anilistCredits.map((credit) => credit.episode))
+  await writeEpisodeCredits(String(season._id), [
+    ...anilistCredits,
+    ...tmdbEpisodeCredits(tmdbEpisodes).filter((credit) => !credited.has(credit.episode)),
+  ])
   return season
+}
+
+/**
+ * Replace a season's episode credits. Credits for episodes the season doesn't have
+ * are dropped; a season with no credits keeps what it had (a failed lookup).
+ * @param {string} seasonId
+ * @param {Array<{ episode: number, role: string, person: object }>} credits
+ * @returns {Promise<number>} Credits written
+ */
+export async function writeEpisodeCredits(seasonId, credits) {
+  if (!credits.length) return 0
+  const { rows } = await query('SELECT id::text AS id, number FROM episodes WHERE season_id = $1', [
+    seasonId,
+  ])
+  const episodeIds = new Map(rows.map((row) => [Number(row.number), row.id]))
+  const people = new Map()
+  const show = await peopleOnShow(await showWorkIds(seasonId))
+  let written = 0
+  await query(
+    'DELETE FROM episode_credits WHERE episode_id IN (SELECT id FROM episodes WHERE season_id = $1)',
+    [seasonId],
+  )
+  for (const credit of credits) {
+    const episodeId = episodeIds.get(credit.episode)
+    if (!episodeId) continue
+    const key = credit.person.anilistId
+      ? `al:${credit.person.anilistId}`
+      : `tmdb:${credit.person.tmdbId}`
+    if (!people.has(key)) people.set(key, await upsertPerson(credit.person, { show }))
+    const personId = people.get(key)
+    if (!personId) continue
+    await query(
+      `INSERT INTO episode_credits (episode_id, person_id, role) VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [episodeId, personId, credit.role],
+    )
+    written += 1
+  }
+  return written
 }
 
 /**
@@ -555,10 +798,13 @@ export async function importSeries(seriesId, { save = {} } = {}) {
     } = first[source]
     snapshots[source] = rest
   }
-  return saveResolved(series, snapshots, {
+  const saved = await saveResolved(series, snapshots, {
     save,
     adjust: (doc) => Object.assign(doc, seriesTotals(seasons)),
   })
+  // AniList, MAL, and TMDB credits of the same person end up as one person.
+  await mergeShowPeople(seriesId)
+  return saved
 }
 
 /**
