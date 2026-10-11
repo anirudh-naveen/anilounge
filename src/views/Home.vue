@@ -60,13 +60,30 @@
           </header>
 
           <div v-if="!authStore.isAuthenticated" class="status-signup" data-testid="status-signup">
-            <ul class="signup-preview" aria-hidden="true">
-              <li v-for="n in 3" :key="n" class="preview-row">
-                <span class="preview-poster"></span>
-                <span class="preview-lines">
-                  <span class="preview-line wide"></span>
-                  <span class="preview-line"></span>
-                </span>
+            <ul class="signup-preview" aria-label="Example status updates">
+              <li
+                v-for="example in EXAMPLE_ACTIVITY"
+                :key="example.title"
+                class="preview-row"
+                data-testid="example-activity"
+              >
+                <span class="preview-poster" aria-hidden="true">{{ example.title.charAt(0) }}</span>
+                <div class="activity-body">
+                  <p class="activity-text">
+                    <span class="activity-user">iMaji</span>
+                    {{ example.action }}
+                    <span class="activity-title">{{ example.title }}</span>
+                  </p>
+                  <p class="activity-meta">
+                    <span class="status-chip" :class="`status-${example.status}`">
+                      {{ getWatchlistStatusLabel(example.status) }}
+                    </span>
+                    <span v-if="example.rating" class="activity-rating"
+                      >★ {{ example.rating }}/10</span
+                    >
+                    <span>{{ example.ago }}</span>
+                  </p>
+                </div>
               </li>
             </ul>
             <div class="signup-copy">
@@ -75,6 +92,7 @@
                 Create a free account to build your watchlist and see what you and your friends are
                 watching.
               </p>
+              <ListSyncNote class="signup-sync" />
               <div class="signup-actions">
                 <router-link to="/login" class="btn btn-secondary">Log in</router-link>
                 <router-link to="/register" class="btn btn-primary">Sign up</router-link>
@@ -280,6 +298,7 @@
     </div>
 
     <JoinPrompt
+      list-sync
       title="Join the Community"
       message="Sign up free to track what you watch, rate titles, and talk animation with the lounge."
     />
@@ -293,6 +312,7 @@ import { useAuthStore } from '@/stores/auth'
 import ImportReminder from '@/components/ImportReminder.vue'
 import ForumPostCard from '@/components/ForumPostCard.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
+import ListSyncNote from '@/components/ListSyncNote.vue'
 import SupportCard from '@/components/SupportCard.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
 import { absoluteUrl } from '@/utils/pageMeta'
@@ -301,7 +321,7 @@ import type { HomeForum } from '@/types/forum'
 import type { CatalogEntity, EntityAppearance } from '@/types/content'
 import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'
 import { getDisplayTitle } from '@/utils/titles'
-import { getWatchlistStatusLabel } from '@/utils/watchlist'
+import { getWatchlistStatusLabel, type WatchlistStatus } from '@/utils/watchlist'
 import { characterFranchiseIds as franchiseIdsOf, characterFranchises } from '@/utils/entities'
 import {
   characterBlurb,
@@ -319,6 +339,24 @@ const FEED_TABS: { value: FeedTab; label: string }[] = [
   { value: 'all', label: 'Everyone' },
   { value: 'you', label: 'You' },
   { value: 'friends', label: 'Friends' },
+]
+
+/** Sample feed (from iMaji's account) shown to signed-out visitors beside the sign-up copy. */
+const EXAMPLE_ACTIVITY: {
+  action: string
+  title: string
+  status: WatchlistStatus
+  rating?: number
+  ago: string
+}[] = [
+  { action: 'is watching', title: 'Naruto Shippūden', status: 'watching', ago: '2h ago' },
+  { action: 'finished', title: 'The Wild Robot', status: 'completed', rating: 9, ago: '1d ago' },
+  {
+    action: 'plans to watch',
+    title: "Frieren: Beyond Journey's End",
+    status: 'plan_to_watch',
+    ago: '3d ago',
+  },
 ]
 
 const authStore = useAuthStore()
@@ -817,7 +855,8 @@ usePageMeta(() => ({
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  opacity: 0.7;
+  opacity: 0.85;
+  pointer-events: none;
 }
 
 .preview-row {
@@ -826,30 +865,22 @@ usePageMeta(() => ({
   align-items: center;
 }
 
+.preview-row .activity-text {
+  font-size: 0.9rem;
+}
+
 .preview-poster {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 40px;
   height: 56px;
   border-radius: 6px;
-  background: linear-gradient(160deg, rgba(224, 122, 95, 0.25), rgba(43, 187, 173, 0.2));
-}
-
-.preview-lines {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.preview-line {
-  display: block;
-  height: 9px;
-  width: 55%;
-  border-radius: 999px;
-  background: var(--bg-secondary);
-}
-
-.preview-line.wide {
-  width: 85%;
+  background: linear-gradient(160deg, rgba(224, 122, 95, 0.35), rgba(43, 187, 173, 0.3));
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .signup-copy h3 {
@@ -863,6 +894,12 @@ usePageMeta(() => ({
   margin: 0 0 1.1rem;
   line-height: 1.55;
   color: var(--text-secondary);
+}
+
+.signup-copy .signup-sync {
+  margin: -0.5rem 0 1.1rem;
+  line-height: 1.3;
+  color: var(--text-muted);
 }
 
 .signup-actions {

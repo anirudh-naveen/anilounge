@@ -199,7 +199,6 @@
 
       <TitleExtras :content="show" />
 
-
       <!-- Title: Forum -->
       <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
 
@@ -366,6 +365,7 @@
     </div>
 
     <JoinPrompt
+      list-sync
       title="Track this series"
       message="Sign up free to follow new episodes, log your progress, and rate every season."
     />
@@ -1194,8 +1194,6 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-
-
 
 .franchise-rating {
   margin: 0.35rem 0 0;

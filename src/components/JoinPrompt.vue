@@ -4,7 +4,8 @@
   A small card that slides up in the corner (a bottom sheet on phones) a few
   seconds after a signed-out visitor lands, e.g. from a search engine. It never
   covers the page, so the content stays readable (and indexable). Sign in / Sign
-  up return to the current page afterwards (`?redirect=`). Closing it hides every
+  up return to the current page afterwards (`?redirect=`). `listSync` adds a
+  one-line AniList / MyAnimeList sync note. Closing it hides every
   prompt for the rest of the browser session.
 -->
 <template>
@@ -23,6 +24,7 @@
       </p>
       <h2 class="join-title">{{ title }}</h2>
       <p class="join-message">{{ message }}</p>
+      <ListSyncNote v-if="listSync" />
       <div class="join-actions">
         <router-link
           :to="{ path: '/login', query: { redirect: route.fullPath } }"
@@ -45,10 +47,18 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import ListSyncNote from '@/components/ListSyncNote.vue'
 
-const props = withDefaults(defineProps<{ title: string; message: string; delayMs?: number }>(), {
-  delayMs: 4000,
-})
+const props = withDefaults(
+  defineProps<{
+    title: string
+    message: string
+    delayMs?: number
+    /** Add the AniList / MyAnimeList sync note (for prompts that offer a watchlist). */
+    listSync?: boolean
+  }>(),
+  { delayMs: 4000, listSync: false },
+)
 
 /** sessionStorage key: set once the visitor closes a prompt. */
 const DISMISSED_KEY = 'anilounge-join-prompt-dismissed'

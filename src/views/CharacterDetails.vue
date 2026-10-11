@@ -164,6 +164,7 @@
     </div>
 
     <JoinPrompt
+      list-sync
       title="Join the Community"
       message="Sign up free to favorite characters, track what you watch, and talk animation with the lounge."
     />
