@@ -16,11 +16,9 @@ describe('badgesForUser', () => {
     ])
   })
 
-  it('lets Admin be granted like the other badges', () => {
-    assert.deepEqual(badgesForUser({ role: 'user', granted: ['admin', 'artist'] }), [
-      'admin',
-      'artist',
-    ])
+  it('only gives Admin with admin access, never as a stored badge', () => {
+    assert.deepEqual(badgesForUser({ role: 'user', granted: ['admin', 'artist'] }), ['artist'])
+    assert.deepEqual(badgesForUser({ role: 'admin', granted: ['artist'] }), ['admin', 'artist'])
   })
 
   it('gives the bot accounts the bot badge and nothing else', () => {

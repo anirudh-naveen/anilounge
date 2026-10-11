@@ -5,7 +5,8 @@
   edit a row's fields, and jump between linked rows (a title's cast and studios, a
   character's titles and voice actors, ...). Edited fields are locked so the hourly
   catalog sync keeps them; unlocking hands a field back to the sync.
-  Users: admins mute users; the creator also adds/removes admins and bans users.
+  Users: admins mute users and give badges; the creator also bans users and gives or
+  takes the Admin badge (admin access itself).
   Reports: forum posts and comments people flagged; admins delete them or dismiss the reports.
   Metrics: users, page views, visitors, and clicks (components/AdminMetrics.vue).
   News: write site news with pictures, posted to every inbox as Lounge Keeper
@@ -835,12 +836,13 @@
           </div>
         </div>
         <p class="social-meta admin-rules">
-          Admins can mute users and give Developer, Artist, and Influencer badges (badges grant
-          nothing; people pick which one shows by their name).
+          Admins can mute users and give Developer, Artist, Influencer, and Supporter badges (those
+          grant nothing; people pick which one shows by their name). The Admin badge is admin access
+          itself.
           <template v-if="authStore.isCreator">
-            As the creator, you can also add or remove admins and ban users.
+            As the creator, you give or take the Admin badge and ban users.
           </template>
-          <template v-else>Only the creator can add admins or ban users.</template>
+          <template v-else>Only the creator can give the Admin badge or ban users.</template>
         </p>
         <div v-if="usersLoading" class="social-loading"><div class="spinner"></div></div>
         <p v-else-if="usersError" class="social-empty admin-error">{{ usersError }}</p>
@@ -900,7 +902,7 @@
                   <span v-if="user.isDemo" class="admin-pill muted">Demo</span>
                 </div>
                 <div
-                  v-if="!user.isDemo && !user.bannedAt && !user.pendingSignup"
+                  v-if="!user.isDemo && !user.isBot && !user.bannedAt && !user.pendingSignup"
                   class="cosmetic-toggles"
                 >
                   <button
@@ -908,11 +910,12 @@
                     :key="role"
                     type="button"
                     class="cosmetic-toggle"
-                    :class="[role, { on: user.cosmeticRoles.includes(role) }]"
-                    :aria-pressed="user.cosmeticRoles.includes(role)"
-                    :disabled="busy === user.id"
+                    :class="[role, { on: holdsBadge(user, role) }]"
+                    :aria-pressed="holdsBadge(user, role)"
+                    :disabled="busy === user.id || (role === 'admin' && !canManageRole(user))"
+                    :title="role === 'admin' ? adminBadgeTitle(user) : undefined"
                     :data-testid="`cosmetic-${role}`"
-                    @click="toggleCosmetic(user, role)"
+                    @click="role === 'admin' ? toggleAdmin(user) : toggleCosmetic(user, role)"
                   >
                     <BadgeEmblem :badge="role" />
                     {{ badgeInfo(role).label }}
@@ -928,26 +931,6 @@
               <div class="social-actions user-actions">
                 <span v-if="user.id === authStore.user?.id" class="social-meta">That's you</span>
                 <template v-else-if="!user.pendingSignup">
-                  <template v-if="canManageRole(user)">
-                    <button
-                      v-if="user.role === 'admin'"
-                      type="button"
-                      class="btn btn-ghost btn-small"
-                      :disabled="busy === user.id"
-                      @click="changeRole(user, 'user')"
-                    >
-                      Remove admin
-                    </button>
-                    <button
-                      v-else
-                      type="button"
-                      class="btn btn-primary btn-small"
-                      :disabled="busy === user.id"
-                      @click="changeRole(user, 'admin')"
-                    >
-                      Make admin
-                    </button>
-                  </template>
                   <template v-if="canMute(user)">
                     <button
                       v-if="user.mutedUntil"
@@ -1146,6 +1129,8 @@ type AdminUser = {
   /** Signed up but never verified; can't be moderated until they verify. */
   pendingSignup: boolean
   isDemo: boolean
+  /** Lounge Keeper / Lounge Cleaner: no admin role or badges. */
+  isBot?: boolean
   mutedUntil: string | null
   muteReason: string | null
   bannedAt: string | null
@@ -1704,10 +1689,11 @@ const openFromSync = async (notice: SyncNotice) => {
 
 const isSelf = (user: AdminUser) => user.id === authStore.user?.id
 
-/** Mirrors adminService.setUserRole: creator only; not owners, demo, banned, or unverified. */
+/** Mirrors adminService.setUserRole: creator only; not owners, bots, demo, banned, or unverified. */
 const canManageRole = (user: AdminUser) =>
   authStore.isCreator &&
   !isSelf(user) &&
+  !user.isBot &&
   user.role !== 'creator' &&
   !user.isOwner &&
   !user.isDemo &&
@@ -1717,6 +1703,7 @@ const canManageRole = (user: AdminUser) =>
 /** Mirrors adminService.muteUser: admins mute regular users; the creator can mute admins. */
 const canMute = (user: AdminUser) =>
   !isSelf(user) &&
+  !user.isBot &&
   user.role !== 'creator' &&
   !user.bannedAt &&
   (!user.isAdmin || authStore.isCreator)
@@ -1725,6 +1712,7 @@ const canMute = (user: AdminUser) =>
 const canBan = (user: AdminUser) =>
   authStore.isCreator &&
   !isSelf(user) &&
+  !user.isBot &&
   user.role !== 'creator' &&
   !user.isDemo &&
   (Boolean(user.bannedAt) || !user.isOwner)
@@ -1758,11 +1746,27 @@ const moderate = async (
   }
 }
 
-const changeRole = (user: AdminUser, role: 'user' | 'admin') => {
+/** The Admin badge is admin access itself (role, owner, or creator); others are stored. */
+const holdsBadge = (user: AdminUser, role: string) =>
+  role === 'admin' ? user.isAdmin : user.cosmeticRoles.includes(role)
+
+const adminBadgeTitle = (user: AdminUser) => {
+  if (user.role === 'creator') return 'The creator is always an admin.'
+  if (user.isOwner) return 'Owners (ADMIN_EMAILS) are always admins.'
+  if (!authStore.isCreator) return 'Only the creator can give or take the Admin badge.'
+  if (isSelf(user)) return "You can't change your own admin access."
+  return user.isAdmin
+    ? 'Take admin access away'
+    : 'Give admin access: the admin page, muting, badges, and news'
+}
+
+/** Give or take the Admin badge, which is admin access: asks first. */
+const toggleAdmin = (user: AdminUser) => {
+  const role = user.isAdmin ? 'user' : 'admin'
   const prompt =
     role === 'admin'
-      ? `Make ${user.username} an admin? They'll be able to edit content and mute users.`
-      : `Remove admin from ${user.username}?`
+      ? `Are you sure you want to give ${user.username} the Admin badge? They'll get admin access: editing content, muting users, giving badges, and posting news.`
+      : `Are you sure you want to take the Admin badge from ${user.username}? They'll lose admin access.`
   if (!window.confirm(prompt)) return
   moderate(user, () => adminAPI.setUserRole(user.id, role))
 }

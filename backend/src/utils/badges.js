@@ -1,8 +1,9 @@
 /**
  * Badge registry: every badge a user can hold, in display order.
  *
- * Layer: utils (pure). `creator` comes from the account role; `admin` comes with admin
- * access (the creator holds it too) and can also be granted like the others; `bot` is
+ * Layer: utils (pure). `creator` comes from the account role; `admin` IS admin access
+ * (role 'admin', ADMIN_EMAILS, or the creator): the admin page's Admin badge toggle sets
+ * the role (creator only), so it is never stored as a granted badge; `bot` is
  * worn only by the bot accounts (and is their only badge); the rest are
  * granted (stored in `users.cosmetic_roles`); `supporter` is also granted automatically
  * for a Ko-fi donation (services/donationService.js). `emblem` badges can be picked as the one
@@ -14,7 +15,7 @@
 /** @type {Array<{ id: string, emblem: boolean, grantable: boolean }>} */
 export const BADGES = [
   { id: 'creator', emblem: true, grantable: false },
-  { id: 'admin', emblem: true, grantable: true },
+  { id: 'admin', emblem: true, grantable: false },
   { id: 'developer', emblem: true, grantable: true },
   { id: 'artist', emblem: true, grantable: true },
   { id: 'influencer', emblem: true, grantable: true },

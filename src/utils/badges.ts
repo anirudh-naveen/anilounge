@@ -3,8 +3,8 @@
  *
  * Every badge a user can hold, in display order. `emblem` badges can be chosen as
  * the one emblem next to a username; emblem-less badges (future ones) only appear in
- * the profile Badges section. `grantable` badges are handed out on the admin page
- * (Admin also comes with admin access, and the creator holds it);
+ * the profile Badges section. `grantable` badges are toggled on the admin page; the
+ * Admin toggle sets admin access itself (creator only; never stored as a badge);
  * Bot is worn only by the bot accounts (Lounge Keeper, Lounge Cleaner);
  * Supporter is also granted automatically for a Ko-fi donation.
  */
