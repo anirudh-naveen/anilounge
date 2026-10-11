@@ -53,6 +53,23 @@
         "5175"
       ],
       "port": 5175
+    },
+    {
+      "name": "backend-prodcopy",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=postgresql://postgres:dev@localhost:5433/anilounge",
+        "CONTENT_SYNC_ENABLED=false",
+        "CONNECTIONS_SYNC_ENABLED=false",
+        "RELEASE_THREADS_ENABLED=false",
+        "NODE_ENV=development",
+        "npm",
+        "--prefix",
+        "backend",
+        "run",
+        "start"
+      ],
+      "port": 5001
     }
   ]
 }

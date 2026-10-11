@@ -123,12 +123,6 @@
                     <span class="episodes-watched">{{ getCurrentEpisodes(item) }}</span>
                     <span class="episode-separator">/</span>
                     <span class="total-episodes">{{ getTotalEpisodes(item) || '?' }}</span>
-                    <span
-                      v-if="hasNewEpisodes(item)"
-                      class="new-episodes-indicator"
-                      title="New episodes available"
-                      >🆕</span
-                    >
                   </div>
                   <div v-else class="movie-progress">—</div>
                 </div>
@@ -412,6 +406,7 @@
 </template>
 
 <script setup lang="ts">
+import { isEpisodic } from '@/utils/contentKinds'
 import { showPosterPlaceholder } from '@/utils/posters'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -535,7 +530,7 @@ const tracksItemEpisodes = (item: WatchlistItem) => {
 
 const isTvContent = (item: WatchlistItem) => {
   if (typeof item === 'string' || typeof item.content === 'string') return false
-  return item.content?.contentType === 'tv'
+  return isEpisodic(item.content?.contentType)
 }
 
 const getContentYear = (item: WatchlistItem) => {
@@ -567,7 +562,7 @@ const getContentSeasons = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 'Unknown'
   const content = item.content
   if (!content) return 'Unknown'
-  return content.contentType === 'tv' ? content.seasonCount || 'Unknown' : 'N/A'
+  return isEpisodic(content.contentType) ? content.seasonCount || 'Unknown' : 'N/A'
 }
 
 const getContentRating = (item: WatchlistItem) => {
@@ -597,25 +592,10 @@ const getTotalSeasons = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 1
   const content = item.content
   if (!content) return 1
-  return content.contentType === 'tv' ? content.seasonCount || item.totalSeasons || 1 : 1
+  return isEpisodic(content.contentType) ? content.seasonCount || item.totalSeasons || 1 : 1
 }
 
 /** Episodes out so far: up to the next scheduled one while airing, else the total. */
-const getAiredEpisodes = (item: WatchlistItem) => {
-  if (typeof item.content === 'string' || !item.content) return 0
-  const { malStatus, nextEpisodeNumber } = item.content
-  if (malStatus === 'not_yet_aired') return 0
-  if (nextEpisodeNumber && nextEpisodeNumber > 1) return nextEpisodeNumber - 1
-  return getTotalEpisodes(item)
-}
-
-/** A show the user is watching or plans to watch has aired episodes they haven't seen. */
-const hasNewEpisodes = (item: WatchlistItem) => {
-  if (typeof item === 'string') return false
-  if (item.status !== 'watching' && item.status !== 'plan_to_watch') return false
-  return getCurrentEpisodes(item) < getAiredEpisodes(item)
-}
-
 const getProgressPercent = (item: WatchlistItem) => {
   if (tracksItemEpisodes(item)) {
     const total = getTotalEpisodes(item)
@@ -1243,21 +1223,6 @@ onUnmounted(() => {
 
 .total-episodes {
   color: var(--text-muted);
-}
-
-.new-episodes-indicator {
-  font-size: 0.7rem;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
 }
 
 .movie-progress {

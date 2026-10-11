@@ -63,6 +63,24 @@ export function mapContentRow(row) {
     nextEpisodeSeason: row.next_episode_season != null ? Number(row.next_episode_season) : null,
     startSeasonYear: row.start_year != null ? Number(row.start_year) : null,
     startSeason: row.start_season,
+    seriesId: row.series_id ? String(row.series_id) : null,
+    seasonNumber: row.season_number != null ? Number(row.season_number) : null,
+    partNumber: row.part_number != null ? Number(row.part_number) : null,
+    seasonLabel: row.season_label || null,
+    format: row.format || null,
+    tmdbSeasonNumber: row.tmdb_season_number != null ? Number(row.tmdb_season_number) : null,
+    tmdbEpisodeOffset: row.tmdb_episode_offset != null ? Number(row.tmdb_episode_offset) : 0,
+    endDate: row.end_date || null,
+    episodeRuntime:
+      row.content_type === 'season' && row.runtime != null ? Number(row.runtime) : null,
+    broadcastTime: row.broadcast_time || null,
+    malRank: row.mal_rank != null ? Number(row.mal_rank) : null,
+    anilistScore: row.anilist_score != null ? Number(row.anilist_score) : null,
+    trailer: row.trailer_key ? { site: row.trailer_site, key: row.trailer_key } : null,
+    bannerPath: row.banner_path || null,
+    coverColor: row.cover_color || null,
+    ageRating: row.age_rating || null,
+    sourceMaterial: row.source_material || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastUpdated: row.updated_at,
@@ -133,11 +151,15 @@ export async function attachContentRelations(docs) {
       [ids],
     ),
     // Each title's franchise with its nicknames and rating: the average unified score
-    // of its series (each season rated on its own), or of all its titles when it has
-    // no series, to the tenth.
+    // of its series (each the average of its seasons), or of all its titles when it
+    // has no series, to the tenth.
     query(
       `WITH m AS (
-         SELECT member_id, franchise_id FROM franchise_members WHERE member_id = ANY($1::uuid[])
+         -- A season is in its series' franchise.
+         SELECT t.id AS member_id, fm.franchise_id
+         FROM unnest($1::uuid[]) AS t(id)
+         LEFT JOIN seasons sn ON sn.content_id = t.id
+         JOIN franchise_members fm ON fm.member_id = COALESCE(sn.series_id, t.id)
        ), scored AS (
          SELECT fm.franchise_id, c.kind,
                 COALESCE(mv.unified_score, s.unified_score, sp.unified_score) AS score
@@ -347,7 +369,7 @@ export async function catalogStats() {
             count(*) FILTER (WHERE kind = 'movie')::int AS movies,
             count(*) FILTER (WHERE kind = 'series')::int AS "tvShows",
             count(*) FILTER (WHERE kind = 'special')::int AS specials
-     FROM content WHERE kind IN ('movie', 'series', 'special')`,
+     FROM content WHERE kind IN ('movie', 'series', 'season', 'special')`,
   )
   return rows[0]
 }
@@ -402,7 +424,15 @@ export function airedEpisode(before, after, now = Date.now()) {
   return { season, episode, airedAt }
 }
 
-Content.prototype.save = async function save() {
+/**
+ * Write the document. `clampProgress: false` leaves watchlist progress alone even when
+ * a series' counts shrink, and `quiet: true` skips the title-added / episode-aired
+ * events (release megathreads, pushes); the series migration must not touch users'
+ * lists or the forum.
+ * @param {{ clampProgress?: boolean, quiet?: boolean }} [options]
+ * @returns {Promise<Content>}
+ */
+Content.prototype.save = async function save({ clampProgress = true, quiet = false } = {}) {
   const id = this._id
   const kind = kindFromContentType(this.contentType)
   // Admin edits win over whatever the catalog sync put on this document.
@@ -431,7 +461,7 @@ Content.prototype.save = async function save() {
        tmdb_id = EXCLUDED.tmdb_id,
        anilist_id = EXCLUDED.anilist_id,
        updated_at = now()
-     WHERE content.kind IN ('movie', 'series', 'special')
+     WHERE content.kind IN ('movie', 'series', 'season', 'special')
      RETURNING (xmax = 0) AS inserted`,
     [
       id,
@@ -450,101 +480,120 @@ Content.prototype.save = async function save() {
   }
 
   const { rows: previous } = await query(
-    `WITH dm AS (DELETE FROM movies WHERE content_id = $1),
-          dsp AS (DELETE FROM specials WHERE content_id = $1)
-     DELETE FROM series WHERE content_id = $1
-     RETURNING next_episode_at, next_episode_number, next_episode_season`,
+    'SELECT next_episode_at, next_episode_number, next_episode_season FROM works WHERE id = $1',
     [id],
   )
-
-  const origin = (this.originCountries || []).map(String).find((code) => code.length === 2) || null
-  const shared = {
-    original_title: this.originalTitle || this.nativeTitle || null,
-    tagline: this.tagline || null,
-    backdrop_path: this.backdropPath || null,
-    release_date: this.releaseDate || null,
-    origin_country: origin ? origin.toUpperCase() : null,
-    tmdb_score: this.voteAverage ?? null,
-    tmdb_votes: this.voteCount ?? null,
-    mal_score: this.malScore ?? null,
-    mal_votes: this.malScoredBy ?? null,
-    popularity: this.popularity ?? null,
-    unified_score: this.unifiedScore ?? null,
-    airing_status: airingFromMalStatus(this.malStatus),
+  // A row that changed kind drops its old subtype row; its own is updated in place,
+  // since deleting a series row would also delete its seasons and their episodes.
+  for (const [other, table] of Object.entries(WATCHABLE_TABLES)) {
+    if (other !== kind) await query(`DELETE FROM ${table} WHERE content_id = $1`, [id])
   }
-
-  if (kind === 'movie' || kind === 'special') {
-    await query(
-      `INSERT INTO ${WATCHABLE_TABLES[kind]} (
-         content_id, original_title, tagline, backdrop_path, release_date, origin_country,
-         runtime_minutes, tmdb_score, tmdb_votes, mal_score, mal_votes, popularity, unified_score,
-         airing_status
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-      [
-        id,
-        shared.original_title,
-        shared.tagline,
-        shared.backdrop_path,
-        shared.release_date,
-        shared.origin_country,
-        this.runtime ?? null,
-        shared.tmdb_score,
-        shared.tmdb_votes,
-        shared.mal_score,
-        shared.mal_votes,
-        shared.popularity,
-        shared.unified_score,
-        shared.airing_status,
-      ],
-    )
-  } else {
-    await query(
-      `INSERT INTO series (
-         content_id, original_title, tagline, backdrop_path, release_date, origin_country,
-         season_count, episode_count, airing_status, start_season, start_year, broadcast_day,
-         next_episode_at, next_episode_number, tmdb_score, tmdb_votes, mal_score, mal_votes,
-         popularity, unified_score, next_episode_season
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
-      [
-        id,
-        shared.original_title,
-        shared.tagline,
-        shared.backdrop_path,
-        shared.release_date,
-        shared.origin_country,
-        this.seasonCount ?? null,
-        this.episodeCount ?? null,
-        airingFromMalStatus(this.malStatus),
-        this.startSeason || null,
-        this.startSeasonYear ?? null,
-        this.broadcastDay || null,
-        this.nextEpisodeAirDate || null,
-        this.nextEpisodeNumber ?? null,
-        shared.tmdb_score,
-        shared.tmdb_votes,
-        shared.mal_score,
-        shared.mal_votes,
-        shared.popularity,
-        shared.unified_score,
-        this.nextEpisodeSeason ?? null,
-      ],
-    )
-  }
+  await upsertSubtype(WATCHABLE_TABLES[kind], id, subtypeColumns(this, kind))
 
   await replaceChildren(this)
-  if (kind === 'series') await clampWatchlistProgress({ contentIds: [String(id)] })
+  if (kind === 'series' && clampProgress) await clampWatchlistProgress({ contentIds: [String(id)] })
   this.$isNew = false
+  if (quiet) return this
   if (saved[0]?.inserted) catalogEvents.emit('title-added', String(id))
-  const aired = airedEpisode(previous[0], kind === 'series' ? this : null)
+  const airs = kind === 'series' || kind === 'season'
+  const aired = airedEpisode(previous[0], airs ? this : null)
   if (aired) catalogEvents.emit('episode-aired', { contentId: String(id), ...aired })
   return this
+}
+
+/**
+ * Subtype-table columns for a watchable document of `kind`.
+ * @param {object} doc
+ * @param {'movie' | 'series' | 'season' | 'special'} kind
+ * @returns {Record<string, unknown>}
+ */
+export function subtypeColumns(doc, kind) {
+  const origin = (doc.originCountries || []).map(String).find((code) => code.length === 2) || null
+  const columns = {
+    original_title: doc.originalTitle || doc.nativeTitle || null,
+    backdrop_path: doc.backdropPath || null,
+    release_date: doc.releaseDate || null,
+    origin_country: origin ? origin.toUpperCase() : null,
+    tmdb_score: doc.voteAverage ?? null,
+    tmdb_votes: doc.voteCount ?? null,
+    mal_score: doc.malScore ?? null,
+    mal_votes: doc.malScoredBy ?? null,
+    popularity: doc.popularity ?? null,
+    unified_score: doc.unifiedScore ?? null,
+    airing_status: airingFromMalStatus(doc.malStatus),
+    trailer_site: doc.trailer?.site || null,
+    trailer_key: doc.trailer?.key || null,
+    banner_path: doc.bannerPath || null,
+    cover_color: doc.coverColor || null,
+    age_rating: doc.ageRating || null,
+    source_material: doc.sourceMaterial || null,
+  }
+  if (kind !== 'season') columns.tagline = doc.tagline || null
+  if (kind === 'movie' || kind === 'special') {
+    columns.runtime_minutes = doc.runtime ?? null
+  }
+  const airing = {
+    episode_count: doc.episodeCount ?? null,
+    start_season: doc.startSeason || null,
+    start_year: doc.startSeasonYear ?? null,
+    broadcast_day: doc.broadcastDay || null,
+    next_episode_at: doc.nextEpisodeAirDate || null,
+    next_episode_number: doc.nextEpisodeNumber ?? null,
+  }
+  if (kind === 'series') {
+    Object.assign(columns, airing, {
+      season_count: doc.seasonCount ?? null,
+      next_episode_season: doc.nextEpisodeSeason ?? null,
+    })
+  }
+  if (kind === 'season') {
+    if (!doc.seriesId || !positiveInt(doc.seasonNumber)) {
+      throw new Error(`Season ${doc._id} needs a seriesId and seasonNumber`)
+    }
+    Object.assign(columns, airing, {
+      series_id: doc.seriesId,
+      season_number: doc.seasonNumber,
+      part_number: positiveInt(doc.partNumber) || 1,
+      label: doc.seasonLabel || null,
+      format: doc.format || null,
+      tmdb_season_number: doc.tmdbSeasonNumber ?? null,
+      tmdb_episode_offset: doc.tmdbEpisodeOffset ?? 0,
+      end_date: doc.endDate || null,
+      episode_runtime: doc.episodeRuntime ?? null,
+      broadcast_time: doc.broadcastTime || null,
+      mal_rank: doc.malRank ?? null,
+      anilist_score: doc.anilistScore ?? null,
+    })
+  }
+  return columns
+}
+
+/**
+ * Insert or update one subtype row.
+ * @param {string} table
+ * @param {string} id
+ * @param {Record<string, unknown>} columns
+ * @returns {Promise<void>}
+ */
+async function upsertSubtype(table, id, columns) {
+  const names = Object.keys(columns)
+  await query(
+    `INSERT INTO ${table} (content_id, ${names.join(', ')})
+     VALUES ($1, ${names.map((_, index) => `$${index + 2}`).join(', ')})
+     ON CONFLICT (content_id) DO UPDATE SET
+       ${names.map((name) => `${name} = EXCLUDED.${name}`).join(', ')}`,
+    [id, ...Object.values(columns)],
+  )
 }
 
 async function upsertGenre(name) {
   const existing = await query('SELECT id FROM genres WHERE lower(name) = lower($1)', [name])
   if (existing.rows[0]) return existing.rows[0].id
   const id = crypto.randomUUID()
-  await query('INSERT INTO genres (id, name) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING', [id, name])
+  await query('INSERT INTO genres (id, name) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING', [
+    id,
+    name,
+  ])
   const again = await query('SELECT id FROM genres WHERE lower(name) = lower($1)', [name])
   return again.rows[0].id
 }
@@ -636,10 +685,9 @@ async function upsertStudio(name, ref = {}) {
 }
 
 async function upsertFranchise(name) {
-  const existing = await query(
-    `SELECT id FROM content WHERE kind = 'franchise' AND name = $1`,
-    [name],
-  )
+  const existing = await query(`SELECT id FROM content WHERE kind = 'franchise' AND name = $1`, [
+    name,
+  ])
   if (existing.rows[0]) {
     await query('INSERT INTO franchises (content_id) VALUES ($1) ON CONFLICT DO NOTHING', [
       existing.rows[0].id,
@@ -676,7 +724,9 @@ async function replaceChildren(doc) {
   )
   const hasAkas = (doc.alternativeTitles || []).some(Boolean)
   const hasStudios = [...(doc.studios || []), ...(doc.productionCompanies || [])].some(Boolean)
-  let franchiseName = doc.franchise || doc.relationships?.franchise
+  // A season belongs to a franchise through its series, never as a member itself.
+  const seasonRow = kindFromContentType(doc.contentType) === 'season'
+  let franchiseName = seasonRow ? null : doc.franchise || doc.relationships?.franchise
   if (franchiseName && (await isCurrentFranchise(id, franchiseName))) {
     // Loaded docs echo their franchise's name back. If that row was renamed under
     // us (e.g. clobbered by a person save), re-upserting by name would mint a new
@@ -800,17 +850,17 @@ Content.searchIds = async function searchIds(text, { limit = 2000 } = {}) {
   const { rows } = await query(
     `SELECT id FROM (
        SELECT id FROM content
-       WHERE kind IN ('movie', 'series', 'special')
+       WHERE kind IN ('movie', 'series', 'season', 'special')
          AND (name ILIKE $1 OR native_name ILIKE $1 OR about ILIKE $1)
        UNION
        SELECT a.content_id FROM content_akas a
-       JOIN content c ON c.id = a.content_id AND c.kind IN ('movie', 'series', 'special')
+       JOIN content c ON c.id = a.content_id AND c.kind IN ('movie', 'series', 'season', 'special')
        WHERE a.name ILIKE $1
        UNION
        SELECT fm.member_id FROM content_akas a
        JOIN content f ON f.id = a.content_id AND f.kind = 'franchise'
        JOIN franchise_members fm ON fm.franchise_id = f.id
-       JOIN content c ON c.id = fm.member_id AND c.kind IN ('movie', 'series', 'special')
+       JOIN content c ON c.id = fm.member_id AND c.kind IN ('movie', 'series', 'season', 'special')
        WHERE a.name ILIKE $1
        UNION
        SELECT content_id FROM movies WHERE original_title ILIKE $1

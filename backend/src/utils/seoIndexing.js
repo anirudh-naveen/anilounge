@@ -7,13 +7,16 @@
  * (services/sitemapService.js) and served with `noindex` (services/seoService.js);
  * people can still open them.
  *
- * Indexed: every title and franchise; characters with a biography or a main role;
- * voice actors with a biography or VOICE_MIN_CHARACTERS characters; studios with a
- * biography or STUDIO_MIN_WORKS titles.
+ * Indexed: every title (anime seasons, and TMDB-only seasons with an overview) and
+ * franchise; characters with a biography or a main role; voice actors and staff with
+ * a biography, VOICE_MIN_CHARACTERS characters, or STAFF_MIN_WORKS staff credits;
+ * studios with a biography or STUDIO_MIN_WORKS titles.
  */
 
 export const VOICE_MIN_CHARACTERS = 3
 export const STUDIO_MIN_WORKS = 2
+/** Directors, writers, and composers credited on this many titles get indexed pages. */
+export const STAFF_MIN_WORKS = 3
 
 const HAS_ABOUT = "coalesce(btrim(c.about), '') <> ''"
 
@@ -24,6 +27,9 @@ const HAS_ABOUT = "coalesce(btrim(c.about), '') <> ''"
 export const INDEXABLE_SQL = {
   movie: 'true',
   series: 'true',
+  // MAL/AniList seasons are full title pages; a TMDB-only season row is worth indexing
+  // only once it has an overview.
+  season: `(c.mal_id IS NOT NULL OR c.anilist_id IS NOT NULL OR ${HAS_ABOUT})`,
   special: 'true',
   franchise: 'true',
   character: `(${HAS_ABOUT} OR EXISTS (
@@ -31,7 +37,9 @@ export const INDEXABLE_SQL = {
   voice: `(${HAS_ABOUT} OR (
     SELECT count(DISTINCT a.character_id) FROM voice_credits vc
     JOIN appearances a ON a.id = vc.appearance_id
-    WHERE vc.voice_id = c.id) >= ${VOICE_MIN_CHARACTERS})`,
+    WHERE vc.voice_id = c.id) >= ${VOICE_MIN_CHARACTERS} OR (
+    SELECT count(DISTINCT sc.work_id) FROM staff_credits sc
+    WHERE sc.person_id = c.id) >= ${STAFF_MIN_WORKS})`,
   studio: `(${HAS_ABOUT} OR (
     SELECT count(*) FROM studio_credits sc WHERE sc.studio_id = c.id) >= ${STUDIO_MIN_WORKS})`,
 }

@@ -12,7 +12,7 @@ import { anilistSearchInput } from './contentSyncService.js'
 import { ANILIST_ORIGIN_COUNTRIES, fetchAnilistMediaBatch, findAnilistMatch } from './anilistService.js'
 import { mergeDuplicateWork } from './catalogRepair.js'
 
-const WATCHABLE = `('movie', 'series', 'special')`
+const WATCHABLE = `('movie', 'series', 'season', 'special')`
 
 /**
  * Set a title's external id when unset and unowned within its kind.

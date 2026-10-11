@@ -74,7 +74,8 @@ export function classifyUpdate(content, now = new Date()) {
     return { kind: 'premiere', at: releaseIso }
   }
 
-  if (content.contentType === 'tv' && content.malStatus !== 'finished_airing') {
+  const episodic = content.contentType === 'tv' || content.contentType === 'season'
+  if (episodic && content.malStatus !== 'finished_airing') {
     const next = toTime(content.nextEpisodeAirDate)
     const nextInWindow =
       next != null &&

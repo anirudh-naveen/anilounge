@@ -24,7 +24,7 @@ const cache = new Map()
 
 const STREAMING_LINKS_QUERY = `query ($id: Int, $idMal: Int) {
   Media(id: $id, idMal: $idMal, type: ANIME) {
-    externalLinks { site url type language isDisabled }
+    externalLinks { site url type language isDisabled icon color }
   }
 }`
 
@@ -51,7 +51,14 @@ export function streamingLinks(links) {
   const bySite = new Map()
   for (const link of [...usable].sort((a, b) => rank(a) - rank(b))) {
     if (!bySite.has(link.site)) {
-      bySite.set(link.site, { site: link.site, url: link.url, language: link.language || null })
+      bySite.set(link.site, {
+        site: link.site,
+        url: link.url,
+        language: link.language || null,
+        // AniList's site icon and brand color, shown as the link's logo.
+        icon: /^https:\/\//.test(link.icon || '') ? link.icon : null,
+        color: link.color || null,
+      })
     }
   }
   return [...bySite.values()]
@@ -132,8 +139,20 @@ async function sourcesFor(row) {
 export async function getWhereToWatch(contentId, region) {
   if (!isUuid(contentId)) throw new HttpError(404, 'Title not found.')
   const { rows } = await query(
-    `SELECT id, kind, tmdb_id, anilist_id, mal_id FROM content
-     WHERE id = $1 AND kind IN ('movie', 'series', 'special')`,
+    // A season streams where its show does (TMDB lists the show); a series links out
+    // through its first season's AniList entry.
+    `SELECT c.id, CASE WHEN c.kind = 'season' THEN 'series' ELSE c.kind END AS kind,
+            COALESCE(c.tmdb_id, show.tmdb_id) AS tmdb_id,
+            COALESCE(c.anilist_id, first.anilist_id) AS anilist_id,
+            COALESCE(c.mal_id, first.mal_id) AS mal_id
+     FROM content c
+     LEFT JOIN seasons sn ON sn.content_id = c.id
+     LEFT JOIN content show ON show.id = sn.series_id
+     LEFT JOIN LATERAL (
+       SELECT f.anilist_id, f.mal_id FROM seasons x JOIN content f ON f.id = x.content_id
+       WHERE x.series_id = c.id ORDER BY x.season_number, x.part_number LIMIT 1
+     ) first ON c.kind = 'series'
+     WHERE c.id = $1 AND c.kind IN ('movie', 'series', 'season', 'special')`,
     [contentId],
   )
   if (!rows[0]) throw new HttpError(404, 'Title not found.')

@@ -26,7 +26,7 @@ const STATIC_PATHS = new Set(['/', '/movies', '/tv', '/forum', '/search', '/priv
 
 const ID =
   '(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{24})'
-const DETAIL_PREFIX = '/(?:forum/post|movie|tv-show|character|voice-actor|studio|franchise)'
+const DETAIL_PREFIX = '/(?:forum/post|movie|tv-show|character|voice-actor|staff|studio|franchise)'
 /** Detail pages: `/<kind>/<slug>/<id>`, `/<kind>/<id>`, or the older `/<kind>/<id>/<slug>`. */
 const DETAIL_PAGE = new RegExp(`^${DETAIL_PREFIX}/(?:[^/]+/${ID}|${ID}(?:/[^/]+)?)$`)
 

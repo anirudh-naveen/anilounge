@@ -34,6 +34,12 @@ describe('normalizeProfileSettings', () => {
     assert.equal(settings.defaultTab, 'forum')
   })
 
+  it('shows connected accounts unless turned off', () => {
+    assert.equal(normalizeProfileSettings({}).showConnections, true)
+    assert.equal(normalizeProfileSettings({ showConnections: 'no' }).showConnections, true)
+    assert.equal(normalizeProfileSettings({ showConnections: false }).showConnections, false)
+  })
+
   it('merges a partial update over the stored settings', () => {
     const stored = normalizeProfileSettings({ accent: 'teal', isPublic: false })
     const next = normalizeProfileSettings({ headline: 'Hi' }, stored)

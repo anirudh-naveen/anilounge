@@ -68,6 +68,8 @@ export function mapTmdbEpisode(episode, seriesCast = []) {
     stillPath: asText(episode.still_path),
     airDate: asText(episode.air_date) || null,
     runtime: Number.isFinite(Number(episode.runtime)) ? Number(episode.runtime) : null,
+    tmdbEpisodeId: Number(episode.id) > 0 ? Number(episode.id) : null,
+    tmdbScore: Number(episode.vote_average) > 0 ? Number(episode.vote_average) : null,
     cast: guestCast.length ? guestCast : seriesCast.slice(0, DEFAULT_CAST_LIMIT),
   }
 }

@@ -357,7 +357,7 @@ async function writeChildren(userId, rows, previous) {
          current_season int, notes text, started_on date, completed_on date, rewatch_count int,
          imported_at timestamptz, added_at timestamptz, updated_at timestamptz
        )
-       JOIN content c ON c.id = r.content_id AND c.kind IN ('movie', 'series', 'special')
+       JOIN content c ON c.id = r.content_id AND c.kind IN ('movie', 'series', 'season', 'special')
        ON CONFLICT (user_id, content_id) DO UPDATE SET
          status = EXCLUDED.status, current_episode = EXCLUDED.current_episode,
          previous_episode = EXCLUDED.previous_episode, current_season = EXCLUDED.current_season,
@@ -384,7 +384,7 @@ async function writeChildren(userId, rows, previous) {
        FROM jsonb_to_recordset($2::jsonb) AS r(
          content_id uuid, score numeric, review text, rated_at timestamptz
        )
-       JOIN content c ON c.id = r.content_id AND c.kind IN ('movie', 'series', 'special')
+       JOIN content c ON c.id = r.content_id AND c.kind IN ('movie', 'series', 'season', 'special')
        ON CONFLICT (user_id, content_id) DO UPDATE SET
          score = EXCLUDED.score, review = EXCLUDED.review, rated_at = EXCLUDED.rated_at`,
       [userId, JSON.stringify(rated.upserts)],

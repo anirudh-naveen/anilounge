@@ -33,6 +33,10 @@ const CONTENT_COLUMNS = {
   nextEpisodeAirDate: 'c.next_episode_at',
   startSeasonYear: 'c.start_year',
   startSeason: 'c.start_season',
+  seriesId: 'c.series_id',
+  seasonNumber: 'c.season_number',
+  partNumber: 'c.part_number',
+  seasonsScheduled: 'c.seasons_scheduled',
 }
 
 const ENTITY_COLUMNS = {

@@ -624,6 +624,7 @@ export const getContentTypeDisplay = (contentType: string) => {
   if (contentType === 'character') return 'Character'
   if (contentType === 'voice_actor') return 'Voice Actor'
   if (contentType === 'studio') return 'Studio'
+  if (contentType === 'season') return 'Season'
   return 'Series'
 }
 
@@ -661,6 +662,8 @@ export const matchesContentTypeFilter = (itemType: string | undefined, filter?: 
   if (!filter || filter === 'all') return true
   if (ENTITY_KINDS.has(itemType || '')) return false
   if (filter === 'movie') return isMovieLike(itemType)
+  // A season is a series' part: the TV filter keeps it.
+  if (filter === 'tv') return itemType === 'tv' || itemType === 'season'
   return itemType === filter
 }
 
@@ -670,7 +673,7 @@ export const matchesContentTypeFilter = (itemType: string | undefined, filter?: 
  * @returns `'movie-badge'`, `'tv-badge'`, or `'special-badge'`.
  */
 export const getContentTypeBadgeClass = (contentType: string) => {
-  if (contentType === 'tv') return 'tv-badge'
+  if (contentType === 'tv' || contentType === 'season') return 'tv-badge'
   if (contentType === 'special') return 'special-badge'
   if (contentType === 'character') return 'character-badge'
   if (contentType === 'voice_actor') return 'voice-actor-badge'
@@ -689,7 +692,7 @@ export const tracksEpisodes = (item: {
   episodeCount?: number
   malEpisodes?: number
 }) => {
-  if (item.contentType === 'tv') return true
+  if (item.contentType === 'tv' || item.contentType === 'season') return true
   if (item.contentType === 'special') {
     return (item.episodeCount || item.malEpisodes || 0) > 1
   }
@@ -706,7 +709,9 @@ export const getDetailsRouteName = (item: { contentType?: string; entityType?: s
   if (kind === 'character') return 'CharacterDetails'
   if (kind === 'voice_actor') return 'VoiceActorDetails'
   if (kind === 'studio') return 'StudioDetails'
-  return item.contentType === 'tv' ? 'TVShowDetails' : 'MovieDetails'
+  return item.contentType === 'tv' || item.contentType === 'season'
+    ? 'TVShowDetails'
+    : 'MovieDetails'
 }
 
 export default api

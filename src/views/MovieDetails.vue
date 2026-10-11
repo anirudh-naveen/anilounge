@@ -105,6 +105,8 @@
       <!-- Title: Where to Watch -->
       <WhereToWatch :content-id="movie._id" />
 
+      <TitleExtras :content="movie" />
+
       <!-- Title: Forum -->
       <ForumHighlights :content-id="movie._id" :name="getDisplayTitle(movie)" reviewable />
 
@@ -142,13 +144,6 @@
             ><template v-else>{{ movie.franchise }}</template>
             franchise
           </h4>
-          <router-link
-            v-if="movie.franchiseId"
-            :to="{ name: 'FranchiseDetails', params: { id: movie.franchiseId } }"
-            class="franchise-order-link"
-          >
-            See every title in watch order <i class="fas fa-arrow-right"></i>
-          </router-link>
           <p v-if="movie.franchiseRating" class="franchise-rating" data-testid="franchise-rating">
             <i class="fas fa-star"></i> {{ movie.franchiseRating.toFixed(1) }} across the franchise
           </p>
@@ -303,6 +298,7 @@ import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
 import { shareLink } from '@/utils/nativeApp'
 import WhereToWatch from '@/components/WhereToWatch.vue'
+import TitleExtras from '@/components/TitleExtras.vue'
 import { useToast } from 'vue-toastification'
 
 const route = useRoute()
@@ -836,17 +832,7 @@ useCanonicalSlug(
   text-underline-offset: 3px;
 }
 
-.franchise-order-link {
-  display: inline-block;
-  margin-top: 0.4rem;
-  color: white;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
 
-.franchise-order-link:hover {
-  text-decoration: underline;
-}
 
 .franchise-rating {
   margin: 0.35rem 0 0;

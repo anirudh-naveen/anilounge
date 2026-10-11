@@ -37,6 +37,7 @@ export const DETAIL_PREFIX = {
   movie: '/movie',
   special: '/movie',
   series: '/tv-show',
+  season: '/tv-show',
   character: '/character',
   voice: '/voice-actor',
   studio: '/studio',

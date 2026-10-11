@@ -31,6 +31,7 @@ export const DEFAULT_PROFILE_SETTINGS = Object.freeze({
   defaultTab: 'favorites',
   tabOrder: [...PROFILE_TABS],
   hiddenTabs: [],
+  showConnections: true,
 })
 
 /**
@@ -40,13 +41,15 @@ export const DEFAULT_PROFILE_SETTINGS = Object.freeze({
  *
  * @param {unknown} input - Raw settings object (DB JSON or request body).
  * @param {object} [base=DEFAULT_PROFILE_SETTINGS] - Values kept when `input` omits a key.
- * @returns {{ isPublic: boolean, accent: string, headline: string, defaultTab: string, tabOrder: string[], hiddenTabs: string[] }}
+ * @returns {{ isPublic: boolean, accent: string, headline: string, defaultTab: string, tabOrder: string[], hiddenTabs: string[], showConnections: boolean }}
  */
 export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS) {
   const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
   const pick = (key) => (raw[key] !== undefined ? raw[key] : base[key])
 
   const isPublic = typeof pick('isPublic') === 'boolean' ? pick('isPublic') : true
+  const showConnections =
+    typeof pick('showConnections') === 'boolean' ? pick('showConnections') : true
   const accent = normalizeAccent(pick('accent')) || 'coral'
   const headline =
     typeof pick('headline') === 'string'
@@ -64,7 +67,7 @@ export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS)
   const visible = tabOrder.filter((tab) => !hiddenTabs.includes(tab))
   const defaultTab = visible.includes(pick('defaultTab')) ? pick('defaultTab') : visible[0]
 
-  return { isPublic, accent, headline, defaultTab, tabOrder, hiddenTabs }
+  return { isPublic, accent, headline, defaultTab, tabOrder, hiddenTabs, showConnections }
 }
 
 /**
