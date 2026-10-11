@@ -3,7 +3,7 @@
 
   Creator: sparkly gold crown. Admin: sparkly violet shield. Developer: emerald hex
   with </>. Artist: pink palette. Influencer: sky disc with a megaphone. Supporter: coral heart with a
-  coin glint. Bot (the release bot only): cyan robot head. All glow and
+  coin glint. Bot (the bot accounts only): cyan robot head. All glow and
   catch a light sweep; only creator/admin twinkle. Badges without an emblem (future
   ones) get a plain medal, used in the profile Badges section.
 -->

@@ -275,6 +275,34 @@ export function displayPersonName(value) {
 }
 
 /**
+ * Comparison key for a person's name in display order: "Takeuchi, Junko" (MAL) and
+ * "Junko Takeuchi" (AniList, TMDB) give the same key.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function personNameKey(value) {
+  return foldEntityName(displayPersonName(value))
+}
+
+/**
+ * Looser key for the same person across romanizations and name orders: long vowels
+ * folded ("Yuuichirou" / "Yuichiro", "Oono" / "Ono") and words sorted ("Yano
+ * Yuuichirou"). Only safe among people already credited on the same show.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function romajiNameKey(value) {
+  return personNameKey(value)
+    .replace(/ou/g, 'o')
+    .replace(/oh(?=[^aeiou]|$)/g, 'o')
+    .replace(/([aeiou])\1/g, '$1')
+    .split(' ')
+    .filter(Boolean)
+    .sort()
+    .join(' ')
+}
+
+/**
  * Character display name: strip credit suffixes, then Westernize `"Last, First"`.
  * @param {unknown} value
  * @returns {string}

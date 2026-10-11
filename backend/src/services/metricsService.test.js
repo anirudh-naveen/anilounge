@@ -36,12 +36,12 @@ describe('normalizeEvents', () => {
 })
 
 describe('recordEvents', () => {
-  it('ignores bots and bad visitor ids without touching the database', async () => {
-    const req = (userAgent, visitorId) => ({
-      get: () => userAgent,
-      body: { visitorId, events: [{ type: 'view', path: '/' }] },
+  it('ignores bad visitor ids and empty batches without touching the database', async () => {
+    const req = (visitorId, events = [{ type: 'view', path: '/' }]) => ({
+      get: () => 'Mozilla/5.0',
+      body: { visitorId, events },
     })
-    assert.equal(await recordEvents(req('Googlebot/2.1', 'abcdef123456')), 0)
-    assert.equal(await recordEvents(req('Mozilla/5.0', 'x')), 0)
+    assert.equal(await recordEvents(req('x')), 0)
+    assert.equal(await recordEvents(req('abcdef123456', [{ type: 'nope', path: '/' }])), 0)
   })
 })

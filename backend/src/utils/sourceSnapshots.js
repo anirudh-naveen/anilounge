@@ -8,6 +8,7 @@
  */
 import { airingFromMalStatus } from '../db/kinds.js'
 import { isMissing } from './sourcePriority.js'
+import { tmdbKeyStaff } from './staffCredits.js'
 
 const SEASONS = ['winter', 'spring', 'summer', 'fall']
 
@@ -331,6 +332,7 @@ export function tmdbSnapshot(details, contentType) {
       text(details.origin_country?.[0] || details.production_countries?.[0]?.iso_3166_1) || null,
     ageRating: tmdbAgeRating(details),
     trailer: tmdbTrailer(details.videos),
+    staff: tmdbKeyStaff(details, movie ? details.credits : details.aggregate_credits, { movie }),
     score: positive(details.vote_average),
     votes: positive(details.vote_count),
     popularity: finite(details.popularity),

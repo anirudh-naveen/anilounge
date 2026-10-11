@@ -8,6 +8,8 @@
 #   3. (asks to continue)
 #   4. db:restructure-series         backs up to a backup_<stamp> schema, applies, commits
 #   5. db:reload --phases seasons    imports every title by source priority (long: hours)
+#   6. db:reload --phases characters,photos   characters (TVmaze images for western
+#                                    shows) and photos for people without one
 #
 # Deploy the new code before running this. Uses DATABASE_URL from the environment, else
 # backend/.env. Step 5 can be stopped and rerun; it resumes from its checkpoint.
@@ -32,11 +34,11 @@ read -r -p "Run the series migration against this database? Type 'yes': " answer
 [[ "$answer" == "yes" ]] || { echo "Stopped."; exit 1; }
 
 echo
-echo "== 1/4 Applying the schema =="
+echo "== 1/5 Applying the schema =="
 npm run db:schema
 
 echo
-echo "== 2/4 Dry run (applied in a transaction, then rolled back) =="
+echo "== 2/5 Dry run (applied in a transaction, then rolled back) =="
 npm run db:restructure-series -- --dry-run
 echo
 echo "Plan written to backend/logs/restructure-plan.json (see its 'review' list)."
@@ -44,12 +46,16 @@ read -r -p "The dry run left users' data unchanged. Commit the migration? Type '
 [[ "$answer" == "yes" ]] || { echo "Stopped before changing anything."; exit 1; }
 
 echo
-echo "== 3/4 Migrating (backs up first) =="
+echo "== 3/5 Migrating (backs up first) =="
 npm run db:restructure-series
 
 echo
-echo "== 4/4 Importing seasons, episodes, tags, staff, and ids =="
+echo "== 4/5 Importing seasons, episodes, tags, staff, and ids =="
 npm run db:reload -- --phases seasons --workers 2 --fresh
+
+echo
+echo "== 5/5 Characters (TVmaze images) and people's photos =="
+npm run db:reload -- --phases characters,photos --workers 2
 
 echo
 echo "Done. Check a few pages (e.g. Blue Box, Attack on Titan) and the Search rails."

@@ -6,16 +6,24 @@ describe('badgesForUser', () => {
   it('combines the role badge with granted badges in registry order', () => {
     assert.deepEqual(badgesForUser({ role: 'creator', granted: ['influencer', 'developer'] }), [
       'creator',
+      'admin',
       'developer',
       'influencer',
     ])
     assert.deepEqual(badgesForUser({ role: 'user', isStaff: true }), ['admin'])
-    assert.deepEqual(badgesForUser({ role: 'user', granted: ['artist', 'bogus', 'admin'] }), [
+    assert.deepEqual(badgesForUser({ role: 'user', granted: ['artist', 'bogus', 'bot'] }), [
       'artist',
     ])
   })
 
-  it('gives the release bot the bot badge and nothing else', () => {
+  it('lets Admin be granted like the other badges', () => {
+    assert.deepEqual(badgesForUser({ role: 'user', granted: ['admin', 'artist'] }), [
+      'admin',
+      'artist',
+    ])
+  })
+
+  it('gives the bot accounts the bot badge and nothing else', () => {
     assert.deepEqual(badgesForUser({ role: 'admin', isBot: true, granted: ['developer'] }), ['bot'])
     assert.deepEqual(badgesForUser({ role: 'user', granted: ['bot'] }), [])
     assert.equal(featuredEmblem(['bot'], null), 'bot')

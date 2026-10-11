@@ -3,12 +3,15 @@
  *
  * Layer: services. The app batches events (src/services/metrics.ts) and posts them to
  * `POST /api/metrics/events`; they land in `site_events`. Visitors are counted by a random
- * id the browser keeps, not by IP. Bots that announce themselves are skipped. Fails open:
+ * id the browser keeps, not by IP. Bots and crawlers (utils/botAgents.js) are stored with
+ * their name and counted apart: every visitor, view, and top-list number is people only,
+ * and `bots` reports the rest. Fails open:
  * a missing table or a database error never breaks the page that reported the event.
  */
 
 import cron from 'node-cron'
 import { query } from '../../config/postgres.js'
+import { botName } from '../utils/botAgents.js'
 import { withJobLock } from '../utils/jobLock.js'
 
 const EVENT_TYPES = ['view', 'click']
@@ -17,7 +20,6 @@ const RETENTION_DAYS = 400
 const DEFAULT_DAYS = 30
 const MAX_DAYS = 365
 const TOP_LIMIT = 15
-const BOT_AGENT = /bot|crawl|spider|slurp|headless|lighthouse|preview|curl|wget|python|axios/i
 const VISITOR_ID = /^[A-Za-z0-9-]{8,64}$/
 
 /**
@@ -69,28 +71,31 @@ export function normalizeEvents(events) {
 }
 
 /**
- * Store a batch of events for one visitor. Ignores bots and malformed input.
- * @param {import('express').Request} req - `body.visitorId`, `body.events`; `req.user` when signed in.
+ * Store a batch of events for one visitor, tagged with the bot's name when it is one.
+ * Ignores malformed input.
+ * @param {import('express').Request} req - `body.visitorId`, `body.events`, `body.automated`
+ *   (the page saw `navigator.webdriver`); `req.user` when signed in.
  * @returns {Promise<number>} How many events were stored.
  */
 export async function recordEvents(req) {
-  if (BOT_AGENT.test(req.get('User-Agent') || '')) return 0
   const visitorId = typeof req.body?.visitorId === 'string' ? req.body.visitorId : ''
   if (!VISITOR_ID.test(visitorId)) return 0
   const events = normalizeEvents(req.body?.events)
   if (!events.length) return 0
+  const bot = botName(req.get('User-Agent'), { automated: req.body?.automated === true })
 
   try {
     await query(
-      `INSERT INTO site_events (type, path, target, referrer, visitor_id, user_id)
-       SELECT e.type, e.path, e.target, e.referrer, $2, $3
+      `INSERT INTO site_events (type, path, target, referrer, visitor_id, user_id, bot)
+       SELECT e.type, e.path, e.target, e.referrer, $2, $3, $4
        FROM jsonb_to_recordset($1::jsonb) AS e(type TEXT, path TEXT, target TEXT, referrer TEXT)`,
-      [JSON.stringify(events), visitorId, req.user?._id || null],
+      [JSON.stringify(events), visitorId, req.user?._id || null, bot],
     )
     return events.length
   } catch (error) {
-    if (error.code !== '42P01') console.error('Metrics insert failed:', error.message)
-    else console.warn('site_events table missing; run npm run db:schema to record metrics')
+    if (error.code === '42P01' || error.code === '42703') {
+      console.warn('site_events table or bot column missing; run npm run db:schema')
+    } else console.error('Metrics insert failed:', error.message)
     return 0
   }
 }
@@ -105,7 +110,7 @@ async function eventRows(sql, params) {
   try {
     return (await query(sql, params)).rows
   } catch (error) {
-    if (error.code === '42P01') return []
+    if (error.code === '42P01' || error.code === '42703') return []
     throw error
   }
 }
@@ -119,52 +124,62 @@ export async function getMetrics({ days } = {}) {
   const range = Math.min(Math.max(Math.trunc(Number(days)) || DEFAULT_DAYS, 1), MAX_DAYS)
   const since = `(((now() AT TIME ZONE 'UTC')::date - ${range - 1}) AT TIME ZONE 'UTC')`
 
-  const [userTotals, eventTotals, signups, daily, pages, clicks, referrers] = await Promise.all([
-    query(
-      `SELECT count(*)::int AS total,
+  const [userTotals, eventTotals, signups, daily, pages, clicks, referrers, bots] =
+    await Promise.all([
+      query(
+        `SELECT count(*)::int AS total,
               count(*) FILTER (WHERE created_at >= ${since})::int AS new,
               count(*) FILTER (WHERE last_active_at >= ${since})::int AS active
        FROM users WHERE is_demo = false`,
-    ).then(({ rows }) => rows[0]),
-    eventRows(
-      `SELECT count(*) FILTER (WHERE type = 'view')::int AS views,
+      ).then(({ rows }) => rows[0]),
+      eventRows(
+        `SELECT count(*) FILTER (WHERE type = 'view')::int AS views,
               count(*) FILTER (WHERE type = 'click')::int AS clicks,
               count(DISTINCT visitor_id)::int AS visitors,
               count(DISTINCT user_id)::int AS "signedIn"
-       FROM site_events WHERE created_at >= ${since}`,
-      [],
-    ),
-    query(
-      `SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, count(*)::int AS n
+       FROM site_events WHERE bot IS NULL AND created_at >= ${since}`,
+        [],
+      ),
+      query(
+        `SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, count(*)::int AS n
        FROM users WHERE is_demo = false AND created_at >= ${since} GROUP BY 1`,
-    ).then(({ rows }) => rows),
-    eventRows(
-      `SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
-              count(*) FILTER (WHERE type = 'view')::int AS views,
-              count(*) FILTER (WHERE type = 'click')::int AS clicks,
-              count(DISTINCT visitor_id)::int AS visitors
+      ).then(({ rows }) => rows),
+      eventRows(
+        `SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+              count(*) FILTER (WHERE type = 'view' AND bot IS NULL)::int AS views,
+              count(*) FILTER (WHERE type = 'click' AND bot IS NULL)::int AS clicks,
+              count(DISTINCT visitor_id) FILTER (WHERE bot IS NULL)::int AS visitors,
+              count(DISTINCT visitor_id) FILTER (WHERE bot IS NOT NULL)::int AS "botVisitors"
        FROM site_events WHERE created_at >= ${since} GROUP BY 1`,
-      [],
-    ),
-    eventRows(
-      `SELECT path, count(*)::int AS views, count(DISTINCT visitor_id)::int AS visitors
-       FROM site_events WHERE type = 'view' AND created_at >= ${since}
+        [],
+      ),
+      eventRows(
+        `SELECT path, count(*)::int AS views, count(DISTINCT visitor_id)::int AS visitors
+       FROM site_events WHERE type = 'view' AND bot IS NULL AND created_at >= ${since}
        GROUP BY path ORDER BY views DESC LIMIT $1`,
-      [TOP_LIMIT],
-    ),
-    eventRows(
-      `SELECT target, count(*)::int AS clicks, count(DISTINCT visitor_id)::int AS visitors
-       FROM site_events WHERE type = 'click' AND created_at >= ${since}
+        [TOP_LIMIT],
+      ),
+      eventRows(
+        `SELECT target, count(*)::int AS clicks, count(DISTINCT visitor_id)::int AS visitors
+       FROM site_events WHERE type = 'click' AND bot IS NULL AND created_at >= ${since}
        GROUP BY target ORDER BY clicks DESC LIMIT $1`,
-      [TOP_LIMIT],
-    ),
-    eventRows(
-      `SELECT referrer AS host, count(DISTINCT visitor_id)::int AS visitors
-       FROM site_events WHERE type = 'view' AND referrer IS NOT NULL AND created_at >= ${since}
+        [TOP_LIMIT],
+      ),
+      eventRows(
+        `SELECT referrer AS host, count(DISTINCT visitor_id)::int AS visitors
+       FROM site_events
+       WHERE type = 'view' AND bot IS NULL AND referrer IS NOT NULL AND created_at >= ${since}
        GROUP BY referrer ORDER BY visitors DESC LIMIT $1`,
-      [TOP_LIMIT],
-    ),
-  ])
+        [TOP_LIMIT],
+      ),
+      eventRows(
+        `SELECT bot AS name, count(DISTINCT visitor_id)::int AS visitors,
+              count(*) FILTER (WHERE type = 'view')::int AS views
+       FROM site_events WHERE bot IS NOT NULL AND created_at >= ${since}
+       GROUP BY bot ORDER BY visitors DESC, views DESC LIMIT $1`,
+        [TOP_LIMIT],
+      ),
+    ])
 
   const signupsByDay = new Map(signups.map((row) => [row.day, row.n]))
   const eventsByDay = new Map(daily.map((row) => [row.day, row]))
@@ -183,6 +198,7 @@ export async function getMetrics({ days } = {}) {
       day,
       views: events?.views || 0,
       visitors: events?.visitors || 0,
+      botVisitors: events?.botVisitors || 0,
       clicks: events?.clicks || 0,
       signups: signupsByDay.get(day) || 0,
     }
@@ -197,6 +213,12 @@ export async function getMetrics({ days } = {}) {
     pages,
     clicks,
     referrers,
+    /** Bots and crawlers, kept out of every number above. */
+    bots: {
+      visitors: bots.reduce((sum, row) => sum + row.visitors, 0),
+      views: bots.reduce((sum, row) => sum + row.views, 0),
+      top: bots,
+    },
   }
 }
 

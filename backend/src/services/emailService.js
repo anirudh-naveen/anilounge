@@ -237,7 +237,9 @@ export function sendVerificationEmail(user, code) {
   return sendEmail({
     to: user.email,
     subject: 'Verify your AniLounge email',
-    text: withAccountFooter(`Hi ${user.username},\n\nYour verification code is ${code}. It expires in 24 hours.${note}\n\nOr open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email.`),
+    text: withAccountFooter(
+      `Hi ${user.username},\n\nYour verification code is ${code}. It expires in 24 hours.${note}\n\nOr open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email.`,
+    ),
     html: layout(
       'Verify your email',
       `<p>Hi ${escapeHtml(user.username)}, welcome to AniLounge!</p>
@@ -260,7 +262,9 @@ export function sendUnlockEmail(user, code) {
   return sendEmail({
     to: user.email,
     subject: 'Your AniLounge account was locked',
-    text: withAccountFooter(`Hi ${user.username},\n\nYour account was locked after several failed sign-in attempts. If this was you, unlock it now with code ${code} or this link: ${link}\n\nThe link expires in 1 hour. Otherwise the lock lifts on its own in 30 minutes. If this wasn't you, consider changing your password after signing in.`),
+    text: withAccountFooter(
+      `Hi ${user.username},\n\nYour account was locked after several failed sign-in attempts. If this was you, unlock it now with code ${code} or this link: ${link}\n\nThe link expires in 1 hour. Otherwise the lock lifts on its own in 30 minutes. If this wasn't you, consider changing your password after signing in.`,
+    ),
     html: layout(
       'Account locked',
       `<p>Hi ${escapeHtml(user.username)}, your account was locked after several failed sign-in attempts.</p>
@@ -281,7 +285,9 @@ export function sendEmailChangedNotice(previous, newEmail) {
   return sendEmail({
     to: previous.email,
     subject: 'Your AniLounge email was changed',
-    text: withAccountFooter(`Hi ${previous.username},\n\nThe email on your AniLounge account was changed to ${newEmail}. If you did this, no action is needed. If not, contact support@anilounge.net right away so we can secure your account.`),
+    text: withAccountFooter(
+      `Hi ${previous.username},\n\nThe email on your AniLounge account was changed to ${newEmail}. If you did this, no action is needed. If not, contact support@anilounge.net right away so we can secure your account.`,
+    ),
     html: layout(
       'Email changed',
       `<p>Hi ${escapeHtml(previous.username)}, the email on your AniLounge account was changed to <strong>${escapeHtml(newEmail)}</strong>.</p>
@@ -317,7 +323,9 @@ export function sendInactivityWarning(user, daysLeft, deleteAt) {
   return sendEmail({
     to: user.email,
     subject: `Your AniLounge account will be deleted in ${when}`,
-    text: withAccountFooter(`Hi ${user.username},\n\nYou haven't used AniLounge in almost a year. To protect your data, inactive accounts are deleted after one year. Your account, watchlist, ratings, and favorites will be permanently deleted on ${date} (in ${when}).\n\nTo keep your account, just sign in before then: ${link}\n\nIf you'd rather let it go, you don't need to do anything.`),
+    text: withAccountFooter(
+      `Hi ${user.username},\n\nYou haven't used AniLounge in almost a year. To protect your data, inactive accounts are deleted after one year. Your account, watchlist, ratings, and favorites will be permanently deleted on ${date} (in ${when}).\n\nTo keep your account, just sign in before then: ${link}\n\nIf you'd rather let it go, you don't need to do anything.`,
+    ),
     html: layout(
       `Your account will be deleted in ${when}`,
       `<p>Hi ${escapeHtml(user.username)}, you haven't used AniLounge in almost a year.</p>
@@ -337,7 +345,9 @@ export function sendInactiveAccountDeleted(user) {
   return sendEmail({
     to: user.email,
     subject: 'Your AniLounge account has been deleted',
-    text: withAccountFooter(`Hi ${user.username},\n\nYour AniLounge account was deleted after a year without activity, as we warned in earlier emails. Your watchlist, ratings, favorites, and profile have been removed.\n\nYou're welcome back anytime: ${appUrl()}/register`),
+    text: withAccountFooter(
+      `Hi ${user.username},\n\nYour AniLounge account was deleted after a year without activity, as we warned in earlier emails. Your watchlist, ratings, favorites, and profile have been removed.\n\nYou're welcome back anytime: ${appUrl()}/register`,
+    ),
     html: layout(
       'Your account has been deleted',
       `<p>Hi ${escapeHtml(user.username)}, your AniLounge account was deleted after a year without activity, as we warned in earlier emails.</p>
@@ -364,7 +374,9 @@ export function sendVerificationReminder(user, code, deleteAt) {
   return sendEmail({
     to: user.email,
     subject: 'Verify your AniLounge email to keep your account',
-    text: withAccountFooter(`Hi ${user.username},\n\nYou signed up for AniLounge but haven't verified your email yet. Your account will be deleted on ${when} UTC (in about 1 day) unless you verify it.\n\nYour new verification code is ${code}. Or open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email and the account will be removed.`),
+    text: withAccountFooter(
+      `Hi ${user.username},\n\nYou signed up for AniLounge but haven't verified your email yet. Your account will be deleted on ${when} UTC (in about 1 day) unless you verify it.\n\nYour new verification code is ${code}. Or open this link to verify: ${link}\n\nIf you didn't sign up, ignore this email and the account will be removed.`,
+    ),
     html: layout(
       'Verify your email to keep your account',
       `<p>Hi ${escapeHtml(user.username)}, you signed up for AniLounge but haven't verified your email yet.</p>
@@ -476,7 +488,8 @@ export function sendFeedbackEmail(feedback) {
 }
 
 /**
- * One announcement to one user, with a one-click unsubscribe link and header.
+ * One announcement to one user, signed by Lounge Keeper, with a one-click unsubscribe
+ * link and header.
  * `bodyText` is written by the site owner; paragraphs are split on blank lines.
  * @param {{ email: string, username: string }} user
  * @param {{ subject: string, bodyText: string }} announcement
@@ -496,10 +509,10 @@ export function sendAnnouncementEmail(user, { subject, bodyText }, unsubscribeUr
       'List-Unsubscribe': `<${unsubscribeUrl}>`,
       'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
     },
-    text: `Hi ${user.username},\n\n${bodyText.trim()}\n\n—\nYou're receiving this because you have an AniLounge account. Unsubscribe from announcements: ${unsubscribeUrl}`,
+    text: `Hi ${user.username},\n\n${bodyText.trim()}\n\n— Lounge Keeper\n\n—\nYou're receiving this because you have an AniLounge account. Unsubscribe from announcements: ${unsubscribeUrl}`,
     html: layout(
       escapeHtml(subject),
-      `<p>Hi ${escapeHtml(user.username)},</p>\n${paragraphs}`,
+      `<p>Hi ${escapeHtml(user.username)},</p>\n${paragraphs}\n<p>— Lounge Keeper</p>`,
       `AniLounge · You're receiving this because you have an AniLounge account. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#8b93a6">Unsubscribe from announcements</a> or <a href="${emailSettingsLink()}" style="color:#8b93a6">manage all emails</a>.`,
     ),
   })

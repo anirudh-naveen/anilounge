@@ -172,3 +172,19 @@ describe('applyFormatting', () => {
     })
   })
 })
+
+describe('pictures (site news only)', () => {
+  const text = 'Hi\n![The new forum](/api/news-images/abc-123)\n![x](javascript:alert(1))'
+
+  it('stays plain text unless images are on', () => {
+    expect(parseRichText(text).some((block) => block.type === 'image')).toBe(false)
+  })
+
+  it('renders uploaded and https pictures, nothing else', () => {
+    const blocks = parseRichText(`${text}\n![](https://example.com/a.png)`, { images: true })
+    expect(blocks.filter((block) => block.type === 'image')).toEqual([
+      { type: 'image', alt: 'The new forum', src: '/api/news-images/abc-123' },
+      { type: 'image', alt: '', src: 'https://example.com/a.png' },
+    ])
+  })
+})

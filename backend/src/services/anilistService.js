@@ -332,6 +332,37 @@ export async function fetchAnilistDetailsBatch(
   return results
 }
 
+/** Staff pages read per title (50 credits each); key animators fill the long tail. */
+const MAX_STAFF_PAGES = 12
+
+/**
+ * Every staff credit of one AniList anime, page by page (episode notes included:
+ * "Animation Director (eps 3, 7)"). Not cached: the import runs once per title.
+ * @param {number} anilistId
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object[]>} `staff.edges`
+ */
+export async function fetchAnilistStaffCredits(anilistId, { fetchImpl } = {}) {
+  const id = positiveInt(anilistId)
+  if (!id) return []
+  const edges = []
+  for (let page = 1; page <= MAX_STAFF_PAGES; page += 1) {
+    const data = await anilistRequest(
+      `query ($id: Int, $page: Int) { Media(id: $id, type: ANIME) {
+         staff(page: $page, perPage: 50, sort: [RELEVANCE, ID]) {
+           pageInfo { hasNextPage }
+           edges { role node { id name { full native } image { large } } }
+         } } }`,
+      { id, page },
+      { fetchImpl },
+    )
+    const staff = data?.Media?.staff
+    edges.push(...(staff?.edges || []))
+    if (!staff?.pageInfo?.hasNextPage) break
+  }
+  return edges
+}
+
 /**
  * One AniList anime by AniList id or MAL id (cached).
  * @param {{ anilistId?: number, malId?: number }} ids
