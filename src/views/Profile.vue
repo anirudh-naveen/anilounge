@@ -98,6 +98,31 @@
                   {{ genre }}
                 </span>
               </div>
+
+              <!-- Title: Connected Accounts -->
+              <ul
+                v-if="profile.connections?.length"
+                class="connection-links"
+                data-testid="profile-connections"
+              >
+                <li v-for="link in profile.connections" :key="link.provider">
+                  <a
+                    :href="link.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="connection-link"
+                    :title="`${link.username} on ${link.label}`"
+                    :aria-label="`${link.username} on ${link.label}`"
+                  >
+                    <img
+                      :src="`/${CONNECTION_LOGOS[link.provider]}`"
+                      alt=""
+                      class="connection-logo"
+                    />
+                    <span class="connection-name">{{ link.username }}</span>
+                  </a>
+                </li>
+              </ul>
             </div>
 
             <!-- Title: Actions -->
@@ -582,6 +607,17 @@
           </span>
         </label>
 
+        <label class="toggle-row">
+          <input v-model="draft.showConnections" type="checkbox" data-testid="toggle-connections" />
+          <span>
+            <strong>Show connected accounts</strong>
+            <small>
+              Link to your AniList, MyAnimeList, and TMDB profiles under your name. Add accounts on
+              the Connections page.
+            </small>
+          </span>
+        </label>
+
         <label v-if="emblemBadges.length" class="field">
           <span class="field-label">Badge next to my name</span>
           <select v-model="draftEmblem" class="form-control" data-testid="emblem-picker">
@@ -819,6 +855,12 @@ const pickCustomAccent = (event: Event) => {
   if (draft.value)
     draft.value.accent = (event.target as HTMLInputElement).value.toLowerCase() as ProfileAccent
 }
+
+const CONNECTION_LOGOS = {
+  anilist: 'anilist-logo.svg',
+  mal: 'mal-logo.svg',
+  tmdb: 'tmdb-logo.svg',
+} as const
 
 const favoriteGenres = computed(() => profile.value?.user.preferences.favoriteGenres || [])
 
@@ -1382,7 +1424,7 @@ const handleImageError = showPosterPlaceholder
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 128px;
+  min-width: 128px;
   margin-top: -56px;
 }
 
@@ -1467,12 +1509,14 @@ const handleImageError = showPosterPlaceholder
 
 .badge-list {
   list-style: none;
-  margin: 0;
+  margin: 0 auto;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.4rem;
+  /* Up to five per row. */
+  max-width: calc(5 * 2.5rem + 4 * 0.4rem);
 }
 
 .badge-card {
@@ -1587,6 +1631,53 @@ const handleImageError = showPosterPlaceholder
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+.connection-links {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.connection-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 14rem;
+  padding: 0.25rem 0.7rem 0.25rem 0.3rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.connection-link:hover,
+.connection-link:focus-visible {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.connection-logo {
+  width: 1.3rem;
+  height: 1.3rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
+.connection-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-actions {
@@ -2481,12 +2572,18 @@ textarea.form-control {
   }
 
   .hero-name-row,
-  .genre-tags {
+  .genre-tags,
+  .connection-links {
     justify-content: center;
   }
 
   .avatar {
-    width: auto;
+    min-width: 0;
+  }
+
+  /* Full width here: one centered row, wrapping only when it runs out of room. */
+  .badge-list {
+    max-width: none;
   }
 
   .bio {
