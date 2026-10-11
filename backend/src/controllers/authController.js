@@ -542,7 +542,15 @@ export const updateProfile = async (req, res) => {
       message: changesEmail
         ? 'Profile updated. Check your new email for a verification code.'
         : 'Profile updated successfully.',
-      data: { user, emailVerificationSent: changesEmail },
+      data: {
+        // Same shape as getProfile, so the app keeps isAdmin/canEditContent after a save.
+        user: {
+          ...sessionUserPayload(user),
+          bio: user.bio || '',
+          profileSettings: user.profileSettings,
+        },
+        emailVerificationSent: changesEmail,
+      },
     })
   } catch (error) {
     console.error('Update profile error:', error)
