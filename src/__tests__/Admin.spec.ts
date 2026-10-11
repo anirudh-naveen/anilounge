@@ -233,21 +233,33 @@ describe('Admin page', () => {
     await flushPromises()
     const text = wrapper.find('[data-testid="admin-users"]').text()
     expect(text).toContain('Mute…')
-    expect(text).not.toContain('Make admin')
     expect(text).not.toContain('Ban…')
+    // Only the creator can toggle the Admin badge (admin access).
+    expect(wrapper.find('[data-testid="cosmetic-admin"]').attributes('disabled')).toBeDefined()
     // The admin row gets no mute button for a non-creator.
     expect(wrapper.findAll('.user-item')[1]!.text()).not.toContain('Mute…')
   })
 
-  it('gives the creator role and ban controls', async () => {
+  it('lets the creator give the Admin badge (after confirming) and ban', async () => {
     const wrapper = mountAdmin('creator')
     await flushPromises()
     await wrapper.findAll('.admin-tab')[1]!.trigger('click')
     await flushPromises()
-    const text = wrapper.find('[data-testid="admin-users"]').text()
-    expect(text).toContain('Make admin')
-    expect(text).toContain('Remove admin')
-    expect(text).toContain('Ban…')
+    const users = wrapper.find('[data-testid="admin-users"]')
+    expect(users.text()).not.toContain('Make admin')
+    expect(users.text()).toContain('Ban…')
+
+    const [regular, admin] = wrapper.findAll('.user-item')
+    expect(admin!.find('[data-testid="cosmetic-admin"]').attributes('aria-pressed')).toBe('true')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    api.setUserRole.mockResolvedValue({ data: { data: user({ isAdmin: true }), message: 'ok' } })
+    await regular!.find('[data-testid="cosmetic-admin"]').trigger('click')
+    expect(confirm.mock.calls[0]![0]).toContain('Are you sure')
+    expect(api.setUserRole).not.toHaveBeenCalled()
+    await regular!.find('[data-testid="cosmetic-admin"]').trigger('click')
+    await flushPromises()
+    expect(api.setUserRole).toHaveBeenCalledWith('u2', 'admin')
+    confirm.mockRestore()
   })
 
   it('shows sync changes under the log and reverts or applies them', async () => {
