@@ -11,6 +11,7 @@
 
 import { query, withTransaction } from '../../config/postgres.js'
 import { isUuid } from '../db/ids.js'
+import { isBotEmail } from '../utils/botAccount.js'
 import { HttpError } from '../utils/httpError.js'
 
 /**
@@ -74,7 +75,7 @@ export async function hasBlocked(blockerId, blockedId) {
  * @param {string} blockerId
  * @param {string} blockedId
  * @returns {Promise<{ id: string, username: string }>} The blocked user.
- * @throws {HttpError} 400 self, 404 unknown user.
+ * @throws {HttpError} 400 self or a bot account, 404 unknown user.
  */
 export async function blockUser(blockerId, blockedId) {
   if (String(blockerId) === String(blockedId)) {
@@ -82,10 +83,13 @@ export async function blockUser(blockerId, blockedId) {
   }
   if (!isUuid(blockedId)) throw new HttpError(404, 'User not found.')
   const { rows } = await query(
-    'SELECT id, username FROM users WHERE id = $1 AND NOT pending_signup',
+    'SELECT id, username, email FROM users WHERE id = $1 AND NOT pending_signup',
     [blockedId],
   )
   if (!rows[0]) throw new HttpError(404, 'User not found.')
+  if (isBotEmail(rows[0].email)) {
+    throw new HttpError(400, "AniLounge's bots can't be blocked.", 'BOT_UNBLOCKABLE')
+  }
 
   await withTransaction(async () => {
     await query(

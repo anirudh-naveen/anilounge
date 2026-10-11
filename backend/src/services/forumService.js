@@ -19,8 +19,8 @@
  * posts and comments; admins can delete anyone's (logged). Deleting resolves open
  * reports on it (`forumReportService`). Banned users' posts and comments are hidden. Throws `HttpError` for user-facing failures.
  *
- * Megathreads are only opened by the release bot (`releaseThreadService`, through
- * `createMegathread`); people can't pick that kind when posting.
+ * Megathreads are only opened by Lounge Keeper, the release bot (`releaseThreadService`,
+ * through `createMegathread`); people can't pick that kind when posting.
  */
 
 import cron from 'node-cron'
@@ -44,7 +44,7 @@ import { resolveReports } from './forumReportService.js'
 import { blockedByViewerSql } from './blockService.js'
 
 export const POST_KINDS = ['discussion', 'review', 'guide', 'article', 'megathread']
-/** Kinds people can post; megathreads come from the release bot. */
+/** Kinds people can post; megathreads come from Lounge Keeper. */
 export const USER_POST_KINDS = ['discussion', 'review', 'guide', 'article']
 export const TAG_KINDS = ['movie', 'series', 'season', 'special', 'franchise', 'character']
 /** Kinds a review can score. */

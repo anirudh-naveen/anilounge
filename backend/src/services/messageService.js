@@ -2,7 +2,8 @@
  * Direct messages between friends, plus the friend requests shown beside them.
  *
  * Layer: service. A `messages` row runs from `sender_id` to `recipient_id`; a
- * conversation is every row between two users. Only friends can send, but history
+ * conversation is every row between two users. Only friends can send (except
+ * Lounge Cleaner, the support bot: see `canMessageUser`), but history
  * stays readable after an unfriend. Opening a thread marks the other user's messages
  * as read. Pending friend requests appear in the Messages tab so a request's note
  * reads like an opening message; accepting turns that note into the first message
@@ -27,7 +28,8 @@ import {
   requestExpiresAt,
 } from './friendService.js'
 import { maskLanguage, screenText } from './languageWarningService.js'
-import { blockedByViewerSql } from './blockService.js'
+import { blockedByViewerSql, isBlockedEitherWay } from './blockService.js'
+import { ensureLoungeCleaner } from './botAccountService.js'
 import { pushToUser } from './pushService.js'
 
 export { maskLanguage }
@@ -38,6 +40,29 @@ const CONVERSATION_LIMIT = 100
 /** Per-sender burst limit: at most SEND_BURST_MAX messages in SEND_BURST_SECONDS. */
 export const SEND_BURST_MAX = 20
 export const SEND_BURST_SECONDS = 60
+
+/**
+ * Whether `userId` may send to `otherId`: friends always can; Lounge Cleaner (the
+ * support bot) can message anyone; and anyone it has written to can reply to it.
+ * @param {string} userId
+ * @param {string} otherId
+ * @param {string} [relationship] - From `relationshipBetween`, when already known.
+ * @returns {Promise<boolean>}
+ */
+export async function canMessageUser(userId, otherId, relationship) {
+  const link = relationship ?? (await relationshipBetween(userId, otherId))
+  if (link === 'friends') return true
+  const cleanerId = await ensureLoungeCleaner()
+  if (![String(userId), String(otherId)].includes(cleanerId)) return false
+  // Staff signed in as Lounge Cleaner can still block someone.
+  if (await isBlockedEitherWay(userId, otherId)) return false
+  if (String(userId) === cleanerId) return true
+  const { rows } = await query(
+    'SELECT 1 FROM messages WHERE sender_id = $1 AND recipient_id = $2 LIMIT 1',
+    [cleanerId, userId],
+  )
+  return Boolean(rows[0])
+}
 
 /**
  * SQL condition for rows between `$a` and `$b` in either direction. Matches the
@@ -162,19 +187,21 @@ export async function listConversations(userId) {
      SELECT l.sender_id, l.body, l.created_at,
             u.id, u.username, u.profile_picture,
             COALESCE(un.unread, 0) AS unread,
-            EXISTS (
+            (EXISTS (
               SELECT 1 FROM friendships f
               WHERE f.status = 'accepted'
                 AND ((f.follower_id = $1 AND f.followee_id = l.other_id)
                   OR (f.follower_id = l.other_id AND f.followee_id = $1))
-            ) AS can_message
+            )
+            -- Lounge Cleaner writes to anyone; a thread with it means it wrote first.
+            OR $1 = $2::uuid OR l.other_id = $2::uuid) AS can_message
      FROM latest l
      JOIN users u ON u.id = l.other_id
      LEFT JOIN unread un ON un.other_id = l.other_id
      WHERE NOT ${blockedByViewerSql('$1', 'l.other_id')}
      ORDER BY l.created_at DESC
      LIMIT ${CONVERSATION_LIMIT}`,
-    [userId],
+    [userId, await ensureLoungeCleaner()],
   )
   const [{ rows }, { incoming }] = await Promise.all([conversations, listFriends(userId)])
   return {
@@ -242,7 +269,7 @@ export async function getThread(userId, otherId, { before, after } = {}) {
   return {
     user: publicUser(other),
     relationship,
-    canMessage: relationship === 'friends',
+    canMessage: await canMessageUser(userId, other.id, relationship),
     /** Both allow profanity: curses go through unmasked in this chat. */
     profanityAllowed,
     request: await pendingRequest(userId, other.id, relationship),
@@ -276,7 +303,8 @@ async function pendingRequest(userId, otherId, relationship) {
 }
 
 /**
- * Send a direct message to a friend. Blocked language is masked and earns the
+ * Send a direct message to a friend (or to/from Lounge Cleaner, see `canMessageUser`).
+ * Blocked language is masked and earns the
  * sender a language warning.
  *
  * @param {{ _id: string, username: string }} sender
@@ -294,7 +322,7 @@ export async function sendMessage(sender, otherId, body) {
   }
   const text = cleanMessageBody(body)
   const other = await loadUser(otherId)
-  if ((await relationshipBetween(userId, other.id)) !== 'friends') {
+  if (!(await canMessageUser(userId, other.id))) {
     throw new HttpError(403, 'You can only message friends.', 'NOT_FRIENDS')
   }
   const { rows: recent } = await query(

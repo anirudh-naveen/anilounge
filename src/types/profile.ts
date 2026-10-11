@@ -80,6 +80,10 @@ export interface PublicProfile {
   relationship?: Relationship | null
   /** Whether the signed-in visitor blocked this user. */
   blocked?: boolean
+  /** Whether the signed-in visitor can message this user (friends, or the support bot). */
+  canMessage?: boolean
+  /** A bot account (Lounge Keeper / Lounge Cleaner): no friending or blocking. */
+  isBot?: boolean
   /** Tabs in display order; hidden tabs are included only for the owner. The Forum
    * tab loads its posts and comments separately (see ProfileForum.vue). */
   tabs: ProfileTab[]
