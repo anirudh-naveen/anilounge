@@ -113,7 +113,7 @@ const matchContentType = (contentType) => {
 /**
  * List catalog titles with pagination, in the stored catalog order (`hiddenSortScore`:
  * unified score plus a visibility boost for TMDB titles; see db/mongoFilter.js).
- * `tab` filters TV into popular/airing/upcoming and movies into popular/theatres/upcoming.
+ * `tab` filters TV into popular/airing/season/upcoming and movies into popular/theatres/upcoming.
  * Popular Right Now on movie and TV catalogs is a single page.
  *
  * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`, `query.tab`.

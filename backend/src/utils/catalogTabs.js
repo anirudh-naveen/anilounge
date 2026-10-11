@@ -1,10 +1,10 @@
 /**
  * Catalog tab filters and sort stages for Movies and TV.
  * Utils layer: Mongo match/sort for Popular Right Now, Currently Airing,
- * Now in Theatres, and Upcoming Highlights.
+ * Anime of the current season, Now in Theatres, and Upcoming Highlights.
  */
 
-export const TV_CATALOG_TABS = ['popular', 'airing', 'upcoming']
+export const TV_CATALOG_TABS = ['popular', 'airing', 'season', 'upcoming']
 export const MOVIE_CATALOG_TABS = ['popular', 'theatres', 'upcoming']
 
 /** Animated films released in this window are treated as still in theatres. */
@@ -13,7 +13,7 @@ export const THEATRICAL_WINDOW_MS = 120 * 24 * 60 * 60 * 1000
 /**
  * Coerce a query value to a TV catalog tab id.
  * @param {unknown} value - Raw `tab` query param.
- * @returns {'popular'|'airing'|'upcoming'}
+ * @returns {'popular'|'airing'|'season'|'upcoming'}
  */
 export function normalizeTvCatalogTab(value) {
   return TV_CATALOG_TABS.includes(value) ? value : 'popular'
@@ -26,6 +26,20 @@ export function normalizeTvCatalogTab(value) {
  */
 export function normalizeMovieCatalogTab(value) {
   return MOVIE_CATALOG_TABS.includes(value) ? value : 'popular'
+}
+
+const ANIME_SEASONS = ['winter', 'spring', 'summer', 'fall']
+
+/**
+ * Anime broadcast season (MAL/AniList quarters) containing a date, in UTC.
+ * @param {Date} [from=new Date()]
+ * @returns {{ season: 'winter'|'spring'|'summer'|'fall', year: number }}
+ */
+export function currentAnimeSeason(from = new Date()) {
+  return {
+    season: ANIME_SEASONS[Math.floor(from.getUTCMonth() / 3)],
+    year: from.getUTCFullYear(),
+  }
 }
 
 /**
@@ -76,6 +90,7 @@ function matchUpcoming(from) {
 
 /**
  * Mongo filter for a TV catalog tab. Popular adds no extra constraints.
+ * Season is anime whose MAL/AniList start season is the current one.
  * Airing follows MAL `currently_airing`, with a future TMDB next-episode fallback.
  * Upcoming is MAL `not_yet_aired`, with a future release-date fallback.
  * @param {unknown} tab - Raw tab query value.
@@ -85,6 +100,11 @@ function matchUpcoming(from) {
 export function matchTvCatalogTab(tab, from = new Date()) {
   const normalized = normalizeTvCatalogTab(tab)
   if (normalized === 'popular') return {}
+
+  if (normalized === 'season') {
+    const { season, year } = currentAnimeSeason(from)
+    return { contentType: 'tv', startSeason: season, startSeasonYear: year }
+  }
 
   if (normalized === 'airing') {
     return {

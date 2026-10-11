@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { continuesTitle, matchSeasonsToWorks, splitCombinedSeasons } from './seasonService.js'
+import {
+  continuesTitle,
+  matchSeasonsToWorks,
+  renumberedTitle,
+  splitCombinedSeasons,
+} from './seasonService.js'
 
 const seasons = [
   { seasonNumber: 1, airDate: '2013-04-07', episodeCount: 25 },
@@ -148,6 +153,26 @@ describe('splitCombinedSeasons', () => {
     )
   })
 
+  it("renames TMDB's placeholder titles after their new numbers", () => {
+    // Blue Box: TMDB runs season 2 on as episodes 26-37 of "Season 1", untitled past 26.
+    const blueBox = [
+      ...weekly(1, '2024-10-03', 25),
+      { seasonNumber: 1, episodeNumber: 26, title: 'Déjà Vu', airDate: '2026-10-04' },
+      { seasonNumber: 1, episodeNumber: 27, title: 'Episode 27', airDate: '2026-10-11' },
+      { seasonNumber: 1, episodeNumber: 28, title: 'Episode 28', airDate: '2026-10-18' },
+    ]
+    const { episodes } = splitCombinedSeasons(
+      [{ seasonNumber: 1, name: 'Season 1', airDate: '2024-10-03', episodeCount: 37 }],
+      blueBox,
+      { _id: 'bb1', tmdbId: 207347, malId: 57181 },
+      [{ _id: 'bb2', malId: 61316, title: 'Ao no Hako 2nd Season', releaseDate: '2026-10-02' }],
+    )
+    assert.deepEqual(
+      episodes.filter((episode) => episode.seasonNumber === 2).map(({ title }) => title),
+      ['Déjà Vu', 'Episode 2', 'Episode 3'],
+    )
+  })
+
   it('follows MAL entries whatever their titles say', () => {
     const { seasons: split } = splitCombinedSeasons(combined, run, anchor, [
       {
@@ -173,6 +198,16 @@ describe('splitCombinedSeasons', () => {
     ])
     assert.equal(others.seasons, combined)
     assert.equal(others.episodes, run)
+  })
+})
+
+describe('renumberedTitle', () => {
+  it('keeps real titles and renames placeholders that match the TMDB number', () => {
+    assert.equal(renumberedTitle('Episode 28', 28, 3), 'Episode 3')
+    assert.equal(renumberedTitle('episode 028', 28, 3), 'Episode 3')
+    assert.equal(renumberedTitle('', 28, 3), 'Episode 3')
+    assert.equal(renumberedTitle('Episode 1', 28, 3), 'Episode 1')
+    assert.equal(renumberedTitle('Déjà Vu', 26, 1), 'Déjà Vu')
   })
 })
 
