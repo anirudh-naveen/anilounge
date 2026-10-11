@@ -15,6 +15,10 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | [Vue Toastification](https://github.com/Maronato/vue-toastification) | Toast notifications |
 | [Cropper.js](https://github.com/fengyuanchen/cropperjs) / [vue-cropperjs](https://github.com/Agontuk/vue-cropperjs) | Profile picture cropping |
 | [Google Fonts](https://fonts.google.com) | Fraunces (display) and Outfit (body) typefaces |
+| [Capacitor](https://capacitorjs.com) | iOS app shell (`ios/`, `capacitor.config.ts`) that loads the live site, so deploys reach the app without an App Store release; `src/utils/nativeApp.ts` handles the in-app parts |
+| [WidgetKit](https://developer.apple.com/documentation/widgetkit) / SwiftUI | iOS home screen widgets, "Watchlist updates" and "Recent releases" (`ios/App/AniLoungeWidgets/`), fed by `GET /api/widget/feed` with a per-device widget token shared through an App Group |
+| iOS share extension (SwiftUI) | "Share to AniLounge" from Safari, AniList, MyAnimeList, or TMDB adds the title to the watchlist (`ios/App/AniLoungeShare/`, `services/shareService.js`) |
+| iCalendar (.ics) | "Add to calendar" for a show's upcoming episodes (`services/calendarService.js`) |
 | Web Locks API | Coordinates session refresh across browser tabs |
 | [schema.org](https://schema.org) JSON-LD + Open Graph | Per-page structured data and link previews (`usePageMeta`, `src/utils/pageMeta.ts`) |
 
@@ -45,10 +49,10 @@ The languages, frameworks, services, and tools AniLounge is built with.
 
 | Service | Used for |
 | --- | --- |
-| [TMDB API](https://developer.themoviedb.org) | Movie and series metadata, posters, episodes; watchlist/ratings import (user-approved session) |
+| [TMDB API](https://developer.themoviedb.org) | Movie and series metadata, posters, episodes; watchlist/ratings import (user-approved session); "Where to watch" services per country, data from [JustWatch](https://www.justwatch.com) (credited on the page; `services/watchProviderService.js`) |
 | [MyAnimeList API](https://myanimelist.net/apiconfig/references/api/v2) | Anime metadata and scores; public anime list import |
 | [Jikan](https://jikan.moe) | Unofficial MyAnimeList API (characters, voice actors, studios) |
-| [AniList GraphQL API](https://docs.anilist.co) | Additional anime metadata and linking; public anime list import |
+| [AniList GraphQL API](https://docs.anilist.co) | Additional anime metadata and linking; public anime list import; direct streaming links for "Where to watch" |
 | [Google Gemini](https://ai.google.dev) (`gemini-2.5-flash`) | The AI chatbot |
 
 ## Search and discovery
@@ -80,6 +84,7 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | Service | Used for |
 | --- | --- |
 | [Vercel](https://vercel.com) | Frontend hosting; proxies `/api`, `/uploads`, and the sitemaps to the backend and sets security headers (`vercel.json`); DNS for anilounge.net; Routing Middleware for search-engine HTML |
+| [Apple Push Notification service](https://developer.apple.com/documentation/usernotifications) | iOS app push notifications over HTTP/2 with a .p8 token key (`services/pushService.js`); friend, forum, message, and new-release alerts |
 | [Railway](https://railway.com) | Backend API and production PostgreSQL (client IPs read from Vercel's `X-Vercel-Forwarded-For`, `middleware/clientIp.js`) |
 | [Docker](https://www.docker.com) / Docker Compose | Local PostgreSQL (`docker-compose.yml`) |
 

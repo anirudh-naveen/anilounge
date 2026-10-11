@@ -36,6 +36,7 @@ import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
 import { apiErrorMessage } from '@/utils/social'
+import { haptic } from '@/utils/nativeApp'
 
 const props = defineProps<{ contentId: string }>()
 
@@ -48,6 +49,7 @@ const favorited = computed(() => favoritesStore.isFavorite(props.contentId))
 const toggle = async () => {
   try {
     const added = await favoritesStore.toggle(props.contentId)
+    haptic()
     toast.success(added ? 'Added to favorites' : 'Removed from favorites')
   } catch (err) {
     console.error('Failed to update favorite:', err)

@@ -1130,6 +1130,42 @@ CREATE INDEX IF NOT EXISTS forum_reports_open_idx ON forum_reports (target_kind,
   WHERE resolved_at IS NULL;
 CREATE INDEX IF NOT EXISTS forum_reports_reporter_idx ON forum_reports (reporter_id, created_at);
 
+-- Blocked users (services/blockService.js). `blocker_id` blocked `blocked_id`: the two
+-- stop being friends, neither can send the other a request or reach them through
+-- notifications, and the blocker no longer sees the other's forum posts or comments.
+CREATE TABLE IF NOT EXISTS user_blocks (
+  blocker_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  blocked_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (blocker_id, blocked_id),
+  CHECK (blocker_id <> blocked_id)
+);
+CREATE INDEX IF NOT EXISTS user_blocks_blocked_idx ON user_blocks (blocked_id);
+
+-- iOS app push notifications (services/pushService.js). One row per device token from
+-- Apple; a token belongs to the account last signed in on that device. `environment` is
+-- the APNs server that accepted it ('sandbox' for Xcode builds). Settings → Notifications
+-- turns kinds off in `users.push_settings` ({ "friends": false, ... }; missing = on).
+CREATE TABLE IF NOT EXISTS push_devices (
+  token         TEXT PRIMARY KEY,
+  user_id       UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  environment   TEXT NOT NULL DEFAULT 'production' CHECK (environment IN ('production', 'sandbox')),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS push_devices_user_idx ON push_devices (user_id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS push_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- iOS home screen widget tokens (services/widgetService.js): read-only access to the
+-- widget feed, one per device, stored as a SHA-256 hash.
+CREATE TABLE IF NOT EXISTS widget_tokens (
+  token_hash    TEXT PRIMARY KEY,
+  user_id       UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS widget_tokens_user_idx ON widget_tokens (user_id, created_at DESC);
+
 -- Demo account baseline (services/demoAccount.js): the shared demo login's watchlist,
 -- ratings, favorites, and profile as saved by `npm run demo:snapshot`. A nightly job
 -- restores it, so whatever visitors change on the public demo login is undone daily.
@@ -1158,3 +1194,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS release_threads_unique
   ON release_threads (content_id, COALESCE(season_number, -1), COALESCE(episode_number, -1));
 CREATE INDEX IF NOT EXISTS release_threads_pending_idx ON release_threads (created_at)
   WHERE posted_at IS NULL;
+-- When followers were sent a "new episode" push for this release (services/pushService.js).
+ALTER TABLE release_threads ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;

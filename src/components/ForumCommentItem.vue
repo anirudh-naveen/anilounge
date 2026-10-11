@@ -3,13 +3,17 @@
 
   Author, time, body, and actions: like (not your own), reply, and edit/delete
   for the author (admins can delete), report for other signed-in users. Edits happen inline. A deleted comment kept
-  for its replies shows as "[deleted]" with no actions. Emits `reply`,
+  for its replies shows as "[deleted]" with no actions; one from someone the viewer
+  blocked shows as hidden the same way. Emits `reply`,
   `changed` (the updated comment), and `removed` (id, and whether it was removed
   outright rather than blanked).
 -->
 <template>
   <div :id="`comment-${comment.id}`" class="comment" :data-testid="`comment-${comment.id}`">
     <p v-if="comment.deleted" class="comment-deleted">[deleted]</p>
+    <p v-else-if="comment.hidden" class="comment-deleted" data-testid="comment-hidden">
+      Comment from someone you blocked
+    </p>
     <template v-else>
       <div class="comment-head">
         <router-link
@@ -123,6 +127,7 @@ import type { LanguageWarning } from '@/types/social'
 import { COMMENT_MAX, reportForum, showLanguageWarning } from '@/utils/forum'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
+import { haptic } from '@/utils/nativeApp'
 
 const props = defineProps<{ comment: ForumComment }>()
 const emit = defineEmits<{
@@ -148,6 +153,7 @@ const toggleLike = async () => {
   try {
     const response = await forumAPI.likeComment(props.comment.id, !props.comment.liked)
     emit('changed', { ...props.comment, ...response.data.data })
+    haptic()
   } catch (error) {
     toast.error(apiErrorMessage(error, 'Could not update the like.'))
   } finally {

@@ -44,6 +44,7 @@ import { startConnectionSync } from './services/connectionSync.js'
 import { startSessionCleanupScheduler } from './services/sessionService.js'
 import { startHotScoreScheduler } from './services/forumService.js'
 import { startReleaseThreadScheduler } from './services/releaseThreadService.js'
+import { startReleasePushScheduler } from './services/pushService.js'
 import { startAiUsageCleanupScheduler } from './services/aiUsageService.js'
 import { startSiteEventsCleanupScheduler } from './services/metricsService.js'
 import { KEY_PATH, indexNowKey, startIndexNow } from './services/indexNowService.js'
@@ -367,6 +368,7 @@ app
     startSessionCleanupScheduler()
     startHotScoreScheduler()
     startReleaseThreadScheduler()
+    startReleasePushScheduler()
     startAiUsageCleanupScheduler()
     startSiteEventsCleanupScheduler()
     startIndexNow()

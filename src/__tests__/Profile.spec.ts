@@ -11,6 +11,8 @@ const updateProfile = vi.fn()
 const reorderFavorites = vi.fn()
 const listPosts = vi.fn()
 const userComments = vi.fn()
+const blockUser = vi.fn()
+const unblockUser = vi.fn()
 const authState = { isDemoUser: false }
 
 vi.mock('vue-toastification', () => ({
@@ -32,6 +34,10 @@ vi.mock('@/services/api', async (importOriginal) => {
       ...actual.forumAPI,
       list: (...args: unknown[]) => listPosts(...args),
       userComments: (...args: unknown[]) => userComments(...args),
+    },
+    blocksAPI: {
+      block: (...args: unknown[]) => blockUser(...args),
+      unblock: (...args: unknown[]) => unblockUser(...args),
     },
   }
 })
@@ -148,6 +154,7 @@ const mountAt = async (path: string) => {
       { path: '/profile', name: 'profile', component: Profile },
       { path: '/u/:username', name: 'publicProfile', component: Profile },
       { path: '/settings', component: { template: '<div />' } },
+      { path: '/friends', name: 'friends', component: { template: '<div />' } },
       { path: '/', component: { template: '<div />' } },
       { path: '/tv-show/:id', name: 'TVShowDetails', component: { template: '<div />' } },
       { path: '/character/:id', name: 'CharacterDetails', component: { template: '<div />' } },
@@ -164,6 +171,8 @@ const mountAt = async (path: string) => {
 describe('Profile', () => {
   beforeEach(() => {
     getPublicProfile.mockReset()
+    blockUser.mockReset()
+    unblockUser.mockReset()
     updateSettings.mockReset()
     updateProfile.mockReset()
     updateProfile.mockResolvedValue({})
@@ -180,6 +189,46 @@ describe('Profile', () => {
     expect(wrapper.get('[data-testid="panel-favorites"]').text()).toContain('Gurren Lagann')
     expect(wrapper.text()).toContain('Kamina')
     expect(wrapper.find('[data-testid="customize-profile"]').exists()).toBe(false)
+  })
+
+  it('blocks a friend after confirming, removing the friend and message buttons', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    blockUser.mockResolvedValue({})
+    getPublicProfile.mockResolvedValue({
+      data: { data: buildProfile({ relationship: 'friends', blocked: false }) },
+    })
+    const { wrapper } = await mountAt('/u/mika')
+    expect(wrapper.find('[data-testid="message-friend"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="block-user"]').trigger('click')
+    await flushPromises()
+
+    expect(blockUser).toHaveBeenCalledWith('u1')
+    expect(wrapper.find('[data-testid="message-friend"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="friend-button"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="block-user"]').text()).toBe('Unblock')
+  })
+
+  it('does not block when the confirmation is cancelled, and unblocks without asking', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    unblockUser.mockResolvedValue({})
+    getPublicProfile.mockResolvedValue({
+      data: { data: buildProfile({ relationship: 'none', blocked: false }) },
+    })
+    const { wrapper } = await mountAt('/u/mika')
+    await wrapper.get('[data-testid="block-user"]').trigger('click')
+    expect(blockUser).not.toHaveBeenCalled()
+
+    getPublicProfile.mockResolvedValue({
+      data: { data: buildProfile({ relationship: 'none', blocked: true }) },
+    })
+    const blocked = (await mountAt('/u/mika')).wrapper
+    confirm.mockClear()
+    await blocked.get('[data-testid="block-user"]').trigger('click')
+    await flushPromises()
+    expect(confirm).not.toHaveBeenCalled()
+    expect(unblockUser).toHaveBeenCalledWith('u1')
+    expect(blocked.get('[data-testid="block-user"]').text()).toBe('Block')
   })
 
   it('shows a top 10 per category and tells the owner about extras', async () => {

@@ -571,7 +571,7 @@ onUnmounted(() => {
   max-height: calc(100vh - 140px);
   overflow-y: auto;
   position: sticky;
-  top: 110px;
+  top: calc(110px + var(--safe-top));
 }
 
 .social-panel + .social-panel {

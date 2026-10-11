@@ -169,6 +169,65 @@
           />
         </div>
 
+        <!-- Notifications (iOS app only) -->
+        <div v-if="isNativeApp" id="notifications" class="settings-section">
+          <h2>Notifications</h2>
+          <div class="settings-card">
+            <div v-if="pushState !== 'granted'" class="setting-item" data-testid="push-off">
+              <div class="setting-info">
+                <h3>Push notifications</h3>
+                <p>
+                  Hear about friend requests, replies, messages, and new episodes from your
+                  watchlist.
+                </p>
+              </div>
+              <div class="setting-control">
+                <p v-if="pushState === 'denied'" class="setting-hint">
+                  Notifications are turned off for AniLounge. Turn them on in the iPhone Settings
+                  app, under Notifications, then AniLounge.
+                </p>
+                <button
+                  v-else
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="pushEnabling || authStore.isDemoUser"
+                  data-testid="push-enable"
+                  @click="turnOnPush"
+                >
+                  Turn on notifications
+                </button>
+              </div>
+            </div>
+            <template v-else>
+              <div v-for="option in PUSH_OPTIONS" :key="option.key" class="setting-item">
+                <div class="setting-info">
+                  <h3>{{ option.title }}</h3>
+                  <p>{{ option.description }}</p>
+                </div>
+                <div class="setting-control">
+                  <label class="email-toggle">
+                    <input
+                      v-model="pushDraft[option.key]"
+                      type="checkbox"
+                      :disabled="!pushSettings || pushSaving"
+                      :data-testid="`push-pref-${option.key}`"
+                    />
+                    <span>{{ pushDraft[option.key] ? 'On' : 'Off' }}</span>
+                  </label>
+                </div>
+              </div>
+            </template>
+          </div>
+          <SettingsSaveBar
+            v-if="pushState === 'granted'"
+            :dirty="pushDirty"
+            :saving="pushSaving"
+            testid="save-push"
+            @save="savePushSettings"
+            @discard="resetPushDraft"
+          />
+        </div>
+
         <!-- Communication -->
         <div id="communication" class="settings-section">
           <h2>Communication</h2>
@@ -202,6 +261,33 @@
             @save="saveCommunication"
             @discard="allowProfanityDraft = communication?.allowProfanity ?? false"
           />
+        </div>
+
+        <!-- Title: Blocked Users -->
+        <div id="blocked" class="settings-section">
+          <h2>Blocked users</h2>
+          <div class="settings-card">
+            <p v-if="!blockedUsers.length" class="blocked-empty" data-testid="blocked-empty">
+              You haven't blocked anyone. To block someone, open their profile and choose Block.
+            </p>
+            <ul v-else class="blocked-list" data-testid="blocked-list">
+              <li v-for="user in blockedUsers" :key="user.id" class="blocked-row">
+                <router-link :to="profileRoute(user.username)" class="blocked-user">
+                  <UserAvatar :src="user.profilePicture" :name="user.username" :size="32" />
+                  {{ user.username }}
+                </router-link>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="unblocking === user.id"
+                  :data-testid="`unblock-${user.id}`"
+                  @click="unblock(user)"
+                >
+                  Unblock
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <!-- Privacy -->
@@ -480,7 +566,10 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  blocksAPI,
   communicationAPI,
+  pushAPI,
+  type PushSettings,
   emailPreferencesAPI,
   securityAPI,
   type CommunicationSettings,
@@ -491,6 +580,10 @@ import { useFavoritesStore } from '@/stores/favorites'
 import { useToast } from 'vue-toastification'
 import { useTheme, type ThemePreference } from '@/composables/useTheme'
 import SettingsSaveBar from '@/components/SettingsSaveBar.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
+import { enablePush, isNativeApp, pushPermission } from '@/utils/nativeApp'
+import { profileRoute } from '@/utils/social'
+import type { BlockedUser } from '@/types/social'
 import { usePageTitle } from '@/composables/usePageMeta'
 
 usePageTitle('Settings')
@@ -800,6 +893,78 @@ const saveEmailPreferences = async () => {
   }
 }
 
+const PUSH_OPTIONS: { key: keyof PushSettings; title: string; description: string }[] = [
+  { key: 'friends', title: 'Friends', description: 'Friend requests, and when one is accepted' },
+  { key: 'messages', title: 'Messages', description: 'New direct messages from friends' },
+  { key: 'forum', title: 'Forum', description: 'Comments on your posts and replies to you' },
+  {
+    key: 'releases',
+    title: 'New releases',
+    description: 'New episodes and releases of titles on your watchlist',
+  },
+]
+const pushState = ref<'granted' | 'denied' | 'prompt' | 'unavailable'>('unavailable')
+const pushEnabling = ref(false)
+const pushSettings = ref<PushSettings | null>(null)
+const pushDraft = ref<PushSettings>({ friends: true, forum: true, messages: true, releases: true })
+const pushSaving = ref(false)
+
+const resetPushDraft = () => {
+  if (pushSettings.value) pushDraft.value = { ...pushSettings.value }
+}
+
+const pushDirty = computed(
+  () =>
+    !!pushSettings.value &&
+    PUSH_OPTIONS.some((option) => pushDraft.value[option.key] !== pushSettings.value?.[option.key]),
+)
+
+const loadPush = async () => {
+  if (!isNativeApp) return
+  pushState.value = await pushPermission()
+  try {
+    const response = await pushAPI.getSettings()
+    pushSettings.value = response.data.data as PushSettings
+    resetPushDraft()
+  } catch (err) {
+    toast.error(apiMessage(err, 'Could not load notification settings.'))
+  }
+}
+
+const turnOnPush = async () => {
+  pushEnabling.value = true
+  try {
+    const on = await enablePush()
+    pushState.value = await pushPermission()
+    if (on) toast.success('Notifications are on.')
+  } catch {
+    toast.error('Could not turn on notifications.')
+  } finally {
+    pushEnabling.value = false
+  }
+}
+
+const savePushSettings = async () => {
+  if (!pushSettings.value || !pushDirty.value) return
+  const changes: Partial<PushSettings> = {}
+  for (const option of PUSH_OPTIONS) {
+    if (pushDraft.value[option.key] !== pushSettings.value[option.key]) {
+      changes[option.key] = pushDraft.value[option.key]
+    }
+  }
+  pushSaving.value = true
+  try {
+    const response = await pushAPI.updateSettings(changes)
+    pushSettings.value = response.data.data as PushSettings
+    resetPushDraft()
+    toast.success('Notification settings saved.')
+  } catch (err) {
+    toast.error(apiMessage(err, 'Could not save notification settings.'))
+  } finally {
+    pushSaving.value = false
+  }
+}
+
 const communication = ref<CommunicationSettings | null>(null)
 const allowProfanityDraft = ref(false)
 const communicationSaving = ref(false)
@@ -815,6 +980,31 @@ const loadCommunication = async () => {
     allowProfanityDraft.value = communication.value.allowProfanity
   } catch (err) {
     toast.error(apiMessage(err, 'Could not load communication settings.'))
+  }
+}
+
+const blockedUsers = ref<BlockedUser[]>([])
+const unblocking = ref<string | null>(null)
+
+const loadBlocked = async () => {
+  try {
+    const response = await blocksAPI.list()
+    blockedUsers.value = response.data.data as BlockedUser[]
+  } catch (err) {
+    toast.error(apiMessage(err, 'Could not load blocked users.'))
+  }
+}
+
+const unblock = async (user: BlockedUser) => {
+  unblocking.value = user.id
+  try {
+    await blocksAPI.unblock(user.id)
+    blockedUsers.value = blockedUsers.value.filter((item) => item.id !== user.id)
+    toast.success(`${user.username} is unblocked.`)
+  } catch (err) {
+    toast.error(apiMessage(err, `Could not unblock ${user.username}.`))
+  } finally {
+    unblocking.value = null
   }
 }
 
@@ -845,6 +1035,8 @@ onMounted(() => {
   loadSecurityStatus()
   loadEmailPreferences()
   loadCommunication()
+  loadBlocked()
+  loadPush()
   // Email footers link to /settings#email.
   if (route.hash === '#email') {
     nextTick(() => document.getElementById('email')?.scrollIntoView({ behavior: 'smooth' }))
@@ -901,6 +1093,40 @@ onMounted(() => {
   border-radius: 12px;
   padding: 2rem;
   box-shadow: var(--shadow-sm);
+}
+
+.blocked-empty {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.blocked-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.blocked-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.blocked-row:last-child {
+  border-bottom: none;
+}
+
+.blocked-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .setting-item {
