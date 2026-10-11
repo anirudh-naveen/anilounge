@@ -461,6 +461,20 @@ export const adminAPI = {
 
   getLog: (params: { month?: string; category?: string }) => api.get('/admin/log', { params }),
 
+  /** Site news still in inboxes (News tab; admins only). */
+  listNews: () => api.get('/admin/news'),
+
+  /** Post news to every inbox as Lounge Keeper. */
+  postNews: (body: { title: string; body: string }) => api.post('/admin/news', body),
+
+  deleteNews: (id: string) => api.delete(`/admin/news/${id}`),
+
+  /** Upload a news picture (form field `image`); returns `{ id, url }`. */
+  uploadNewsImage: (formData: FormData) =>
+    api.post('/admin/news-images', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
   /** Users, views, visitors, clicks, and top lists for the last `days` days. */
   getMetrics: (days: number) => api.get('/admin/metrics', { params: { days } }),
 

@@ -16,6 +16,10 @@
  *   the end of a text line (`last line +++`) closes the block too, so pasted text
  *   that lost its line breaks still reads right.
  *
+ * Pictures are only for site news (`{ images: true }`): a line that is just
+ * `![caption](url)` shows the picture (https, or an uploaded `/api/news-images/...`
+ * file). Elsewhere that line stays plain text, so forum posts can't embed images.
+ *
  * Text has no sizes of its own: only the heading and body presets. `parseRichText`
  * builds a tree that `ForumRichText.vue` renders with Vue (never `v-html`), and
  * `plainText` flattens it for previews and page descriptions.
@@ -35,6 +39,12 @@ export type Block =
   | { type: 'list'; ordered: boolean; items: Inline[][] }
   | { type: 'section'; summary: Inline[]; blocks: Block[] }
   | { type: 'callout'; tone: CalloutTone; title: Inline[]; blocks: Block[] }
+  | { type: 'image'; src: string; alt: string }
+
+export interface RichTextOptions {
+  /** Render `![caption](url)` lines as pictures (site news only). */
+  images?: boolean
+}
 
 /** Inline marks, tried in this order when two start at the same place. */
 const INLINE_RULES: { type: 'link' | 'bold' | 'italic' | 'strike'; re: RegExp }[] = [
@@ -52,6 +62,8 @@ const NUMBERED = /^\d{1,3}[.)]\s+(.*)$/
 /** Fence lines: with text they open a block, bare they close it. */
 const SECTION = /^\+{3}(?:\s+(.*))?$/
 const CALLOUT = /^:{3}(?:\s+(.*))?$/
+/** A picture line: `![caption](https://…)` or an uploaded news image. */
+const IMAGE = /^!\[([^\]\n]{0,200})\]\((https:\/\/[^\s()<>]+|\/api\/news-images\/[\w-]+)\)$/
 /** A fence closing its block at the end of a text line. */
 const TRAILING_FENCE = { section: /\s+\+{3}$/, callout: /\s+:{3}$/ }
 
@@ -127,11 +139,11 @@ function calloutHead(head: string) {
 }
 
 /** Blocks of a post body. */
-export function parseRichText(text: string): Block[] {
-  return parseLines(String(text || '').split('\n'))
+export function parseRichText(text: string, options: RichTextOptions = {}): Block[] {
+  return parseLines(String(text || '').split('\n'), options)
 }
 
-function parseLines(lines: string[]): Block[] {
+function parseLines(lines: string[], options: RichTextOptions): Block[] {
   const blocks: Block[] = []
   let paragraph: string[] = []
   let quote: string[] = []
@@ -169,13 +181,24 @@ function parseLines(lines: string[]): Block[] {
         blocks.push({
           type: 'section',
           summary: parseInline(head || SECTION_DEFAULT_SUMMARY),
-          blocks: parseLines(body),
+          blocks: parseLines(body, options),
         })
       } else {
         const { tone, title } = calloutHead(head)
-        blocks.push({ type: 'callout', tone, title: parseInline(title), blocks: parseLines(body) })
+        blocks.push({
+          type: 'callout',
+          tone,
+          title: parseInline(title),
+          blocks: parseLines(body, options),
+        })
       }
       index = end
+      continue
+    }
+    const image = options.images ? IMAGE.exec(line.trim()) : null
+    if (image) {
+      flush()
+      blocks.push({ type: 'image', alt: (image[1] as string).trim(), src: image[2] as string })
       continue
     }
     const heading = HEADING.exec(line)
@@ -222,6 +245,7 @@ function blocksText(blocks: Block[]): string {
       if (block.type === 'list') return block.items.map((item) => inlineText(item)).join('\n')
       if (block.type === 'section') return [inlineText(block.summary), blocksText(block.blocks)]
       if (block.type === 'callout') return [inlineText(block.title), blocksText(block.blocks)]
+      if (block.type === 'image') return block.alt
       return inlineText(block.children)
     })
     .flat()
@@ -230,6 +254,6 @@ function blocksText(blocks: Block[]): string {
 }
 
 /** A post body as plain text, one line per paragraph, heading, quote, or list item. */
-export function plainText(text: string) {
-  return blocksText(parseRichText(text))
+export function plainText(text: string, options: RichTextOptions = {}) {
+  return blocksText(parseRichText(text, options))
 }

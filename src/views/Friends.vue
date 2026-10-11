@@ -65,7 +65,11 @@
               </div>
             </header>
             <ul class="social-list">
-              <li v-for="request in data.incoming" :key="request.user.id" class="social-row">
+              <li
+                v-for="request in data.incoming"
+                :key="request.user.id"
+                class="social-row is-unread"
+              >
                 <UserAvatar
                   :src="request.user.profilePicture"
                   :name="request.user.username"

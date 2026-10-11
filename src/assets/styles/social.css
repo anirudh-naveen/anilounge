@@ -134,6 +134,25 @@
   min-width: 0;
 }
 
+/* Something new the user hasn't opened yet (inbox items, chats, friend requests):
+   a coral tint with an accent bar on the left. */
+.is-unread {
+  background: color-mix(in srgb, var(--coral-primary) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--coral-primary);
+  border-radius: 12px;
+}
+
+.social-row.is-unread {
+  margin: 0 -0.75rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  border-top-color: transparent;
+}
+
+.social-row.is-unread + .social-row {
+  border-top-color: transparent;
+}
+
 .social-name {
   font-weight: 700;
   color: var(--text-primary);

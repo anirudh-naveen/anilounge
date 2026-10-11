@@ -59,7 +59,7 @@
             v-for="item in visibleItems"
             :key="item.id"
             class="social-row inbox-row"
-            :class="{ unread: !item.read }"
+            :class="{ unread: !item.read, 'is-unread': !item.read }"
             :data-testid="`inbox-item-${item.kind}`"
           >
             <!-- Icon or avatar -->
@@ -159,11 +159,11 @@
                 <p class="inbox-line">
                   <strong>{{ item.news.title }}</strong>
                 </p>
-                <p class="news-body" :class="{ clamped: !expanded.has(item.id) }">
-                  {{ item.news.body }}
-                </p>
+                <div class="news-body" :class="{ clamped: !expanded.has(item.id) }">
+                  <ForumRichText :text="item.news.body" images />
+                </div>
                 <button
-                  v-if="item.news.body.length > NEWS_PREVIEW"
+                  v-if="newsIsLong(item.news.body)"
                   type="button"
                   class="news-toggle"
                   @click="toggleNews(item.id)"
@@ -217,6 +217,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import ForumRichText from '@/components/ForumRichText.vue'
 import FriendButton from '@/components/FriendButton.vue'
 import ImportConflicts from '@/components/ImportConflicts.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
@@ -250,6 +251,8 @@ const FILTER_KINDS: Record<Exclude<Filter, 'all'>, InboxKind[]> = {
 }
 /** News longer than this starts collapsed. */
 const NEWS_PREVIEW = 280
+/** Long news, or news with a picture, starts collapsed behind "Read more". */
+const newsIsLong = (body: string) => body.length > NEWS_PREVIEW || /^\s*!\[/m.test(body)
 
 const inboxStore = useInboxStore()
 const messagesStore = useMessagesStore()
@@ -384,14 +387,6 @@ onMounted(load)
   position: relative;
 }
 
-.inbox-row.unread {
-  background: color-mix(in srgb, var(--coral-primary) 6%, transparent);
-  margin: 0 -0.75rem;
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
-  border-radius: 12px;
-}
-
 .inbox-icon {
   display: inline-flex;
   align-items: center;
@@ -444,18 +439,19 @@ onMounted(load)
 
 .news-body {
   margin: 0.2rem 0;
-  color: var(--text-secondary);
-  line-height: 1.55;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+.news-body :deep(.rich-text) {
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+/* Collapsed: the first few lines (or the top of a picture), fading out. */
 .news-body.clamped {
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
-  -webkit-box-orient: vertical;
+  max-height: 7.5rem;
   overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
 }
 
 .news-toggle {

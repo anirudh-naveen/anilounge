@@ -1,13 +1,16 @@
 /**
- * Multer in-memory upload for profile pictures (stored in Postgres by avatarService).
+ * Multer in-memory uploads: profile pictures (stored in Postgres by avatarService) and
+ * site-news pictures (newsService).
  *
- * Layer: middleware. Default export is the configured `upload` instance;
- * `handleUploadError` maps multer failures to 400 JSON.
+ * Layer: middleware. Default export is the profile-picture `upload` instance;
+ * `newsImageUpload` takes larger news pictures; `handleUploadError` maps multer
+ * failures to 400 JSON.
  */
 
 import multer from 'multer'
 import path from 'path'
 import { MAX_AVATAR_BYTES } from '../services/avatarService.js'
+import { MAX_NEWS_IMAGE_BYTES } from '../services/newsService.js'
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
 const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
@@ -46,6 +49,22 @@ const upload = multer({
   },
 })
 
+/** News pictures: one image up to MAX_NEWS_IMAGE_BYTES, field `image`. */
+const newsUpload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: MAX_NEWS_IMAGE_BYTES, files: 1 },
+})
+
+/** @type {import('express').RequestHandler[]} */
+export const newsImageUpload = [
+  (req, res, next) => {
+    req.uploadMaxMb = MAX_NEWS_IMAGE_BYTES / 1024 / 1024
+    next()
+  },
+  newsUpload.single('image'),
+]
+
 /**
  * Translate multer size/count errors and filter `Error` messages into 400 JSON.
  *
@@ -60,7 +79,7 @@ export const handleUploadError = (error, req, res, next) => {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        message: 'File size too large. Maximum 2MB allowed.',
+        message: `File size too large. Maximum ${req.uploadMaxMb || MAX_AVATAR_BYTES / 1024 / 1024}MB allowed.`,
       })
     }
     if (error.code === 'LIMIT_FILE_COUNT') {
