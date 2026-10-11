@@ -1071,6 +1071,7 @@ import { useBadgesStore } from '@/stores/badges'
 import { GRANTABLE_BADGES, badgeInfo } from '@/utils/badges'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 import { usePageTitle } from '@/composables/usePageMeta'
+import { saveTextFile } from '@/utils/nativeApp'
 
 usePageTitle('Admin')
 
@@ -2033,13 +2034,10 @@ const logText = computed(() =>
 const downloadLog = () => {
   const section = logCategory.value === 'all' ? '' : `-${logCategory.value}`
   const header = `AniLounge admin log, ${monthLabel(logMonth.value)} (UTC)${section ? `, ${section.slice(1)}` : ''}\n\n`
-  const blob = new Blob([header + logText.value + '\n'], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = `anilounge-admin-log-${logMonth.value}${section}.txt`
-  anchor.click()
-  URL.revokeObjectURL(url)
+  saveTextFile(
+    `anilounge-admin-log-${logMonth.value}${section}.txt`,
+    header + logText.value + '\n',
+  ).catch(() => toast.error("Couldn't save the log. Try again."))
 }
 
 onMounted(() => {
@@ -2108,7 +2106,7 @@ onUnmounted(() => {
 
 .admin-list-panel {
   position: sticky;
-  top: 110px;
+  top: calc(110px + var(--safe-top));
   max-height: calc(100vh - 130px);
   overflow-y: auto;
 }

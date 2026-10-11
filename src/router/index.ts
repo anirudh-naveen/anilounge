@@ -99,6 +99,16 @@ const router = createRouter({
       component: () => import('@/views/Feedback.vue'),
     },
     {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('@/views/Privacy.vue'),
+    },
+    {
+      path: '/support',
+      name: 'support',
+      component: () => import('@/views/Support.vue'),
+    },
+    {
       path: '/watchlist',
       name: 'watchlist',
       component: () => import('@/views/Watchlist.vue'),

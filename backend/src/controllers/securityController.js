@@ -7,6 +7,8 @@
  */
 
 import { endSession, revokeAllSessions } from '../services/sessionService.js'
+import { unregisterAllDevices } from '../services/pushService.js'
+import { revokeAllWidgetTokens } from '../services/widgetService.js'
 import {
   beginTwoFactorSetup,
   confirmTwoFactorSetup,
@@ -144,7 +146,8 @@ export const newBackupCodes = async (req, res) => {
 }
 
 /**
- * Sign out of every browser and device, including this one.
+ * Sign out of every browser and device, including this one, and stop push notifications
+ * and widget access on all of them.
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res - 200 `{ revoked }` or 500.
@@ -153,6 +156,8 @@ export const newBackupCodes = async (req, res) => {
 export const signOutEverywhere = async (req, res) => {
   try {
     const revoked = await revokeAllSessions(req.user._id)
+    await unregisterAllDevices(req.user._id)
+    await revokeAllWidgetTokens(req.user._id)
     await endSession(req, res)
     res.json({ success: true, message: 'Signed out everywhere.', data: { revoked } })
   } catch (error) {

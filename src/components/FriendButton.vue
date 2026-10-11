@@ -76,6 +76,7 @@ import { useToast } from 'vue-toastification'
 import { friendsAPI } from '@/services/api'
 import type { Relationship } from '@/types/social'
 import { apiErrorMessage } from '@/utils/social'
+import { haptic } from '@/utils/nativeApp'
 
 const props = defineProps<{
   userId: string
@@ -93,7 +94,9 @@ const busy = ref(false)
 const run = async (action: () => Promise<Relationship>, fallback: string) => {
   busy.value = true
   try {
-    emit('update:relationship', await action())
+    const next = await action()
+    if (next === 'friends') haptic('success')
+    emit('update:relationship', next)
   } catch (error) {
     toast.error(apiErrorMessage(error, fallback))
   } finally {

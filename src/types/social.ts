@@ -8,6 +8,11 @@ export interface PublicUser {
   profilePicture: string | null
 }
 
+/** Someone the viewer blocked (Settings → Blocked users). */
+export interface BlockedUser extends PublicUser {
+  blockedAt: string
+}
+
 /** The viewer's side of a link with another user. */
 export type Relationship = 'friends' | 'outgoing' | 'incoming' | 'none'
 

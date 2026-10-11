@@ -66,6 +66,8 @@ export interface PublicProfile {
   isOwner: boolean
   /** Signed-in visitor's link to this user; null for the owner and guests. */
   relationship?: Relationship | null
+  /** Whether the signed-in visitor blocked this user. */
+  blocked?: boolean
   /** Tabs in display order; hidden tabs are included only for the owner. The Forum
    * tab loads its posts and comments separately (see ProfileForum.vue). */
   tabs: ProfileTab[]

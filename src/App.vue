@@ -310,6 +310,10 @@
             APIs but is not endorsed or certified by TMDB, AniList or MyAnimeList.
           </span>
         </p>
+        <p class="footer-links">
+          <router-link to="/privacy">Privacy</router-link>
+          <router-link to="/support">Help &amp; support</router-link>
+        </p>
         <p v-if="DONATE_URL" class="footer-support">
           <a :href="DONATE_URL" target="_blank" rel="noopener noreferrer">Support AniLounge</a>
         </p>
@@ -421,7 +425,7 @@ const handleLogout = async () => {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.9rem 0;
   position: sticky;
-  top: 0;
+  top: var(--safe-top);
   z-index: 100;
   backdrop-filter: blur(18px);
   box-shadow: 0 10px 28px rgba(21, 34, 56, 0.18);
@@ -816,6 +820,13 @@ const handleLogout = async () => {
   letter-spacing: 0.01em;
 }
 
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-top: 0.75rem;
+}
+
 .footer-support {
   margin-top: 0.75rem;
 }
@@ -846,6 +857,14 @@ const handleLogout = async () => {
 .footer-support a {
   color: var(--coral-primary);
   font-weight: 600;
+}
+
+.footer-links a {
+  color: var(--text-secondary);
+}
+
+.footer-links a:hover {
+  color: var(--coral-primary);
 }
 
 @media (max-width: 768px) {

@@ -27,6 +27,8 @@ import {
   requestExpiresAt,
 } from './friendService.js'
 import { maskLanguage, screenText } from './languageWarningService.js'
+import { blockedByViewerSql } from './blockService.js'
+import { pushToUser } from './pushService.js'
 
 export { maskLanguage }
 
@@ -169,6 +171,7 @@ export async function listConversations(userId) {
      FROM latest l
      JOIN users u ON u.id = l.other_id
      LEFT JOIN unread un ON un.other_id = l.other_id
+     WHERE NOT ${blockedByViewerSql('$1', 'l.other_id')}
      ORDER BY l.created_at DESC
      LIMIT ${CONVERSATION_LIMIT}`,
     [userId],
@@ -316,6 +319,7 @@ export async function sendMessage(sender, otherId, body) {
      RETURNING id, sender_id, body, created_at, read_at`,
     [userId, other.id, fields.body],
   )
+  pushToUser(other.id, 'message', { actor: sender.username, actorId: userId, text: fields.body })
   return { message: messageEntry(rows[0], userId), warning }
 }
 

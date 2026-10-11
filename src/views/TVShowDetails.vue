@@ -107,6 +107,15 @@
           <!-- Title: Actions -->
           <div class="show-actions">
             <button @click="shareShow" class="btn-outline">Share</button>
+            <button
+              v-if="hasUpcomingEpisode"
+              type="button"
+              class="btn-outline"
+              data-testid="add-to-calendar"
+              @click="addToCalendar"
+            >
+              Add to calendar
+            </button>
           </div>
         </div>
       </div>
@@ -125,6 +134,9 @@
         <h2>Overview</h2>
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
+
+      <!-- Title: Where to Watch -->
+      <WhereToWatch :content-id="show._id" />
 
       <!-- Title: Forum -->
       <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
@@ -341,9 +353,13 @@ import { usePageMeta } from '@/composables/usePageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
 import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
+import { openCalendarFile, shareLink } from '@/utils/nativeApp'
+import WhereToWatch from '@/components/WhereToWatch.vue'
+import { useToast } from 'vue-toastification'
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const contentStore = useContentStore()
 const authStore = useAuthStore()
 const entityStore = useEntityStore()
@@ -500,18 +516,29 @@ const selectSeason = (seasonNumber: number) => {
 const goBack = () =>
   goBackOr(router, () => returnToListing(router, route.query.from as string, contentStore))
 
-const shareShow = () => {
-  if (navigator.share && show.value) {
-    navigator.share({
-      title: getDisplayTitle(show.value),
-      text: show.value.overview,
-      url: window.location.href,
-    })
-  } else {
-    // Fallback: copy to clipboard
-    navigator.clipboard.writeText(window.location.href)
-    // You could add a toast notification here
-  }
+/** A next episode is scheduled (or aired within the last day), so a calendar file exists. */
+const hasUpcomingEpisode = computed(() => {
+  const next = show.value?.nextEpisodeAirDate
+  return !!next && new Date(next).getTime() > Date.now() - 24 * 60 * 60 * 1000
+})
+
+/** Upcoming episodes as an .ics file: the next one, then weekly to the season's end. */
+const addToCalendar = () => {
+  if (!show.value) return
+  openCalendarFile(`${window.location.origin}/api/content/${show.value._id}/calendar.ics`).catch(
+    () => toast.error("Couldn't open the calendar file."),
+  )
+}
+
+const shareShow = async () => {
+  if (!show.value) return
+  const result = await shareLink({
+    title: getDisplayTitle(show.value),
+    text: show.value.overview,
+    url: window.location.href,
+  })
+  if (result === 'copied') toast.success('Link copied!')
+  if (result === 'failed') toast.error("Couldn't share this page.")
 }
 
 const formatDate = (date: string | Date) => {

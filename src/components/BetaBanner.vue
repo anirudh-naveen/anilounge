@@ -10,8 +10,11 @@
     <div class="beta-content">
       <span class="beta-badge">BETA</span>
       <span class="beta-text">
-        Welcome to AniLounge Beta! This is a preview version.
-        <router-link to="/feedback" class="feedback-link">Report bugs or suggestions</router-link>.
+        <span class="beta-welcome">
+          Welcome to AniLounge Beta! This is a preview version.
+          <router-link to="/feedback" class="feedback-link">Report bugs or suggestions</router-link
+          >.
+        </span>
         <span class="beta-contribute">
           AniLounge is open source. Want to help build it?
           <a
@@ -125,8 +128,20 @@ onMounted(() => {
     gap: 8px;
   }
 
+  .beta-content {
+    padding: 0 16px;
+  }
+
+  /* One sentence per line: the type shrinks with the screen (the longer sentence is
+     about 36.5× the font size wide) instead of wrapping. */
   .beta-text {
-    font-size: 13px;
+    font-size: min(13px, calc((100vw - 32px) / 37.5));
+  }
+
+  .beta-welcome,
+  .beta-contribute {
+    display: block;
+    white-space: nowrap;
   }
 }
 </style>

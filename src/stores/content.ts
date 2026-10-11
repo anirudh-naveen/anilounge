@@ -14,6 +14,7 @@ import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
 import { getSearchableTitles } from '@/utils/titles'
 import type { MovieCatalogTab, TvCatalogTab } from '@/utils/catalogTabs'
+import { haptic, refreshWidgets } from '@/utils/nativeApp'
 
 export type SearchFilters = {
   type: string
@@ -476,6 +477,8 @@ export const useContentStore = defineStore('content', () => {
       })
 
       if (response.data.success) {
+        haptic()
+        refreshWidgets()
         await loadWatchlist(true)
       }
 
@@ -516,6 +519,7 @@ export const useContentStore = defineStore('content', () => {
             ...serverDates,
           } as WatchlistItem
         }
+        refreshWidgets()
       }
 
       return true
@@ -535,6 +539,7 @@ export const useContentStore = defineStore('content', () => {
       const response = await watchlistAPI.removeFromWatchlist(contentId)
 
       if (response.data.success) {
+        refreshWidgets()
         await loadWatchlist(true)
       }
 
