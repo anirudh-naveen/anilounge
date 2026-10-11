@@ -13,6 +13,9 @@ describe('inboxEntry', () => {
         kind: 'announcement',
         created_at: at,
         read_at: null,
+        actor_id: 'k1',
+        actor_username: 'Lounge Keeper',
+        actor_picture: 'https://www.anilounge.net/anilounge-logo.png',
         title: 'Forums are live',
         body: 'Come say hi.',
       }),
@@ -21,6 +24,11 @@ describe('inboxEntry', () => {
         kind: 'announcement',
         createdAt: at,
         read: false,
+        actor: {
+          id: 'k1',
+          username: 'Lounge Keeper',
+          profilePicture: 'https://www.anilounge.net/anilounge-logo.png',
+        },
         news: { title: 'Forums are live', body: 'Come say hi.' },
       },
     )

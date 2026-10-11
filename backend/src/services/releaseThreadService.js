@@ -1,5 +1,5 @@
 /**
- * Release bot: opens a forum megathread for each newly released episode, movie, and special.
+ * Release bot (Lounge Keeper): opens a forum megathread for each newly released episode, movie, and special.
  *
  * Layer: service. Releases are queued in `release_threads` from two places: a scan of
  * the catalog (series whose stored next episode has aired, movies and specials whose
@@ -9,27 +9,23 @@
  * the forum with old titles. Only titles someone follows are queued: at least one real
  * account (not the demo, banned, or unverified) has it on their watchlist, not dropped.
  * Each run then posts up to MAX_PER_RUN pending threads,
- * most popular first, as the bot account (created on first use; it has a random
- * password and an undeliverable email, so nobody can sign in as it).
+ * most popular first, as Lounge Keeper (services/botAccountService.js).
  *
  * Env knobs: RELEASE_THREADS_ENABLED (default on in production), RELEASE_THREADS_CRON
  * (default every 15 minutes), RELEASE_THREADS_MAX_PER_RUN (default 20).
  */
 
-import crypto from 'node:crypto'
 import cron from 'node-cron'
 import { query, withTransaction } from '../../config/postgres.js'
-import { BOT_EMAIL, BOT_USERNAME } from '../utils/botAccount.js'
 import { withJobLock } from '../utils/jobLock.js'
-import { hashPassword } from '../utils/passwordHash.js'
 import catalogEvents from './catalogEvents.js'
 import Content from '../models/Content.js'
+import { ensureLoungeKeeper } from './botAccountService.js'
 import { createMegathread } from './forumService.js'
 import { queuePost } from './indexNowService.js'
 import { resolveTmdbEpisode } from './seasonService.js'
 import { guideNumberSql } from './seriesStructure.js'
 
-export { BOT_EMAIL, BOT_USERNAME }
 const DEFAULT_CRON = '*/15 * * * *'
 const DEFAULT_MAX_PER_RUN = 20
 /** Releases older than this are never queued. */
@@ -39,7 +35,6 @@ const MAX_ATTEMPTS = 3
 
 const KIND_NOUNS = { movie: 'Movie', special: 'Special' }
 
-let botId = null
 let scheduledTask = null
 
 /**
@@ -61,34 +56,6 @@ function maxPerRun() {
 }
 
 /**
- * The bot's user id, creating the account the first time.
- * @returns {Promise<string>}
- */
-export async function ensureBotAccount() {
-  if (botId) return botId
-  const existing = await query('SELECT id FROM users WHERE email = $1', [BOT_EMAIL])
-  if (existing.rows[0]) {
-    botId = String(existing.rows[0].id)
-    return botId
-  }
-  const passwordHash = await hashPassword(crypto.randomBytes(32).toString('base64url'))
-  const { rows } = await query(
-    `INSERT INTO users (username, email, password_hash, bio, email_verified_at)
-     VALUES ($1, $2, $3, $4, now())
-     ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-     RETURNING id`,
-    [
-      BOT_USERNAME,
-      BOT_EMAIL,
-      passwordHash,
-      'I open a discussion megathread whenever a new episode or movie comes out.',
-    ],
-  )
-  botId = String(rows[0].id)
-  return botId
-}
-
-/**
  * Megathread title and body for one release.
  * @param {{ name: string, kind: string, season_number: number | null, episode_number: number | null, season_count: number | null, own_entry?: boolean }} release
  *   `own_entry`: the title is that season's own entry, so its name already says the season.
@@ -107,8 +74,7 @@ export function megathreadText(release) {
   }
   // A season's name already says which season it is ("Blue Box Season 2").
   const ownEntry = release.own_entry || kind === 'season'
-  const showSeason =
-    !ownEntry && season != null && (season > 1 || (release.season_count ?? 1) > 1)
+  const showSeason = !ownEntry && season != null && (season > 1 || (release.season_count ?? 1) > 1)
   const label = showSeason ? `Season ${season} Episode ${episode}` : `Episode ${episode}`
   return {
     title: `${name} - ${label} Discussion`,
@@ -274,7 +240,7 @@ export async function postPendingThreads({ limit = maxPerRun() } = {}) {
   )
   if (!rows.length) return { posted: 0, failed: 0 }
 
-  const bot = await ensureBotAccount()
+  const bot = await ensureLoungeKeeper()
   let posted = 0
   let failed = 0
   for (const release of rows) {

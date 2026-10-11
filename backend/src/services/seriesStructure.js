@@ -213,13 +213,46 @@ export async function buildAnimeSeries(show) {
 
 /**
  * Whether the catalog is structured as series → seasons yet (the migration has run).
+ * The migration turns MAL/AniList entries into seasons, so a season row with one of
+ * their ids is the mark; season rows an import made from TMDB alone don't count.
  * @returns {Promise<boolean>}
  */
 export async function hasSeriesStructure() {
   const { rows } = await query(
-    `SELECT to_regclass('seasons') IS NOT NULL AND EXISTS (SELECT 1 FROM seasons) AS ok`,
+    `SELECT EXISTS (
+       SELECT 1 FROM content
+       WHERE kind = 'season' AND (mal_id IS NOT NULL OR anilist_id IS NOT NULL)
+     ) AS ok`,
   ).catch(() => ({ rows: [{ ok: false }] }))
   return Boolean(rows[0]?.ok)
+}
+
+/**
+ * Remove season rows made before the migration (a seasons import run too early
+ * creates TMDB seasons under each MAL entry). They are only removed when nothing of
+ * users' points at them; their episodes and links go with them.
+ * @returns {Promise<number>} Rows removed
+ * @throws {Error} When a user's watchlist, rating, favorite, history, or forum row uses one.
+ */
+export async function removePremigrationSeasons() {
+  if (await hasSeriesStructure()) return 0
+  const { rows } = await query(
+    `SELECT
+       (SELECT count(*) FROM watchlist w JOIN content c ON c.id = w.content_id WHERE c.kind = 'season')
+     + (SELECT count(*) FROM ratings r JOIN content c ON c.id = r.content_id WHERE c.kind = 'season')
+     + (SELECT count(*) FROM favorites f JOIN content c ON c.id = f.content_id WHERE c.kind = 'season')
+     + (SELECT count(*) FROM watch_events e JOIN content c ON c.id = e.content_id WHERE c.kind = 'season')
+     + (SELECT count(*) FROM post_tags t JOIN content c ON c.id = t.content_id WHERE c.kind = 'season')
+     + (SELECT count(*) FROM release_threads t JOIN content c ON c.id = t.content_id WHERE c.kind = 'season')
+       AS used`,
+  )
+  if (Number(rows[0].used)) {
+    throw new Error(
+      `${rows[0].used} users' rows point at pre-migration season rows; not removing them`,
+    )
+  }
+  const removed = await query(`DELETE FROM content WHERE kind = 'season'`)
+  return removed.rowCount || 0
 }
 
 /**

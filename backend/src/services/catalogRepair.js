@@ -9,7 +9,7 @@
 import { query, withTransaction } from '../../config/postgres.js'
 import { titleKeySql } from '../db/mongoFilter.js'
 import Content from '../models/Content.js'
-import { foldEntityName, studioNameKey } from '../utils/entities.js'
+import { personNameKey, studioNameKey } from '../utils/entities.js'
 import { moveWatchHistory } from './watchEvents.js'
 import { recordMove } from './contentMoves.js'
 
@@ -268,12 +268,6 @@ export async function mergeStudioInto(fromId, toId) {
     await query(
       `INSERT INTO studio_credits (work_id, studio_id)
        SELECT work_id, $2 FROM studio_credits WHERE studio_id = $1
-       ON CONFLICT DO NOTHING`,
-      [fromId, toId],
-    )
-    await query(
-      `INSERT INTO staff_credits (work_id, person_id, role, position)
-       SELECT work_id, $2, role, position FROM staff_credits WHERE person_id = $1
        ON CONFLICT DO NOTHING`,
       [fromId, toId],
     )
@@ -720,7 +714,7 @@ export async function dedupeVoiceCredits() {
  * @param {string} toId
  * @returns {Promise<void>}
  */
-async function mergeVoiceInto(fromId, toId) {
+export async function mergeVoiceInto(fromId, toId) {
   if (!fromId || !toId || String(fromId) === String(toId)) return
   await withTransaction(async () => {
     const { rows: source } = await query(
@@ -737,6 +731,19 @@ async function mergeVoiceInto(fromId, toId) {
            WHERE x.appearance_id = vc.appearance_id AND x.voice_id = $2
              AND x.language IS NOT DISTINCT FROM vc.language
          )`,
+      [fromId, toId],
+    )
+    // Staff work (title-level and per episode) goes with the person.
+    await query(
+      `INSERT INTO staff_credits (work_id, person_id, role, position)
+       SELECT work_id, $2, role, position FROM staff_credits WHERE person_id = $1
+       ON CONFLICT DO NOTHING`,
+      [fromId, toId],
+    )
+    await query(
+      `INSERT INTO episode_credits (episode_id, person_id, role)
+       SELECT episode_id, $2, role FROM episode_credits WHERE person_id = $1
+       ON CONFLICT DO NOTHING`,
       [fromId, toId],
     )
     await query(
@@ -788,7 +795,8 @@ export async function mergeDuplicateVoices() {
   )
   const groups = new Map()
   for (const row of rows) {
-    const key = foldEntityName(row.name)
+    // MAL's "Takeuchi, Junko" and AniList's "Junko Takeuchi" are one name.
+    const key = personNameKey(row.name)
     if (!key) continue
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(row)

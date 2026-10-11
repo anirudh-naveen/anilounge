@@ -3,14 +3,15 @@
  *
  * Layer: service. Notifications (friend requests and acceptances, comments on your
  * posts, replies to your comments, language warnings) are written by
- * `notificationService.notify`. Site news lives in `announcements` and shows in every
- * inbox for NEWS_DAYS; news from before an account existed starts out read. Import
- * clashes (`watchlist_import_conflicts`) aren't items: the inbox shows a count and
+ * `notificationService.notify` (language warnings come from Lounge Cleaner). Site news
+ * lives in `announcements`, signed by Lounge Keeper, and shows in every inbox for
+ * NEWS_DAYS; news from before an account existed starts out read. Import clashes (`watchlist_import_conflicts`) aren't items: the inbox shows a count and
  * the clash picker until the user settles them.
  */
 
 import { query } from '../../config/postgres.js'
 import { isUuid } from '../db/ids.js'
+import { LOUNGE_KEEPER } from '../utils/botAccount.js'
 import { HttpError } from '../utils/httpError.js'
 import { cleanUserText } from '../utils/userText.js'
 import { excerptOf } from './forumService.js'
@@ -34,18 +35,19 @@ export function inboxEntry(row) {
     createdAt: row.created_at,
     read: Boolean(row.read_at),
   }
+  const actor = row.actor_id
+    ? publicUser({
+        id: row.actor_id,
+        username: row.actor_username,
+        profile_picture: row.actor_picture,
+      })
+    : null
   if (row.source === 'news') {
-    return { ...base, news: { title: row.title, body: row.body } }
+    return { ...base, actor, news: { title: row.title, body: row.body } }
   }
   return {
     ...base,
-    actor: row.actor_id
-      ? publicUser({
-          id: row.actor_id,
-          username: row.actor_username,
-          profile_picture: row.actor_picture,
-        })
-      : null,
+    actor,
     post: row.post_id ? { id: String(row.post_id), title: row.post_title } : null,
     comment: row.comment_id
       ? { id: String(row.comment_id), excerpt: excerptOf(row.comment_body, COMMENT_PREVIEW) }
@@ -118,16 +120,19 @@ export async function listInbox(userId, { before } = {}) {
        UNION ALL
        SELECT 'news', a.id, 'announcement', a.created_at,
               COALESCE(r.read_at, CASE WHEN a.created_at <= u.created_at THEN a.created_at END),
-              NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, a.title, a.body
+              NULL, k.id, k.username, k.profile_picture,
+              NULL, NULL, NULL, NULL, NULL, a.title, a.body
        FROM announcements a
        JOIN users u ON u.id = $1
+       -- News is signed by Lounge Keeper.
+       LEFT JOIN users k ON k.email = $3
        LEFT JOIN announcement_reads r ON r.announcement_id = a.id AND r.user_id = $1
        WHERE ${recentNewsSql('a')}
      ) inbox
      WHERE $2::timestamptz IS NULL OR created_at < $2::timestamptz
      ORDER BY created_at DESC, id DESC
      LIMIT ${PAGE_SIZE + 1}`,
-    [userId, beforeAt],
+    [userId, beforeAt, LOUNGE_KEEPER.email],
   )
   const [{ rows }, importClashes] = await Promise.all([
     listing,

@@ -13,6 +13,8 @@ import { query } from '../../config/postgres.js'
 import { escapeRegex } from '../utils/catalogChatQuery.js'
 import Entity from '../models/Entity.js'
 import Content from '../models/Content.js'
+import { lookupTvmazeShow, tvmazeCast } from './tvmazeService.js'
+import { applyTvmazeImages } from '../utils/tvmaze.js'
 import {
   charactersInHome,
   findCharacterForPayload,
@@ -681,7 +683,51 @@ export async function ingestTmdbCharacters(content, options = {}) {
   )
   const cast = Array.isArray(body?.cast) ? body.cast : []
   const payloads = mapTmdbCharacterCredits(cast, content._id).slice(0, MAX_CHARACTERS_PER_TITLE)
+  // TMDB has no character images; TVmaze has them for many western shows.
+  if (content.contentType === 'tv' && payloads.length) {
+    try {
+      const showId = await tvmazeShowFor(content, tmdbId, apiKey, options)
+      if (showId) applyTvmazeImages(payloads, await tvmazeCast(showId, options))
+    } catch (error) {
+      console.error('TVmaze images failed:', error.message)
+    }
+  }
   return upsertCharacterPayloads(payloads)
+}
+
+/**
+ * TVmaze's id for a TMDB show: stored, else looked up by its TVDB/IMDb ids (stored,
+ * else TMDB's), and remembered.
+ * @param {object} content - Series document
+ * @param {number} tmdbId
+ * @param {string} apiKey - TMDB key
+ * @param {{ fetchImpl?: typeof fetch }} options
+ * @returns {Promise<number | null>}
+ */
+async function tvmazeShowFor(content, tmdbId, apiKey, options) {
+  const { rows } = await query(
+    'SELECT source, external_id FROM content_external_ids WHERE content_id = $1',
+    [content._id],
+  )
+  const ids = Object.fromEntries(rows.map((row) => [row.source, row.external_id]))
+  if (Number(ids.tvmaze) > 0) return Number(ids.tvmaze)
+  if (!ids.tvdb && !ids.imdb) {
+    const external = await fetchJson(
+      `${TMDB_BASE}/tv/${tmdbId}/external_ids?api_key=${encodeURIComponent(apiKey)}`,
+      options,
+    )
+    ids.tvdb = external?.tvdb_id || null
+    ids.imdb = external?.imdb_id || null
+  }
+  const showId = await lookupTvmazeShow({ tvdb: ids.tvdb, imdb: ids.imdb }, options)
+  if (showId) {
+    await query(
+      `INSERT INTO content_external_ids (content_id, source, external_id) VALUES ($1, 'tvmaze', $2)
+       ON CONFLICT (content_id, source) DO UPDATE SET external_id = EXCLUDED.external_id`,
+      [content._id, String(showId)],
+    )
+  }
+  return showId
 }
 
 /**
@@ -754,6 +800,11 @@ function needsCharacterRefresh(content, docs, malId) {
   if (catalogSourced && hasSourced && docs.some((doc) => !hasSourceId(doc))) return true
   if (catalogSourced && docs.every((doc) => !characterPortraitPath(doc.imagePath))) return true
   if (catalogSourced && !hasSourced) return true
+  // A western show's characters can gain TVmaze images (retried at most every
+  // CHARACTER_RETRY_MS, see `characterSyncAttempts`).
+  if (!catalogSourced && content.contentType === 'tv') {
+    if (docs.every((doc) => !characterPortraitPath(doc.imagePath))) return true
+  }
   // AniList-only rows on a MAL title pick up MAL ids once Jikan is reachable.
   if (catalogMalId && jikanStatus().available && docs.every((doc) => !positiveId(doc.malId))) {
     return true
@@ -770,7 +821,7 @@ function needsCharacterRefresh(content, docs, malId) {
  */
 export async function ensureCharactersForContent(content, options = {}) {
   if (!content?._id) return []
-  if (content.contentType === 'tv') {
+  if (content.contentType === 'tv' && !options.ownCredits) {
     const cast = await seriesCharacters(content, options)
     if (cast) return cast
   }
@@ -801,14 +852,18 @@ async function seriesCharacters(series, options) {
   if (!rows.length) return null
   const seasonIds = rows.map((row) => row.id)
   const first = await Content.findById(seasonIds[0])
-  if (first) await ensureCharactersForContent(first, options)
+  // An anime's cast comes with its seasons (MAL/AniList entries); a show TMDB lists
+  // keeps its cast on the series row itself (TMDB credits the whole show).
+  const anime = Boolean(first && (first.malId || first.anilistId))
+  if (anime) await ensureCharactersForContent(first, options)
+  else await ensureCharactersForContent(series, { ...options, ownCredits: true })
   const { rows: cast } = await query(
     'SELECT DISTINCT character_id::text AS id FROM appearances WHERE work_id = ANY($1::uuid[])',
-    [seasonIds],
+    [[String(series._id), ...seasonIds]],
   )
   if (!cast.length) return []
   const docs = await Entity.find({ _id: { $in: cast.map((row) => row.id) } })
-  return highlightedCharacters(docs, seasonIds[0], MAX_CHARACTERS_PER_TITLE)
+  return highlightedCharacters(docs, anime ? seasonIds[0] : series._id, MAX_CHARACTERS_PER_TITLE)
 }
 
 /**
@@ -1546,15 +1601,24 @@ export async function serializeEntityDetails(entity, options = {}) {
  */
 export async function staffCreditsOf(personId) {
   const { rows } = await query(
-    `SELECT w.id::text AS id, w.title, w.content_type, w.poster_path, w.release_date,
+    `WITH credits AS (
+       SELECT sc.work_id, sc.role, sc.position, NULL::int AS episodes
+       FROM staff_credits sc WHERE sc.person_id = $1
+       UNION ALL
+       SELECT e.season_id, ec.role, 1000, count(DISTINCT ec.episode_id)::int
+       FROM episode_credits ec JOIN episodes e ON e.id = ec.episode_id
+       WHERE ec.person_id = $1
+       GROUP BY e.season_id, ec.role
+     )
+     SELECT w.id::text AS id, w.title, w.content_type, w.poster_path, w.release_date,
             w.season_label, (SELECT name FROM content WHERE id = w.series_id) AS series_title,
-            array_agg(sc.role ORDER BY sc.position) AS roles
-     FROM staff_credits sc JOIN works w ON w.id = sc.work_id
-     WHERE sc.person_id = $1
-       -- A series repeats its first season's staff; list the seasons instead.
-       AND NOT (w.kind = 'series' AND EXISTS (
-         SELECT 1 FROM staff_credits own JOIN seasons sn ON sn.content_id = own.work_id
-         WHERE own.person_id = $1 AND sn.series_id = w.id))
+            json_agg(json_build_object('role', c.role, 'episodes', c.episodes)
+                     ORDER BY c.position, c.role) AS roles
+     FROM credits c JOIN works w ON w.id = c.work_id
+     -- A series repeats its first season's staff; list the seasons instead.
+     WHERE NOT (w.kind = 'series' AND EXISTS (
+       SELECT 1 FROM staff_credits own JOIN seasons sn ON sn.content_id = own.work_id
+       WHERE own.person_id = $1 AND sn.series_id = w.id))
      GROUP BY w.id, w.title, w.content_type, w.poster_path, w.release_date, w.season_label,
               w.series_id
      ORDER BY w.release_date DESC NULLS LAST, w.title`,
@@ -1570,7 +1634,14 @@ export async function staffCreditsOf(personId) {
       seasonLabel: row.season_label || null,
       seriesTitle: row.series_title || null,
     },
-    roles: [...new Set(row.roles)],
+    // "Animation Director (4 episodes)" for episode credits, the role alone otherwise.
+    roles: [
+      ...new Set(
+        row.roles.map(({ role, episodes }) =>
+          episodes ? `${role} (${episodes} episode${episodes === 1 ? '' : 's'})` : role,
+        ),
+      ),
+    ],
   }))
 }
 

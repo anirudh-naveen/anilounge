@@ -136,14 +136,16 @@
                 Share profile
               </button>
               <FriendButton
-                v-if="profile.relationship && !profile.blocked"
+                v-if="profile.relationship && !profile.blocked && !profile.isBot"
                 :user-id="profile.user.id"
                 :username="profile.user.username"
                 :relationship="profile.relationship"
                 @update:relationship="(value) => profile && (profile.relationship = value)"
               />
               <router-link
-                v-if="profile.relationship === 'friends' && !profile.blocked"
+                v-if="
+                  (profile.canMessage ?? profile.relationship === 'friends') && !profile.blocked
+                "
                 :to="{ name: 'friends', query: { user: profile.user.id } }"
                 class="btn btn-secondary"
                 data-testid="message-friend"
@@ -151,7 +153,7 @@
                 Message
               </router-link>
               <button
-                v-if="profile.relationship && !authStore.isDemoUser"
+                v-if="profile.relationship && !profile.isBot && !authStore.isDemoUser"
                 type="button"
                 class="btn btn-secondary"
                 :disabled="blocking"

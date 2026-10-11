@@ -261,6 +261,7 @@
     </div>
 
     <JoinPrompt
+      list-sync
       title="Track this movie"
       message="Sign up free to add it to your watchlist, rate it, and see what other fans think."
     />
@@ -831,8 +832,6 @@ useCanonicalSlug(
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-
-
 
 .franchise-rating {
   margin: 0.35rem 0 0;

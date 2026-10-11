@@ -27,6 +27,8 @@
  *               services/catalogImport.js: source snapshots, fields by source
  *               priority, tags, key staff, ids on other sites. Run after
  *               `npm run db:restructure-series`.
+ *   photos      (Only when named.) Photos for people without one: TMDB's profile
+ *               photo, else their Wikidata image (services/personPhotos.js).
  *
  * Usage:
  *   npm run db:reload
@@ -69,6 +71,7 @@ import { applyFranchisePlan, loadFranchisePlan } from '../services/franchiseBuil
 import * as repair from '../services/catalogRepair.js'
 import { importSeries, importStandalone } from '../services/catalogImport.js'
 import { hasSeriesStructure } from '../services/seriesStructure.js'
+import { fillPersonPhotos } from '../services/personPhotos.js'
 
 dotenv.config()
 // The pool is created on first query, so this applies to the whole run.
@@ -88,7 +91,7 @@ const ALL_PHASES = [
   'cleanup',
 ]
 /** Phases a plain run leaves out; they run only when named in --phases. */
-const NAMED_ONLY_PHASES = ['seasons']
+const NAMED_ONLY_PHASES = ['seasons', 'photos']
 const FAMILY_KINDS = [
   'sequel',
   'prequel',
@@ -110,7 +113,10 @@ function parseArgs() {
   for (let i = 0; i < args.length; i += 1) {
     const next = args[i + 1]
     if (args[i] === '--phases' && next) {
-      options.phases = next.split(',').map((value) => value.trim()).filter(Boolean)
+      options.phases = next
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
       i += 1
     } else if (args[i] === '--workers' && next) {
       options.workers = Math.max(1, parseInt(next, 10) || 1)
@@ -325,7 +331,11 @@ async function reloadTitle(id, populator, byMal) {
 
   if (content.tmdbId && unifiedContentService.hasTmdbKey) {
     const types =
-      content.contentType === 'movie' ? ['movie'] : content.contentType === 'tv' ? ['tv'] : ['movie', 'tv']
+      content.contentType === 'movie'
+        ? ['movie']
+        : content.contentType === 'tv'
+          ? ['tv']
+          : ['movie', 'tv']
     for (const type of types) {
       const details = await unifiedContentService.getTmdbContentDetails(content.tmdbId, type)
       if (!details) continue
@@ -678,6 +688,11 @@ async function phaseCleanup() {
  * @returns {Promise<boolean>} False when some titles failed.
  */
 async function phaseSeasons(options, checkpoint) {
+  if (!(await hasSeriesStructure())) {
+    // Before the migration each MAL entry is still a `series` row, and importing it
+    // would hang TMDB's whole show under every one of them.
+    throw new Error('Run `npm run db:restructure-series` before the seasons phase')
+  }
   const { rows } = await query(
     `SELECT id::text AS id, kind FROM content WHERE kind IN ('series', 'movie', 'special')
      ORDER BY catalog_score DESC NULLS LAST, id`,
@@ -718,6 +733,10 @@ async function run() {
     studios: () => phaseStudios(options, checkpoint),
     cleanup: () => phaseCleanup(),
     seasons: () => phaseSeasons(options, checkpoint),
+    photos: async () => {
+      const result = await fillPersonPhotos({ limit: options.limit || 20000 })
+      console.log(`  Photos: ${result.filled} of ${result.checked} people without one`)
+    },
   }
   let incomplete = false
   for (const phase of options.phases) {

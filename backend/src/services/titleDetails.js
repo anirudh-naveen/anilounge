@@ -1,11 +1,13 @@
 /**
- * Extra fields on a title's detail response: tags, key staff, its ids on other sites,
- * and where it sits in its show (a season's series, a series' seasons).
+ * Extra fields on a title's detail response: tags, key staff, everyone credited on its
+ * episodes, its ids on other sites, and where it sits in its show (a season's series, a
+ * series' seasons).
  *
  * Domain service used by `contentController.getContentById`.
  */
 import { query } from '../../config/postgres.js'
 import { WATCHABLE_KINDS, kindFromContentType } from '../db/kinds.js'
+import { EPISODE_ROLES } from '../utils/staffCredits.js'
 
 /** Pages on other sites, by id source. */
 const EXTERNAL_URLS = {
@@ -53,7 +55,7 @@ export async function attachTitleDetails(content) {
   const kind = kindFromContentType(content.contentType)
   if (!WATCHABLE_KINDS.includes(kind)) return content
   const id = String(content._id)
-  const [tags, staff, ids, show, seasons] = await Promise.all([
+  const [tags, staff, ids, show, seasons, episodeStaff] = await Promise.all([
     query(
       `SELECT t.name, t.category, ct.rank, ct.is_spoiler FROM content_tags ct
        JOIN tags t ON t.id = ct.tag_id
@@ -82,8 +84,30 @@ export async function attachTitleDetails(content) {
           [id],
         )
       : { rows: [] },
+    // Everyone credited on its episodes (a series: on every season's), with how many.
+    kind === 'season' || kind === 'series'
+      ? query(
+          `SELECT p.id::text AS id, p.name, p.image_path, ec.role,
+                  count(DISTINCT ec.episode_id)::int AS episodes
+           FROM episode_credits ec
+           JOIN episodes e ON e.id = ec.episode_id
+           JOIN seasons sn ON sn.content_id = e.season_id
+           JOIN content p ON p.id = ec.person_id
+           WHERE sn.content_id = $1 OR sn.series_id = $1
+           GROUP BY p.id, p.name, p.image_path, ec.role
+           ORDER BY array_position($2::text[], ec.role), count(DISTINCT ec.episode_id) DESC, p.name`,
+          [id, EPISODE_ROLES],
+        )
+      : { rows: [] },
   ])
 
+  content.episodeStaff = episodeStaff.rows.map((row) => ({
+    _id: row.id,
+    name: row.name,
+    imagePath: row.image_path || '',
+    role: row.role,
+    episodes: row.episodes,
+  }))
   content.tags = tags.rows.map((row) => ({
     name: row.name,
     category: row.category || '',

@@ -2,7 +2,8 @@
   AdminMetrics.vue — the admin page's Metrics tab.
 
   Users (total, new, active), page views, unique visitors, and clicks for a chosen
-  range, a daily bar chart, and the top pages, clicks, and referrers. Data comes from
+  range, a daily bar chart, and the top pages, clicks, and referrers. Those count real
+  visitors only; bots and crawlers get their own tile, chart series, and list. Data comes from
   `GET /api/admin/metrics`; the app records it through src/services/metrics.ts.
 -->
 <template>
@@ -29,7 +30,13 @@
     <p v-else-if="error" class="social-empty admin-error">{{ error }}</p>
     <template v-else-if="data">
       <div class="metrics-tiles">
-        <div v-for="tile in tiles" :key="tile.label" class="metrics-tile">
+        <div
+          v-for="tile in tiles"
+          :key="tile.label"
+          class="metrics-tile"
+          :class="{ bot: tile.bot }"
+          :data-testid="tile.bot ? 'metrics-bots' : undefined"
+        >
           <span class="metrics-tile-label">{{ tile.label }}</span>
           <span class="metrics-tile-value">{{ format(tile.value) }}</span>
           <span v-if="tile.note" class="metrics-tile-note">{{ tile.note }}</span>
@@ -63,6 +70,7 @@
           >
             <div
               class="metrics-bar"
+              :class="{ bot: series === 'botVisitors' }"
               :style="{ height: `${(point[series] / chartMax) * 100}%` }"
             ></div>
           </div>
@@ -89,8 +97,10 @@
       </div>
 
       <p class="social-meta">
-        Days are UTC. Visitors are counted per browser; admin pages and known bots are not counted.
-        Mark any element with <code>data-track="name"</code> to give its clicks a clearer label.
+        Days are UTC. Visitors are counted per browser and are real people only: bots and crawlers
+        (search engines, link previews, automated browsers) are counted on their own. Admin pages
+        are not tracked. Mark any element with <code>data-track="name"</code> to give its clicks a
+        clearer label.
       </p>
     </template>
   </section>
@@ -101,7 +111,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { adminAPI } from '@/services/api'
 import { apiErrorMessage } from '@/utils/social'
 
-type Point = { day: string; views: number; visitors: number; clicks: number; signups: number }
+type Point = {
+  day: string
+  views: number
+  visitors: number
+  botVisitors: number
+  clicks: number
+  signups: number
+}
 type Metrics = {
   days: number
   users: { total: number; new: number; active: number }
@@ -110,12 +127,19 @@ type Metrics = {
   pages: Array<{ path: string; views: number; visitors: number }>
   clicks: Array<{ target: string; clicks: number; visitors: number }>
   referrers: Array<{ host: string; visitors: number }>
+  /** Bots and crawlers, kept out of every other number. Missing on an older server. */
+  bots?: {
+    visitors: number
+    views: number
+    top: Array<{ name: string; visitors: number; views: number }>
+  }
 }
 
 const RANGES = [7, 30, 90] as const
 const SERIES = [
   { id: 'views', label: 'Views' },
   { id: 'visitors', label: 'Visitors' },
+  { id: 'botVisitors', label: 'Bots' },
   { id: 'clicks', label: 'Clicks' },
   { id: 'signups', label: 'Sign-ups' },
 ] as const
@@ -130,15 +154,25 @@ let seq = 0
 const numberFormat = new Intl.NumberFormat()
 const format = (value: number) => numberFormat.format(value)
 
-const tiles = computed(() => {
+const tiles = computed<Array<{ label: string; value: number; note: string; bot?: boolean }>>(() => {
   const d = data.value
   if (!d) return []
   return [
     { label: 'Total users', value: d.users.total, note: `+${format(d.users.new)} new` },
     { label: 'Active users', value: d.users.active, note: 'signed in and active' },
-    { label: 'Visitors', value: d.totals.visitors, note: `${format(d.totals.signedIn)} signed in` },
+    {
+      label: 'Real visitors',
+      value: d.totals.visitors,
+      note: `${format(d.totals.signedIn)} signed in`,
+    },
     { label: 'Page views', value: d.totals.views, note: perVisitor(d.totals.views) },
     { label: 'Clicks', value: d.totals.clicks, note: perVisitor(d.totals.clicks) },
+    {
+      label: 'Bots & crawlers',
+      value: d.bots?.visitors ?? 0,
+      note: `${format(d.bots?.views ?? 0)} page views, not counted`,
+      bot: true,
+    },
   ]
 })
 
@@ -172,6 +206,11 @@ const lists = computed(() => {
       title: 'Referrers',
       note: 'Visitors arriving from other sites.',
       rows: d.referrers.map((row) => ({ name: row.host, count: row.visitors })),
+    },
+    {
+      title: 'Bots & crawlers',
+      note: 'By visitor ids; not counted anywhere else. Most crawlers never run the site, so only some show.',
+      rows: (d.bots?.top ?? []).map((row) => ({ name: row.name, count: row.visitors })),
     },
   ]
 })
@@ -262,6 +301,11 @@ onMounted(load)
   gap: 0.15rem;
 }
 
+.metrics-tile.bot {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--teal-primary) 6%, var(--bg-card));
+}
+
 .metrics-tile-label {
   color: var(--text-muted);
   font-size: 0.8rem;
@@ -314,6 +358,10 @@ onMounted(load)
   min-height: 1px;
   border-radius: 3px 3px 0 0;
   background: var(--coral-primary);
+}
+
+.metrics-bar.bot {
+  background: var(--teal-primary);
 }
 
 .metrics-axis {

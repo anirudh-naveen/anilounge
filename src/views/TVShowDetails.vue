@@ -199,7 +199,6 @@
 
       <TitleExtras :content="show" />
 
-
       <!-- Title: Forum -->
       <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
 
@@ -361,11 +360,16 @@
       </div>
 
       <EntityCastRow :items="characters" :content-id="show._id" :loading="charactersLoading" />
+      <p v-if="characters.some((item) => isTvmazeImage(item.imagePath))" class="image-credit">
+        Character images from
+        <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA).
+      </p>
 
       <StudioLinks :content="show" />
     </div>
 
     <JoinPrompt
+      list-sync
       title="Track this series"
       message="Sign up free to follow new episodes, log your progress, and rate every season."
     />
@@ -391,6 +395,7 @@ import EntityCastRow from '@/components/EntityCastRow.vue'
 import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
+import { isTvmazeImage } from '@/utils/imageCredits'
 import type {
   CatalogEntity,
   Episode,
@@ -783,6 +788,16 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   background: var(--bg-primary);
   color: var(--text-primary);
   padding: 2rem;
+}
+
+.image-credit {
+  margin: -1rem 0 2rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.image-credit a {
+  color: var(--coral-primary);
 }
 
 .series-link {
@@ -1194,8 +1209,6 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-
-
 
 .franchise-rating {
   margin: 0.35rem 0 0;

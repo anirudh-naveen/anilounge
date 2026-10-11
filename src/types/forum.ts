@@ -6,7 +6,7 @@ import type { PublicUser } from './social'
 
 export type PostKind = 'discussion' | 'review' | 'guide' | 'article' | 'megathread'
 export type PostSort = 'hot' | 'new' | 'top' | 'active'
-export type TagKind = 'movie' | 'series' | 'special' | 'franchise' | 'character'
+export type TagKind = 'movie' | 'series' | 'season' | 'special' | 'franchise' | 'character'
 
 /** What a post is about; `season` + `episode` make it an episode thread. */
 export interface PostTag {

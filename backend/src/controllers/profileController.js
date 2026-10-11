@@ -18,14 +18,12 @@ import { getAvatar } from '../services/avatarService.js'
 import { moderationMessage } from '../utils/moderation.js'
 import { relationshipBetween } from '../services/friendService.js'
 import { hasBlocked } from '../services/blockService.js'
+import { canMessageUser } from '../services/messageService.js'
+import { isBotEmail } from '../utils/botAccount.js'
 import { listProfileConnections } from '../services/connectionService.js'
 import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
 import { sendError } from '../utils/httpError.js'
-import {
-  addFavorite,
-  FAVORITE_ORDER_SQL,
-  reorderFavorites,
-} from '../services/favoriteService.js'
+import { addFavorite, FAVORITE_ORDER_SQL, reorderFavorites } from '../services/favoriteService.js'
 import {
   normalizePreferences,
   normalizeProfileSettings,
@@ -164,6 +162,10 @@ export const getPublicProfile = async (req, res) => {
             hasBlocked(req.user._id, user._id),
           ])
         : [null, false]
+    const canMessage =
+      req.user && !isOwner && !blocked
+        ? await canMessageUser(req.user._id, user._id, relationship)
+        : false
     const history = shows('stats') ? await loadWatchHistory(user._id) : null
     const connections = settings.showConnections ? await listProfileConnections(user._id) : []
 
@@ -172,6 +174,9 @@ export const getPublicProfile = async (req, res) => {
       data: {
         relationship,
         blocked,
+        canMessage,
+        /** A bot account (Lounge Keeper / Lounge Cleaner): it can't be blocked. */
+        isBot: isBotEmail(user.email),
         user: {
           id: user._id,
           username: user.username,
@@ -184,9 +189,7 @@ export const getPublicProfile = async (req, res) => {
         connections,
         isOwner,
         tabs: visibleTabs,
-        favorites: shows('favorites')
-          ? { content: favoriteContent, ...favoriteEntities }
-          : null,
+        favorites: shows('favorites') ? { content: favoriteContent, ...favoriteEntities } : null,
         watchlist: shows('watchlist')
           ? watchlistRows.map((item) => ({
               content: slimContent(item.content),

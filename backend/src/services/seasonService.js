@@ -10,6 +10,7 @@ import { query } from '../../config/postgres.js'
 import { escapeLike } from '../db/mongoFilter.js'
 import Content, { loadWorksById } from '../models/Content.js'
 import { tmdbEpisodesForSeason } from './catalogImport.js'
+import { EPISODE_ROLES } from '../utils/staffCredits.js'
 import unifiedContentService from './unifiedContentService.js'
 import { collectContentTitles, normalizeTitle } from '../utils/titles.js'
 import {
@@ -193,6 +194,31 @@ async function seasonCast(seasonIds) {
 }
 
 /**
+ * Who worked on each episode of these seasons, by `seasonId:number`, in role order
+ * (utils/staffCredits.js `EPISODE_ROLES`).
+ * @param {string[]} seasonIds
+ * @returns {Promise<Map<string, { _id: string, name: string, role: string }[]>>}
+ */
+async function episodeStaff(seasonIds) {
+  const { rows } = await query(
+    `SELECT e.season_id::text AS season_id, e.number, p.id::text AS person_id, p.name, ec.role
+     FROM episode_credits ec
+     JOIN episodes e ON e.id = ec.episode_id
+     JOIN content p ON p.id = ec.person_id
+     WHERE e.season_id = ANY($1::uuid[])
+     ORDER BY array_position($2::text[], ec.role), p.name`,
+    [seasonIds, EPISODE_ROLES],
+  )
+  const staff = new Map()
+  for (const row of rows) {
+    const key = `${row.season_id}:${row.number}`
+    if (!staff.has(key)) staff.set(key, [])
+    staff.get(key).push({ _id: row.person_id, name: row.name, role: row.role })
+  }
+  return staff
+}
+
+/**
  * @param {unknown} value
  * @returns {string | null} ISO date (YYYY-MM-DD) or timestamp
  */
@@ -221,7 +247,7 @@ export async function storedGuide(seriesId) {
   const ids = seasonRows.map((row) => row.id)
   const guideNumber = new Map(ids.map((id, index) => [id, index + 1]))
   const byId = new Map(seasonRows.map((row) => [row.id, row]))
-  const [{ rows: episodeRows }, cast] = await Promise.all([
+  const [{ rows: episodeRows }, cast, staff] = await Promise.all([
     query(
       `SELECT season_id::text AS season_id, number, title, title_romaji, title_native, overview,
               still_path, air_at, runtime, is_filler, is_recap
@@ -229,6 +255,7 @@ export async function storedGuide(seriesId) {
       [ids],
     ),
     seasonCast(ids),
+    episodeStaff(ids),
   ])
 
   return {
@@ -258,6 +285,7 @@ export async function storedGuide(seriesId) {
         isFiller: Boolean(row.is_filler),
         isRecap: Boolean(row.is_recap),
         cast: cast.get(row.season_id) || [],
+        staff: staff.get(`${row.season_id}:${row.number}`) || [],
         contentId: row.season_id,
         tmdbSeasonNumber:
           season.tmdb_season_number != null ? Number(season.tmdb_season_number) : null,

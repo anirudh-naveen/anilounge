@@ -68,7 +68,7 @@
               <button
                 type="button"
                 class="conversation-row"
-                :class="{ active: activeId === request.user.id }"
+                :class="{ active: activeId === request.user.id, 'is-unread': true }"
                 @click="openThread(request.user.id)"
               >
                 <UserAvatar
@@ -100,7 +100,7 @@
             <button
               type="button"
               class="conversation-row"
-              :class="{ active: activeId === convo.user.id }"
+              :class="{ active: activeId === convo.user.id, 'is-unread': convo.unread > 0 }"
               :data-testid="`conversation-${convo.user.username}`"
               @click="openThread(convo.user.id)"
             >

@@ -8,6 +8,8 @@
   Users: admins mute users; the creator also adds/removes admins and bans users.
   Reports: forum posts and comments people flagged; admins delete them or dismiss the reports.
   Metrics: users, page views, visitors, and clicks (components/AdminMetrics.vue).
+  News: write site news with pictures, posted to every inbox as Lounge Keeper
+  (components/AdminNews.vue).
   Admin-only; the server enforces every permission shown here.
 -->
 <template>
@@ -805,6 +807,7 @@
 
       <!-- Title: Metrics -->
       <AdminMetrics v-else-if="activeTab === 'metrics'" />
+      <AdminNews v-else-if="activeTab === 'news'" />
 
       <!-- Title: Users -->
       <section v-else class="social-panel" data-testid="admin-users">
@@ -1061,6 +1064,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import AdminMetrics from '@/components/AdminMetrics.vue'
+import AdminNews from '@/components/AdminNews.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { adminAPI, forumAPI, getDetailsRouteName, getImageUrl } from '@/services/api'
@@ -1163,10 +1167,11 @@ const TABS = [
   { id: 'log', label: 'Log' },
   { id: 'reports', label: 'Reports' },
   { id: 'metrics', label: 'Metrics' },
+  { id: 'news', label: 'News' },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 /** Developers (not admins) only get the Content tab. */
-const ADMIN_ONLY_TABS: TabId[] = ['users', 'log', 'reports', 'metrics']
+const ADMIN_ONLY_TABS: TabId[] = ['users', 'log', 'reports', 'metrics', 'news']
 const KINDS: Array<{ id: Kind; singular: string; plural: string }> = [
   { id: 'movie', singular: 'Movie', plural: 'Movies' },
   { id: 'series', singular: 'Series', plural: 'Series' },

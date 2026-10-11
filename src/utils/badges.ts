@@ -3,8 +3,9 @@
  *
  * Every badge a user can hold, in display order. `emblem` badges can be chosen as
  * the one emblem next to a username; emblem-less badges (future ones) only appear in
- * the profile Badges section. `grantable` badges are handed out on the admin page;
- * Bot is worn only by the release bot account;
+ * the profile Badges section. `grantable` badges are handed out on the admin page
+ * (Admin also comes with admin access, and the creator holds it);
+ * Bot is worn only by the bot accounts (Lounge Keeper, Lounge Cleaner);
  * Supporter is also granted automatically for a Ko-fi donation.
  */
 
@@ -29,7 +30,7 @@ export const BADGES: BadgeDef[] = [
     label: 'Admin',
     description: 'Helps run AniLounge.',
     emblem: true,
-    grantable: false,
+    grantable: true,
   },
   {
     id: 'developer',
@@ -62,7 +63,8 @@ export const BADGES: BadgeDef[] = [
   {
     id: 'bot',
     label: 'Bot',
-    description: "AniLounge's own bot. Opens a discussion thread for every new release.",
+    description:
+      "One of AniLounge's own bots: Lounge Keeper posts news and release threads, Lounge Cleaner handles moderation and support.",
     emblem: true,
     grantable: false,
   },
