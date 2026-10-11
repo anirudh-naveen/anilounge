@@ -931,6 +931,16 @@ CREATE TABLE IF NOT EXISTS announcements (
 );
 CREATE INDEX IF NOT EXISTS announcements_created_idx ON announcements (created_at DESC);
 
+-- Pictures in site news, uploaded from the admin page's News tab and served at
+-- /api/news-images/:id (services/newsService.js).
+CREATE TABLE IF NOT EXISTS news_images (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_type  TEXT NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp', 'image/gif')),
+  data          BYTEA NOT NULL CHECK (octet_length(data) <= 5242880),
+  uploaded_by   UUID REFERENCES users (id) ON DELETE SET NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS announcement_reads (
   announcement_id  UUID NOT NULL REFERENCES announcements (id) ON DELETE CASCADE,
   user_id          UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,

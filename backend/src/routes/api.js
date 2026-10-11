@@ -28,12 +28,13 @@ import adminOnly, { contentEditorOnly, creatorOnly } from '../middleware/adminOn
 import adminController from '../controllers/adminController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import metricsController from '../controllers/metricsController.js'
+import newsController from '../controllers/newsController.js'
 import authMiddleware, {
   optionalAuthenticate,
   refreshAccessToken,
   revokeRefreshToken,
 } from '../middleware/auth.js'
-import upload, { handleUploadError } from '../middleware/upload.js'
+import upload, { handleUploadError, newsImageUpload } from '../middleware/upload.js'
 import { bruteForceProtection } from '../middleware/antiBot.js'
 import { validateObjectId } from '../middleware/security.js'
 import { isCatalogId } from '../db/ids.js'
@@ -46,16 +47,16 @@ const WATCHLIST_STATUSES = ['plan_to_watch', 'watching', 'completed', 'on_hold',
 
 /** Optional watchlist fields accepted when adding or editing an entry. */
 const watchlistFieldRules = () => [
-    body('status').optional().isIn(WATCHLIST_STATUSES),
-    body('rating').optional().isFloat({ min: 0, max: 10 }),
-    body('currentEpisode').optional().isInt({ min: 0 }),
-    body('currentSeason').optional().isInt({ min: 1 }),
-    body('totalEpisodes').optional().isInt({ min: 0 }),
-    body('totalSeasons').optional().isInt({ min: 1 }),
-    body('notes').optional().isString(),
-    body('startedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
-    body('completedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
-    body('rewatchCount').optional().isInt({ min: 0, max: 999 }),
+  body('status').optional().isIn(WATCHLIST_STATUSES),
+  body('rating').optional().isFloat({ min: 0, max: 10 }),
+  body('currentEpisode').optional().isInt({ min: 0 }),
+  body('currentSeason').optional().isInt({ min: 1 }),
+  body('totalEpisodes').optional().isInt({ min: 0 }),
+  body('totalSeasons').optional().isInt({ min: 1 }),
+  body('notes').optional().isString(),
+  body('startedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
+  body('completedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
+  body('rewatchCount').optional().isInt({ min: 0, max: 999 }),
 ]
 
 /** 3-20 characters; letters, numbers, dot, dash, underscore (matches the DB length check). */
@@ -118,8 +119,16 @@ router.post(
   [body('email').isEmail(), body('code').isString()],
   authController.verifyEmail,
 )
-router.post('/auth/resend-verification', [body('email').isEmail()], authController.resendVerification)
-router.post('/auth/unlock', [body('email').isEmail(), body('code').isString()], authController.unlockAccount)
+router.post(
+  '/auth/resend-verification',
+  [body('email').isEmail()],
+  authController.resendVerification,
+)
+router.post(
+  '/auth/unlock',
+  [body('email').isEmail(), body('code').isString()],
+  authController.unlockAccount,
+)
 router.post(
   '/auth/2fa/verify',
   [body('challengeToken').isString(), body('code').isString()],
@@ -136,12 +145,7 @@ router.get('/content/:id', validateObjectId, contentController.getContentById)
 router.get('/content/:id/episodes', validateObjectId, contentController.getContentEpisodes)
 router.get('/content/:id/characters', validateObjectId, entityController.getContentCharacters)
 router.get('/entities', entityController.searchCatalogEntities)
-router.get(
-  '/entities/:id',
-  validateObjectId,
-  optionalAuthenticate,
-  entityController.getEntityById,
-)
+router.get('/entities/:id', validateObjectId, optionalAuthenticate, entityController.getEntityById)
 router.get('/franchises/:id', validateObjectId, contentController.getFranchiseById)
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
 /** Links out to other apps: streaming services, and upcoming episodes for a calendar. */
@@ -170,7 +174,12 @@ router.get('/forum/posts/:id', validateObjectId, optionalAuthenticate, forumCont
 router.get('/forum/comments', optionalAuthenticate, forumController.listComments)
 router.get('/forum/tags', forumController.searchTags)
 router.get('/forum/tags/:id/characters', validateObjectId, forumController.contentCharacters)
-router.get('/forum/highlights/:id', validateObjectId, optionalAuthenticate, forumController.getHighlights)
+router.get(
+  '/forum/highlights/:id',
+  validateObjectId,
+  optionalAuthenticate,
+  forumController.getHighlights,
+)
 
 /** Gemini-backed catalog chat. Optional auth personalizes from watchlist/preferences. */
 router.post(
@@ -196,6 +205,8 @@ router.post(
 
 /** Profile pictures (stored in Postgres); public so avatars load for visitors. */
 router.get('/avatars/:id', validateObjectId, profileController.getAvatarImage)
+/** Site-news pictures (stored in Postgres); public so inboxes can show them. */
+router.get('/news-images/:id', validateObjectId, newsController.getNewsImage)
 
 /** Shareable user profile; optional auth lets owners see private profiles and hidden tabs. */
 router.get('/users/:username', optionalAuthenticate, profileController.getPublicProfile)
@@ -268,10 +279,7 @@ router.get('/watchlist', contentController.getWatchlist)
 router.delete('/watchlist/:contentId', validateObjectId, contentController.removeFromWatchlist)
 router.put(
   '/watchlist/:contentId',
-  [
-    validateObjectId,
-    ...watchlistFieldRules(),
-  ],
+  [validateObjectId, ...watchlistFieldRules()],
   contentController.updateWatchlistItem,
 )
 
@@ -284,7 +292,9 @@ router.get('/watchlist/import', watchlistImportController.getImport)
 router.post(
   '/watchlist/import',
   [
-    body('sources').isArray({ min: 1, max: 3 }).withMessage('Enter at least one username to import'),
+    body('sources')
+      .isArray({ min: 1, max: 3 })
+      .withMessage('Enter at least one username to import'),
     body('sources.*.source')
       .isIn(['anilist', 'mal', 'mal_file', 'tmdb'])
       .withMessage('Choose AniList, MyAnimeList, or TMDB'),
@@ -333,9 +343,7 @@ router.post(
   '/content/:contentId/vote',
   [
     validateObjectId,
-    body('rating')
-      .isFloat({ min: 1, max: 10 })
-      .withMessage('Rating must be between 1 and 10'),
+    body('rating').isFloat({ min: 1, max: 10 }).withMessage('Rating must be between 1 and 10'),
   ],
   contentController.voteContent,
 )
@@ -364,7 +372,11 @@ router.post(
   [body('password').isString(), body('code').isString()],
   securityController.turnOffTwoFactor,
 )
-router.post('/account/2fa/backup-codes', [body('code').isString()], securityController.newBackupCodes)
+router.post(
+  '/account/2fa/backup-codes',
+  [body('code').isString()],
+  securityController.newBackupCodes,
+)
 
 /** Optional email categories (announcements, friend requests); account emails always send. */
 router.get('/account/email-preferences', emailPreferenceController.getPreferences)
@@ -443,7 +455,12 @@ router.post(
   blockWhenMuted(),
   forumController.createComment,
 )
-router.patch('/forum/comments/:id', validateObjectId, blockWhenMuted(), forumController.updateComment)
+router.patch(
+  '/forum/comments/:id',
+  validateObjectId,
+  blockWhenMuted(),
+  forumController.updateComment,
+)
 router.delete('/forum/comments/:id', validateObjectId, forumController.deleteComment)
 router.put('/forum/comments/:id/like', validateObjectId, forumController.likeComment)
 router.delete('/forum/comments/:id/like', validateObjectId, forumController.unlikeComment)
@@ -492,6 +509,22 @@ router.get('/admin/forum-reports', adminOnly, forumController.listReports)
 router.get('/admin/forum-reports/count', adminOnly, forumController.countReports)
 router.post('/admin/forum-reports/dismiss', adminOnly, forumController.dismissReports)
 router.get('/admin/users', adminOnly, adminController.listUsers)
+/** Site news (admins only, not developers), posted to inboxes as Lounge Keeper. */
+router.get('/admin/news', adminOnly, newsController.listNews)
+router.post(
+  '/admin/news',
+  adminOnly,
+  [body('title').isString(), body('body').isString()],
+  newsController.postNews,
+)
+router.delete('/admin/news/:id', adminOnly, validateObjectId, newsController.deleteNews)
+router.post(
+  '/admin/news-images',
+  adminOnly,
+  newsImageUpload,
+  handleUploadError,
+  newsController.uploadNewsImage,
+)
 router.put(
   '/admin/users/:id/role',
   creatorOnly,
@@ -503,7 +536,7 @@ router.put(
   '/admin/users/:id/cosmetic-roles',
   adminOnly,
   validateObjectId,
-  [body('roles').isArray({ max: 3 })],
+  [body('roles').isArray({ max: 10 })],
   adminController.setCosmeticRoles,
 )
 router.post(

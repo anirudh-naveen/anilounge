@@ -4,13 +4,18 @@
   Renders the marks described in `utils/richText.ts` (bold, italics, strikethrough,
   links, one heading size, lists, quotes, collapsible sections, and callout boxes)
   as Vue nodes, so user text is never parsed as HTML. Links open in a new tab and
-  are marked `nofollow ugc`.
+  are marked `nofollow ugc`. With `images` (site news only), picture lines render
+  as captioned images.
 -->
 <script setup lang="ts">
 import { computed, h, type VNode } from 'vue'
 import { parseRichText, type Block, type CalloutTone, type Inline } from '@/utils/richText'
+import { API_HOST } from '@/services/api'
 
-const props = defineProps<{ text: string }>()
+const props = defineProps<{ text: string; images?: boolean }>()
+
+/** Uploaded news pictures are served by the API. */
+const imageUrl = (src: string) => (src.startsWith('/') ? `${API_HOST}${src}` : src)
 
 const INLINE_TAGS = { bold: 'strong', italic: 'em', strike: 's' } as const
 
@@ -60,6 +65,11 @@ const renderBlock = (block: Block): VNode => {
         ...block.blocks.map(renderBlock),
       ])
     }
+    case 'image':
+      return h('figure', { class: 'rich-image' }, [
+        h('img', { src: imageUrl(block.src), alt: block.alt, loading: 'lazy' }),
+        block.alt ? h('figcaption', block.alt) : null,
+      ])
     case 'heading':
       return h('h2', { class: 'rich-heading' }, renderInline(block.children))
     case 'quote':
@@ -74,7 +84,7 @@ const renderBlock = (block: Block): VNode => {
   }
 }
 
-const blocks = computed(() => parseRichText(props.text))
+const blocks = computed(() => parseRichText(props.text, { images: props.images }))
 
 const Blocks = () => blocks.value.map(renderBlock)
 </script>
@@ -125,6 +135,26 @@ const Blocks = () => blocks.value.map(renderBlock)
 .rich-text :deep(.rich-section-body > * + *),
 .rich-text :deep(.rich-callout > * + *) {
   margin-top: 0.7rem;
+}
+
+/* Title: Picture (site news) */
+.rich-text :deep(.rich-image) {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.rich-text :deep(.rich-image img) {
+  display: block;
+  max-width: 100%;
+  max-height: 28rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.rich-text :deep(.rich-image figcaption) {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 /* Title: Collapsible section */
