@@ -26,7 +26,11 @@
           data-testid="watchlist-search"
         />
         <!-- Title: Sort -->
-        <SortByControls v-model:sort-by="sortBy" v-model:sort-direction="sortDirection" />
+        <SortByControls
+          v-model:sort-by="sortBy"
+          v-model:sort-direction="sortDirection"
+          :options="WATCHLIST_SORT_OPTIONS"
+        />
       </div>
 
       <!-- List -->
@@ -424,7 +428,12 @@ import { useToast } from 'vue-toastification'
 import type { WatchlistItem } from '@/types'
 import SortByControls from '@/components/SortByControls.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
-import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
+import {
+  applySort,
+  DEFAULT_SORT_OPTIONS,
+  type SortByOption,
+  type SortDirection,
+} from '@/utils/sorting'
 import { getDisplayTitle } from '@/utils/titles'
 import { getSearchCategoryDate } from '@/utils/searchFilters'
 import {
@@ -454,6 +463,10 @@ const isPhone =
 const searchQuery = ref('')
 const sortBy = ref<SortByOption>('relevance')
 const sortDirection = ref<SortDirection>('desc')
+/** "Relevance" here is recency: the order titles were last updated. */
+const WATCHLIST_SORT_OPTIONS = DEFAULT_SORT_OPTIONS.map((option) =>
+  option.value === 'relevance' ? { ...option, label: 'Updated' } : option,
+)
 
 /** Collapsed status sections, remembered per browser. */
 const COLLAPSED_KEY = 'anilounge:watchlist-collapsed'
@@ -1009,7 +1022,8 @@ onUnmounted(() => {
 }
 
 .watchlist-toolbar :deep(.list-search) {
-  max-width: 420px;
+  flex: 1 1 auto;
+  max-width: none;
 }
 
 .no-matches {
