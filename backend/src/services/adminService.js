@@ -40,6 +40,7 @@ import { contentPagePath } from '../utils/slug.js'
 import { indexablePaths, indexNowEnabled, queuePaths } from './indexNowService.js'
 import { revokeAllSessions } from './sessionService.js'
 import { GRANTABLE_BADGES } from '../utils/badges.js'
+import { isBotEmail } from '../utils/botAccount.js'
 import { loadManagedLinks } from './adminLinks.js'
 import { describeRow, logAction, quoteValue } from './adminLog.js'
 import { WARNING_LIMIT } from './languageWarningService.js'
@@ -582,6 +583,8 @@ function adminUserView(row, owners) {
     // Signed up but never verified; removed 3 days after sign-up (unverifiedAccountService.js).
     pendingSignup: user.pendingSignup,
     isDemo: Boolean(row.is_demo),
+    /** Lounge Keeper / Lounge Cleaner: no admin role or badges. */
+    isBot: isBotEmail(row.email),
     createdAt: row.created_at,
     lastActiveAt: row.last_active_at,
     mutedUntil: isMuted({ mutedUntil: row.muted_until }) ? row.muted_until : null,
@@ -668,6 +671,9 @@ async function loadTarget(actor, targetId) {
   const target = rows[0]
   if (!target || target.pending_signup) throw new HttpError(404, 'User not found.')
   if (target.role === 'creator') throw new HttpError(403, "The creator's account can't be changed.")
+  if (isBotEmail(target.email)) {
+    throw new HttpError(400, "Bot accounts can't be made admins, muted, or banned.")
+  }
   return target
 }
 
@@ -819,6 +825,7 @@ export async function setCosmeticRoles(actor, targetId, roles) {
   const target = rows[0]
   if (!target || target.pending_signup) throw new HttpError(404, 'User not found.')
   if (target.is_demo) throw new HttpError(400, "The demo account can't have badges.")
+  if (isBotEmail(target.email)) throw new HttpError(400, 'Bot accounts only wear the Bot badge.')
   if (target.banned_at) throw new HttpError(400, 'Unban this account first.')
 
   const next = GRANTABLE_BADGES.filter((role) => roles.includes(role))

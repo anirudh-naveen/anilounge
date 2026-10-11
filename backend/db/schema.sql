@@ -540,6 +540,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_single_creator ON users ((true)) WHERE r
 ALTER TABLE users ADD COLUMN IF NOT EXISTS cosmetic_roles TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_cosmetic_roles_check;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS featured_badge TEXT;
+-- Admin is a role, not a stored badge: drop any Admin badge granted as one
+-- (utils/badges.js). Real admins keep theirs through `role`.
+UPDATE users SET cosmetic_roles = array_remove(cosmetic_roles, 'admin')
+  WHERE 'admin' = ANY(cosmetic_roles);
 
 -- Moderation (services/adminService.js). A muted user can't do anything other people see
 -- until `muted_until` (year 9999 = until unmuted). A banned user can't sign in.

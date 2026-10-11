@@ -3,9 +3,10 @@
  * their definitions (name, bio, picture), plus the checks other services use to treat
  * them specially (never blockable; Lounge Cleaner may message anyone).
  *
- * Layer: service. A new bot gets a random password; Lounge Keeper's email is
- * undeliverable, while Lounge Cleaner's is the support mailbox, so staff can reset its
- * password to sign in.
+ * Layer: service. A new bot gets a random password. Lounge Keeper's email is the notify@
+ * sending address and Lounge Cleaner's the support mailbox; whoever reads a mailbox can
+ * reset that bot's password to sign in. A bot whose email changed (`previousEmails`)
+ * is moved to the new address.
  */
 
 import crypto from 'node:crypto'
@@ -24,10 +25,21 @@ const ids = new Map()
  */
 export async function ensureBot(bot) {
   if (ids.has(bot.key)) return ids.get(bot.key)
-  const existing = await query('SELECT id FROM users WHERE email = $1', [bot.email])
+  const existing = await query('SELECT id, email FROM users WHERE email = ANY($1::text[])', [
+    [bot.email, ...bot.previousEmails],
+  ])
+  const current = existing.rows.find((row) => row.email === bot.email)
+  const legacy = existing.rows.find((row) => row.email !== bot.email)
   let id
-  if (existing.rows[0]) {
-    id = String(existing.rows[0].id)
+  if (legacy && current) {
+    // Another account already has the new email: keep using the bot's old one.
+    console.error(`Bot ${bot.username}: ${bot.email} belongs to another account; not moving.`)
+  } else if (legacy) {
+    await query('UPDATE users SET email = $2 WHERE id = $1', [legacy.id, bot.email])
+  }
+  const found = legacy || current
+  if (found) {
+    id = String(found.id)
     await query(
       `UPDATE users SET username = $2, bio = $3, profile_picture = $4
        WHERE id = $1 AND (username, bio, profile_picture) IS DISTINCT FROM ($2, $3, $4)`,
