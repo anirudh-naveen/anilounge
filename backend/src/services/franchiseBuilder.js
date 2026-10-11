@@ -187,29 +187,42 @@ export function seasonlessName(name) {
 export async function loadFranchisePlan() {
   const [works, relations, sharedUniverse, mainCast, franchises] = await Promise.all([
     query(
+      // Seasons stand for their series: a franchise holds series, not seasons.
       `SELECT w.id::text, w.title AS name, w.kind, w.mal_id, w.tmdb_id,
               COALESCE(w.start_year, extract(year FROM w.release_date)::int) AS year,
               fm.franchise_id::text AS franchise_id
        FROM works w
-       LEFT JOIN franchise_members fm ON fm.member_id = w.id`,
+       LEFT JOIN franchise_members fm ON fm.member_id = w.id
+       WHERE w.kind <> 'season'`,
     ),
     query(
-      `SELECT from_id::text AS from_id, to_id::text AS to_id
-       FROM content_relations WHERE kind <> ALL($1::text[])`,
+      `SELECT DISTINCT COALESCE(sa.series_id, r.from_id)::text AS from_id,
+              COALESCE(sb.series_id, r.to_id)::text AS to_id
+       FROM content_relations r
+       LEFT JOIN seasons sa ON sa.content_id = r.from_id
+       LEFT JOIN seasons sb ON sb.content_id = r.to_id
+       WHERE r.kind <> ALL($1::text[])
+         AND COALESCE(sa.series_id, r.from_id) <> COALESCE(sb.series_id, r.to_id)`,
       [UNLINKED_RELATION_KINDS],
     ),
     query(
-      `SELECT from_id::text AS from_id, to_id::text AS to_id
-       FROM content_relations WHERE kind = 'alternative_setting'`,
+      `SELECT DISTINCT COALESCE(sa.series_id, r.from_id)::text AS from_id,
+              COALESCE(sb.series_id, r.to_id)::text AS to_id
+       FROM content_relations r
+       LEFT JOIN seasons sa ON sa.content_id = r.from_id
+       LEFT JOIN seasons sb ON sb.content_id = r.to_id
+       WHERE r.kind = 'alternative_setting'
+         AND COALESCE(sa.series_id, r.from_id) <> COALESCE(sb.series_id, r.to_id)`,
     ),
     // TMDB credits mark the whole cast 'supporting'; use the top billing there.
     query(
-      `SELECT ranked.work_id::text AS work_id, c.name AS character_name
+      `SELECT DISTINCT ranked.work_id::text AS work_id, c.name AS character_name
        FROM (
-         SELECT a.*,
+         SELECT a.character_id, a.role, COALESCE(sn.series_id, a.work_id) AS work_id,
                 bool_or(a.role = 'main') OVER (PARTITION BY a.work_id) AS has_main,
                 row_number() OVER (PARTITION BY a.work_id ORDER BY a.importance DESC, a.id) AS billing
          FROM appearances a
+         LEFT JOIN seasons sn ON sn.content_id = a.work_id
        ) ranked
        JOIN content c ON c.id = ranked.character_id
        WHERE role = 'main' OR (NOT has_main AND billing <= $1)`,

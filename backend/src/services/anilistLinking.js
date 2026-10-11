@@ -75,6 +75,10 @@ export async function bridgeTmdbTitles({ limit = null, log = () => {} } = {}) {
     `SELECT id::text AS id, kind FROM works
      WHERE mal_id IS NULL AND anilist_id IS NULL AND tmdb_id IS NOT NULL
        AND origin_country = ANY($1::text[])
+       -- A series with seasons is already linked through them (each season is a
+       -- MAL/AniList entry); bridging it would hand it its first season's ids.
+       AND kind <> 'season'
+       AND NOT EXISTS (SELECT 1 FROM seasons sn WHERE sn.series_id = works.id)
      ORDER BY popularity DESC NULLS LAST`,
     [[...ANILIST_ORIGIN_COUNTRIES]],
   )
