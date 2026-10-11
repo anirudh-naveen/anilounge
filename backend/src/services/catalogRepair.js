@@ -11,6 +11,7 @@ import { titleKeySql } from '../db/mongoFilter.js'
 import Content from '../models/Content.js'
 import { foldEntityName, studioNameKey } from '../utils/entities.js'
 import { moveWatchHistory } from './watchEvents.js'
+import { recordMove } from './contentMoves.js'
 
 const WATCHABLE = `('movie', 'series', 'special')`
 
@@ -132,6 +133,7 @@ export async function mergeWorkInto(fromId, toId) {
        AND NOT EXISTS (SELECT 1 FROM franchise_members WHERE member_id = $2)`,
     [fromId, toId],
   )
+  await recordMove(fromId, toId)
   await query('DELETE FROM content WHERE id = $1', [fromId])
 }
 
@@ -277,6 +279,7 @@ export async function mergeStudioInto(fromId, toId) {
       [fromId, toId],
     )
     await query('UPDATE posts SET content_id = $2 WHERE content_id = $1', [fromId, toId])
+    await recordMove(fromId, toId)
     await query(`DELETE FROM content WHERE id = $1 AND kind = 'studio'`, [fromId])
     await carryExternalIds(toId, source[0])
     await query(
@@ -738,6 +741,7 @@ async function mergeVoiceInto(fromId, toId) {
       [toId],
     )
     await query('UPDATE posts SET content_id = $2 WHERE content_id = $1', [fromId, toId])
+    await recordMove(fromId, toId)
     await query(`DELETE FROM content WHERE id = $1 AND kind = 'voice'`, [fromId])
     await carryExternalIds(toId, source[0])
     await query(
@@ -775,8 +779,7 @@ export async function mergeDuplicateVoices() {
   const conflict = (left, right) =>
     ['mal_id', 'tmdb_id', 'anilist_id'].some(
       (column) => left[column] != null && right[column] != null && left[column] !== right[column],
-    ) ||
-    Boolean(native(left) && native(right) && native(left) !== native(right))
+    ) || Boolean(native(left) && native(right) && native(left) !== native(right))
   let merged = 0
   for (const group of groups.values()) {
     if (group.length < 2) continue

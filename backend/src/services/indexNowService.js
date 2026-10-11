@@ -2,8 +2,9 @@
  * IndexNow: tell Bing (and Yandex, Naver, Seznam, Yep, which share submissions) when a
  * page is new, changed, or gone, instead of waiting for them to recrawl.
  *
- * Layer: domain service. New titles (the `title-added` catalog event) and forum posts
- * (created, edited, deleted) are queued and sent once a minute in one request. Only
+ * Layer: domain service. New titles (the `title-added` catalog event), admin edits and
+ * merges of catalog pages, and forum posts (created, edited, deleted) are queued and
+ * sent a few seconds later (Bing prefers a steady stream to large batches). Only
  * pages worth indexing are sent (utils/seoIndexing.js), at their canonical URLs
  * (utils/slug.js). Routine sync updates (scores, airing dates) are not: IndexNow asks
  * for meaningful changes only.
@@ -26,7 +27,7 @@ export const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow'
 export const KEY_PATH = '/indexnow-key.txt'
 /** URLs per request (the protocol's limit). */
 export const BATCH_MAX = 10000
-const FLUSH_DELAY_MS = 60 * 1000
+const FLUSH_DELAY_MS = 10 * 1000
 
 /**
  * The site's IndexNow key: INDEXNOW_KEY when valid, else derived from JWT_SECRET.
@@ -104,7 +105,7 @@ async function flush() {
 }
 
 /**
- * Queue in-site paths for the next submission (about a minute later). No-op unless
+ * Queue in-site paths for the next submission (a few seconds later). No-op unless
  * enabled with a key.
  * @param {string[]} paths
  */
@@ -118,6 +119,25 @@ export function queuePaths(paths) {
 }
 
 /**
+ * Canonical paths of the catalog pages among `ids` that are indexed (thin pages are
+ * left out). Rows must still exist.
+ * @param {string[]} ids
+ * @returns {Promise<string[]>}
+ */
+export async function indexablePaths(ids) {
+  if (!ids.length) return []
+  const indexable = Object.entries(INDEXABLE_SQL)
+    .map(([kind, sql]) => `WHEN '${kind}' THEN ${sql}`)
+    .join(' ')
+  const { rows } = await query(
+    `SELECT c.id, c.kind, c.name FROM content c
+     WHERE c.id = ANY ($1::uuid[]) AND (CASE c.kind ${indexable} ELSE false END)`,
+    [ids],
+  )
+  return rows.map(contentPagePath)
+}
+
+/**
  * Queue catalog pages by id, skipping pages that aren't indexed (thin pages).
  * @param {string[]} ids
  * @returns {Promise<void>} Never rejects.
@@ -125,15 +145,7 @@ export function queuePaths(paths) {
 export async function queueContent(ids) {
   if (!ids.length || !indexNowEnabled()) return
   try {
-    const indexable = Object.entries(INDEXABLE_SQL)
-      .map(([kind, sql]) => `WHEN '${kind}' THEN ${sql}`)
-      .join(' ')
-    const { rows } = await query(
-      `SELECT c.id, c.kind, c.name FROM content c
-       WHERE c.id = ANY ($1::uuid[]) AND (CASE c.kind ${indexable} ELSE false END)`,
-      [ids],
-    )
-    queuePaths(rows.map(contentPagePath))
+    queuePaths(await indexablePaths(ids))
   } catch (error) {
     console.error('IndexNow: could not queue content:', error.message)
   }
@@ -162,6 +174,7 @@ export default {
   indexNowEnabled,
   submitUrls,
   queuePaths,
+  indexablePaths,
   queueContent,
   queuePost,
   startIndexNow,

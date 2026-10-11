@@ -33,6 +33,8 @@ const OWNED = 'data-page-meta'
  * content here (and the title in `data-default`), so they still restore correctly.
  */
 const DEFAULT_CONTENT = 'data-default-content'
+/** Marks the `noindex` tag usePageTitle added (a public page opened next drops it). */
+const TITLE_ONLY = 'data-title-only'
 
 /** index.html's title and description, read before any page changed them. */
 let defaults: { title: string; description: string } | null = null
@@ -123,6 +125,8 @@ export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
     const url = new URL(value.path || window.location.pathname, window.location.origin).href
 
     document.title = title
+    // The middleware's `noindex` for thin pages stays; usePageTitle's goes.
+    document.head.querySelector(`meta[name="robots"][${TITLE_ONLY}]`)?.remove()
     descriptionTag.setAttribute('content', description)
     metaTag('property', 'og:site_name').setAttribute('content', SITE_NAME)
     metaTag('property', 'og:title').setAttribute('content', value.title)
@@ -158,8 +162,8 @@ export function usePageMeta(meta: MaybeRefOrGetter<PageMeta | null>) {
 
 /**
  * Tab title only (`<title> · AniLounge`), for pages kept out of search results
- * (signed-in and account pages). The rest of the head stays at index.html's defaults.
- * `null` (still loading) keeps the default title.
+ * (sign-in, account, and profile pages): they also get `noindex`. The rest of the head
+ * stays at index.html's defaults. `null` (still loading) keeps the default title.
  */
 export function usePageTitle(title: MaybeRefOrGetter<string | null | undefined>) {
   const id = Symbol('page-title')
@@ -170,6 +174,9 @@ export function usePageTitle(title: MaybeRefOrGetter<string | null | undefined>)
     if (owner !== id) restoreDefaults()
     owner = id
     document.title = `${value} · ${SITE_NAME}`
+    const robots = metaTag('name', 'robots')
+    robots.setAttribute('content', 'noindex')
+    robots.setAttribute(TITLE_ONLY, '')
   })
 
   onUnmounted(() => {

@@ -44,5 +44,11 @@ describe('xml', () => {
       sitemapIndexXml('https://x.test', ['pages.xml']),
       /<sitemap><loc>https:\/\/x\.test\/sitemaps\/pages\.xml<\/loc><\/sitemap>/,
     )
+    assert.match(
+      sitemapIndexXml('https://x.test', [
+        { file: 'titles-1.xml', lastModified: '2026-10-01T00:00:00Z' },
+      ]),
+      /<loc>https:\/\/x\.test\/sitemaps\/titles-1\.xml<\/loc><lastmod>2026-10-01T00:00:00\.000Z<\/lastmod>/,
+    )
   })
 })

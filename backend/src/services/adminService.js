@@ -36,6 +36,8 @@ import {
 } from '../utils/adminContent.js'
 import { isMuted, muteEndsAt, MUTE_DURATIONS } from '../utils/accountStatus.js'
 import { HttpError } from '../utils/httpError.js'
+import { contentPagePath } from '../utils/slug.js'
+import { indexablePaths, indexNowEnabled, queuePaths } from './indexNowService.js'
 import { revokeAllSessions } from './sessionService.js'
 import { GRANTABLE_BADGES } from '../utils/badges.js'
 import { loadManagedLinks } from './adminLinks.js'
@@ -317,6 +319,7 @@ export async function updateContent(
   if (!isCatalogId(id)) throw new HttpError(400, 'Invalid content id.')
   const before = await getEditableContent(id)
   let logLine = ''
+  let oldPath = null
 
   await withTransaction(async () => {
     const { rows } = await query(
@@ -326,6 +329,7 @@ export async function updateContent(
     const row = rows[0]
     if (!row || !EDITABLE_KINDS.includes(row.kind)) throw new HttpError(404, 'Content not found.')
     const { kind } = row
+    oldPath = contentPagePath(row)
 
     const { values, errors } = parseContentEdits(changes, kind)
     if (errors.length) throw new HttpError(400, errors.join('. '))
@@ -370,6 +374,12 @@ export async function updateContent(
   })
 
   await logAction('content', actor, logLine)
+  // Tell search engines (IndexNow); a renamed page also moved to a new slug URL, and
+  // the old one now redirects there.
+  if (indexNowEnabled()) {
+    const paths = await indexablePaths([id]).catch(() => [])
+    if (paths.length) queuePaths(paths[0] === oldPath ? paths : [...paths, oldPath])
+  }
   return getEditableContent(id)
 }
 
