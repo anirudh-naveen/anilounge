@@ -1,37 +1,26 @@
 /**
- * Season guide for TV details: TMDB lists a show as one row with numbered
- * seasons, while MAL/AniList list each season as its own title. This maps
- * every TMDB season onto the catalog row for that season (when one exists) so
- * the season picker can show that season's own content.
+ * Season guide for TV details: a series' seasons and their episodes, from the
+ * stored `seasons` / `episodes` tables (services/catalogImport.js fills them). Until
+ * the series migration has run, the guide is built live from TMDB, mapping every
+ * TMDB season onto the catalog row for that season (utils/seasonPlan.js).
  *
  * Domain service used by `contentController.getContentEpisodes`.
  */
 import { query } from '../../config/postgres.js'
 import { escapeLike } from '../db/mongoFilter.js'
-import Content from '../models/Content.js'
+import Content, { loadWorksById } from '../models/Content.js'
+import { tmdbEpisodesForSeason } from './catalogImport.js'
 import unifiedContentService from './unifiedContentService.js'
-import { collectContentTitles, contentSeason, normalizeTitle } from '../utils/titles.js'
+import { collectContentTitles, normalizeTitle } from '../utils/titles.js'
+import {
+  MIN_PREFIX_LENGTH,
+  continuesTitle,
+  isListedAnime,
+  matchSeasonsToWorks,
+  splitCombinedSeasons,
+} from '../utils/seasonPlan.js'
 
-const DAY_MS = 24 * 60 * 60 * 1000
-/** MAL/AniList start dates can be a season (quarter) start, well before the premiere. */
-const START_TOLERANCE_MS = 75 * DAY_MS
-const END_TOLERANCE_MS = 30 * DAY_MS
-/** A pause between episodes this long may be a break between seasons. */
-const MIN_BREAK_MS = 28 * DAY_MS
-/** MAL dates are Japan's; TMDB's can be a day later or earlier. */
-const PREMIERE_SLACK_MS = 3 * DAY_MS
-const MIN_PREFIX_LENGTH = 6
 const MAX_ANCHORS = 3
-
-/**
- * @param {unknown} value
- * @returns {number | null} Epoch ms, or null when missing/invalid.
- */
-function toTime(value) {
-  if (!value) return null
-  const time = new Date(value).getTime()
-  return Number.isFinite(time) ? time : null
-}
 
 /**
  * Lowercased, whitespace-collapsed name used for franchise prefix checks.
@@ -52,264 +41,12 @@ function nameKeySql(column) {
 }
 
 /**
- * Whether `name` is `prefix` or continues it past a word boundary
- * ("attack on titan season 2" continues "attack on titan"; "narutos" does not).
- * @param {string} name
- * @param {string} prefix
- * @returns {boolean}
- */
-export function continuesTitle(name, prefix) {
-  if (prefix.length < MIN_PREFIX_LENGTH || !name.startsWith(prefix)) return false
-  const next = name.charAt(prefix.length)
-  return !next || !/\p{L}/u.test(next) || !/\p{L}/u.test(prefix.charAt(prefix.length - 1))
-}
-
-/**
- * First air date and last aired episode per season number.
- * @param {object[]} seasons - TMDB season summaries
- * @param {object[]} episodes - Episode cards
- * @returns {Map<number, { start: number | null, end: number | null }>}
- */
-function seasonSpans(seasons, episodes) {
-  const spans = new Map(
-    seasons.map((season) => [season.seasonNumber, { start: toTime(season.airDate), end: null }]),
-  )
-  for (const episode of episodes) {
-    const span = spans.get(episode.seasonNumber)
-    const aired = toTime(episode.airDate)
-    if (!span || aired == null) continue
-    if (span.start == null || aired < span.start) span.start = aired
-    if (span.end == null || aired > span.end) span.end = aired
-  }
-  return spans
-}
-
-/**
- * Episode cards grouped by season number.
- * @param {object[]} episodes
- * @returns {Map<number, object[]>}
- */
-function bySeasonNumber(episodes) {
-  const groups = new Map()
-  for (const episode of episodes) {
-    const list = groups.get(episode.seasonNumber)
-    if (list) list.push(episode)
-    else groups.set(episode.seasonNumber, [episode])
-  }
-  return groups
-}
-
-/**
- * Episodes of one season in order, each with the pause since the previous one.
- * @param {object[]} episodes - Episode cards of a single season
- * @returns {{ episode: object, aired: number | null, gap: number | null }[]}
- */
-function airingRun(episodes) {
-  const sorted = [...episodes].sort((left, right) => left.episodeNumber - right.episodeNumber)
-  return sorted.map((episode, index) => {
-    const aired = toTime(episode.airDate)
-    const before = index ? toTime(sorted[index - 1].airDate) : null
-    return { episode, aired, gap: aired != null && before != null ? aired - before : null }
-  })
-}
-
-/**
- * Whether a row is a MyAnimeList/AniList entry. Those sites list each anime
- * season (and often each cour) as its own title, which the guide follows.
- * @param {object} [content]
- * @returns {boolean}
- */
-function isListedAnime(content) {
-  return Boolean(content?.malId || content?.anilistId)
-}
-
-/**
- * Where in a season's episode run an entry premiering at `released` begins:
- * the episode that resumes after the airing break nearest the premiere, else
- * the first episode aired from the premiere on.
- * @param {{ aired: number | null, gap: number | null }[]} run
- * @param {number} released
- * @returns {number | null} Index past the first episode, or null when none fits.
- */
-function entryStart(run, released) {
-  let best = null
-  for (const [index, { aired, gap }] of run.entries()) {
-    if (gap == null || gap < MIN_BREAK_MS) continue
-    if (released < aired - START_TOLERANCE_MS || released > aired + END_TOLERANCE_MS) continue
-    if (best == null || Math.abs(released - aired) < Math.abs(released - run[best].aired)) {
-      best = index
-    }
-  }
-  if (best != null) return best
-  const index = run.findIndex(({ aired }) => aired != null && aired >= released - PREMIERE_SLACK_MS)
-  return index > 0 && run[index].aired <= released + END_TOLERANCE_MS ? index : null
-}
-
-/**
- * An episode's title after it is renumbered. TMDB names episodes it has no title
- * for yet "Episode 27" after their place in its own numbering; those follow the
- * new number, and real titles are kept.
- * @param {string} title
- * @param {number} tmdbNumber - The episode's number on TMDB
- * @param {number} number - The episode's number in the guide
- * @returns {string}
- */
-export function renumberedTitle(title, tmdbNumber, number) {
-  const placeholder = /^episode\s*0*(\d+)$/i.exec(String(title || '').trim())
-  if (!title || (placeholder && Number(placeholder[1]) === tmdbNumber)) return `Episode ${number}`
-  return title
-}
-
-/**
- * For anime, follow MAL/AniList's seasons over TMDB's. TMDB sometimes lists a
- * show as one long season (The Apothecary Diaries: seasons 1–3 as "Season 1",
- * episodes 1–60) while MAL/AniList list "Season 2" and "Season 3" as titles of
- * their own. A TMDB season is cut where another MAL/AniList TV entry of the
- * franchise premiered inside it (`entryStart`). Seasons are then numbered in
- * order and each part's episodes restart at 1, so the guide matches the
- * catalog rows. Non-anime shows keep TMDB's seasons.
- * @param {object[]} seasons - TMDB season summaries
- * @param {object[]} episodes - Episode cards with `seasonNumber` and `airDate`
- * @param {{ _id: unknown, tmdbId?: number, malId?: number, anilistId?: number }} anchor - The TMDB-backed row
- * @param {object[]} candidates - Series rows from the same franchise
- * @returns {{ seasons: object[], episodes: object[] }} Unchanged when nothing splits
- */
-export function splitCombinedSeasons(seasons, episodes, anchor, candidates) {
-  if (!isListedAnime(anchor)) return { seasons, episodes }
-  const ordered = [...seasons].sort((left, right) => left.seasonNumber - right.seasonNumber)
-  const bySeason = bySeasonNumber(episodes)
-  const premieres = candidates
-    .filter(
-      (candidate) =>
-        isListedAnime(candidate) &&
-        String(candidate._id) !== String(anchor._id) &&
-        (candidate.contentType ?? 'tv') === 'tv' &&
-        !(candidate.tmdbId && anchor.tmdbId && Number(candidate.tmdbId) !== Number(anchor.tmdbId)),
-    )
-    .map((candidate) => toTime(candidate.releaseDate))
-    .filter((released) => released != null)
-
-  const plans = ordered.map((season) => {
-    const run = airingRun(bySeason.get(season.seasonNumber) || [])
-    const cuts = new Set()
-    for (const released of premieres) {
-      const start = entryStart(run, released)
-      if (start != null) cuts.add(start)
-    }
-    return { season, run, cuts }
-  })
-  if (plans.every(({ cuts }) => !cuts.size)) return { seasons, episodes }
-
-  const plainName = /^season\s*\d+$/i
-  const splitSeasons = []
-  const splitEpisodes = []
-  let number = 0
-  for (const { season, run, cuts } of plans) {
-    if (!run.length) {
-      number += 1
-      const name = !season.name || plainName.test(season.name) ? `Season ${number}` : season.name
-      splitSeasons.push({ ...season, seasonNumber: number, name })
-      continue
-    }
-    const starts = [0, ...[...cuts].sort((left, right) => left - right)]
-    for (const [part, start] of starts.entries()) {
-      number += 1
-      const slice = run.slice(start, starts[part + 1] ?? run.length)
-      const first = slice[0].episode.episodeNumber
-      for (const { episode } of slice) {
-        const episodeNumber = episode.episodeNumber - first + 1
-        splitEpisodes.push({
-          ...episode,
-          title: renumberedTitle(episode.title, episode.episodeNumber, episodeNumber),
-          seasonNumber: number,
-          episodeNumber,
-          tmdbSeasonNumber: episode.seasonNumber,
-          tmdbEpisodeNumber: episode.episodeNumber,
-        })
-      }
-      const own = part === 0 ? season : { overview: '', posterPath: '', voteAverage: null }
-      const name =
-        part === 0 && season.name && !plainName.test(season.name) ? season.name : `Season ${number}`
-      splitSeasons.push({
-        ...own,
-        seasonNumber: number,
-        name,
-        airDate: part === 0 ? season.airDate : slice[0].episode.airDate,
-        episodeCount: starts.length > 1 ? slice.length : season.episodeCount,
-      })
-    }
-  }
-  return { seasons: splitSeasons, episodes: splitEpisodes }
-}
-
-/**
- * Assign catalog rows to TMDB seasons. The first season is the TMDB row
- * itself. Each other row goes to the latest season that started (with
- * tolerance) by its release date and had not ended; per season the row whose
- * title names that season (first part before later parts) wins, then the one
- * released closest to the premiere.
- * @param {object[]} seasons - TMDB season summaries, any order
- * @param {object[]} episodes - Episode cards with `seasonNumber` and `airDate`
- * @param {{ _id: unknown, tmdbId?: number }} anchor - The TMDB-backed row
- * @param {object[]} candidates - Series rows from the same franchise
- * @returns {Map<number, string>} Season number → content id
- */
-export function matchSeasonsToWorks(seasons, episodes, anchor, candidates) {
-  const ordered = [...seasons].sort((left, right) => left.seasonNumber - right.seasonNumber)
-  const matches = new Map()
-  if (!ordered.length) return matches
-  const anchorId = String(anchor._id)
-  matches.set(ordered[0].seasonNumber, anchorId)
-
-  const spans = seasonSpans(ordered, episodes)
-  const later = ordered.slice(1).filter((season) => spans.get(season.seasonNumber)?.start != null)
-  const best = new Map()
-
-  for (const candidate of candidates) {
-    const id = String(candidate._id)
-    const released = toTime(candidate.releaseDate)
-    if (id === anchorId || released == null) continue
-    if (candidate.tmdbId && anchor.tmdbId && Number(candidate.tmdbId) !== Number(anchor.tmdbId)) {
-      continue
-    }
-
-    let season = null
-    for (const option of later) {
-      if (spans.get(option.seasonNumber).start - START_TOLERANCE_MS <= released) season = option
-    }
-    if (!season) continue
-    const index = ordered.indexOf(season)
-    const span = spans.get(season.seasonNumber)
-    const nextStart = spans.get(ordered[index + 1]?.seasonNumber)?.start ?? null
-    const end = span.end ?? nextStart
-    if (end != null && released > end + END_TOLERANCE_MS) continue
-
-    const named = contentSeason(candidate)
-    const score = [
-      named.season !== season.seasonNumber ? 2 : named.part === 1 ? 0 : 1,
-      Math.abs(released - span.start),
-    ]
-    const current = best.get(season.seasonNumber)
-    if (
-      !current ||
-      score[0] < current.score[0] ||
-      (score[0] === current.score[0] && score[1] < current.score[1])
-    ) {
-      best.set(season.seasonNumber, { id, score })
-    }
-  }
-
-  for (const [seasonNumber, { id }] of best) matches.set(seasonNumber, id)
-  return matches
-}
-
-/**
  * Series rows that may be later seasons of `anchor`: its sequel/prequel chain
  * plus series whose name continues one of the anchor's names.
  * @param {object} anchor
  * @returns {Promise<object[]>}
  */
-async function seasonCandidates(anchor) {
+export async function seasonCandidates(anchor) {
   const prefixes = [...new Set(collectContentTitles(anchor).map(prefixKey))].filter(
     (prefix) => prefix.length >= MIN_PREFIX_LENGTH,
   )
@@ -413,20 +150,179 @@ async function buildGuide(anchor) {
   }
 }
 
+/** Cast shown on each episode card: a season's leads first. */
+const EPISODE_CAST_LIMIT = 8
+
 /**
- * Episodes, seasons, and which season `content` is. A row that is one season
- * of a TMDB show (e.g. MAL's "Season 2") gets that show's full season list
- * with its own season selected; otherwise the row's own episodes.
+ * Each season's lead characters with their (Japanese, else any) voice actor, for the
+ * episode cards.
+ * @param {string[]} seasonIds
+ * @returns {Promise<Map<string, { name: string, character: string, profilePath: string }[]>>}
+ */
+async function seasonCast(seasonIds) {
+  const { rows } = await query(
+    `SELECT work_id, name, character, profile_path FROM (
+       SELECT a.work_id::text AS work_id, ch.name AS character,
+              COALESCE(v.name, ch.name) AS name,
+              COALESCE(v.image_path, ch.image_path, '') AS profile_path,
+              row_number() OVER (
+                PARTITION BY a.work_id
+                ORDER BY a.position NULLS LAST, (a.role = 'main') DESC, a.importance DESC, ch.name
+              ) AS rank
+       FROM appearances a
+       JOIN content ch ON ch.id = a.character_id
+       LEFT JOIN LATERAL (
+         SELECT vc.voice_id FROM voice_credits vc WHERE vc.appearance_id = a.id
+         ORDER BY (vc.language = 'Japanese') DESC LIMIT 1
+       ) pick ON true
+       LEFT JOIN content v ON v.id = pick.voice_id
+       WHERE a.work_id = ANY($1::uuid[])
+     ) ranked WHERE rank <= ${EPISODE_CAST_LIMIT}`,
+    [seasonIds],
+  )
+  const cast = new Map()
+  for (const row of rows) {
+    if (!cast.has(row.work_id)) cast.set(row.work_id, [])
+    cast.get(row.work_id).push({
+      name: row.name,
+      character: row.character,
+      profilePath: row.profile_path,
+    })
+  }
+  return cast
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string | null} ISO date (YYYY-MM-DD) or timestamp
+ */
+function isoDate(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+/**
+ * A series' stored seasons and episodes (`seasons`, `episodes` tables), or null when
+ * it has none yet (before `npm run db:restructure-series`). Guide season numbers run
+ * 1, 2, 3 in airing order, one per season row (a "Part 2" is its own entry), and each
+ * row's episodes start at 1, the numbering forum episode tags use.
+ * @param {string} seriesId
+ * @returns {Promise<{ seriesId: string, episodes: object[], seasons: object[] } | null>}
+ */
+export async function storedGuide(seriesId) {
+  const { rows: seasonRows } = await query(
+    `SELECT id::text AS id, season_number, part_number, season_label, overview, poster_path,
+            release_date, episode_count, vote_average, tmdb_season_number, tmdb_episode_offset
+     FROM works WHERE series_id = $1 ORDER BY season_number, part_number`,
+    [seriesId],
+  )
+  if (!seasonRows.length) return null
+  const ids = seasonRows.map((row) => row.id)
+  const guideNumber = new Map(ids.map((id, index) => [id, index + 1]))
+  const byId = new Map(seasonRows.map((row) => [row.id, row]))
+  const [{ rows: episodeRows }, cast] = await Promise.all([
+    query(
+      `SELECT season_id::text AS season_id, number, title, title_romaji, title_native, overview,
+              still_path, air_at, runtime, is_filler, is_recap
+       FROM episodes WHERE season_id = ANY($1::uuid[]) ORDER BY number`,
+      [ids],
+    ),
+    seasonCast(ids),
+  ])
+
+  return {
+    seriesId: String(seriesId),
+    seasons: seasonRows.map((row) => ({
+      seasonNumber: guideNumber.get(row.id),
+      name: row.season_label || `Season ${row.season_number}`,
+      overview: row.overview || '',
+      posterPath: row.poster_path || '',
+      airDate: isoDate(row.release_date),
+      episodeCount: row.episode_count != null ? Number(row.episode_count) : 0,
+      voteAverage: row.vote_average != null ? Number(row.vote_average) : null,
+      contentId: row.id,
+    })),
+    episodes: episodeRows.map((row) => {
+      const season = byId.get(row.season_id)
+      return {
+        seasonNumber: guideNumber.get(row.season_id),
+        episodeNumber: Number(row.number),
+        title: row.title || `Episode ${row.number}`,
+        titleRomaji: row.title_romaji || '',
+        titleNative: row.title_native || '',
+        overview: row.overview || '',
+        stillPath: row.still_path || '',
+        airDate: isoDate(row.air_at),
+        runtime: row.runtime != null ? Number(row.runtime) : null,
+        isFiller: Boolean(row.is_filler),
+        isRecap: Boolean(row.is_recap),
+        cast: cast.get(row.season_id) || [],
+        contentId: row.season_id,
+        tmdbSeasonNumber:
+          season.tmdb_season_number != null ? Number(season.tmdb_season_number) : null,
+        tmdbEpisodeNumber:
+          season.tmdb_season_number != null
+            ? Number(row.number) + Number(season.tmdb_episode_offset || 0)
+            : null,
+      }
+    }),
+  }
+}
+
+/**
+ * Seasons with no stored episodes yet (the import hasn't run since the migration)
+ * show TMDB's live episodes for their place on TMDB.
+ * @param {{ seriesId: string, seasons: object[], episodes: object[] }} guide - Mutated
+ * @param {object | null} series - The series document, when already loaded
+ * @returns {Promise<void>}
+ */
+async function fillFromTmdb(guide, series) {
+  const stocked = new Set(guide.episodes.map((episode) => episode.contentId))
+  const missing = guide.seasons.filter((season) => !stocked.has(season.contentId))
+  if (!missing.length) return
+  const show = series || (await Content.findById(guide.seriesId))
+  if (!show?.tmdbId) return
+  const { episodes } = await unifiedContentService.getTvShowSeasonData(show)
+  const placed = await loadWorksById(guide.seasons.map((season) => season.contentId))
+  const siblings = [...placed.values()]
+  for (const season of missing) {
+    const row = placed.get(season.contentId)
+    if (!row) continue
+    for (const episode of tmdbEpisodesForSeason(row, siblings, episodes)) {
+      guide.episodes.push({
+        ...episode,
+        seasonNumber: season.seasonNumber,
+        episodeNumber: episode.number,
+        contentId: season.contentId,
+      })
+    }
+  }
+}
+
+/**
+ * Episodes, seasons, and which season `content` is. A season row or a series gets its
+ * show's stored guide with its own season selected. Before the series migration a
+ * row that is one season of a TMDB show (e.g. MAL's "Season 2") gets that show's
+ * guide built live from TMDB; otherwise the row's own episodes.
  * @param {object} content
  * @returns {Promise<{ seriesId: string, currentSeason: number | null, episodes: object[], seasons: object[] }>}
  */
 export async function getSeasonGuide(content) {
   const id = String(content._id)
   const empty = { seriesId: id, currentSeason: null, episodes: [], seasons: [] }
-  if (content.contentType !== 'tv') return empty
+  if (content.contentType !== 'tv' && content.contentType !== 'season') return empty
 
   const currentIn = (guide) =>
     guide.seasons.find((season) => season.contentId === id)?.seasonNumber ?? null
+
+  const seriesId = content.contentType === 'season' ? content.seriesId : id
+  const stored = await storedGuide(seriesId)
+  if (stored) {
+    await fillFromTmdb(stored, content.contentType === 'season' ? null : content)
+    return { ...stored, currentSeason: currentIn(stored) }
+  }
+  if (content.contentType === 'season') return empty
 
   if (content.tmdbId) {
     const guide = await buildGuide(content)

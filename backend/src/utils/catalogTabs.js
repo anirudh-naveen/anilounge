@@ -31,6 +31,13 @@ export function normalizeMovieCatalogTab(value) {
 const ANIME_SEASONS = ['winter', 'spring', 'summer', 'fall']
 
 /**
+ * TV in schedule tabs: seasons that keep their own airing state (anime, where Blue Box
+ * Season 2 airs in Fall 2026 though the show began in 2024), and series without such
+ * seasons (shows TMDB tracks as a whole), so no show is listed twice.
+ */
+export const SCHEDULED_TV = { contentType: { $in: ['tv', 'season'] }, seasonsScheduled: false }
+
+/**
  * Anime broadcast season (MAL/AniList quarters) containing a date, in UTC.
  * @param {Date} [from=new Date()]
  * @returns {{ season: 'winter'|'spring'|'summer'|'fall', year: number }}
@@ -95,7 +102,7 @@ function matchUpcoming(from) {
  * Upcoming is MAL `not_yet_aired`, with a future release-date fallback.
  * @param {unknown} tab - Raw tab query value.
  * @param {Date} [from=new Date()] - Clock used for "future" date comparisons.
- * @returns {object} Empty object for popular; otherwise a TV-only match.
+ * @returns {object} Empty object for popular; otherwise a match over `SCHEDULED_TV`.
  */
 export function matchTvCatalogTab(tab, from = new Date()) {
   const normalized = normalizeTvCatalogTab(tab)
@@ -103,12 +110,12 @@ export function matchTvCatalogTab(tab, from = new Date()) {
 
   if (normalized === 'season') {
     const { season, year } = currentAnimeSeason(from)
-    return { contentType: 'tv', startSeason: season, startSeasonYear: year }
+    return { ...SCHEDULED_TV, startSeason: season, startSeasonYear: year }
   }
 
   if (normalized === 'airing') {
     return {
-      contentType: 'tv',
+      ...SCHEDULED_TV,
       $or: [
         { malStatus: 'currently_airing' },
         {
@@ -120,7 +127,7 @@ export function matchTvCatalogTab(tab, from = new Date()) {
   }
 
   return {
-    contentType: 'tv',
+    ...SCHEDULED_TV,
     ...matchUpcoming(from),
   }
 }

@@ -24,6 +24,7 @@ import DatabasePopulator from './contentSyncService.js'
 import { anilistRequest, fetchAnilistMediaBatch } from './anilistService.js'
 import { addAnilistTitle } from './anilistImport.js'
 import { writeImportedHistory } from './watchEvents.js'
+import { rollUpSeriesOf } from './seriesStructure.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 import { HttpError } from '../utils/httpError.js'
 import {
@@ -1081,6 +1082,8 @@ async function refreshScores(contentIds) {
       ),
     })),
   )
+  // Seasons' new scores move their series' averages.
+  for (const row of rows.filter((item) => item.kind === 'season')) await rollUpSeriesOf(row.id)
 }
 
 /**

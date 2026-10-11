@@ -42,6 +42,7 @@ const DETAIL_ROUTES: Array<[string, string]> = [
   ['/tv-show', 'TVShowDetails'],
   ['/character', 'CharacterDetails'],
   ['/voice-actor', 'VoiceActorDetails'],
+  ['/staff', 'StaffDetails'],
   ['/franchise', 'FranchiseDetails'],
   ['/studio', 'StudioDetails'],
 ]
@@ -201,6 +202,12 @@ const router = createRouter({
     {
       path: `/voice-actor/:slug?/:id(${CATALOG_ID})`,
       name: 'VoiceActorDetails',
+      component: () => import('@/views/VoiceActorDetails.vue'),
+    },
+    // Directors, writers, and composers: the same person page, led by their staff work.
+    {
+      path: `/staff/:slug?/:id(${CATALOG_ID})`,
+      name: 'StaffDetails',
       component: () => import('@/views/VoiceActorDetails.vue'),
     },
     {

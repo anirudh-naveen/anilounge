@@ -3,6 +3,7 @@
  * episode moves, list dates, and keeping ratings and title aggregates in step.
  */
 import { kindFromContentType } from '../db/kinds.js'
+import { rollUpSeriesOf } from './seriesStructure.js'
 import { saveUnifiedScores } from '../models/Content.js'
 import { applyUserRatingDelta, isValidUserRating } from '../utils/ratings.js'
 
@@ -155,11 +156,7 @@ export function syncLegacyUserRating(user, contentId, rating) {
 export async function applyContentRatingChange(content, oldRating, newRating) {
   if (oldRating === newRating) return
   applyUserRatingDelta(content, oldRating, newRating)
-  await saveUnifiedScores([
-    {
-      id: String(content._id),
-      kind: kindFromContentType(content.contentType),
-      score: content.unifiedScore ?? null,
-    },
-  ])
+  const kind = kindFromContentType(content.contentType)
+  await saveUnifiedScores([{ id: String(content._id), kind, score: content.unifiedScore ?? null }])
+  if (kind === 'season') await rollUpSeriesOf(String(content._id))
 }

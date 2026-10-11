@@ -48,7 +48,7 @@ describe('buildCatalogChatQuery', () => {
 
   it('filters currently airing TV the same way as the TV catalog tab', () => {
     const query = buildCatalogChatQuery({ status: 'airing' }, from)
-    assert.equal(query.contentType, 'tv')
+    assert.deepEqual(query.contentType, { $in: ['tv', 'season'] })
     assert.deepEqual(query.$or[0], { malStatus: 'currently_airing' })
   })
 

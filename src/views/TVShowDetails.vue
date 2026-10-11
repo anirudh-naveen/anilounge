@@ -49,7 +49,16 @@
         <div class="show-info">
           <!-- Title: Titles -->
           <h1 class="show-title">{{ getDisplayTitle(show) }}</h1>
-          <p v-if="seasonLabel" class="season-label" data-testid="season-label">
+          <p v-if="show.series" class="season-label" data-testid="season-label">
+            <router-link
+              :to="detailPath('/tv-show', show.series._id, show.series.title)"
+              class="series-link"
+              data-testid="series-link"
+              >{{ show.series.title }}</router-link
+            >
+            · {{ show.seasonLabel || seasonLabel }}
+          </p>
+          <p v-else-if="seasonLabel" class="season-label" data-testid="season-label">
             {{ seasonLabel }}
           </p>
           <p v-if="getNativeTitle(show)" class="original-title">
@@ -71,7 +80,7 @@
               <span>{{ show.releaseDate ? formatDate(show.releaseDate) : 'N/A' }}</span>
             </div>
 
-            <div v-if="show.seasonCount" class="seasons">
+            <div v-if="show.seasonCount && show.contentType !== 'season'" class="seasons">
               <i class="fas fa-layer-group"></i>
               <span>{{ show.seasonCount }} season{{ show.seasonCount > 1 ? 's' : '' }}</span>
             </div>
@@ -121,12 +130,62 @@
       </div>
 
       <!-- Title: Watchlist -->
+      <!-- A series with seasons is tracked season by season, unless it is tracked already. -->
       <WatchlistPanel
+        v-if="!seriesSeasons.length || contentStore.isInWatchlist(show._id)"
         :content-id="show._id"
         content-type="tv"
         :total-episodes="show.episodeCount || show.malEpisodes || 0"
-        :total-seasons="show.seasonCount || 1"
+        :total-seasons="show.contentType === 'season' ? 1 : show.seasonCount || 1"
       />
+
+      <!-- Title: Seasons -->
+      <section v-if="seriesSeasons.length" class="series-seasons" data-testid="series-seasons">
+        <h2>Seasons</h2>
+        <p class="seasons-hint">Track and rate each season on its own page.</p>
+        <div class="season-cards">
+          <router-link
+            v-for="season in seriesSeasons"
+            :key="season._id"
+            :to="detailPath('/tv-show', season._id, season.title)"
+            class="season-card"
+            :data-testid="`season-card-${season._id}`"
+          >
+            <img
+              v-if="season.posterPath"
+              :src="getPosterUrl(season.posterPath)"
+              :alt="season.label"
+              @error="hideBrokenImage"
+            />
+            <div v-else class="no-poster"><i class="fas fa-tv"></i></div>
+            <div class="season-card-info">
+              <p class="season-card-label">{{ season.label }}</p>
+              <p class="season-card-meta">
+                {{
+                  [
+                    season.releaseDate ? new Date(season.releaseDate).getFullYear() : '',
+                    season.episodeCount ? `${season.episodeCount} episodes` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                }}
+              </p>
+              <p class="season-card-meta">
+                <span v-if="season.unifiedScore"
+                  ><i class="fas fa-star"></i> {{ season.unifiedScore.toFixed(1) }}</span
+                >
+                <span v-if="season.airingStatus === 'airing'" class="season-airing">Airing</span>
+                <span v-else-if="season.airingStatus === 'upcoming'" class="season-airing"
+                  >Upcoming</span
+                >
+                <span v-if="contentStore.isInWatchlist(season._id)" class="season-tracked">
+                  {{ watchlistStatusLabel(season._id) }}
+                </span>
+              </p>
+            </div>
+          </router-link>
+        </div>
+      </section>
 
       <!-- Body -->
       <!-- Title: Overview -->
@@ -134,6 +193,8 @@
         <h2>Overview</h2>
         <p>{{ show.overview || 'No overview available.' }}</p>
       </div>
+
+      <TitleExtras :content="show" />
 
       <!-- Title: Where to Watch -->
       <WhereToWatch :content-id="show._id" />
@@ -149,6 +210,7 @@
         :content-id="show._id"
         :show="show"
         :selected-season="selectedSeason"
+        :season-names="seasonNames"
         @select-season="selectSeason"
       />
 
@@ -334,6 +396,7 @@ import EpisodeRow from '@/components/EpisodeRow.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
 import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
+import TitleExtras from '@/components/TitleExtras.vue'
 import type {
   CatalogEntity,
   Episode,
@@ -403,6 +466,28 @@ const seasonLabel = computed(() =>
     ? formatSeasonLabel(selectedSeasonInfo.value)
     : '',
 )
+
+/** A series' seasons (series pages only). */
+const seriesSeasons = computed(() =>
+  show.value?.contentType === 'tv' ? show.value.seasons || [] : [],
+)
+/** Season pill names by guide number, for shows stored season by season. */
+const seasonNames = computed(() =>
+  seasons.value.some((season) => season.contentId)
+    ? Object.fromEntries(seasons.value.map((season) => [season.seasonNumber, season.name]))
+    : null,
+)
+const WATCHLIST_STATUS_LABELS: Record<string, string> = {
+  plan_to_watch: 'Planned',
+  watching: 'Watching',
+  completed: 'Completed',
+  on_hold: 'On hold',
+  dropped: 'Dropped',
+}
+const watchlistStatusLabel = (contentId: string) => {
+  const item = contentStore.getWatchlistItem(contentId) as { status?: string } | undefined
+  return WATCHLIST_STATUS_LABELS[item?.status || ''] || 'On your list'
+}
 
 const getDisplayScore = (content: UnifiedContent) => {
   const average = getWeightedAverage(content)
@@ -704,6 +789,87 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   background: var(--bg-primary);
   color: var(--text-primary);
   padding: 2rem;
+}
+
+.series-link {
+  color: var(--coral-primary);
+  text-decoration: none;
+}
+
+.series-link:hover {
+  text-decoration: underline;
+}
+
+.series-seasons {
+  margin-bottom: 2rem;
+}
+
+.series-seasons h2 {
+  margin-bottom: 0.25rem;
+}
+
+.seasons-hint {
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.season-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.season-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color 0.2s ease;
+}
+
+.season-card:hover {
+  border-color: var(--coral-primary);
+}
+
+.season-card img,
+.season-card .no-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+}
+
+.season-card-info {
+  padding: 0.6rem 0.7rem 0.75rem;
+}
+
+.season-card-label {
+  font-weight: 600;
+}
+
+.season-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+
+.season-airing,
+.season-tracked {
+  padding: 0 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  font-size: 0.75rem;
+}
+
+.season-airing {
+  color: var(--coral-primary);
+  border-color: var(--coral-primary);
 }
 
 .back-button {

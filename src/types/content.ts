@@ -14,7 +14,8 @@ export interface UnifiedContent {
   nativeTitle?: string
   originalTitle?: string
   overview: string
-  contentType: 'movie' | 'tv' | 'special' | 'character' | 'voice_actor' | 'studio'
+  /** `tv` is a whole series; `season` one season of it (its own page and watchlist entry). */
+  contentType: 'movie' | 'tv' | 'season' | 'special' | 'character' | 'voice_actor' | 'studio'
   posterPath?: string
   backdropPath?: string
   releaseDate?: string | Date
@@ -52,6 +53,22 @@ export interface UnifiedContent {
   lastAirDate?: string | Date
   /** Chat recommendation reason grounded in catalog fields. */
   why?: string
+  /** Season rows: the series, season number, and label ("Season 2", "Stone Wars"). */
+  seriesId?: string | null
+  seasonNumber?: number | null
+  partNumber?: number | null
+  seasonLabel?: string | null
+  /** Detail pages: the season's series, or the series' seasons. */
+  series?: { _id: string; title: string; posterPath?: string }
+  seasons?: SeriesSeason[]
+  trailer?: { site: string; key: string } | null
+  bannerPath?: string | null
+  coverColor?: string | null
+  ageRating?: string | null
+  sourceMaterial?: string | null
+  tags?: TitleTag[]
+  staff?: StaffCredit[]
+  externalLinks?: ExternalLink[]
   alternativeTitles?: string[]
   tmdbId?: number
   malId?: number
@@ -116,6 +133,11 @@ export interface Episode {
   airDate?: string | null
   runtime?: number | null
   cast: EpisodeCastMember[]
+  /** Romaji and Japanese titles (from MyAnimeList via Jikan), when known. */
+  titleRomaji?: string
+  titleNative?: string
+  isFiller?: boolean
+  isRecap?: boolean
 }
 
 /** One TMDB season of a show, linked to the catalog title for that season when stored. */
@@ -159,7 +181,7 @@ export interface EntityAppearance {
         englishTitle?: string
         nativeTitle?: string
         posterPath?: string
-        contentType?: 'movie' | 'tv' | 'special'
+        contentType?: 'movie' | 'tv' | 'season' | 'special'
         releaseDate?: string | Date
         startSeasonYear?: number
         unifiedScore?: number
@@ -197,4 +219,54 @@ export interface CatalogEntity {
   favoritesCount?: number
   isFavorited?: boolean
   appearances?: EntityAppearance[]
+  /** People: titles they worked on as staff, with their roles, newest first. */
+  staffCredits?: Array<{
+    content: {
+      _id: string
+      title: string
+      contentType: UnifiedContent['contentType']
+      posterPath?: string
+      releaseDate?: string | null
+      seasonLabel?: string | null
+      seriesTitle?: string | null
+    }
+    roles: string[]
+  }>
+}
+
+/** One season on a series page. */
+export interface SeriesSeason {
+  _id: string
+  title: string
+  label: string
+  seasonNumber: number
+  partNumber: number
+  posterPath?: string
+  releaseDate?: string | null
+  episodeCount?: number | null
+  airingStatus?: 'upcoming' | 'airing' | 'finished' | null
+  unifiedScore?: number | null
+}
+
+/** An AniList tag on a title, ranked 0-100; spoiler tags are hidden until asked. */
+export interface TitleTag {
+  name: string
+  category: string
+  rank: number
+  isSpoiler: boolean
+}
+
+/** A key staff member on a title (director, series composition, music, ...). */
+export interface StaffCredit {
+  _id: string
+  name: string
+  imagePath?: string
+  role: string
+}
+
+/** A title's page on another site. */
+export interface ExternalLink {
+  source: string
+  id: string
+  url: string
 }

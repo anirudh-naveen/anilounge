@@ -431,8 +431,13 @@ export async function pushNewReleases() {
   if (!releases.length) return { releases: 0, users: 0 }
 
   const { rows: followers } = await query(
-    `SELECT wl.user_id, wl.content_id FROM watchlist wl JOIN users u ON u.id = wl.user_id
-     WHERE wl.content_id = ANY($1::uuid[]) AND wl.status <> 'dropped'
+    // Following a series counts for its seasons' releases.
+    `SELECT DISTINCT wl.user_id, r.id AS content_id
+     FROM unnest($1::uuid[]) AS r(id)
+     LEFT JOIN seasons sn ON sn.content_id = r.id
+     JOIN watchlist wl ON wl.content_id IN (r.id, sn.series_id)
+     JOIN users u ON u.id = wl.user_id
+     WHERE wl.status <> 'dropped'
        AND NOT u.is_demo AND u.banned_at IS NULL
        AND EXISTS (SELECT 1 FROM push_devices d WHERE d.user_id = wl.user_id)`,
     [releases.map((release) => release.content_id)],

@@ -14,7 +14,7 @@
 
 import { airingFromMalStatus, malStatusFromAiring } from '../db/kinds.js'
 
-export const WATCHABLE_KINDS = ['movie', 'series', 'special']
+export const WATCHABLE_KINDS = ['movie', 'series', 'season', 'special']
 export const ENTITY_KINDS = ['character', 'voice', 'studio']
 /** Franchises are only named and nicknamed by hand; the sync never edits them. */
 export const EDITABLE_KINDS = [...WATCHABLE_KINDS, ...ENTITY_KINDS, 'franchise']
@@ -37,7 +37,7 @@ export const CONTENT_FIELDS = {
   releaseDate: { type: 'date', kinds: WATCHABLE_KINDS },
   airingStatus: { type: 'enum', values: ['upcoming', 'airing', 'finished'], kinds: WATCHABLE_KINDS },
   runtime: { type: 'int', max: 10000, kinds: ['movie', 'special'] },
-  episodeCount: { type: 'int', max: 100000, kinds: ['series'] },
+  episodeCount: { type: 'int', max: 100000, kinds: ['series', 'season'] },
   seasonCount: { type: 'int', max: 1000, kinds: ['series'] },
   name: { type: 'text', max: 300, required: true, kinds: [...ENTITY_KINDS, 'franchise'] },
   englishName: { type: 'text', max: 300, kinds: ['character', 'voice'] },

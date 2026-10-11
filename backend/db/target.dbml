@@ -1,10 +1,12 @@
 // AniLounge target schema (dbdiagram.io)
 // `content` is the shared id. Subtype tables are disjoint: a row is exactly
-// one of movie / series / special / franchise / character / voice / studio.
+// one of movie / series / season / special / franchise / character / voice / studio.
+// franchise → movies / series / specials; series → seasons → episodes.
 
 Enum title_kind {
   movie
   series
+  season
   special
   franchise
   character
@@ -115,6 +117,97 @@ Table series {
   popularity decimal
 }
 
+Table seasons {
+  content_id uuid [pk, ref: - content.id]
+  series_id uuid [not null, ref: > series.content_id]
+  season_number int [not null]
+  part_number int [not null, default: 1]
+  label varchar
+  format varchar
+  tmdb_season_number int
+  tmdb_episode_offset int [default: 0]
+  release_date date
+  end_date date
+  episode_count int
+  episode_runtime int
+  airing_status airing_status
+  start_season varchar
+  start_year int
+  broadcast_day varchar
+  broadcast_time varchar
+  next_episode_at timestamptz
+  next_episode_number int
+  mal_score decimal
+  mal_votes int
+  mal_rank int
+  anilist_score decimal
+  unified_score decimal
+
+  indexes {
+    (series_id, season_number, part_number) [unique]
+  }
+
+  Note: 'An anime season row carries its MAL/AniList ids; it reaches TMDB through its series.'
+}
+
+Table episodes {
+  id uuid [pk]
+  season_id uuid [not null, ref: > seasons.content_id]
+  number int [not null]
+  title varchar
+  title_romaji varchar
+  title_native varchar
+  overview text
+  still_path varchar
+  air_at timestamptz
+  runtime int
+  is_filler boolean [default: false]
+  is_recap boolean [default: false]
+  tmdb_episode_id int
+
+  indexes {
+    (season_id, number) [unique]
+  }
+}
+
+Table content_external_ids {
+  content_id uuid [not null, ref: > content.id]
+  source varchar [not null, note: 'imdb, tvdb, wikidata, kitsu, anidb, livechart, anime_planet']
+  external_id varchar [not null]
+
+  indexes {
+    (content_id, source) [pk]
+  }
+}
+
+Table content_source_data {
+  content_id uuid [not null, ref: > content.id]
+  source varchar [not null, note: 'anilist, mal, tmdb']
+  data jsonb [not null]
+  fetched_at timestamptz
+
+  indexes {
+    (content_id, source) [pk]
+  }
+}
+
+Table tags {
+  id uuid [pk]
+  name varchar [unique, not null]
+  category varchar
+}
+
+Table content_tags {
+  content_id uuid [not null, ref: > content.id]
+  tag_id uuid [not null, ref: > tags.id]
+  rank int
+  is_spoiler boolean
+
+  indexes {
+    (content_id, tag_id) [pk]
+  }
+}
+
 Table specials {
   content_id uuid [pk, ref: - content.id]
   original_title varchar
@@ -214,7 +307,7 @@ Table appearances {
     (work_id, character_id) [unique]
   }
 
-  Note: 'work_id is a movie, series, or special.'
+  Note: 'work_id is a movie, season, or special.'
 }
 
 Table voice_credits {
@@ -225,6 +318,16 @@ Table voice_credits {
 
   indexes {
     (appearance_id, voice_id, language) [unique]
+  }
+}
+
+Table staff_credits {
+  work_id uuid [not null, ref: > content.id]
+  person_id uuid [not null, ref: > voices.content_id]
+  role varchar [not null]
+
+  indexes {
+    (work_id, person_id, role) [pk]
   }
 }
 

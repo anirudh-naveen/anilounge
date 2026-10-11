@@ -23,7 +23,7 @@ export const SITEMAP_PAGES = ['/', '/forum', '/movies', '/tv', '/search', '/priv
  * listed (utils/seoIndexing.js); paths carry the readable slug (utils/slug.js).
  */
 export const SITEMAP_SECTIONS = {
-  titles: { kinds: ['movie', 'series', 'special'] },
+  titles: { kinds: ['movie', 'series', 'season', 'special'] },
   franchises: { kinds: ['franchise'] },
   characters: { kinds: ['character'] },
   'voice-actors': { kinds: ['voice'] },

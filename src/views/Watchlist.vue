@@ -412,6 +412,7 @@
 </template>
 
 <script setup lang="ts">
+import { isEpisodic } from '@/utils/contentKinds'
 import { showPosterPlaceholder } from '@/utils/posters'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -535,7 +536,7 @@ const tracksItemEpisodes = (item: WatchlistItem) => {
 
 const isTvContent = (item: WatchlistItem) => {
   if (typeof item === 'string' || typeof item.content === 'string') return false
-  return item.content?.contentType === 'tv'
+  return isEpisodic(item.content?.contentType)
 }
 
 const getContentYear = (item: WatchlistItem) => {
@@ -567,7 +568,7 @@ const getContentSeasons = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 'Unknown'
   const content = item.content
   if (!content) return 'Unknown'
-  return content.contentType === 'tv' ? content.seasonCount || 'Unknown' : 'N/A'
+  return isEpisodic(content.contentType) ? content.seasonCount || 'Unknown' : 'N/A'
 }
 
 const getContentRating = (item: WatchlistItem) => {
@@ -597,7 +598,7 @@ const getTotalSeasons = (item: WatchlistItem) => {
   if (typeof item.content === 'string') return 1
   const content = item.content
   if (!content) return 1
-  return content.contentType === 'tv' ? content.seasonCount || item.totalSeasons || 1 : 1
+  return isEpisodic(content.contentType) ? content.seasonCount || item.totalSeasons || 1 : 1
 }
 
 /** Episodes out so far: up to the next scheduled one while airing, else the total. */

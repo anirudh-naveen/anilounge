@@ -1,28 +1,36 @@
 /**
  * Map API catalog fields onto content.kind / airing_status.
+ * API `contentType` is 'movie' | 'tv' (a series) | 'season' | 'special'.
  */
-export const WATCHABLE_KINDS = ['movie', 'series', 'special']
+export const WATCHABLE_KINDS = ['movie', 'series', 'season', 'special']
 
 /** Subtype table holding each watchable kind's columns. */
-export const WATCHABLE_TABLES = { movie: 'movies', series: 'series', special: 'specials' }
+export const WATCHABLE_TABLES = {
+  movie: 'movies',
+  series: 'series',
+  season: 'seasons',
+  special: 'specials',
+}
 
 /**
  * @param {unknown} contentType
- * @returns {'movie' | 'series' | 'special'}
+ * @returns {'movie' | 'series' | 'season' | 'special'}
  */
 export function kindFromContentType(contentType) {
   if (contentType === 'movie') return 'movie'
   if (contentType === 'special') return 'special'
+  if (contentType === 'season') return 'season'
   return 'series'
 }
 
 /**
  * @param {unknown} kind
- * @returns {'movie' | 'tv' | 'special'}
+ * @returns {'movie' | 'tv' | 'season' | 'special'}
  */
 export function contentTypeFromKind(kind) {
   if (kind === 'movie') return 'movie'
   if (kind === 'special') return 'special'
+  if (kind === 'season') return 'season'
   return 'tv'
 }
 

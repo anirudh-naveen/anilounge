@@ -204,7 +204,7 @@ struct ShareView: View {
 
     private func titleHeader(_ title: ShareModel.Title) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title.contentType == "movie" ? "Movie" : title.contentType == "special" ? "Special" : "Series")
+            Text(title.contentType == "movie" ? "Movie" : title.contentType == "special" ? "Special" : title.contentType == "season" ? "Season" : "Series")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(accent)
             Text(title.title)

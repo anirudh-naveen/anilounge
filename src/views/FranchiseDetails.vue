@@ -61,14 +61,14 @@
               @error="hideBrokenImage"
             />
             <div v-else class="timeline-poster no-poster">
-              <i :class="work.contentType === 'tv' ? 'fas fa-tv' : 'fas fa-film'"></i>
+              <i :class="isEpisodic(work.contentType) ? 'fas fa-tv' : 'fas fa-film'"></i>
             </div>
             <div class="timeline-info">
               <h3>{{ getDisplayTitle(work) }}</h3>
               <p class="content-type">
                 {{ getCardContentTypeDisplay(work.contentType || 'movie') }}
                 <span v-if="workYear(work)"> · {{ workYear(work) }}</span>
-                <span v-if="work.contentType === 'tv' && work.episodeCount">
+                <span v-if="isEpisodic(work.contentType) && work.episodeCount">
                   · {{ work.episodeCount }} {{ work.episodeCount === 1 ? 'episode' : 'episodes' }}
                 </span>
               </p>
@@ -87,6 +87,7 @@
 </template>
 
 <script setup lang="ts">
+import { isEpisodic } from '@/utils/contentKinds'
 import { goBackOr } from '@/utils/navigation'
 import { hideBrokenImage } from '@/utils/posters'
 import { computed, ref, watch } from 'vue'

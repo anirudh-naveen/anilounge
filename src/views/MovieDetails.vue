@@ -103,6 +103,8 @@
       </div>
 
       <!-- Title: Where to Watch -->
+      <TitleExtras :content="movie" />
+
       <WhereToWatch :content-id="movie._id" />
 
       <!-- Title: Forum -->
@@ -303,6 +305,7 @@ import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
 import { shareLink } from '@/utils/nativeApp'
 import WhereToWatch from '@/components/WhereToWatch.vue'
+import TitleExtras from '@/components/TitleExtras.vue'
 import { useToast } from 'vue-toastification'
 
 const route = useRoute()

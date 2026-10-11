@@ -43,6 +43,19 @@ describe('titlePageMeta', () => {
     expect(String(main(meta).url)).toMatch(/\/tv-show\/t1$/)
   })
 
+  it("doesn't repeat a season label the season's own title already has", () => {
+    const meta = titlePageMeta(
+      title({
+        englishTitle: 'Blue Box Season 2',
+        contentType: 'season',
+        releaseDate: '2026-10-04',
+      }),
+      { path: '/tv-show/blue-box-season-2/t2', image: null, seasonLabel: 'Season 2' },
+    )
+    expect(meta.title).toBe('Blue Box Season 2 (2026)')
+    expect(main(meta)['@type']).toBe('TVSeason')
+  })
+
   it('writes a description for a movie without an overview', () => {
     const meta = titlePageMeta(
       title({ contentType: 'movie', overview: '', releaseDate: undefined }),

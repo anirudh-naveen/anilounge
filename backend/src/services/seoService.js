@@ -204,7 +204,7 @@ export function parsePagePath(path) {
   // `/<kind>/<slug>/<id>`, `/<kind>/<id>`, or the older `/<kind>/<id>/<slug>`: the id is
   // whichever segment is one.
   const match =
-    /^\/(forum\/post|movie|tv-show|character|voice-actor|studio|franchise)\/([^/]+)(?:\/([^/]+))?$/.exec(
+    /^\/(forum\/post|movie|tv-show|character|voice-actor|staff|studio|franchise)\/([^/]+)(?:\/([^/]+))?$/.exec(
       pathname,
     )
   if (!match) return null
@@ -218,10 +218,11 @@ export function parsePagePath(path) {
 
 /** Content kinds each detail route shows. */
 const ROUTE_KINDS = {
-  '/movie': ['movie', 'special', 'series'],
-  '/tv-show': ['series', 'movie', 'special'],
+  '/movie': ['movie', 'special', 'series', 'season'],
+  '/tv-show': ['series', 'season', 'movie', 'special'],
   '/character': ['character'],
   '/voice-actor': ['voice'],
+  '/staff': ['voice'],
   '/studio': ['studio'],
   '/franchise': ['franchise'],
 }
@@ -275,7 +276,8 @@ async function staticPage(key) {
 }
 
 async function titlePage(row) {
-  const [genres, studios, characters, franchise] = await Promise.all([
+  // A season's franchise is its series'; a series lists its seasons, a season its show.
+  const [genres, studios, characters, franchise, seasons, show] = await Promise.all([
     rows(
       `SELECT g.name FROM content_genres cg JOIN genres g ON g.id = cg.genre_id
        WHERE cg.content_id = $1 ORDER BY g.name`,
@@ -295,12 +297,23 @@ async function titlePage(row) {
     ),
     rows(
       `SELECT c.id, c.kind, c.name FROM franchise_members m JOIN content c ON c.id = m.franchise_id
-       WHERE m.member_id = $1 LIMIT 1`,
+       WHERE m.member_id = COALESCE((SELECT series_id FROM seasons WHERE content_id = $1), $1)
+       LIMIT 1`,
+      [row.id],
+    ),
+    rows(
+      `SELECT c.id, c.kind, c.name FROM seasons s JOIN content c ON c.id = s.content_id
+       WHERE s.series_id = $1 ORDER BY s.season_number, s.part_number`,
+      [row.id],
+    ),
+    rows(
+      `SELECT c.id, c.kind, c.name FROM seasons s JOIN content c ON c.id = s.series_id
+       WHERE s.content_id = $1`,
       [row.id],
     ),
   ])
   const name = contentDisplayName(row.kind, row.name)
-  const series = row.kind === 'series'
+  const series = row.kind === 'series' || row.kind === 'season'
   const year = yearOf(row.release_date)
   const genreNames = genres.map((genre) => genre.name)
   const noun = series ? 'series' : row.kind === 'special' ? 'special' : 'movie'
@@ -338,6 +351,8 @@ async function titlePage(row) {
       poster: image,
     },
     sections: [
+      show.length && { title: 'Series', links: show.map(link) },
+      seasons.length && { title: 'Seasons', links: seasons.map(link) },
       franchise.length && { title: 'Franchise', links: franchise.map(link) },
       studios.length && { title: 'Studios', links: studios.map(link) },
       characters.length && { title: 'Characters', links: characters.map(link) },
@@ -345,7 +360,7 @@ async function titlePage(row) {
     jsonLd: [
       {
         '@context': 'https://schema.org',
-        '@type': series ? 'TVSeries' : 'Movie',
+        '@type': row.kind === 'season' ? 'TVSeason' : series ? 'TVSeries' : 'Movie',
         name,
         ...(row.native_name && row.native_name !== name ? { alternateName: row.native_name } : {}),
         url: path,
@@ -532,7 +547,9 @@ async function contentPage({ prefix, id }) {
     [id, kinds],
   )
   if (!row) return null
-  return ['movie', 'series', 'special'].includes(row.kind) ? titlePage(row) : entityPage(row)
+  return ['movie', 'series', 'season', 'special'].includes(row.kind)
+    ? titlePage(row)
+    : entityPage(row)
 }
 
 async function postPage(id) {

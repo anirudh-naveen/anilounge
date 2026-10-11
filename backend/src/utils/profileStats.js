@@ -155,7 +155,9 @@ export function computeProfileStats(watchlist, now = new Date(), history = new M
     else totals.planToWatch += 1
 
     if (item.status === 'completed') {
-      if (content.contentType === 'tv') totals.completedSeries += 1
+      if (content.contentType === 'tv' || content.contentType === 'season') {
+        totals.completedSeries += 1
+      }
       else totals.completedMovies += 1
     }
 

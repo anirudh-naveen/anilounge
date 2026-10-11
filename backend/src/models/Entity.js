@@ -192,7 +192,7 @@ async function upsertAppearances(rows) {
      SELECT gen_random_uuid(), t.work_id, t.character_id, t.role, t.importance
      FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::int[])
        AS t(work_id, character_id, role, importance)
-     JOIN content w ON w.id = t.work_id AND w.kind IN ('movie', 'series', 'special')
+     JOIN content w ON w.id = t.work_id AND w.kind IN ('movie', 'series', 'season', 'special')
      JOIN characters ch ON ch.content_id = t.character_id
      WHERE NOT EXISTS (
        SELECT 1 FROM admin_link_removals r
@@ -470,7 +470,7 @@ Entity.prototype.save = async function save() {
       await query(
         `INSERT INTO studio_credits (work_id, studio_id)
          SELECT w.id, $2 FROM content w
-         WHERE w.id = ANY($1::uuid[]) AND w.kind IN ('movie', 'series', 'special')
+         WHERE w.id = ANY($1::uuid[]) AND w.kind IN ('movie', 'series', 'season', 'special')
            AND NOT EXISTS (
              SELECT 1 FROM admin_link_removals r
              WHERE r.link_kind = 'studio_credit' AND r.work_id = w.id AND r.other_id = $2

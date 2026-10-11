@@ -27,6 +27,7 @@ import Content from '../models/Content.js'
 import { createMegathread } from './forumService.js'
 import { queuePost } from './indexNowService.js'
 import { resolveTmdbEpisode } from './seasonService.js'
+import { guideNumberSql } from './seriesStructure.js'
 
 export { BOT_EMAIL, BOT_USERNAME }
 const DEFAULT_CRON = '*/15 * * * *'
@@ -104,8 +105,10 @@ export function megathreadText(release) {
         'Please keep spoilers to this thread.',
     }
   }
+  // A season's name already says which season it is ("Blue Box Season 2").
+  const ownEntry = release.own_entry || kind === 'season'
   const showSeason =
-    !release.own_entry && season != null && (season > 1 || (release.season_count ?? 1) > 1)
+    !ownEntry && season != null && (season > 1 || (release.season_count ?? 1) > 1)
   const label = showSeason ? `Season ${season} Episode ${episode}` : `Episode ${episode}`
   return {
     title: `${name} - ${label} Discussion`,
@@ -123,7 +126,9 @@ export function megathreadText(release) {
 export function megathreadTags(release) {
   const contentId = String(release.content_id)
   const episodeTag =
-    release.kind === 'series' && release.season_number != null && release.episode_number != null
+    (release.kind === 'series' || release.kind === 'season') &&
+    release.season_number != null &&
+    release.episode_number != null
   return [
     {
       contentId,
@@ -180,7 +185,9 @@ const seasonSql = (season) =>
  */
 export const followedSql = (contentId) => `EXISTS (
   SELECT 1 FROM watchlist wl JOIN users wu ON wu.id = wl.user_id
-  WHERE wl.content_id = ${contentId} AND wl.status <> 'dropped'
+  WHERE (wl.content_id = ${contentId}
+         OR wl.content_id = (SELECT series_id FROM seasons WHERE content_id = ${contentId}))
+    AND wl.status <> 'dropped'
     AND NOT wu.is_demo AND NOT wu.pending_signup AND wu.banned_at IS NULL
 )`
 
@@ -197,6 +204,18 @@ export async function queueReleases() {
        AND s.next_episode_at <= now()
        AND s.next_episode_at > now() - make_interval(days => $1)
        AND ${followedSql('s.content_id')}
+       -- A series whose seasons keep their own schedule (anime) is queued per season.
+       AND NOT EXISTS (
+         SELECT 1 FROM seasons sn WHERE sn.series_id = s.content_id AND sn.next_episode_at IS NOT NULL
+       )
+     UNION ALL
+     SELECT sn.content_id, ${guideNumberSql('sn.content_id')}, sn.next_episode_number,
+            sn.next_episode_at
+     FROM seasons sn
+     WHERE sn.next_episode_number IS NOT NULL
+       AND sn.next_episode_at <= now()
+       AND sn.next_episode_at > now() - make_interval(days => $1)
+       AND ${followedSql('sn.content_id')}
      UNION ALL
      SELECT r.content_id, NULL, NULL, r.release_date::timestamptz
      FROM (
@@ -222,9 +241,14 @@ export async function queueAiredEpisode({ contentId, season, episode, airedAt })
   if (Date.now() - new Date(airedAt).getTime() > LOOKBACK_DAYS * 24 * 60 * 60_000) return
   await query(
     `INSERT INTO release_threads (content_id, season_number, episode_number, released_at)
-     SELECT $1, ${seasonSql('$2::int')}, $3, $4
+     SELECT $1,
+            CASE WHEN c.kind = 'season' THEN ${guideNumberSql('c.id')} ELSE ${seasonSql('$2::int')} END,
+            $3, $4
      FROM content c LEFT JOIN series s ON s.content_id = c.id
      WHERE c.id = $1 AND ${followedSql('c.id')}
+       -- The same episode reaches a series through its seasons' schedule.
+       AND NOT (c.kind = 'series' AND EXISTS (
+         SELECT 1 FROM seasons sn WHERE sn.series_id = c.id AND sn.next_episode_at IS NOT NULL))
      ON CONFLICT DO NOTHING`,
     [contentId, season, episode, airedAt],
   )

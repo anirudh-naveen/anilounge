@@ -14,6 +14,7 @@
  *   titles      Re-fetch every movie/series/special from TMDB, MAL, and AniList;
  *               rebuild studio credits (MAL studios, then AniList animation
  *               studios, then TMDB companies), genres, aliases, MAL relations.
+ *               After the series migration this runs the seasons phase instead.
  *   characters  Re-ingest characters and voice actors for every title from
  *               Jikan and AniList (merged by id and name), TMDB credits otherwise.
  *   studios     Fill studio ids, logos, and about (Jikan, else TMDB); merge
@@ -21,12 +22,18 @@
  *   cleanup     Merge titles whose names differ only by case/spacing, franchise
  *               characters, and same-name studios; enforce links, prune
  *               orphans, audit.
+ *   seasons     (Only when named.) Import every series with its seasons and
+ *               episodes, and every movie and special, through
+ *               services/catalogImport.js: source snapshots, fields by source
+ *               priority, tags, key staff, ids on other sites. Run after
+ *               `npm run db:restructure-series`.
  *
  * Usage:
  *   npm run db:reload
  *   npm run db:reload -- --phases titles,characters --workers 4 --limit 50
  *   npm run db:reload -- --fresh     (ignore the resume checkpoint)
  *   npm run db:reload -- --phases backup,import,cleanup --import-limit 2000
+ *   npm run db:reload -- --phases seasons --workers 2
  *
  * Progress is checkpointed to backend/logs/reload-checkpoint.json so an
  * interrupted run resumes where it stopped. Titles or studios whose sources
@@ -60,6 +67,8 @@ import { importPopularAnilist } from '../services/anilistImport.js'
 import { mergeAllFranchiseCharacters } from '../services/characterMerge.js'
 import { applyFranchisePlan, loadFranchisePlan } from '../services/franchiseBuilder.js'
 import * as repair from '../services/catalogRepair.js'
+import { importSeries, importStandalone } from '../services/catalogImport.js'
+import { hasSeriesStructure } from '../services/seriesStructure.js'
 
 dotenv.config()
 // The pool is created on first query, so this applies to the whole run.
@@ -78,6 +87,8 @@ const ALL_PHASES = [
   'studios',
   'cleanup',
 ]
+/** Phases a plain run leaves out; they run only when named in --phases. */
+const NAMED_ONLY_PHASES = ['seasons']
 const FAMILY_KINDS = [
   'sequel',
   'prequel',
@@ -114,9 +125,10 @@ function parseArgs() {
       options.fresh = true
     }
   }
-  const unknown = options.phases.filter((phase) => !ALL_PHASES.includes(phase))
+  const known = [...ALL_PHASES, ...NAMED_ONLY_PHASES]
+  const unknown = options.phases.filter((phase) => !known.includes(phase))
   if (unknown.length) throw new Error(`Unknown phase(s): ${unknown.join(', ')}`)
-  options.phases = ALL_PHASES.filter((phase) => options.phases.includes(phase))
+  options.phases = known.filter((phase) => options.phases.includes(phase))
   return options
 }
 
@@ -227,7 +239,7 @@ async function groupByFamily(ids) {
 
 async function watchableIds(limit) {
   const { rows } = await query(
-    `SELECT id::text AS id FROM content WHERE kind IN ('movie', 'series', 'special') ORDER BY id`,
+    `SELECT id::text AS id FROM content WHERE kind IN ('movie', 'series', 'season', 'special') ORDER BY id`,
   )
   const ids = rows.map((row) => row.id)
   return limit ? ids.slice(0, limit) : ids
@@ -317,7 +329,9 @@ async function reloadTitle(id, populator, byMal) {
     for (const type of types) {
       const details = await unifiedContentService.getTmdbContentDetails(content.tmdbId, type)
       if (!details) continue
-      const converted = unifiedContentService.convertTmdbToContent(details, type, { minVoteCount: 0 })
+      const converted = unifiedContentService.convertTmdbToContent(details, type, {
+        minVoteCount: 0,
+      })
       if (!converted) continue
       await populator.mergeTmdbIntoExisting(content, converted, { save: false })
       tmdbOk = true
@@ -375,7 +389,7 @@ async function prefetchAnilist(ids, options = {}) {
 async function malIdMap() {
   const { rows } = await query(
     `SELECT id::text AS id, mal_id FROM content
-     WHERE kind IN ('movie', 'series', 'special') AND mal_id IS NOT NULL`,
+     WHERE kind IN ('movie', 'series', 'season', 'special') AND mal_id IS NOT NULL`,
   )
   return new Map(rows.map((row) => [Number(row.mal_id), row.id]))
 }
@@ -506,6 +520,11 @@ async function phaseImport(options, checkpoint) {
 }
 
 async function phaseTitles(options, checkpoint) {
+  if (await hasSeriesStructure()) {
+    // After the series migration titles import by source priority, seasons and all.
+    console.log('  Series are split into seasons: importing through the seasons phase')
+    return phaseSeasons(options, checkpoint)
+  }
   const ids = await watchableIds(options.limit)
   const done = checkpoint.done('titles')
   const todo = ids.filter((id) => !done.has(id))
@@ -650,6 +669,37 @@ async function phaseCleanup() {
   console.log('  Pruned orphans:', await repair.pruneOrphans())
 }
 
+/**
+ * Import every series (with seasons and episodes), movie, and special from all
+ * sources by source priority. A title whose import fails stays unchecked so a rerun
+ * picks it up.
+ * @param {{ workers: number, limit: number | null }} options
+ * @param {Checkpoint} checkpoint
+ * @returns {Promise<boolean>} False when some titles failed.
+ */
+async function phaseSeasons(options, checkpoint) {
+  const { rows } = await query(
+    `SELECT id::text AS id, kind FROM content WHERE kind IN ('series', 'movie', 'special')
+     ORDER BY catalog_score DESC NULLS LAST, id`,
+  )
+  const done = checkpoint.done('seasons')
+  const todo = rows.filter((row) => !done.has(row.id)).slice(0, options.limit || undefined)
+  let failed = 0
+  await runQueue('seasons', todo, options.workers, async (row) => {
+    try {
+      if (row.kind === 'series') await importSeries(row.id)
+      else await importStandalone(row.id)
+      checkpoint.mark('seasons', row.id)
+    } catch (error) {
+      failed += 1
+      console.error(`  ${row.kind} ${row.id} failed: ${error.message}`)
+    }
+  })
+  checkpoint.flush()
+  console.log(`  Imported ${todo.length - failed} titles, ${failed} failed`)
+  return failed === 0
+}
+
 async function run() {
   const options = parseArgs()
   const checkpoint = new Checkpoint(options.fresh)
@@ -667,6 +717,7 @@ async function run() {
     characters: () => phaseCharacters(options, checkpoint),
     studios: () => phaseStudios(options, checkpoint),
     cleanup: () => phaseCleanup(),
+    seasons: () => phaseSeasons(options, checkpoint),
   }
   let incomplete = false
   for (const phase of options.phases) {
