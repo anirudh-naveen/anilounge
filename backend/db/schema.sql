@@ -1196,3 +1196,12 @@ CREATE INDEX IF NOT EXISTS release_threads_pending_idx ON release_threads (creat
   WHERE posted_at IS NULL;
 -- When followers were sent a "new episode" push for this release (services/pushService.js).
 ALTER TABLE release_threads ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+
+-- Catalog pages merged into another (services/contentMoves.js): the old page's URL
+-- redirects (301) to the page it was merged into, instead of going 404.
+CREATE TABLE IF NOT EXISTS content_moves (
+  from_id   UUID PRIMARY KEY,
+  to_id     UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  moved_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS content_moves_to_idx ON content_moves (to_id);

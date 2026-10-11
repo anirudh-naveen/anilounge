@@ -16,7 +16,7 @@ import { indexableSql } from '../utils/seoIndexing.js'
 export const SITEMAP_CHUNK = 40000
 
 /** Public pages listed besides forum posts and catalog pages. */
-export const SITEMAP_PAGES = ['/', '/forum', '/movies', '/tv', '/search']
+export const SITEMAP_PAGES = ['/', '/forum', '/movies', '/tv', '/search', '/privacy', '/support']
 
 /**
  * Catalog sections and the content kinds each lists. Only pages worth indexing are
@@ -63,16 +63,18 @@ export function urlsetXml(base, entries) {
 /**
  * A `<sitemapindex>` document.
  * @param {string} base
- * @param {string[]} files - Child sitemap file names under /sitemaps/.
+ * @param {Array<string | { file: string, lastModified?: Date | string | null }>} files -
+ *   Child sitemap file names under /sitemaps/, with when their newest entry changed.
  * @returns {string}
  */
 export function sitemapIndexXml(base, files) {
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ...files.map(
-      (file) => `  <sitemap><loc>${xmlEscape(`${base}/sitemaps/${file}`)}</loc></sitemap>`,
-    ),
+    ...files.map((entry) => {
+      const { file, lastModified } = typeof entry === 'string' ? { file: entry } : entry
+      return `  <sitemap><loc>${xmlEscape(`${base}/sitemaps/${file}`)}</loc>${lastmod(lastModified)}</sitemap>`
+    }),
     '</sitemapindex>',
   ].join('\n')
 }
@@ -103,18 +105,30 @@ export function parseSitemapFile(file) {
   return { section: match[1], chunk: Number(match[2]) }
 }
 
-/** Indexable rows per catalog section. */
-async function sectionCounts() {
-  const counts = {}
+/**
+ * Per catalog section, the newest `updated_at` in each chunk of indexable rows (same
+ * order as the child sitemaps), so the index's `lastmod` says which files changed.
+ * @returns {Promise<Record<string, Array<Date | null>>>}
+ */
+async function sectionChunks() {
+  const chunks = {}
   for (const [section, { kinds }] of Object.entries(SITEMAP_SECTIONS)) {
     const { rows } = await query(
-      `SELECT count(*)::int AS count FROM content c WHERE c.kind = ANY ($1) AND ${indexableSql(kinds)}`,
-      [kinds],
+      `SELECT chunk, max(updated_at) AS last_modified FROM (
+         SELECT c.updated_at, (row_number() OVER (ORDER BY c.created_at, c.id) - 1) / $2 AS chunk
+         FROM content c WHERE c.kind = ANY ($1) AND ${indexableSql(kinds)}
+       ) t GROUP BY chunk ORDER BY chunk`,
+      [kinds, SITEMAP_CHUNK],
     )
-    counts[section] = rows[0]?.count || 0
+    chunks[section] = rows.map((row) => row.last_modified)
   }
-  return counts
+  return chunks
 }
+
+const countsOf = (chunks) =>
+  Object.fromEntries(
+    Object.entries(chunks).map(([section, list]) => [section, list.length * SITEMAP_CHUNK]),
+  )
 
 /**
  * The sitemap index.
@@ -122,7 +136,21 @@ async function sectionCounts() {
  * @returns {Promise<string>}
  */
 export async function buildSitemapIndex(base) {
-  return sitemapIndexXml(base, sitemapFiles(await sectionCounts()))
+  const [chunks, posts] = await Promise.all([sectionChunks(), sitemapPosts()])
+  const newestPost = posts.reduce(
+    (newest, post) =>
+      post.lastModified && (!newest || new Date(post.lastModified) > newest)
+        ? new Date(post.lastModified)
+        : newest,
+    null,
+  )
+  const files = sitemapFiles(countsOf(chunks)).map((file) => {
+    const parsed = parseSitemapFile(file)
+    const lastModified =
+      parsed.section === 'pages' ? newestPost : chunks[parsed.section][parsed.chunk - 1]
+    return { file, lastModified }
+  })
+  return sitemapIndexXml(base, files)
 }
 
 /**
@@ -164,7 +192,7 @@ export async function buildSitemapFile(base, file) {
  * @returns {Promise<string[]>}
  */
 export async function listSitemapUrls(base) {
-  const files = sitemapFiles(await sectionCounts())
+  const files = sitemapFiles(countsOf(await sectionChunks()))
   const urls = []
   for (const file of files) {
     const xml = (await buildSitemapFile(base, file)) || ''

@@ -154,11 +154,17 @@
 
 <script setup lang="ts">
 import { SUPPORT_EMAIL } from '@/utils/community'
-import { usePageTitle } from '@/composables/usePageMeta'
+import { usePageMeta } from '@/composables/usePageMeta'
 
 const POLICY_DATE = 'October 10, 2026'
 
-usePageTitle('Privacy policy')
+// Keep in step with STATIC_PAGES in backend/src/services/seoService.js.
+usePageMeta({
+  title: 'Privacy policy',
+  description:
+    'What AniLounge collects, why, who it shares data with, and how to get a copy of your data or delete your account. AniLounge is free, has no ads, and does not sell your data.',
+  path: '/privacy',
+})
 
 defineOptions({
   name: 'PrivacyPage',

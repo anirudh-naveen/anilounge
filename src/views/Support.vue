@@ -72,9 +72,15 @@
 
 <script setup lang="ts">
 import { DISCORD_INVITE_URL, SUPPORT_EMAIL } from '@/utils/community'
-import { usePageTitle } from '@/composables/usePageMeta'
+import { usePageMeta } from '@/composables/usePageMeta'
 
-usePageTitle('Support')
+// Keep in step with STATIC_PAGES in backend/src/services/seoService.js.
+usePageMeta({
+  title: 'Support',
+  description:
+    'Get help with the AniLounge website and iOS app: contact options, bug reports, and answers to common account questions.',
+  path: '/support',
+})
 
 defineOptions({
   name: 'SupportPage',
