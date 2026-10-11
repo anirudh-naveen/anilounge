@@ -27,6 +27,8 @@
  *               services/catalogImport.js: source snapshots, fields by source
  *               priority, tags, key staff, ids on other sites. Run after
  *               `npm run db:restructure-series`.
+ *   episodes    (Only when named.) Per-episode details: MAL episode titles and
+ *               filler/recap flags (Jikan), and episode staff (AniList, TMDB).
  *   photos      (Only when named.) Photos for people without one: TMDB's profile
  *               photo, else their Wikidata image (services/personPhotos.js).
  *
@@ -69,7 +71,7 @@ import { importPopularAnilist } from '../services/anilistImport.js'
 import { mergeAllFranchiseCharacters } from '../services/characterMerge.js'
 import { applyFranchisePlan, loadFranchisePlan } from '../services/franchiseBuilder.js'
 import * as repair from '../services/catalogRepair.js'
-import { importSeries, importStandalone } from '../services/catalogImport.js'
+import { importEpisodeDetails, importSeries, importStandalone } from '../services/catalogImport.js'
 import { hasSeriesStructure } from '../services/seriesStructure.js'
 import { fillPersonPhotos } from '../services/personPhotos.js'
 
@@ -92,7 +94,8 @@ const ALL_PHASES = [
 ]
 /**
  * Order phases run in: seasons (and new titles' seasons) before characters and cleanup.
- * A plain run (no --phases) runs ALL_PHASES; `seasons` and `photos` run only when named.
+ * A plain run (no --phases) runs ALL_PHASES; `seasons`, `episodes`, and `photos` run only
+ * when named.
  */
 const PHASE_ORDER = [
   'backup',
@@ -101,6 +104,7 @@ const PHASE_ORDER = [
   'import',
   'titles',
   'seasons',
+  'episodes',
   'characters',
   'studios',
   'cleanup',
@@ -715,7 +719,8 @@ async function phaseSeasons(options, checkpoint) {
   let failed = 0
   await runQueue('seasons', todo, options.workers, async (row) => {
     try {
-      if (row.kind === 'series') await importSeries(row.id)
+      // Per-episode details (Jikan, staff pages) come in the `episodes` phase.
+      if (row.kind === 'series') await importSeries(row.id, { details: false })
       else await importStandalone(row.id)
       checkpoint.mark('seasons', row.id)
     } catch (error) {
@@ -725,6 +730,43 @@ async function phaseSeasons(options, checkpoint) {
   })
   checkpoint.flush()
   console.log(`  Imported ${todo.length - failed} titles, ${failed} failed`)
+  return failed === 0
+}
+
+/**
+ * Per-episode details for every series: MAL episode titles and filler/recap flags
+ * (Jikan), and who worked on each episode (AniList staff pages, TMDB crew). Slow, so
+ * apart from the seasons phase; rerun it once Jikan is back if it was down.
+ * @param {{ workers: number, limit: number | null }} options
+ * @param {Checkpoint} checkpoint
+ * @returns {Promise<boolean>} False when some series failed.
+ */
+async function phaseEpisodes(options, checkpoint) {
+  if (!(await hasSeriesStructure())) {
+    throw new Error('Run `npm run db:restructure-series` before the episodes phase')
+  }
+  if (!(await probeJikan())) {
+    console.log('  Jikan is down: episodes keep TMDB titles; rerun this phase once it is back')
+  }
+  const { rows } = await query(
+    `SELECT DISTINCT c.id::text AS id, c.catalog_score FROM content c
+     JOIN seasons s ON s.series_id = c.id
+     ORDER BY c.catalog_score DESC NULLS LAST, id`,
+  )
+  const done = checkpoint.done('episodes')
+  const todo = rows.filter((row) => !done.has(row.id)).slice(0, options.limit || undefined)
+  let failed = 0
+  await runQueue('episodes', todo, options.workers, async (row) => {
+    try {
+      await importEpisodeDetails(row.id)
+      checkpoint.mark('episodes', row.id)
+    } catch (error) {
+      failed += 1
+      console.error(`  series ${row.id} failed: ${error.message}`)
+    }
+  })
+  checkpoint.flush()
+  console.log(`  Episode details for ${todo.length - failed} series, ${failed} failed`)
   return failed === 0
 }
 
@@ -746,6 +788,7 @@ async function run() {
     studios: () => phaseStudios(options, checkpoint),
     cleanup: () => phaseCleanup(),
     seasons: () => phaseSeasons(options, checkpoint),
+    episodes: () => phaseEpisodes(options, checkpoint),
     photos: async () => {
       const result = await fillPersonPhotos({ limit: options.limit || 20000 })
       console.log(`  Photos: ${result.filled} of ${result.checked} people without one`)
