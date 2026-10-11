@@ -92,7 +92,7 @@
               @error="hideBrokenImage"
             />
             <div v-else class="no-poster">
-              <i :class="work.contentType === 'tv' ? 'fas fa-tv' : 'fas fa-film'"></i>
+              <i :class="isEpisodic(work.contentType) ? 'fas fa-tv' : 'fas fa-film'"></i>
             </div>
             <div class="content-info">
               <h5>{{ getDisplayTitle(work) }}</h5>
@@ -117,6 +117,7 @@
 </template>
 
 <script setup lang="ts">
+import { isEpisodic } from '@/utils/contentKinds'
 import { goBackOr } from '@/utils/navigation'
 import { hideBrokenImage } from '@/utils/posters'
 import { computed, ref, watch } from 'vue'

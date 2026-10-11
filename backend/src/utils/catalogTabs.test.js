@@ -28,7 +28,8 @@ describe('TV catalog Mongo filters', () => {
 
   it('matches currently airing MAL status or a future next episode', () => {
     const query = matchTvCatalogTab('airing', from)
-    assert.equal(query.contentType, 'tv')
+    assert.deepEqual(query.contentType, { $in: ['tv', 'season'] })
+    assert.equal(query.seasonsScheduled, false)
     assert.deepEqual(query.$or, [
       { malStatus: 'currently_airing' },
       {
@@ -49,7 +50,8 @@ describe('TV catalog Mongo filters', () => {
       year: 2027,
     })
     assert.deepEqual(matchTvCatalogTab('season', from), {
-      contentType: 'tv',
+      contentType: { $in: ['tv', 'season'] },
+      seasonsScheduled: false,
       startSeason: 'summer',
       startSeasonYear: 2026,
     })
@@ -59,7 +61,7 @@ describe('TV catalog Mongo filters', () => {
 
   it('matches not-yet-aired MAL status or a future premiere', () => {
     const query = matchTvCatalogTab('upcoming', from)
-    assert.equal(query.contentType, 'tv')
+    assert.deepEqual(query.contentType, { $in: ['tv', 'season'] })
     assert.deepEqual(query.$or, [
       { malStatus: 'not_yet_aired' },
       {

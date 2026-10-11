@@ -75,7 +75,7 @@ export async function loadManagedLinks(id, kind) {
              JOIN franchise_members fm2 ON fm2.franchise_id = fm.franchise_id
              WHERE fm.member_id = $1 AND fm2.member_id <> $1
            ) r JOIN content c ON c.id = r.other
-           WHERE c.kind IN ('movie', 'series', 'special')
+           WHERE c.kind IN ('movie', 'series', 'season', 'special')
            ORDER BY c.id LIMIT ${RELATED_LIMIT}`),
     ])
     return [

@@ -107,9 +107,8 @@ export function buildEpisodeCalendar(show, now = new Date()) {
 export async function episodeCalendarFor(contentId) {
   if (!isUuid(contentId)) throw new HttpError(404, 'Show not found.')
   const { rows } = await query(
-    `SELECT c.id, c.name, s.next_episode_at, s.next_episode_number, s.episode_count
-     FROM content c JOIN series s ON s.content_id = c.id
-     WHERE c.id = $1`,
+    `SELECT id, kind, title AS name, next_episode_at, next_episode_number, episode_count
+     FROM works WHERE id = $1 AND kind IN ('series', 'season')`,
     [contentId],
   )
   const row = rows[0]
@@ -123,7 +122,7 @@ export async function episodeCalendarFor(contentId) {
     nextEpisodeAt: row.next_episode_at,
     nextEpisodeNumber: row.next_episode_number,
     episodeCount: row.episode_count,
-    path: contentPagePath({ kind: 'series', id: row.id, name: row.name }),
+    path: contentPagePath({ kind: row.kind, id: row.id, name: row.name }),
   })
   const slug = String(row.name)
     .replace(/[^a-z0-9]+/gi, '-')

@@ -12,6 +12,7 @@ import geminiService from '../services/geminiService.js'
 import { consumeAiCall } from '../services/aiUsageService.js'
 import relationshipService from '../services/relationshipService.js'
 import { getSeasonGuide } from '../services/seasonService.js'
+import { attachTitleDetails } from '../services/titleDetails.js'
 import { getFranchise } from '../services/franchiseService.js'
 import {
   ingestMalRankingByTypes,
@@ -63,6 +64,12 @@ const airingRefreshFailures = new Map()
  */
 const refreshAiringIfNeeded = async (content) => {
   const id = String(content._id)
+  // A series with seasons gets its schedule from them (the six-hourly import); TMDB's
+  // whole-show counts would undo its totals.
+  if (content.contentType === 'tv') {
+    const { rows } = await dbQuery('SELECT 1 FROM seasons WHERE series_id = $1 LIMIT 1', [id])
+    if (rows.length) return
+  }
   const failedAt = airingRefreshFailures.get(id)
   if (failedAt && Date.now() - failedAt < AIRING_REFRESH_BACKOFF_MS) return
   // Everyone viewing a stale airing title at once shares one MAL/TMDB refresh.
@@ -102,10 +109,11 @@ const refreshAiringIfNeeded = async (content) => {
  * `movie` includes `special` so specials appear in the movie catalog.
  *
  * @param {string|undefined} contentType - `all`, `movie`, `tv`, `special`, or omitted.
- * @returns {object} Empty object for all types; otherwise a `contentType` match.
+ * @returns {object} Every type but seasons for `all`; otherwise a `contentType` match.
  */
 const matchContentType = (contentType) => {
-  if (!contentType || contentType === 'all') return {}
+  // Seasons are listed through their series, never on their own in the catalog.
+  if (!contentType || contentType === 'all') return { contentType: { $nin: ['season'] } }
   if (contentType === 'movie') return { contentType: { $in: movieLikeTypes } }
   return { contentType }
 }
@@ -142,7 +150,10 @@ export const getContent = async (req, res) => {
         : contentType === 'movie'
           ? matchMovieCatalogTab(tab)
           : {}
-    const query = mergeCatalogQuery(matchContentType(contentType), tabQuery)
+    // Schedule tabs choose their own TV rows (seasons or series, see SCHEDULED_TV).
+    const typeQuery =
+      contentType === 'tv' && tab !== 'popular' ? {} : matchContentType(contentType)
+    const query = mergeCatalogQuery(typeQuery, tabQuery)
 
     if (tab === 'upcoming' && (contentType === 'tv' || contentType === 'movie')) {
       const existingUpcoming = await Content.countDocuments(query)
@@ -223,6 +234,7 @@ export const getContentById = async (req, res) => {
     }
 
     await refreshAiringIfNeeded(content)
+    await attachTitleDetails(content)
 
     res.json({
       success: true,

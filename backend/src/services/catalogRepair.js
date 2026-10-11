@@ -13,12 +13,14 @@ import { foldEntityName, studioNameKey } from '../utils/entities.js'
 import { moveWatchHistory } from './watchEvents.js'
 import { recordMove } from './contentMoves.js'
 
-const WATCHABLE = `('movie', 'series', 'special')`
+const WATCHABLE = `('movie', 'series', 'season', 'special')`
 
 const BACKUP_TABLES = [
   'content',
   'movies',
   'series',
+  'seasons',
+  'episodes',
   'specials',
   'franchises',
   'franchise_members',
@@ -35,6 +37,9 @@ const BACKUP_TABLES = [
   'watchlist',
   'ratings',
   'favorites',
+  'watch_events',
+  'post_tags',
+  'release_threads',
 ]
 
 const SUBTYPE_TABLES = [
@@ -67,6 +72,8 @@ export async function backupCatalog(now = new Date()) {
   await withTransaction(async () => {
     await query(`CREATE SCHEMA ${schema}`)
     for (const table of BACKUP_TABLES) {
+      // Tables a schema without `npm run db:schema` lacks yet (seasons, episodes).
+      if (!(await tableExists(table))) continue
       await query(`CREATE TABLE ${schema}.${table} AS TABLE public.${table}`)
     }
   })
@@ -265,6 +272,12 @@ export async function mergeStudioInto(fromId, toId) {
       [fromId, toId],
     )
     await query(
+      `INSERT INTO staff_credits (work_id, person_id, role, position)
+       SELECT work_id, $2, role, position FROM staff_credits WHERE person_id = $1
+       ON CONFLICT DO NOTHING`,
+      [fromId, toId],
+    )
+    await query(
       `INSERT INTO favorites (user_id, content_id, added_at)
        SELECT user_id, $2, added_at FROM favorites WHERE content_id = $1
        ON CONFLICT DO NOTHING`,
@@ -303,16 +316,18 @@ export async function findClobberedContent() {
        CASE
          WHEN m.content_id IS NOT NULL THEN 'movie'
          WHEN s.content_id IS NOT NULL THEN 'series'
+         WHEN sn.content_id IS NOT NULL THEN 'season'
          WHEN sp.content_id IS NOT NULL THEN 'special'
          ELSE 'franchise'
        END AS restored_kind
      FROM content c
      LEFT JOIN movies m ON m.content_id = c.id
      LEFT JOIN series s ON s.content_id = c.id
+     LEFT JOIN seasons sn ON sn.content_id = c.id
      LEFT JOIN specials sp ON sp.content_id = c.id
      LEFT JOIN franchises f ON f.content_id = c.id
      WHERE c.kind IN ('character', 'voice', 'studio')
-       AND COALESCE(m.content_id, s.content_id, sp.content_id, f.content_id) IS NOT NULL
+       AND COALESCE(m.content_id, s.content_id, sn.content_id, sp.content_id, f.content_id) IS NOT NULL
      ORDER BY c.id`,
   )
   return rows.map((row) => ({ id: row.id, restoredKind: row.restored_kind }))
@@ -569,7 +584,8 @@ export async function enforceSchemaLinks() {
        WHERE a.id = r.from_id AND b.id = r.to_id
          AND (a.kind NOT IN ${WATCHABLE} OR b.kind NOT IN ${WATCHABLE})`,
     )
-    for (const [table, kind] of SUBTYPE_TABLES) {
+    // A season row can't be re-added bare (it needs its series), so only stray ones go.
+    for (const [table, kind] of [...SUBTYPE_TABLES, ['seasons', 'season']]) {
       await run(
         `${table}_wrong_kind`,
         `DELETE FROM ${table} x USING content c
@@ -609,7 +625,9 @@ export async function pruneOrphans() {
     AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.content_id = c.id)`
   const targets = {
     characters: `c.kind = 'character' AND NOT EXISTS (SELECT 1 FROM appearances a WHERE a.character_id = c.id)`,
-    voices: `c.kind = 'voice' AND NOT EXISTS (SELECT 1 FROM voice_credits v WHERE v.voice_id = c.id)`,
+    // People credited only as staff (director, composer) are not orphans.
+    voices: `c.kind = 'voice' AND NOT EXISTS (SELECT 1 FROM voice_credits v WHERE v.voice_id = c.id)
+      AND NOT EXISTS (SELECT 1 FROM staff_credits sc WHERE sc.person_id = c.id)`,
     studios: `c.kind = 'studio' AND NOT EXISTS (SELECT 1 FROM studio_credits s WHERE s.studio_id = c.id)`,
     franchises: `c.kind = 'franchise' AND NOT EXISTS (SELECT 1 FROM franchise_members m WHERE m.franchise_id = c.id)`,
   }
@@ -845,7 +863,8 @@ export async function auditCatalog() {
        (SELECT count(*) FROM content c WHERE c.kind = 'character'
         AND NOT EXISTS (SELECT 1 FROM appearances a WHERE a.character_id = c.id))::int AS orphan_characters,
        (SELECT count(*) FROM content c WHERE c.kind = 'voice'
-        AND NOT EXISTS (SELECT 1 FROM voice_credits v WHERE v.voice_id = c.id))::int AS orphan_voices,
+        AND NOT EXISTS (SELECT 1 FROM voice_credits v WHERE v.voice_id = c.id)
+        AND NOT EXISTS (SELECT 1 FROM staff_credits sc WHERE sc.person_id = c.id))::int AS orphan_voices,
        (SELECT count(*) FROM content c WHERE c.kind = 'studio'
         AND NOT EXISTS (SELECT 1 FROM studio_credits s WHERE s.studio_id = c.id))::int AS orphan_studios,
        (SELECT count(*) FROM (

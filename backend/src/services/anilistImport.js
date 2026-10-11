@@ -19,7 +19,7 @@ import {
 import { claimExternalId } from './anilistLinking.js'
 import { collectContentTitles, titlesEqual } from '../utils/titles.js'
 
-const WATCHABLE = `('movie', 'series', 'special')`
+const WATCHABLE = `('movie', 'series', 'season', 'special')`
 const PAGE_SIZE = 50
 
 /**
@@ -170,6 +170,8 @@ export async function addAnilistTitle(media, populator, { create = true } = {}) 
   const { outcome, content } = await importOne(media, populator)
   if (outcome === 'failed' || !content) return { outcome: 'failed' }
   await linkTmdb(content)
+  // A user's import waits on this, so the full import is left to the next refresh.
+  if (outcome === 'added') await populator.placeNewSeries(content, { importDetails: false })
   return { outcome, contentId: String(content._id) }
 }
 
@@ -218,6 +220,7 @@ export async function importPopularAnilist({ limit = 1000, populator, log = () =
         if (outcome === 'added') stats.added += 1
         else stats.mergedIntoExisting += 1
         if (await linkTmdb(content)) stats.tmdbLinked += 1
+        if (outcome === 'added') await populator.placeNewSeries(content, { importDetails: false })
         touched.push(String(content._id))
         const name = content.englishTitle || content.title
         log(`  ${outcome === 'added' ? 'added' : 'merged'} "${name}" (AniList ${media.id})`)

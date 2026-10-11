@@ -3,9 +3,13 @@ import { describe, it } from 'node:test'
 import {
   continuesTitle,
   matchSeasonsToWorks,
+  numberSeasons,
+  planChainShow,
+  planTmdbShow,
   renumberedTitle,
+  seasonRowName,
   splitCombinedSeasons,
-} from './seasonService.js'
+} from './seasonPlan.js'
 
 const seasons = [
   { seasonNumber: 1, airDate: '2013-04-07', episodeCount: 25 },
@@ -220,5 +224,133 @@ describe('continuesTitle', () => {
     )
     assert.equal(continuesTitle('narutos', 'naruto'), false)
     assert.equal(continuesTitle('aot 2', 'aot'), false)
+  })
+})
+
+describe('numberSeasons', () => {
+  it('numbers entries in order and keeps later parts in their season', () => {
+    assert.deepEqual(
+      numberSeasons([
+        { content: { title: 'The Apothecary Diaries' }, name: 'Season 1' },
+        { content: { title: 'The Apothecary Diaries Season 2' } },
+        { content: { title: 'The Apothecary Diaries Season 3' } },
+        { content: { title: 'The Apothecary Diaries Season 3 Part 2' } },
+        { content: null, name: 'The Final Season' },
+      ]),
+      [
+        { seasonNumber: 1, partNumber: 1, label: 'Season 1' },
+        { seasonNumber: 2, partNumber: 1, label: 'Season 2' },
+        { seasonNumber: 3, partNumber: 1, label: 'Season 3' },
+        { seasonNumber: 3, partNumber: 2, label: 'Season 3 Part 2' },
+        { seasonNumber: 4, partNumber: 1, label: 'The Final Season' },
+      ],
+    )
+  })
+})
+
+describe('seasonRowName', () => {
+  it('adds plain labels and sets named seasons apart', () => {
+    assert.equal(seasonRowName('Blue Box', 'Season 2'), 'Blue Box Season 2')
+    assert.equal(
+      seasonRowName('Avatar: The Last Airbender', 'Book One: Water'),
+      'Avatar: The Last Airbender – Book One: Water',
+    )
+  })
+})
+
+describe('planTmdbShow', () => {
+  // Blue Box: TMDB runs season 2 on as episodes 26-37 of its one "Season 1".
+  const blueBoxEpisodes = [
+    ...weekly(1, '2024-10-03', 25),
+    ...weekly(26, '2026-10-04', 12).map((episode) => ({
+      ...episode,
+      title: episode.episodeNumber === 26 ? 'Déjà Vu' : `Episode ${episode.episodeNumber}`,
+    })),
+  ]
+  const blueBox = { _id: 'bb1', tmdbId: 207347, malId: 57181, title: 'Blue Box' }
+  const blueBoxS2 = {
+    _id: 'bb2',
+    malId: 61323,
+    anilistId: 189123,
+    title: 'Blue Box Season 2',
+    releaseDate: '2026-10-02',
+  }
+
+  it('makes the anime TMDB entry season 1 and its sequel season 2, with TMDB offsets', () => {
+    const plan = planTmdbShow({
+      seasons: [{ seasonNumber: 1, name: 'Season 1', airDate: '2024-10-03', episodeCount: 37 }],
+      episodes: blueBoxEpisodes,
+      anchor: blueBox,
+      candidates: [blueBoxS2],
+    })
+    assert.deepEqual(
+      plan.seasons.map((season) => [
+        season.contentId,
+        season.seasonNumber,
+        season.partNumber,
+        season.label,
+        season.tmdbSeasonNumber,
+        season.tmdbEpisodeOffset,
+        season.episodeCount,
+      ]),
+      [
+        ['bb1', 1, 1, 'Season 1', 1, 0, 25],
+        ['bb2', 2, 1, 'Season 2', 1, 25, 12],
+      ],
+    )
+    const second = plan.episodes.filter((episode) => episode.seasonKey === 2)
+    assert.deepEqual(
+      second.slice(0, 3).map(({ number, title }) => [number, title]),
+      [
+        [1, 'Déjà Vu'],
+        [2, 'Episode 2'],
+        [3, 'Episode 3'],
+      ],
+    )
+    assert.equal(second.at(-1).number, 12)
+  })
+
+  it('makes every season a new row for a show that is not anime', () => {
+    const plan = planTmdbShow({
+      seasons: [
+        { seasonNumber: 1, name: 'Book One: Water', airDate: '2005-02-21', episodeCount: 20 },
+        { seasonNumber: 2, name: 'Book Two: Earth', airDate: '2006-03-17', episodeCount: 20 },
+      ],
+      episodes: [
+        { seasonNumber: 1, episodeNumber: 1, airDate: '2005-02-21' },
+        { seasonNumber: 2, episodeNumber: 1, airDate: '2006-03-17' },
+      ],
+      anchor: { _id: 'avatar', tmdbId: 246 },
+      candidates: [],
+    })
+    assert.deepEqual(
+      plan.seasons.map(({ contentId, seasonNumber, label, tmdbSeasonNumber }) => [
+        contentId,
+        seasonNumber,
+        label,
+        tmdbSeasonNumber,
+      ]),
+      [
+        [null, 1, 'Book One: Water', 1],
+        [null, 2, 'Book Two: Earth', 2],
+      ],
+    )
+  })
+})
+
+describe('planChainShow', () => {
+  it('orders TV entries by premiere and numbers them', () => {
+    assert.deepEqual(
+      planChainShow([
+        { _id: 'b', title: 'Show Season 2', releaseDate: '2022-01-01' },
+        { _id: 'a', title: 'Show', releaseDate: '2020-01-01' },
+        { _id: 'c', title: 'Show Season 2 Part 2', releaseDate: '2022-07-01' },
+      ]),
+      [
+        { contentId: 'a', seasonNumber: 1, partNumber: 1, label: 'Season 1' },
+        { contentId: 'b', seasonNumber: 2, partNumber: 1, label: 'Season 2' },
+        { contentId: 'c', seasonNumber: 2, partNumber: 2, label: 'Season 2 Part 2' },
+      ],
+    )
   })
 })

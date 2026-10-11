@@ -74,7 +74,7 @@ async function ingest() {
   await connectPostgres()
   const { rows: titles } = await query(
     `SELECT id, name, mal_id FROM content
-     WHERE mal_id IS NOT NULL AND kind IN ('movie', 'series', 'special')
+     WHERE mal_id IS NOT NULL AND kind IN ('movie', 'series', 'season', 'special')
      ORDER BY mal_id`,
   )
   const byMal = new Map(titles.map((row) => [Number(row.mal_id), row.id]))

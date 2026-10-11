@@ -6,6 +6,8 @@
  * The airing timer prefers TMDB `nextEpisodeAirDate`, then MAL's weekly JST slot.
  */
 
+import { isEpisodic } from '@/utils/contentKinds'
+
 export interface AiringFields {
   contentType?: string
   malStatus?: string
@@ -98,7 +100,7 @@ export const formatAiringStatus = (status?: string | null) => {
  * @param from - Clock used for "future next episode" fallback (defaults to now).
  */
 export const isCurrentlyAiring = (content: AiringFields | null | undefined, from = new Date()) => {
-  if (!content || content.contentType !== 'tv') return false
+  if (!content || !isEpisodic(content.contentType)) return false
   if (content.malStatus === 'currently_airing') return true
   if (content.malStatus === 'finished_airing' || content.malStatus === 'not_yet_aired') return false
   const next = getNextAirInfo(content, from)
@@ -271,7 +273,7 @@ export const getUpcomingTimerLabel = (
   const at = getUpcomingReleaseAt(content)
   if (!at) return ''
   const remaining = at.getTime() - from.getTime()
-  const isTv = content?.contentType === 'tv'
+  const isTv = isEpisodic(content?.contentType)
   if (remaining <= 0) return isTv ? 'Premiering now' : 'Out now'
   const countdown = formatCountdown(remaining, isTv ? 'Premiering now' : 'Out now')
   return `${isTv ? 'Premieres' : 'Releases'} in ${countdown}`

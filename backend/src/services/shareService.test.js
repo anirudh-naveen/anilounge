@@ -17,7 +17,7 @@ describe('parseTitleLink', () => {
     assert.deepEqual(parseTitleLink('https://anilist.co/anime/154587/Sousou-no-Frieren/'), {
       column: 'anilist_id',
       value: 154587,
-      kinds: ['series', 'movie', 'special'],
+      kinds: ['series', 'season', 'movie', 'special'],
     })
     assert.equal(
       parseTitleLink('https://myanimelist.net/anime/52991/Sousou_no_Frieren').value,
@@ -37,7 +37,7 @@ describe('parseTitleLink', () => {
     assert.deepEqual(link, {
       column: 'id',
       value: '5a3b8c1d-0000-4000-8000-000000000001',
-      kinds: ['series', 'movie', 'special'],
+      kinds: ['series', 'season', 'movie', 'special'],
     })
   })
 

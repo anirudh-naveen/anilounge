@@ -284,6 +284,36 @@ class UnifiedContentService {
   }
 
   /**
+   * TMDB movie/TV document with what the catalog import maps: alternative titles,
+   * external ids (IMDb, TVDB, Wikidata), videos (trailer), and US age ratings.
+   * @param {number} tmdbId
+   * @param {'movie' | 'tv'} contentType
+   * @returns {Promise<object | null>}
+   */
+  async getTmdbImportDetails(tmdbId, contentType) {
+    if (!this.hasTmdbKey) return null
+    const movie = contentType === 'movie'
+    try {
+      await this.throttle('tmdb')
+      const response = await this.tmdbClient.get(`${movie ? '/movie' : '/tv'}/${tmdbId}`, {
+        params: {
+          api_key: this.tmdbApiKey,
+          append_to_response: [
+            'alternative_titles',
+            'external_ids',
+            'videos',
+            movie ? 'release_dates' : 'content_ratings',
+          ].join(','),
+        },
+      })
+      return response.data
+    } catch (error) {
+      console.error(`TMDB ${contentType} import error:`, error.response?.data || error.message)
+      return null
+    }
+  }
+
+  /**
    * MAL ranking page over-fetched then filtered to movies/OVA/specials by episode count and title keywords.
    * @param {number} [limit=50]
    * @param {number} [offset=0]

@@ -44,7 +44,15 @@ class RelationshipService {
         return { sequels: [], prequels: [], related: [] }
       }
 
-      const result = await this.findSmartRelationships(content)
+      const found = await this.findSmartRelationships(content)
+      // A series lists its seasons on its own page, and a season links to its series.
+      const id = String(content._id)
+      const keep = (row) => row.seriesId !== id && String(row._id) !== content.seriesId
+      const result = {
+        sequels: found.sequels.filter(keep),
+        prequels: found.prequels.filter(keep),
+        related: found.related.filter(keep),
+      }
 
       this.cache.delete(cacheKey)
       this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
