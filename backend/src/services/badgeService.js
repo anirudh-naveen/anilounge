@@ -19,18 +19,21 @@ import {
 } from '../utils/badges.js'
 import { BOT_EMAILS, isBotEmail } from '../utils/botAccount.js'
 import { HttpError } from '../utils/httpError.js'
+import { normalizeAccent } from '../utils/profileSettings.js'
 import { logAction } from './adminLog.js'
 
 /**
  * Every account holding at least one badge. Banned, demo, and unverified accounts are
  * left out (they show no badges).
- * @returns {Promise<Array<{ id: string, username: string, badges: string[], featured: string | null, choice: string | null }>>}
- *   `featured` is the emblem to show next to the name (null = none).
+ * @returns {Promise<Array<{ id: string, username: string, badges: string[], featured: string | null, choice: string | null, accent: string | null }>>}
+ *   `featured` is the emblem to show next to the name (null = none); `accent` tints their
+ *   avatar frame (null = never picked: silver).
  */
 export async function listBadgeHolders() {
   const owners = [...parseAdminEmails()]
   const { rows } = await query(
     `SELECT id, username, role, cosmetic_roles, featured_badge,
+            to_jsonb(users) #>> '{profile_settings,accent}' AS accent,
             lower(email) = ANY($1::text[]) AS owner, email = ANY($2::text[]) AS bot
      FROM users
      WHERE banned_at IS NULL AND NOT is_demo AND email_verified_at IS NOT NULL
@@ -53,6 +56,7 @@ export async function listBadgeHolders() {
         featured: featuredEmblem(badges, row.featured_badge),
         // Their raw pick (null = automatic), so the owner's picker shows it.
         choice: row.featured_badge || null,
+        accent: normalizeAccent(row.accent),
       }
     })
     .filter((row) => row.badges.length)

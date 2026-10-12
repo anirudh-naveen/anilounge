@@ -29,6 +29,28 @@ describe('UserAvatar', () => {
     expect(plain.classes()).not.toContain('ringed')
   })
 
+  it('crops to the emblem silhouette, or crowns Creator and caps Bot', () => {
+    const spade = mount(UserAvatar, { props: { badge: 'artist', size: 40 } })
+    expect(spade.classes()).toContain('shaped')
+    expect(spade.find('.frame').exists()).toBe(true)
+    expect(spade.get('.user-avatar-inner').attributes('style')).toContain('mask')
+    const creator = mount(UserAvatar, { props: { badge: 'creator' } })
+    expect(creator.classes()).toContain('round')
+    expect(creator.find('.crown').exists()).toBe(true)
+    expect(
+      mount(UserAvatar, { props: { badge: 'bot' } })
+        .find('.crown.jester')
+        .exists(),
+    ).toBe(true)
+  })
+
+  it('frames in silver until the user picks an accent', () => {
+    const silver = mount(UserAvatar, { props: { badge: 'admin', accent: null } })
+    expect(silver.get('stop').attributes('stop-color')).toBe('#f8fafc')
+    const teal = mount(UserAvatar, { props: { badge: 'admin', accent: 'teal' } })
+    expect(teal.findAll('stop')[1]!.attributes('stop-color')).toBe('#2bbbad')
+  })
+
   it('shows no ring for no emblem or an unknown badge', () => {
     expect(mount(UserAvatar, { props: { badge: null } }).classes()).not.toContain('ringed')
     expect(mount(UserAvatar, { props: { badge: 'future' } }).classes()).not.toContain('ringed')
