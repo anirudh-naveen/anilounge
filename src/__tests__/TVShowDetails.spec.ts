@@ -11,6 +11,39 @@ const titles: Record<string, object> = {
     contentType: 'tv',
     genres: [],
   },
+  naruto: {
+    _id: 'naruto',
+    title: 'Naruto',
+    overview: 'A ninja story.',
+    contentType: 'tv',
+    genres: [],
+    franchise: 'Naruto',
+    franchiseId: 'naruto-franchise',
+    seasons: [
+      { _id: 'n-s1', title: 'Naruto Season 1', label: 'Season 1', seasonNumber: 1, partNumber: 1 },
+      { _id: 'n-s2', title: 'Naruto Season 2', label: 'Season 2', seasonNumber: 2, partNumber: 1 },
+    ],
+  },
+  'n-s1': {
+    _id: 'n-s1',
+    title: 'Naruto Season 1',
+    overview: 'The academy years.',
+    contentType: 'season',
+    genres: [],
+    series: { _id: 'naruto', title: 'Naruto' },
+    seasonLabel: 'Season 1',
+    franchise: 'Naruto',
+    franchiseId: 'naruto-franchise',
+  },
+  'n-s2': {
+    _id: 'n-s2',
+    title: 'Naruto Season 2',
+    overview: 'The chunin exams.',
+    contentType: 'season',
+    genres: [],
+    series: { _id: 'naruto', title: 'Naruto' },
+    seasonLabel: 'Season 2',
+  },
   'aot-s3': {
     _id: 'aot-s3',
     title: 'Attack on Titan Season 3',
@@ -41,23 +74,45 @@ const season = (seasonNumber: number, contentId: string | null, overview = '') =
 })
 
 const getContentById = vi.fn((id: string) => Promise.resolve({ data: { data: titles[id] } }))
-const getContentEpisodes = vi.fn((id: string) =>
-  Promise.resolve({
-    data: {
-      data: {
-        episodes: [episode(1, 'Begin'), episode(2, 'Middle'), episode(3, 'Later')],
-        seasons: [season(1, 'aot'), season(2, null, 'Season two plot.'), season(3, 'aot-s3')],
-        seriesId: 'aot',
-        currentSeason: id === 'aot-s3' ? 3 : 1,
-      },
+const narutoGuide = {
+  episodes: [
+    {
+      ...episode(1, 'Enter Naruto'),
+      cast: [{ name: 'Junko Takeuchi', character: 'Naruto Uzumaki', profilePath: '' }],
+      staff: [{ _id: 'staff-dir', name: 'Hayato Date', role: 'Episode Director' }],
     },
-  }),
+    episode(2, 'Exams Begin'),
+  ],
+  seasons: [season(1, 'n-s1'), season(2, 'n-s2')],
+  seriesId: 'naruto',
+  currentSeason: null,
+}
+
+const characterList = [
+  { _id: 'char-naruto', entityType: 'character', name: 'Naruto Uzumaki', appearances: [] },
+  { _id: 'char-sasuke', entityType: 'character', name: 'Sasuke Uchiha', appearances: [] },
+]
+
+const getContentEpisodes = vi.fn((id: string) =>
+  id.startsWith('n')
+    ? Promise.resolve({ data: { data: narutoGuide } })
+    : Promise.resolve({
+        data: {
+          data: {
+            episodes: [episode(1, 'Begin'), episode(2, 'Middle'), episode(3, 'Later')],
+            seasons: [season(1, 'aot'), season(2, null, 'Season two plot.'), season(3, 'aot-s3')],
+            seriesId: 'aot',
+            currentSeason: id === 'aot-s3' ? 3 : 1,
+          },
+        },
+      }),
 )
 
 vi.mock('@/stores/content', () => ({
   useContentStore: () => ({
     loadWatchlist: vi.fn(),
     getWatchlistItem: () => undefined,
+    isInWatchlist: () => false,
     findContentById: () => undefined,
     cacheContent: vi.fn(),
     scrollToTop: vi.fn(),
@@ -86,7 +141,7 @@ vi.mock('@/services/api', () => ({
 
 vi.mock('@/stores/entities', () => ({
   useEntityStore: () => ({
-    getContentCharacters: vi.fn().mockResolvedValue([]),
+    getContentCharacters: (id: string) => Promise.resolve(id.startsWith('n') ? characterList : []),
   }),
 }))
 
@@ -100,7 +155,14 @@ const mountPage = async (path: string) => {
   const wrapper = mount(TVShowDetails, {
     global: {
       plugins: [router],
-      stubs: { WatchlistPanel: true, EntityCastRow: true, StudioLinks: true },
+      stubs: {
+        WatchlistPanel: true,
+        EntityCastRow: true,
+        StudioLinks: true,
+        WhereToWatch: true,
+        ForumHighlights: true,
+        RouterLink: { template: '<a><slot /></a>' },
+      },
     },
   })
   await flushPromises()
@@ -116,7 +178,7 @@ describe('TVShowDetails seasons', () => {
     getContentEpisodes.mockClear()
   })
 
-  it("opens a season's own title when it has one, without reloading episodes", async () => {
+  it("shows a season's own title in place when it has one, without reloading episodes", async () => {
     const { wrapper, router } = await mountPage('/tv-show/aot?from=/tv-shows')
     expect(wrapper.get('.show-title').text()).toBe('Attack on Titan')
     expect(wrapper.text()).toContain('Begin')
@@ -124,7 +186,8 @@ describe('TVShowDetails seasons', () => {
     await pill(wrapper, 'Season 3').trigger('click')
     await flushPromises()
 
-    expect(router.currentRoute.value.params.id).toBe('aot-s3')
+    expect(router.currentRoute.value.params.id).toBe('aot')
+    expect(router.currentRoute.value.query.season).toBe('3')
     expect(router.currentRoute.value.query.from).toBe('/tv-shows')
     expect(wrapper.get('.show-title').text()).toBe('Attack on Titan Season 3')
     expect(wrapper.get('[data-testid="season-label"]').text()).toBe('Season 3')
@@ -159,5 +222,62 @@ describe('TVShowDetails seasons', () => {
     expect(wrapper.get('.show-title').text()).toBe('Attack on Titan Season 3')
     expect(wrapper.get('button.season-pill.active').text()).toBe('Season 3')
     expect(wrapper.text()).toContain('Later')
+  })
+})
+
+describe('TVShowDetails series', () => {
+  const castIds = (wrapper: Awaited<ReturnType<typeof mountPage>>['wrapper']) =>
+    (wrapper.findComponent({ name: 'EntityCastRow' }).props('items') as Array<{ _id: string }>).map(
+      (item) => item._id,
+    )
+
+  it('opens on season 1 and swaps the page in place when another season card is picked', async () => {
+    const { wrapper, router } = await mountPage('/tv-show/naruto')
+    expect(wrapper.get('.show-title').text()).toBe('Naruto Season 1')
+    expect(wrapper.text()).toContain('The academy years.')
+    expect(wrapper.get('[data-testid="season-card-n-s1"]').classes()).toContain('active')
+    expect(wrapper.get('[data-testid="franchise"]').text()).toContain('Naruto')
+
+    await wrapper.get('[data-testid="season-card-n-s2"]').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.params.id).toBe('naruto')
+    expect(router.currentRoute.value.query.season).toBe('2')
+    expect(wrapper.get('.show-title').text()).toBe('Naruto Season 2')
+    expect(wrapper.text()).toContain('The chunin exams.')
+    expect(wrapper.text()).toContain('Exams Begin')
+    expect(wrapper.find('[data-testid="series-seasons"]').exists()).toBe(true)
+    expect(wrapper.find('button.season-pill').exists()).toBe(false)
+  })
+
+  it('lays the page out overview, seasons, episodes, characters, then the rest', async () => {
+    const { wrapper } = await mountPage('/tv-show/naruto')
+    const html = wrapper.html()
+    const order = [
+      'show-description',
+      'series-seasons',
+      'episode-row',
+      'entity-cast-row-stub',
+      'where-to-watch-stub',
+      'forum-highlights-stub',
+    ].map((marker) => html.indexOf(marker))
+    expect(order.every((index) => index >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+    expect(wrapper.text()).not.toContain('Related Content')
+  })
+
+  it('narrows characters and staff to the open episode', async () => {
+    const { wrapper } = await mountPage('/tv-show/naruto')
+    expect(castIds(wrapper)).toEqual(['char-naruto', 'char-sasuke'])
+
+    await wrapper.get('[data-testid="episode-1-1"]').trigger('click')
+
+    expect(castIds(wrapper)).toEqual(['char-naruto'])
+    expect(wrapper.get('[data-testid="episode-focus"]').text()).toContain('Enter Naruto')
+    expect(wrapper.text()).toContain('Hayato Date')
+
+    await wrapper.get('[data-testid="episode-focus"] button').trigger('click')
+    expect(castIds(wrapper)).toEqual(['char-naruto', 'char-sasuke'])
+    expect(wrapper.find('[data-testid="episode-focus"]').exists()).toBe(false)
   })
 })

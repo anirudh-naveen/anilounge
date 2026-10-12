@@ -1,8 +1,9 @@
 <!--
   MovieDetails.vue — movie detail view.
 
-  Loads one movie by route id and shows poster, titles, meta, watchlist
-  actions, overview, and related sequels/prequels from the content store.
+  Loads one movie by route id and shows poster, titles, franchise, meta, watchlist
+  actions, then overview, characters, tags, where to watch and trailer, the
+  forum, and credits.
 -->
 <template>
   <div class="movie-details">
@@ -49,6 +50,7 @@
           <p v-if="getNativeTitle(movie)" class="original-title">
             Native Title: {{ getNativeTitle(movie) }}
           </p>
+          <FranchiseLink :content="movie" />
 
           <!-- Title: Meta -->
           <div class="movie-meta">
@@ -102,161 +104,21 @@
         <p>{{ movie.overview || 'No overview available.' }}</p>
       </div>
 
+      <!-- Title: Characters -->
+      <EntityCastRow :items="characters" :content-id="movie._id" :loading="charactersLoading" />
+
+      <!-- Title: Tags -->
+      <TitleExtras :content="movie" :sections="['tags']" />
+
       <!-- Title: Where to Watch -->
       <WhereToWatch :content-id="movie._id" />
-
-      <TitleExtras :content="movie" />
+      <TitleExtras :content="movie" :sections="['trailer']" />
 
       <!-- Title: Forum -->
       <ForumHighlights :content-id="movie._id" :name="getDisplayTitle(movie)" reviewable />
 
-      <!-- Title: Related Loading -->
-      <div v-if="relatedContentLoading" class="related-content-loading">
-        <h3>Loading Related Content...</h3>
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-          <p>Finding sequels, prequels, and related content...</p>
-        </div>
-      </div>
-
-      <!-- Title: Related Content -->
-      <div
-        v-else-if="
-          relatedContent &&
-          (relatedContent.sequels.length > 0 ||
-            relatedContent.prequels.length > 0 ||
-            relatedContent.related.length > 0)
-        "
-        class="related-content"
-      >
-        <h3>Related Content</h3>
-
-        <!-- Title: Franchise -->
-        <div v-if="movie.franchise" class="franchise-info">
-          <h4>
-            Part of the
-            <router-link
-              v-if="movie.franchiseId"
-              :to="{ name: 'FranchiseDetails', params: { id: movie.franchiseId } }"
-              class="franchise-link"
-              data-testid="franchise-link"
-              >{{ movie.franchise }}</router-link
-            ><template v-else>{{ movie.franchise }}</template>
-            franchise
-          </h4>
-          <p v-if="movie.franchiseRating" class="franchise-rating" data-testid="franchise-rating">
-            <i class="fas fa-star"></i> {{ movie.franchiseRating.toFixed(1) }} across the franchise
-          </p>
-        </div>
-
-        <!-- Title: Sequels -->
-        <div v-if="relatedContent.sequels.length > 0" class="relationship-section">
-          <h4>Sequels</h4>
-          <div class="content-grid">
-            <div
-              v-for="sequel in relatedContent.sequels"
-              :key="`sequel-${sequel._id}`"
-              class="content-card"
-              @click="viewContentDetails(sequel)"
-            >
-              <FavoriteHeart :content-id="sequel._id" />
-              <img
-                v-if="sequel.posterPath"
-                :src="getPosterUrl(sequel.posterPath)"
-                :alt="getDisplayTitle(sequel)"
-                @error="hideBrokenImage"
-              />
-              <div v-else class="no-poster">
-                <i class="fas fa-film"></i>
-              </div>
-              <div class="content-info">
-                <h5>{{ getDisplayTitle(sequel) }}</h5>
-                <p class="content-type">
-                  {{ getCardContentTypeDisplay(sequel.contentType) }}
-                  <AiringBadge :content="sequel" variant="inline" />
-                </p>
-                <div class="rating">
-                  <i class="fas fa-star"></i>
-                  <span>{{ getDisplayScore(sequel) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Title: Prequels -->
-        <div v-if="relatedContent.prequels.length > 0" class="relationship-section">
-          <h4>Prequels</h4>
-          <div class="content-grid">
-            <div
-              v-for="prequel in relatedContent.prequels"
-              :key="`prequel-${prequel._id}`"
-              class="content-card"
-              @click="viewContentDetails(prequel)"
-            >
-              <FavoriteHeart :content-id="prequel._id" />
-              <img
-                v-if="prequel.posterPath"
-                :src="getPosterUrl(prequel.posterPath)"
-                :alt="getDisplayTitle(prequel)"
-                @error="hideBrokenImage"
-              />
-              <div v-else class="no-poster">
-                <i class="fas fa-film"></i>
-              </div>
-              <div class="content-info">
-                <h5>{{ getDisplayTitle(prequel) }}</h5>
-                <p class="content-type">
-                  {{ getCardContentTypeDisplay(prequel.contentType) }}
-                  <AiringBadge :content="prequel" variant="inline" />
-                </p>
-                <div class="rating">
-                  <i class="fas fa-star"></i>
-                  <span>{{ getDisplayScore(prequel) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Title: Related -->
-        <div v-if="relatedContent.related.length > 0" class="relationship-section">
-          <h4>Related</h4>
-          <div class="content-grid">
-            <div
-              v-for="related in relatedContent.related"
-              :key="`related-${related._id}`"
-              class="content-card"
-              @click="viewContentDetails(related)"
-            >
-              <FavoriteHeart :content-id="related._id" />
-              <img
-                v-if="related.posterPath"
-                :src="getPosterUrl(related.posterPath)"
-                :alt="getDisplayTitle(related)"
-                @error="hideBrokenImage"
-              />
-              <div v-else class="no-poster">
-                <i class="fas fa-film"></i>
-              </div>
-              <div class="content-info">
-                <h5>{{ getDisplayTitle(related) }}</h5>
-                <p class="content-type">
-                  {{ getCardContentTypeDisplay(related.contentType) }}
-                  <AiringBadge :content="related" variant="inline" />
-                </p>
-                <div class="rating">
-                  <i class="fas fa-star"></i>
-                  <span>{{ getDisplayScore(related) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <EntityCastRow :items="characters" :content-id="movie._id" :loading="charactersLoading" />
-
+      <!-- Title: Credits -->
+      <TitleExtras :content="movie" :sections="['staff']" />
       <StudioLinks :content="movie" />
     </div>
 
@@ -274,12 +136,7 @@ import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import {
-  contentAPI,
-  getPosterUrl,
-  getCardContentTypeDisplay,
-  getDetailsRouteName,
-} from '@/services/api'
+import { contentAPI, getPosterUrl } from '@/services/api'
 import WatchlistPanel from '@/components/WatchlistPanel.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
@@ -291,7 +148,6 @@ import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { isUpcoming } from '@/utils/airing'
 import { hideBrokenImage } from '@/utils/posters'
-import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
@@ -300,6 +156,7 @@ import { titlePageMeta } from '@/utils/pageMeta'
 import { shareLink } from '@/utils/nativeApp'
 import WhereToWatch from '@/components/WhereToWatch.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
+import FranchiseLink from '@/components/FranchiseLink.vue'
 import { useToast } from 'vue-toastification'
 
 const route = useRoute()
@@ -314,14 +171,7 @@ const loading = ref(true)
 const error = ref('')
 const characters = ref<CatalogEntity[]>([])
 const charactersLoading = ref(false)
-const relatedContent = ref<{
-  sequels: UnifiedContent[]
-  prequels: UnifiedContent[]
-  related: UnifiedContent[]
-} | null>(null)
-const relatedContentLoading = ref(false)
 let detailsRequestId = 0
-let relatedRequestId = 0
 let charactersRequestId = 0
 
 const getDisplayScore = (content: UnifiedContent) => {
@@ -359,8 +209,6 @@ const loadMovie = async (movieId: string) => {
   }
 
   error.value = ''
-  relatedContent.value = null
-  relatedContentLoading.value = false
   characters.value = []
   contentStore.scrollToTop()
   fetchCharacters(movieId)
@@ -370,7 +218,6 @@ const loadMovie = async (movieId: string) => {
     movie.value = cached
     contentStore.cacheContent(cached, true)
     loading.value = false
-    fetchRelatedContent(movieId)
     return
   }
 
@@ -383,7 +230,6 @@ const loadMovie = async (movieId: string) => {
     movie.value = response.data.data
     contentStore.cacheContent(movie.value, true)
     loading.value = false
-    fetchRelatedContent(movieId)
   } catch (err) {
     if (requestId !== detailsRequestId) return
     error.value = err instanceof Error ? err.message : 'Failed to load movie'
@@ -413,52 +259,6 @@ const formatDate = (date: string | Date) => {
     month: 'long',
     day: 'numeric',
   })
-}
-
-const fetchRelatedContent = async (contentId: string) => {
-  const requestId = ++relatedRequestId
-  relatedContentLoading.value = true
-  try {
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Related content request timeout')), 2000),
-    )
-
-    const response = await Promise.race([contentAPI.getRelatedContent(contentId), timeoutPromise])
-    if (requestId !== relatedRequestId) return
-
-    relatedContent.value = (
-      response as {
-        data: {
-          data: { sequels: UnifiedContent[]; prequels: UnifiedContent[]; related: UnifiedContent[] }
-        }
-      }
-    ).data.data
-    relatedContent.value?.sequels?.forEach((item) => contentStore.cacheContent(item))
-    relatedContent.value?.prequels?.forEach((item) => contentStore.cacheContent(item))
-    relatedContent.value?.related?.forEach((item) => contentStore.cacheContent(item))
-  } catch (err) {
-    if (requestId !== relatedRequestId) return
-    console.error('Failed to fetch related content:', err)
-    relatedContent.value = { sequels: [], prequels: [], related: [] }
-  } finally {
-    if (requestId === relatedRequestId) {
-      relatedContentLoading.value = false
-    }
-  }
-}
-
-const viewContentDetails = async (content: UnifiedContent) => {
-  contentStore.cacheContent(content, true)
-
-  try {
-    await router.push({
-      name: getDetailsRouteName(content),
-      params: { id: content._id },
-      query: { from: route.fullPath },
-    })
-  } catch (err) {
-    console.error('Navigation error:', err)
-  }
 }
 
 watch(
@@ -754,172 +554,6 @@ useCanonicalSlug(
   }
 }
 
-/* Related Content Loading Styles */
-.related-content-loading {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: var(--bg-card);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  text-align: center;
-}
-
-.related-content-loading h3 {
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.loading-spinner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.loading-spinner .spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid var(--border-color);
-  border-top: 4px solid var(--highlight-color);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.loading-spinner p {
-  color: var(--text-muted);
-  margin: 0;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* Related Content Styles */
-.related-content {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: var(--bg-card);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-}
-
-.related-content h3 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.franchise-info {
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: linear-gradient(90deg, var(--coral-light), var(--tan-primary));
-  border-radius: 8px;
-}
-
-.franchise-info h4 {
-  margin: 0;
-  color: white;
-  font-size: 1.1rem;
-}
-
-.franchise-link {
-  color: white;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.franchise-rating {
-  margin: 0.35rem 0 0;
-  color: white;
-  font-size: 0.95rem;
-}
-
-.relationship-section {
-  margin-bottom: 2rem;
-}
-
-.relationship-section h4 {
-  font-size: 1.2rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.content-card {
-  background: var(--bg-hover);
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border: 1px solid var(--border-color);
-}
-
-.content-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-  border-color: var(--coral-primary);
-}
-
-.content-card img {
-  width: 100%;
-  height: 250px;
-  object-fit: cover;
-}
-
-.content-card .no-poster {
-  width: 100%;
-  height: 250px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-card);
-  color: var(--text-muted);
-  font-size: 2rem;
-}
-
-.content-info {
-  padding: 1rem;
-}
-
-.content-info h5 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.content-type {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.content-info .rating {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-}
-
-.content-info .rating i {
-  color: #ffd700;
-}
-
 /* Fix text readability issues */
 .movie-description p,
 .movie-description h2,
@@ -946,9 +580,5 @@ useCanonicalSlug(
 
 .genre-tag {
   color: var(--text-on-accent) !important;
-}
-
-.content-type {
-  color: var(--coral-deep) !important;
 }
 </style>

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import EpisodeRow from '@/components/EpisodeRow.vue'
@@ -112,6 +112,11 @@ describe('season helpers', () => {
     expect(findRouteSeason(seasons, 'other')).toBeNull()
   })
 
+  it('lets the series route pick any season by number', () => {
+    expect(findRouteSeason(seasons, 'show', '3', 'show')?.seasonNumber).toBe(3)
+    expect(findRouteSeason(seasons, 'show', undefined, 'show')).toBeNull()
+  })
+
   it("builds a season's details from TMDB season fields", () => {
     const view = seasonContent(
       series,
@@ -213,35 +218,24 @@ describe('EpisodeRow', () => {
     expect(wrapper.get('button.season-pill.active').text()).toBe('Season 1')
   })
 
-  it('shows series characters on every expanded episode and opens their screen', async () => {
+  it('tells the page which episode is open and leaves characters to the page', async () => {
     const characters: CatalogEntity[] = [
       {
         _id: 'char-hero',
         entityType: 'character',
-        name: 'Hero (voice)',
+        name: 'Hero',
         appearances: [{ content: 'show-1', role: 'Main' }],
       },
-      ...Array.from({ length: 11 }, (_, index) => ({
-        _id: `char-${index}`,
-        entityType: 'character' as const,
-        name: `Extra ${index}`,
-        appearances: [{ content: 'show-1', role: 'Supporting' }],
-      })),
     ]
-    const { wrapper, router } = await mountRow({ episodes, characters })
-    await wrapper.get('[data-testid="episode-1-1"]').trigger('click')
-    expect(wrapper.get('[data-testid="character-card-char-hero"]').text()).toContain('Hero')
-    expect(wrapper.get('[data-testid="character-card-char-hero"]').text()).not.toContain('Main')
-    expect(wrapper.get('[data-testid="character-card-char-hero"]').text()).not.toContain('voice')
-    expect(wrapper.findAll('[data-testid^="character-card-"]')).toHaveLength(10)
-    expect(wrapper.text()).toContain('+2 more')
-    const push = vi.spyOn(router, 'push')
-    await wrapper.get('[data-testid="character-card-char-hero"]').trigger('click')
-    expect(push).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'CharacterDetails',
-        params: { id: 'char-hero' },
-      }),
-    )
+    const { wrapper } = await mountRow({ episodes, characters })
+    const card = wrapper.get('[data-testid="episode-1-1"]')
+
+    await card.trigger('click')
+    expect(wrapper.emitted('select-episode')?.at(-1)?.[0]).toMatchObject({ title: 'Begin' })
+    expect(wrapper.text()).toContain('The start of the story.')
+    expect(wrapper.text()).not.toContain('Aoi Yuki')
+
+    await card.trigger('click')
+    expect(wrapper.emitted('select-episode')?.at(-1)).toEqual([null])
   })
 })
