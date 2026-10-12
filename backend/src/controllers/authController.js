@@ -36,6 +36,7 @@ import {
   issueEmailCode,
   markEmailVerified,
   resendWaitSeconds,
+  resetCodeLimitReached,
   verifyTwoFactorCode,
 } from '../services/accountSecurityService.js'
 import {
@@ -449,8 +450,9 @@ export const unlockAccount = async (req, res) => {
 
 /**
  * Email a password reset code. Always answers the same way so it cannot be used to
- * discover which emails have accounts; codes are limited to one a minute, and the
- * demo and banned accounts never get one.
+ * discover which emails have accounts; codes are limited to one a minute and five a
+ * day per account (bounding guesses at the code), and the demo and banned accounts
+ * never get one.
  *
  * @param {import('express').Request} req - `body.email`.
  * @param {import('express').Response} res - 200 generic success, or 500.
@@ -463,7 +465,8 @@ export const forgotPassword = async (req, res) => {
       user &&
       !user.isDemo() &&
       !isBanned(user) &&
-      (await resendWaitSeconds(user._id, 'reset_password')) === 0
+      (await resendWaitSeconds(user._id, 'reset_password')) === 0 &&
+      !(await resetCodeLimitReached(user._id))
     ) {
       const code = await issueEmailCode(user._id, 'reset_password')
       await sendPasswordResetEmail(user, code)
