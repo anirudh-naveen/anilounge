@@ -73,6 +73,7 @@ const mountAt = async (component: object, path: string) => {
       { path: '/login', component: Login },
       { path: '/verify-email', name: 'verifyEmail', component: VerifyEmail },
       { path: '/unlock-account', name: 'unlockAccount', component: stub },
+      { path: '/reset-password', name: 'resetPassword', component: stub },
       { path: '/register', component: stub },
       { path: '/settings', component: Settings },
     ],

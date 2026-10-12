@@ -143,21 +143,25 @@ export const progressiveSlowdown = slowDown({
 })
 
 const AUTH_WINDOW_MS = 15 * 60 * 1000
-const AUTH_MAX_ATTEMPTS = 5
+const AUTH_MAX_ATTEMPTS = 10
+const SIGNUP_WINDOW_MS = 60 * 60 * 1000
+const SIGNUP_MAX_ACCOUNTS = 10
 const authAttemptMessage = {
   success: false,
   message: 'Too many authentication attempts. Please try again later.',
 }
 
 /**
- * Sign-ups count every attempt (slows account spam from one IP). Sign-ins count only
- * failures: successful sign-ins from a shared IP (campus, office, carrier NAT) must not
- * lock out the next person, and per-account lockout already covers guessing.
- * Production only; demo-account logins are exempt.
+ * Sign-ups count only accounts actually created (10 per IP per hour slows account spam);
+ * a rejected form (username taken, weak password) is not counted, so fixing typos never
+ * locks anyone out. Sign-ins count only failures: successful sign-ins from a shared IP
+ * (campus, office, carrier NAT) must not lock out the next person, and per-account
+ * lockout already covers guessing. Production only; demo-account logins are exempt.
  */
 const registerLimiter = rateLimit({
-  windowMs: AUTH_WINDOW_MS,
-  max: AUTH_MAX_ATTEMPTS,
+  windowMs: SIGNUP_WINDOW_MS,
+  max: SIGNUP_MAX_ACCOUNTS,
+  skipFailedRequests: true,
   skip: (req) => process.env.NODE_ENV !== 'production' || isDemoEmail(req.body?.email),
   message: authAttemptMessage,
   standardHeaders: true,
@@ -177,7 +181,7 @@ const loginLimiter = rateLimit({
 
 export const bruteForceProtection = {
   /**
-   * Per-IP auth attempt cap (5 per 15 minutes): all sign-up attempts, failed sign-ins.
+   * Per-IP auth caps: 10 created accounts per hour, 10 failed sign-ins per 15 minutes.
    *
    * @param {import('express').Request} req
    * @param {import('express').Response} res - 429 when the cap is exceeded.

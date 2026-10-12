@@ -1,5 +1,5 @@
 /**
- * Email verification, lockout unlock codes, and authenticator-app 2FA.
+ * Email verification, lockout unlock and password reset codes, and authenticator-app 2FA.
  *
  * Layer: service. Owns the `email_codes` and `two_factor_backup_codes` tables and
  * the verification/2FA columns on `users` (these are written here directly, not
@@ -15,9 +15,12 @@ import { claimDonations } from './donationService.js'
 export const CODE_TTL_MS = {
   verify_email: 24 * 60 * 60 * 1000,
   unlock_account: 60 * 60 * 1000,
+  reset_password: 60 * 60 * 1000,
 }
 export const MAX_CODE_ATTEMPTS = 5
 export const RESEND_COOLDOWN_MS = 60 * 1000
+/** Reset codes per account per day: with 5 guesses each, at most 25 guesses at a 6-digit code. */
+export const MAX_RESET_CODES_PER_DAY = 5
 const BACKUP_CODE_COUNT = 8
 
 /**
@@ -40,7 +43,7 @@ export function generateSixDigitCode() {
 /**
  * Seconds until another code of this purpose may be sent (0 when allowed).
  * @param {string} userId
- * @param {'verify_email'|'unlock_account'} purpose
+ * @param {'verify_email'|'unlock_account'|'reset_password'} purpose
  * @returns {Promise<number>}
  */
 export async function resendWaitSeconds(userId, purpose) {
@@ -56,9 +59,23 @@ export async function resendWaitSeconds(userId, purpose) {
 }
 
 /**
+ * Whether the account has hit its daily password reset code limit.
+ * @param {string} userId
+ * @returns {Promise<boolean>}
+ */
+export async function resetCodeLimitReached(userId) {
+  const { rows } = await query(
+    `SELECT count(*)::int AS n FROM email_codes
+     WHERE user_id = $1 AND purpose = 'reset_password' AND created_at > now() - interval '1 day'`,
+    [userId],
+  )
+  return rows[0].n >= MAX_RESET_CODES_PER_DAY
+}
+
+/**
  * Create a fresh code for `purpose`, invalidating earlier unused ones.
  * @param {string} userId
- * @param {'verify_email'|'unlock_account'} purpose
+ * @param {'verify_email'|'unlock_account'|'reset_password'} purpose
  * @returns {Promise<string>} The plaintext code to email.
  */
 export async function issueEmailCode(userId, purpose) {
@@ -81,7 +98,7 @@ export async function issueEmailCode(userId, purpose) {
  * the code; after `MAX_CODE_ATTEMPTS` it stops working and a new one is needed.
  *
  * @param {string} userId
- * @param {'verify_email'|'unlock_account'} purpose
+ * @param {'verify_email'|'unlock_account'|'reset_password'} purpose
  * @param {unknown} code - User input.
  * @returns {Promise<'ok'|'invalid'|'expired'|'too_many_attempts'|'missing'>}
  */

@@ -20,6 +20,13 @@ const BAN_DURATIONS = {
  * internal address would block everyone behind it. */
 const UNCHECKED_IP = /^(?:::1|127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/
 
+/** Account recovery endpoints a banned IP can still reach (see `checkIPBan`). */
+const EMAIL_RECOVERY_PATHS = new Set([
+  '/api/auth/unlock',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+])
+
 /**
  * Reject banned client IPs with 403. Skips loopback/private addresses and development.
  * On lookup failure the request still continues (fail-open) so DB outages do not lock out users.
@@ -31,13 +38,14 @@ const UNCHECKED_IP = /^(?:::1|127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)
  */
 export const checkIPBan = async (req, res, next) => {
   const ip = normalizeIp(req.ip || req.socket?.remoteAddress)
-  // The emailed unlock code proves account ownership, so a locked-out user can
-  // always reach the unlock endpoint even from the IP their failed attempts banned.
-  const isUnlock = req.method === 'POST' && req.originalUrl.split('?')[0] === '/api/auth/unlock'
+  // Emailed codes prove account ownership, so a locked-out user can always reach the
+  // unlock and password reset endpoints even from the IP their failed attempts banned.
+  const isRecovery =
+    req.method === 'POST' && EMAIL_RECOVERY_PATHS.has(req.originalUrl.split('?')[0])
   // Verified Google/Bing crawlers are never turned away (middleware/searchCrawler.js).
   if (
     !ip ||
-    isUnlock ||
+    isRecovery ||
     isCrawlerExempt(req) ||
     UNCHECKED_IP.test(ip) ||
     process.env.NODE_ENV === 'development'

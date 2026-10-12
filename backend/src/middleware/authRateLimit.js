@@ -1,7 +1,7 @@
 /**
  * Rate limiting for `/api/auth` writes.
  *
- * Layer: middleware. Five failed auth writes per IP per 15 minutes slow credential
+ * Layer: middleware. Ten failed auth writes per IP per 15 minutes slow credential
  * stuffing. `resetAuthRateLimits` clears an IP's counters once it proves account
  * ownership (emailed unlock code), so a user is not blocked right after unlocking.
  */
@@ -14,23 +14,31 @@ import { rateLimitStore } from './pgRateLimitStore.js'
 
 /** Session-cookie endpoints: the cookie holds an unguessable token, so there is nothing to brute-force. */
 const COOKIE_SESSION_PATHS = new Set(['/refresh', '/revoke'])
+/**
+ * Not credential guesses: sign-up has its own limiter (antiBot.js), so a rejected form
+ * is not held against the IP; the unlock code only lifts a lockout (it never signs in);
+ * forgot-password always answers 200. Reset codes do count: a guessed one takes over
+ * the account.
+ */
+const UNCOUNTED_PATHS = new Set(['/register', '/unlock', '/forgot-password'])
 
 /**
- * Failed auth writes: 5 per IP per 15 minutes. Successful requests are not counted.
- * GETs, session refresh/logout, unlocks, and demo logins are exempt.
+ * Failed auth writes: 10 per IP per 15 minutes. Successful requests are not counted.
+ * GETs, session refresh/logout, sign-ups, unlocks, reset-code requests, and demo logins
+ * are exempt.
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 failed auth requests per IP per window
+  max: 10, // 10 failed auth requests per IP per window
   // Only failures (4xx/5xx) count, so signing up or in successfully never uses the budget.
   skipSuccessfulRequests: true,
   // Profile reads are not credential attempts; the page refreshes its session on every
-  // load; demo logins must always work; the unlock code is attempt-limited itself.
+  // load; demo logins must always work; see UNCOUNTED_PATHS for the rest.
   skip: (req) =>
     isCrawlerExempt(req) ||
     req.method === 'GET' ||
     (req.method === 'POST' && COOKIE_SESSION_PATHS.has(req.path)) ||
-    (req.method === 'POST' && req.path === '/unlock') ||
+    (req.method === 'POST' && UNCOUNTED_PATHS.has(req.path)) ||
     (req.method === 'POST' && req.path === '/login' && isDemoEmail(req.body?.email)),
   message: {
     success: false,

@@ -155,7 +155,13 @@ api.interceptors.request.use(
 )
 
 /** Sign-in steps whose 401 means "wrong password/code", not "session expired". */
-const CREDENTIAL_PATHS = ['/auth/login', '/auth/2fa/verify', '/auth/verify-email', '/auth/unlock']
+const CREDENTIAL_PATHS = [
+  '/auth/login',
+  '/auth/2fa/verify',
+  '/auth/verify-email',
+  '/auth/unlock',
+  '/auth/reset-password',
+]
 
 api.interceptors.response.use(
   (response) => response,
@@ -202,6 +208,9 @@ export const authAPI = {
   verifyEmail: (email: string, code: string) => api.post('/auth/verify-email', { email, code }),
   resendVerification: (email: string) => api.post('/auth/resend-verification', { email }),
   unlockAccount: (email: string, code: string) => api.post('/auth/unlock', { email, code }),
+  forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (email: string, code: string, password: string) =>
+    api.post('/auth/reset-password', { email, code, password }),
   verifyTwoFactor: (challengeToken: string, code: string) =>
     api.post('/auth/2fa/verify', { challengeToken, code }),
   removeProfilePicture: () => api.delete('/account/profile-picture'),
