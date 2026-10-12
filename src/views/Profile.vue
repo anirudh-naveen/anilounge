@@ -275,7 +275,7 @@
             <div
               class="favorite-grid"
               :class="{
-                'entity-grid': group.key !== 'content',
+                'entity-grid': !isTitleGroup(group.key),
                 reordering: reordering === group.key,
               }"
             >
@@ -293,8 +293,9 @@
                 @dragover="onDragOver(index, $event)"
                 @dragend="dragIndex = null"
               >
+                <span class="slot-rank-badge" data-testid="favorite-rank">#{{ index + 1 }}</span>
                 <div
-                  v-if="group.key === 'content'"
+                  v-if="isTitleGroup(group.key)"
                   class="favorite-title-card"
                   @click="reordering !== group.key && openContent(asTitle(item))"
                 >
@@ -331,7 +332,6 @@
                 </button>
 
                 <div v-if="reordering === group.key" class="slot-controls">
-                  <span class="slot-rank">{{ index + 1 }}</span>
                   <button
                     type="button"
                     class="slot-move"
@@ -936,8 +936,11 @@ const favoriteTitles = computed(() => {
 /** Favorites shown per category: a ranked top 10 (the server enforces the same cap). */
 const FAVORITES_MAX = 10
 
-type FavoriteKey = 'content' | 'characters' | 'voiceActors' | 'studios'
+type FavoriteKey = 'movies' | 'series' | 'characters' | 'voiceActors' | 'studios'
 type FavoriteItem = UnifiedContent | CatalogEntity
+/** Movies and series are both ranked from `favorites.content`, split by type. */
+const isTitleGroup = (key: FavoriteKey) => key === 'movies' || key === 'series'
+const sourceKey = (key: FavoriteKey) => (isTitleGroup(key) ? 'content' : key)
 interface FavoriteGroup {
   key: FavoriteKey
   label: string
@@ -948,7 +951,16 @@ const favoriteGroups = computed<FavoriteGroup[]>(() => {
   const favorites = profile.value?.favorites
   if (!favorites) return []
   const groups: FavoriteGroup[] = [
-    { key: 'content', label: 'Titles', items: favoriteTitles.value },
+    {
+      key: 'movies',
+      label: 'Movies',
+      items: favoriteTitles.value.filter((item) => item.contentType === 'movie'),
+    },
+    {
+      key: 'series',
+      label: 'Series',
+      items: favoriteTitles.value.filter((item) => item.contentType !== 'movie'),
+    },
     { key: 'characters', label: 'Characters', items: favorites.characters },
     { key: 'voiceActors', label: 'Voice Actors', items: favorites.voiceActors },
     { key: 'studios', label: 'Studios', items: favorites.studios },
@@ -1018,16 +1030,17 @@ const saveOrder = async (key: FavoriteKey) => {
   if (!favorites) return
   // Titles un-hearted on this page are already gone server-side; leave them out.
   const ids = orderDraft.value.filter(
-    (id) => key !== 'content' || !favoritesStore.isLoaded || favoritesStore.isFavorite(id),
+    (id) => !isTitleGroup(key) || !favoritesStore.isLoaded || favoritesStore.isFavorite(id),
   )
   savingOrder.value = true
   try {
     await profileAPI.reorderFavorites(ids)
-    const list = favorites[key] as FavoriteItem[]
+    const source = sourceKey(key)
+    const list = favorites[source] as FavoriteItem[]
     const byId = new Map(list.map((item) => [item._id, item]))
     const ordered = ids.map((id) => byId.get(id)).filter((item) => item !== undefined)
     const rest = list.filter((item) => !ids.includes(item._id))
-    ;(favorites[key] as FavoriteItem[]) = [...ordered, ...rest]
+    ;(favorites[source] as FavoriteItem[]) = [...ordered, ...rest]
     cancelReorder()
     toast.success('Favorites reordered')
   } catch (error) {
@@ -1808,6 +1821,7 @@ const handleImageError = showPosterPlaceholder
 }
 
 .favorite-slot {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -1835,14 +1849,27 @@ const handleImageError = showPosterPlaceholder
 .slot-controls {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.25rem;
 }
 
-.slot-rank {
-  margin-right: auto;
-  font-size: 0.8rem;
+/* The slot's place in the ranking, over the card's top-left corner. */
+.slot-rank-badge {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 2;
+  min-width: 1.6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(10, 14, 24, 0.78);
+  box-shadow: 0 0 0 1px var(--profile-accent, var(--coral-primary));
+  color: #fff;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: var(--profile-accent);
+  line-height: 1.3;
+  text-align: center;
+  pointer-events: none;
 }
 
 .slot-move {

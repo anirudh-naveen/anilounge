@@ -322,8 +322,8 @@ export const toggleContentFavorite = async (req, res) => {
 }
 
 /**
- * Rank one category of the signed-in user's favorites (titles, characters, voice
- * actors, or studios).
+ * Rank one category of the signed-in user's favorites (movies, series, characters,
+ * voice actors, or studios).
  *
  * @param {import('express').Request} req - `body.ids`: that category's favorites in the new order.
  * @param {import('express').Response} res - 200 `{ data: ids }`, 400 not one whole category, or 500.
