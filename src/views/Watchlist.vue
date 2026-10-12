@@ -443,6 +443,7 @@ import {
   getWatchlistStatusLabel,
   WATCHLIST_STATUS_OPTIONS,
   WATCHLIST_STATUS_ORDER,
+  watchedEpisodes,
   type WatchlistStatus,
 } from '@/utils/watchlist'
 import ImportReminder from '@/components/ImportReminder.vue'
@@ -584,7 +585,7 @@ const getContentRating = (item: WatchlistItem) => {
 
 const getCurrentEpisodes = (item: WatchlistItem) => {
   if (typeof item === 'string') return 0
-  return item.currentEpisode || 0
+  return watchedEpisodes(item.status, item.currentEpisode, getTotalEpisodes(item))
 }
 
 const getTotalEpisodes = (item: WatchlistItem) => {
@@ -699,7 +700,7 @@ const initializeFormData = (item: WatchlistItem) => {
   if (!localFormData.value.has(itemId)) {
     localFormData.value.set(itemId, {
       status: item.status || 'plan_to_watch',
-      currentEpisode: item.currentEpisode || 0,
+      currentEpisode: getCurrentEpisodes(item),
       currentSeason: item.currentSeason || 1,
       rating: item.rating,
       notes: item.notes || '',
@@ -719,7 +720,7 @@ const getLocalFormData = (item: WatchlistItem): LocalFormData => {
     // Ensure all required fields exist
     return {
       status: existingData.status || item.status || 'plan_to_watch',
-      currentEpisode: existingData.currentEpisode || item.currentEpisode || 0,
+      currentEpisode: existingData.currentEpisode || getCurrentEpisodes(item),
       currentSeason: existingData.currentSeason || item.currentSeason || 1,
       rating: existingData.rating || item.rating,
       notes: existingData.notes || item.notes || '',
@@ -731,7 +732,7 @@ const getLocalFormData = (item: WatchlistItem): LocalFormData => {
 
   return {
     status: item.status || 'plan_to_watch',
-    currentEpisode: item.currentEpisode || 0,
+    currentEpisode: getCurrentEpisodes(item),
     currentSeason: item.currentSeason || 1,
     rating: item.rating,
     notes: item.notes || '',
