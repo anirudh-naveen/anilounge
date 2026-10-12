@@ -433,16 +433,16 @@
               <span class="stat-label">Watch time</span>
             </div>
             <div class="stat-tile">
-              <span class="stat-number">{{ profile.stats.totals.episodesWatched }}</span>
-              <span class="stat-label">Episodes watched</span>
+              <span class="stat-number">{{ profile.stats.totals.completedMovies }}</span>
+              <span class="stat-label">Movies completed</span>
             </div>
             <div class="stat-tile">
               <span class="stat-number">{{ profile.stats.totals.completedSeries }}</span>
               <span class="stat-label">Series completed</span>
             </div>
             <div class="stat-tile">
-              <span class="stat-number">{{ profile.stats.totals.completedMovies }}</span>
-              <span class="stat-label">Movies completed</span>
+              <span class="stat-number">{{ profile.stats.totals.episodesWatched }}</span>
+              <span class="stat-label">Episodes watched</span>
             </div>
             <div class="stat-tile">
               <span
