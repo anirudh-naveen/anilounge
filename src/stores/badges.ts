@@ -31,6 +31,9 @@ export const useBadgesStore = defineStore('badges', () => {
   /** Fetch the list; concurrent callers share the request. */
   const load = (force = false): Promise<void> => {
     if (!force && loadedAt && Date.now() - loadedAt < STALE_MS) return Promise.resolve()
+    // A forced reload (after the user changed something) must not reuse a fetch that
+    // started before the change.
+    if (force && loading) return loading.then(() => load(true))
     if (!loading) {
       loading = badgesAPI
         .list(force)

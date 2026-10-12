@@ -10,7 +10,8 @@
   a jester's cap for Bot (the mascots, so the deck's Joker). Frames are silver until
   the user picks a profile accent, then take its shades; Creator and Admin also
   shimmer. The frame and accent come from the badges store by `name`, or from
-  `badge` / `accent` when the caller knows them.
+  `badge` / `accent` when the caller knows them; the signed-in user's own picture
+  comes from their account, so changes show everywhere without a reload.
 -->
 <template>
   <span
@@ -92,6 +93,7 @@ import { getActivePinia } from 'pinia'
 import { getAvatarUrl } from '@/utils/avatars'
 import { frameColors } from '@/utils/accent'
 import { useBadgesStore } from '@/stores/badges'
+import { useAuthStore } from '@/stores/auth'
 import type { ProfileAccent } from '@/types/profile'
 
 const props = withDefaults(
@@ -172,12 +174,21 @@ const FRAMES: Record<
 
 // Without Pinia (isolated component tests) avatars simply go unringed.
 const badgesStore = getActivePinia() ? useBadgesStore() : null
+const authStore = getActivePinia() ? useAuthStore() : null
 
 const reducedMotion =
   typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 const failed = ref(false)
-const url = computed(() => getAvatarUrl(props.src))
+// The signed-in user's own avatar follows their account, so a new picture shows
+// everywhere at once instead of only where the page reloaded its data.
+const isSelf = computed(() => {
+  const me = authStore?.user?.username
+  return !!me && !!props.name && me.toLowerCase() === props.name.toLowerCase()
+})
+const url = computed(() =>
+  getAvatarUrl(isSelf.value ? (authStore!.user!.profilePicture ?? null) : props.src),
+)
 const initials = computed(() => (props.name || '?').slice(0, 2).toUpperCase())
 const ring = computed(() => {
   const badge =

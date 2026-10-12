@@ -1166,16 +1166,22 @@ const saveCustomize = async (result: CustomizeResult) => {
   isSaving.value = true
   try {
     const preferences = { favoriteGenres: result.genres }
-    const emblemChanged = result.emblem !== emblemChoice.value
+    const genresChanged =
+      result.genres.join('|') !== profile.value.user.preferences.favoriteGenres.join('|')
+    // null = the badge picker wasn't touched (it may have opened before the badges loaded).
+    const emblemChanged = result.emblem !== null && result.emblem !== emblemChoice.value
     // The frame and its accent show on avatars everywhere, from the badges list.
     const frameChanged =
       result.settings.accent !== profile.value.settings.accent ||
       result.settings.frame !== profile.value.settings.frame
-    const [response] = await Promise.all([
-      profileAPI.updateSettings({ settings: result.settings, bio: result.bio }),
-      authStore.updateProfile({ preferences }),
-      emblemChanged ? profileAPI.setFeaturedBadge(result.emblem || null) : null,
-    ])
+    // One at a time: each save rewrites the whole user row, so running them together let
+    // a stale copy of one overwrite the other's change.
+    const response = await profileAPI.updateSettings({
+      settings: result.settings,
+      bio: result.bio,
+    })
+    if (genresChanged) await authStore.updateProfile({ preferences })
+    if (emblemChanged) await profileAPI.setFeaturedBadge(result.emblem || null)
     if (emblemChanged || frameChanged) await badgesStore.load(true)
     const { settings, bio } = response.data.data as { settings: ProfileSettings; bio: string }
     profile.value.settings = settings
