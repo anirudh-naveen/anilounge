@@ -198,6 +198,38 @@ class UnifiedContentService {
   }
 
   /**
+   * One page of TMDB animation (genre 16) with at least `minVotes` votes, most voted
+   * first. TMDB serves at most 500 pages.
+   * @param {'movie' | 'tv'} type
+   * @param {number} page
+   * @param {number} minVotes
+   * @returns {Promise<{ results: object[], totalPages: number } | null>} null when TMDB fails.
+   */
+  async discoverTmdbAnimatedByVotes(type, page, minVotes) {
+    if (!this.hasTmdbKey) return null
+    try {
+      await this.throttle('tmdb')
+      const response = await this.tmdbClient.get(`/discover/${type}`, {
+        params: {
+          api_key: this.tmdbApiKey,
+          with_genres: '16',
+          sort_by: 'vote_count.desc',
+          'vote_count.gte': minVotes,
+          page,
+          include_adult: false,
+        },
+      })
+      return {
+        results: response.data.results || [],
+        totalPages: Math.min(response.data.total_pages || 0, 500),
+      }
+    } catch (error) {
+      console.error(`TMDB ${type} by votes error:`, error.response?.data || error.message)
+      return null
+    }
+  }
+
+  /**
    * Discover TMDB animation movies (genre 16), popularity descending.
    * @param {number} [page=1]
    * @param {number} [limit=20]
