@@ -66,12 +66,43 @@ export const ensureLoungeKeeper = () => ensureBot(LOUNGE_KEEPER)
 export const ensureLoungeCleaner = () => ensureBot(LOUNGE_CLEANER)
 
 /**
- * Create or sync every bot. Called at startup; never throws.
+ * Make every pair of bots friends: an accepted friendship, replacing any pending
+ * request between them. Leaves pairs that are already friends alone.
+ * @param {string[]} botIds
+ * @returns {Promise<void>}
+ */
+export async function befriendBots(botIds) {
+  for (const [index, a] of botIds.entries()) {
+    for (const b of botIds.slice(index + 1)) {
+      const { rows } = await query(
+        `SELECT 1 FROM friendships
+         WHERE status = 'accepted'
+           AND ((follower_id = $1 AND followee_id = $2) OR (follower_id = $2 AND followee_id = $1))`,
+        [a, b],
+      )
+      if (rows.length) continue
+      await query(
+        `DELETE FROM friendships
+         WHERE (follower_id = $1 AND followee_id = $2) OR (follower_id = $2 AND followee_id = $1)`,
+        [a, b],
+      )
+      await query(
+        `INSERT INTO friendships (follower_id, followee_id, status, responded_at)
+         VALUES ($1, $2, 'accepted', now())`,
+        [a, b],
+      )
+    }
+  }
+}
+
+/**
+ * Create or sync every bot, and keep them all friends. Called at startup; never throws.
  * @returns {Promise<void>}
  */
 export async function syncBots() {
   try {
-    await Promise.all(BOTS.map((bot) => ensureBot(bot)))
+    const ids = await Promise.all(BOTS.map((bot) => ensureBot(bot)))
+    await befriendBots(ids)
   } catch (error) {
     console.error('Bot account sync failed:', error.message)
   }

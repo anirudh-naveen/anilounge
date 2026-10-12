@@ -16,10 +16,10 @@ import { computeProfileStats } from '../utils/profileStats.js'
 import { loadWatchHistory } from '../services/watchEvents.js'
 import { getAvatar } from '../services/avatarService.js'
 import { moderationMessage } from '../utils/moderation.js'
-import { relationshipBetween } from '../services/friendService.js'
+import { listProfileFriends, relationshipBetween } from '../services/friendService.js'
 import { hasBlocked } from '../services/blockService.js'
 import { canMessageUser } from '../services/messageService.js'
-import { isBotEmail } from '../utils/botAccount.js'
+import { botForEmail } from '../utils/botAccount.js'
 import { listProfileConnections } from '../services/connectionService.js'
 import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
 import { sendError } from '../utils/httpError.js'
@@ -123,7 +123,8 @@ async function loadFavoriteEntities(user) {
  * Private profiles and hidden tabs are only returned to the owner; email and
  * watchlist notes are never included. Signed-in visitors also get their
  * `relationship` to the owner (`friends`, `outgoing`, `incoming`, or `none`) and whether
- * they `blocked` the owner. `connections` lists the owner's linked AniList, MyAnimeList,
+ * they `blocked` the owner. `friends` lists the owner's friends for the Friends tab. Bot
+ * accounts show only their own fixed tabs (utils/botAccount.js). `connections` lists the owner's linked AniList, MyAnimeList,
  * and TMDB accounts unless `settings.showConnections` is off.
  *
  * @param {import('express').Request} req - Reads `params.username`; `req.user` when signed in.
@@ -143,9 +144,11 @@ export const getPublicProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Profile not found.' })
     }
 
-    const visibleTabs = settings.tabOrder.filter(
-      (tab) => isOwner || !settings.hiddenTabs.includes(tab),
-    )
+    // Bots show a fixed set of tabs (utils/botAccount.js), whatever their settings say.
+    const bot = botForEmail(user.email)
+    const visibleTabs = bot
+      ? settings.tabOrder.filter((tab) => bot.profileTabs.includes(tab))
+      : settings.tabOrder.filter((tab) => isOwner || !settings.hiddenTabs.includes(tab))
     const shows = (tab) => visibleTabs.includes(tab)
     const watchlistRows = (user.watchlist || []).filter(
       (item) => item.content && typeof item.content === 'object',
@@ -168,6 +171,7 @@ export const getPublicProfile = async (req, res) => {
         : false
     const history = shows('stats') ? await loadWatchHistory(user._id) : null
     const connections = settings.showConnections ? await listProfileConnections(user._id) : []
+    const friends = shows('friends') ? await listProfileFriends(user._id) : null
 
     res.json({
       success: true,
@@ -176,7 +180,7 @@ export const getPublicProfile = async (req, res) => {
         blocked,
         canMessage,
         /** A bot account (Lounge Keeper / Cleaner / Guide): it can't be blocked. */
-        isBot: isBotEmail(user.email),
+        isBot: Boolean(bot),
         user: {
           id: user._id,
           username: user.username,
@@ -201,6 +205,7 @@ export const getPublicProfile = async (req, res) => {
             }))
           : null,
         stats: shows('stats') ? computeProfileStats(watchlistRows, new Date(), history) : null,
+        friends,
       },
     })
   } catch (error) {

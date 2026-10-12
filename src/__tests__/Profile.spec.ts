@@ -341,6 +341,25 @@ describe('Profile', () => {
     expect(names).toEqual(['Simon', 'Kamina'])
   })
 
+  it('lists friends on the Friends tab, linking to their profiles', async () => {
+    getPublicProfile.mockResolvedValue({
+      data: {
+        data: buildProfile({
+          tabs: ['favorites', 'friends'],
+          friends: [
+            { user: { id: 'u2', username: 'kai', profilePicture: null }, since: '2026-10-01' },
+            { user: { id: 'u3', username: 'mika', profilePicture: null }, since: '2026-10-02' },
+          ],
+        }),
+      },
+    })
+    const { wrapper } = await mountAt('/u/mika?tab=friends')
+
+    const friends = wrapper.findAll('[data-testid="profile-friend"]')
+    expect(friends.map((friend) => friend.get('.friend-name').text())).toEqual(['kai', 'mika'])
+    expect(friends[0]!.attributes('href')).toBe('/u/kai')
+  })
+
   it("shows the user's forum posts and comments on the Forum tab", async () => {
     getPublicProfile.mockResolvedValue({
       data: { data: buildProfile({ tabs: ['favorites', 'forum'] }) },

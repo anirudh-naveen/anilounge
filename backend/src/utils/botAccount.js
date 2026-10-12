@@ -15,7 +15,8 @@
  *   home feed. Its email is a plus address on the support mailbox (emails are unique per
  *   account, and support@ itself is Lounge Cleaner's), so resets still land in support@.
  *
- * None can be blocked.
+ * None can be blocked. Each shows only its `profileTabs` on its profile (whatever its
+ * saved settings say), and the bots are all friends with each other.
  */
 
 /** Live-site logo, so the picture loads from every environment. */
@@ -29,6 +30,7 @@ export const LOUNGE_KEEPER = Object.freeze({
   previousEmails: ['release-bot@anilounge.invalid'],
   bio: 'I post site news and open a discussion megathread whenever a new episode or movie comes out.',
   profilePicture: BOT_PICTURE,
+  profileTabs: ['watchlist', 'forum', 'friends'],
 })
 
 export const LOUNGE_CLEANER = Object.freeze({
@@ -38,6 +40,7 @@ export const LOUNGE_CLEANER = Object.freeze({
   previousEmails: [],
   bio: 'I keep the lounge tidy: moderation notices come from me. Message me if you need help.',
   profilePicture: BOT_PICTURE,
+  profileTabs: ['forum', 'friends'],
 })
 
 export const LOUNGE_GUIDE = Object.freeze({
@@ -47,6 +50,7 @@ export const LOUNGE_GUIDE = Object.freeze({
   previousEmails: [],
   bio: "I'm the AniLounge AI assistant. Ask me for recommendations, studios, voice actors, or genres from the search page.",
   profilePicture: BOT_PICTURE,
+  profileTabs: ['friends'],
 })
 
 export const BOTS = [LOUNGE_KEEPER, LOUNGE_CLEANER, LOUNGE_GUIDE]
@@ -58,3 +62,13 @@ export const BOT_EMAILS = BOTS.flatMap((bot) => [bot.email, ...bot.previousEmail
  * @returns {boolean}
  */
 export const isBotEmail = (email) => BOT_EMAILS.includes(String(email || '').toLowerCase())
+
+/**
+ * The bot with this email (current or previous), or null.
+ * @param {string | null | undefined} email
+ * @returns {typeof LOUNGE_KEEPER | null}
+ */
+export const botForEmail = (email) => {
+  const address = String(email || '').toLowerCase()
+  return BOTS.find((bot) => bot.email === address || bot.previousEmails.includes(address)) || null
+}
