@@ -3,7 +3,8 @@
 
   Used on movie, series, and season pages. The trailer loads only when asked (no
   YouTube request until then); spoiler tags stay hidden until revealed; staff open their
-  person page.
+  person page. `sections` picks which parts this instance shows, so a page can place
+  them apart.
 -->
 <template>
   <div v-if="hasAny" class="title-extras" data-testid="title-extras">
@@ -117,9 +118,17 @@ import { getProfileUrl } from '@/services/api'
 import { detailPath } from '@/utils/slug'
 import { hideBrokenImage } from '@/utils/posters'
 
-const props = defineProps<{
-  content: Pick<UnifiedContent, '_id' | 'trailer' | 'tags' | 'staff' | 'episodeStaff'>
-}>()
+type Section = 'trailer' | 'tags' | 'staff'
+
+const props = withDefaults(
+  defineProps<{
+    content: Pick<UnifiedContent, '_id' | 'trailer' | 'tags' | 'staff' | 'episodeStaff'>
+    sections?: Section[]
+  }>(),
+  { sections: () => ['trailer', 'tags', 'staff'] },
+)
+
+const shows = (section: Section) => props.sections.includes(section)
 
 const trailerOpen = ref(false)
 const showSpoilers = ref(false)
@@ -133,9 +142,9 @@ watch(
 )
 
 const trailerKey = computed(() =>
-  props.content.trailer?.site === 'youtube' ? props.content.trailer.key : '',
+  shows('trailer') && props.content.trailer?.site === 'youtube' ? props.content.trailer.key : '',
 )
-const tags = computed(() => props.content.tags || [])
+const tags = computed(() => (shows('tags') && props.content.tags) || [])
 const spoilerCount = computed(() => tags.value.filter((tag) => tag.isSpoiler).length)
 const visibleTags = computed(() =>
   showSpoilers.value ? tags.value : tags.value.filter((tag) => !tag.isSpoiler),
@@ -146,14 +155,14 @@ const staffByPerson = computed(() => {
     string,
     { _id: string; name: string; imagePath?: string; roles: string[] }
   >()
-  for (const credit of props.content.staff || []) {
+  for (const credit of (shows('staff') && props.content.staff) || []) {
     const person = people.get(credit._id)
     if (person) person.roles.push(credit.role)
     else people.set(credit._id, { ...credit, roles: [credit.role] })
   }
   return [...people.values()]
 })
-const episodeStaff = computed(() => props.content.episodeStaff || [])
+const episodeStaff = computed(() => (shows('staff') && props.content.episodeStaff) || [])
 const hasAny = computed(
   () =>
     Boolean(trailerKey.value) ||

@@ -2,9 +2,12 @@
   EpisodeRow.vue — horizontal TV episode strip (component).
 
   Renders season pills and a left-to-right episode scroller on the show
-  details page. Clicking a card expands title, description, and cast in place;
-  episodes are not routed to their own page. Picking a season emits
-  `select-season`; a parent passing `selectedSeason` controls the pills.
+  details page. Clicking a card expands its title and description in place and
+  emits `select-episode` so the page can narrow its characters and staff to that
+  episode (null when it closes); episodes are not routed to their own page. With
+  no catalog characters, the panel lists the episode's TMDB cast itself. Picking a season emits
+  `select-season`; a parent passing `selectedSeason` controls the pills, and
+  `seasonPicker: false` hides them when the parent has its own season picker.
 -->
 <template>
   <section v-if="loading || episodes.length" class="episode-row">
@@ -19,7 +22,12 @@
 
     <template v-else>
       <!-- Title: Season Picker -->
-      <div v-if="multiSeason" class="season-pills" role="tablist" aria-label="Seasons">
+      <div
+        v-if="multiSeason && seasonPicker"
+        class="season-pills"
+        role="tablist"
+        aria-label="Seasons"
+      >
         <button
           v-for="season in seasons"
           :key="`season-${season}`"
@@ -75,22 +83,13 @@
         <p class="expanded-overview">
           {{ selectedEpisode.overview || 'No description available.' }}
         </p>
-        <EntityCastRow
-          v-if="characters.length"
-          :items="characters"
-          :content-id="contentId"
-          title="Characters"
-        />
-        <div v-else-if="selectedEpisode.cast.length" class="expanded-cast">
+        <div v-if="!characters.length && selectedEpisode.cast.length" class="expanded-cast">
           <h4>Cast</h4>
           <div class="cast-list">
-            <button
+            <div
               v-for="member in selectedEpisode.cast"
               :key="`${member.name}-${member.character}`"
-              type="button"
               class="cast-card"
-              :disabled="!matchedCharacter(member.character)"
-              @click.stop="openMatchedCharacter(member.character)"
             >
               <img
                 v-if="member.profilePath"
@@ -105,27 +104,9 @@
               <p v-if="cleanCharacterName(member.character)" class="cast-character">
                 {{ cleanCharacterName(member.character) }}
               </p>
-            </button>
+            </div>
           </div>
         </div>
-        <!-- Title: Episode Staff -->
-        <div v-if="episodeStaffGroups.length" class="expanded-staff" data-testid="episode-staff">
-          <h4>Staff</h4>
-          <dl>
-            <template v-for="group in episodeStaffGroups" :key="group.role">
-              <dt>{{ group.role }}</dt>
-              <dd>
-                <template v-for="(person, index) in group.people" :key="person._id">
-                  <router-link :to="detailPath('/staff', person._id, person.name)">{{
-                    person.name
-                  }}</router-link
-                  ><span v-if="index < group.people.length - 1">, </span>
-                </template>
-              </dd>
-            </template>
-          </dl>
-        </div>
-        <StudioLinks :content="show" title="Animation studio" heading-tag="h4" />
       </div>
     </template>
   </section>
@@ -133,8 +114,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import type { CatalogEntity, Episode, UnifiedContent } from '@/types/content'
+import type { CatalogEntity, Episode } from '@/types/content'
 import { getProfileUrl, getStillUrl } from '@/services/api'
 import {
   episodeKey,
@@ -142,19 +122,14 @@ import {
   formatEpisodeIndex,
   getSeasonNumbers,
 } from '@/utils/episodes'
-import { cleanCharacterName, matchCharacterByName } from '@/utils/entities'
-import EntityCastRow from '@/components/EntityCastRow.vue'
-import StudioLinks from '@/components/StudioLinks.vue'
-import { detailPath } from '@/utils/slug'
+import { cleanCharacterName } from '@/utils/entities'
 
 const props = withDefaults(
   defineProps<{
     episodes: Episode[]
     loading?: boolean
+    /** The page's catalog characters; without any, the panel lists the episode's cast. */
     characters?: CatalogEntity[]
-    contentId?: string
-    /** Parent series; episodes credit its studios. */
-    show?: UnifiedContent | null
     /** Season chosen by the parent; null lets the row track its own pick. */
     selectedSeason?: number | null
     /**
@@ -162,32 +137,21 @@ const props = withDefaults(
      * With them the pills say which season, so cards just number the episode.
      */
     seasonNames?: Record<number, string> | null
+    /** Show the season pills (off when the page picks seasons itself). */
+    seasonPicker?: boolean
   }>(),
   {
     characters: () => [],
-    show: null,
     selectedSeason: null,
     seasonNames: null,
+    seasonPicker: true,
   },
 )
 
-const emit = defineEmits<{ 'select-season': [season: number] }>()
-
-const router = useRouter()
-const route = useRoute()
-
-const matchedCharacter = (characterName: string) =>
-  matchCharacterByName(characterName, props.characters)
-
-const openMatchedCharacter = (characterName: string) => {
-  const entity = matchedCharacter(characterName)
-  if (!entity) return
-  router.push({
-    name: 'CharacterDetails',
-    params: { id: entity._id },
-    query: { from: route.fullPath },
-  })
-}
+const emit = defineEmits<{
+  'select-season': [season: number]
+  'select-episode': [episode: Episode | null]
+}>()
 
 const stripEl = ref<HTMLElement | null>(null)
 const ownSeason = ref(1)
@@ -221,15 +185,7 @@ const expandedMeta = computed(() => {
 
 const isSelected = (episode: Episode) => episodeKey(episode) === selectedKey.value
 
-/** The open episode's staff, one line per role. */
-const episodeStaffGroups = computed(() => {
-  const groups = new Map<string, Array<{ _id: string; name: string }>>()
-  for (const person of selectedEpisode.value?.staff || []) {
-    if (!groups.has(person.role)) groups.set(person.role, [])
-    groups.get(person.role)!.push(person)
-  }
-  return [...groups].map(([role, people]) => ({ role, people }))
-})
+watch(selectedEpisode, (episode) => emit('select-episode', episode))
 
 const indexLabel = (episode: Episode) =>
   formatEpisodeIndex(episode, multiSeason.value && !props.seasonNames)
@@ -267,6 +223,13 @@ watch(
   },
   { immediate: true },
 )
+
+/** Close the open episode (the page's "whole season" button). */
+const closeEpisode = () => {
+  selectedKey.value = ''
+}
+
+defineExpose({ closeEpisode })
 
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
@@ -415,40 +378,6 @@ const handleImageError = (event: Event) => {
   font-size: 1.4rem;
 }
 
-.expanded-staff {
-  margin-top: 1rem;
-}
-
-.expanded-staff h4 {
-  margin-bottom: 0.5rem;
-}
-
-.expanded-staff dl {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.3rem 1rem;
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.expanded-staff dt {
-  color: var(--text-muted);
-}
-
-.expanded-staff dd {
-  margin: 0;
-}
-
-.expanded-staff a {
-  color: var(--text-primary);
-  text-decoration: none;
-}
-
-.expanded-staff a:hover {
-  color: var(--coral-primary);
-  text-decoration: underline;
-}
-
 .episode-flag {
   position: absolute;
   top: 0.4rem;
@@ -543,11 +472,6 @@ const handleImageError = (event: Event) => {
   border: 0;
   padding: 0;
   color: inherit;
-  cursor: pointer;
-}
-
-.cast-card:disabled {
-  cursor: default;
 }
 
 .cast-card img,
