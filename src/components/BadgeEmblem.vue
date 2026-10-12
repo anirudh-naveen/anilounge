@@ -47,7 +47,10 @@
       </template>
 
       <template v-else-if="kind === 'developer'">
-        <path :fill="fill" d="M12 2Q15.6 7.4 20.4 12 15.6 16.6 12 22 8.4 16.6 3.6 12 8.4 7.4 12 2z" />
+        <path
+          :fill="fill"
+          d="M12 2Q15.6 7.4 20.4 12 15.6 16.6 12 22 8.4 16.6 3.6 12 8.4 7.4 12 2z"
+        />
         <path
           transform="translate(12 12) scale(0.82) translate(-12 -11.9)"
           fill="none"

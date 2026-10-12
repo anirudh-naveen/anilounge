@@ -25,9 +25,10 @@ export const PROFILE_HEADLINE_MAX = 80
 export const PROFILE_BIO_MAX = 300
 const PREFERENCE_LIST_MAX = 30
 
+// accent null = never picked: the profile uses coral and the avatar frame stays silver.
 export const DEFAULT_PROFILE_SETTINGS = Object.freeze({
   isPublic: true,
-  accent: 'coral',
+  accent: null,
   headline: '',
   defaultTab: 'favorites',
   tabOrder: [...PROFILE_TABS],
@@ -42,7 +43,7 @@ export const DEFAULT_PROFILE_SETTINGS = Object.freeze({
  *
  * @param {unknown} input - Raw settings object (DB JSON or request body).
  * @param {object} [base=DEFAULT_PROFILE_SETTINGS] - Values kept when `input` omits a key.
- * @returns {{ isPublic: boolean, accent: string, headline: string, defaultTab: string, tabOrder: string[], hiddenTabs: string[], showConnections: boolean }}
+ * @returns {{ isPublic: boolean, accent: string | null, headline: string, defaultTab: string, tabOrder: string[], hiddenTabs: string[], showConnections: boolean }}
  */
 export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS) {
   const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
@@ -51,7 +52,7 @@ export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS)
   const isPublic = typeof pick('isPublic') === 'boolean' ? pick('isPublic') : true
   const showConnections =
     typeof pick('showConnections') === 'boolean' ? pick('showConnections') : true
-  const accent = normalizeAccent(pick('accent')) || 'coral'
+  const accent = normalizeAccent(pick('accent'))
   const headline =
     typeof pick('headline') === 'string'
       ? pick('headline').trim().slice(0, PROFILE_HEADLINE_MAX)

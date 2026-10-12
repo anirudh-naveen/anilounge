@@ -13,7 +13,8 @@ export type ProfileAccent = ProfilePresetAccent | `#${string}`
 
 export interface ProfileSettings {
   isPublic: boolean
-  accent: ProfileAccent
+  /** null = never picked: the profile uses coral and the avatar frame stays silver. */
+  accent: ProfileAccent | null
   headline: string
   defaultTab: ProfileTab
   tabOrder: ProfileTab[]

@@ -35,6 +35,7 @@
               <UserAvatar
                 :src="profile.user.profilePicture"
                 :name="profile.user.username"
+                :accent="profile.settings.accent"
                 :size="112"
                 class="profile-picture"
               />
@@ -661,6 +662,16 @@
         <div class="field">
           <span class="field-label">Accent color</span>
           <div class="swatches">
+            <!-- Default: never picked; coral profile, silver avatar frame. -->
+            <button
+              type="button"
+              class="swatch swatch-default"
+              :class="{ selected: !draft.accent }"
+              title="Default (silver avatar frame)"
+              aria-label="default"
+              data-testid="accent-default"
+              @click="draft.accent = null"
+            ></button>
             <button
               v-for="(color, name) in ACCENT_PRESETS"
               :key="name"
@@ -1365,12 +1376,14 @@ const saveCustomize = async () => {
   try {
     const preferences = { favoriteGenres: draftGenres.value }
     const emblemChanged = draftEmblem.value !== emblemChoice.value
+    // The accent tints their avatar frame everywhere, which comes from the badges list.
+    const accentChanged = draft.value.accent !== profile.value.settings.accent
     const [response] = await Promise.all([
       profileAPI.updateSettings({ settings: draft.value, bio: draftBio.value }),
       authStore.updateProfile({ preferences }),
       emblemChanged ? profileAPI.setFeaturedBadge(draftEmblem.value || null) : null,
     ])
-    if (emblemChanged) await badgesStore.load(true)
+    if (emblemChanged || accentChanged) await badgesStore.load(true)
     const { settings, bio } = response.data.data as { settings: ProfileSettings; bio: string }
     profile.value.settings = settings
     profile.value.user.bio = bio
@@ -2530,6 +2543,11 @@ textarea.form-control {
 .swatches {
   flex-wrap: wrap;
   align-items: center;
+}
+
+/* Default: silver, like the avatar frame it leaves. */
+.swatch-default {
+  background: linear-gradient(135deg, #f8fafc, #cbd5e1 45%, #8b97a8 75%, #e2e8f0);
 }
 
 .swatch-wheel {
