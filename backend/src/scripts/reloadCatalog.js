@@ -606,7 +606,10 @@ async function phaseWestern(options, checkpoint) {
     try {
       const content = await Content.findById(contentId)
       if (!content) return
-      if (content.contentType === 'tv') await importSeries(contentId, { details: false })
+      // A title merged into (or attached as) an anime season imports through its series.
+      if (content.contentType === 'tv') {
+        await importSeries(content.seriesId || contentId, { details: false })
+      }
       else await importStandalone(contentId)
       checkpoint.mark('seasons', contentId)
       checkpoint.mark('western', contentId)
