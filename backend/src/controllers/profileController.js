@@ -19,7 +19,7 @@ import { moderationMessage } from '../utils/moderation.js'
 import { listProfileFriends, relationshipBetween } from '../services/friendService.js'
 import { hasBlocked } from '../services/blockService.js'
 import { canMessageUser } from '../services/messageService.js'
-import { botForEmail } from '../utils/botAccount.js'
+import { BOT_EMAILS, LOUNGE_KEEPER, botForEmail } from '../utils/botAccount.js'
 import { listProfileConnections } from '../services/connectionService.js'
 import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
 import { sendError } from '../utils/httpError.js'
@@ -86,6 +86,52 @@ async function loadFavoriteContent(userId) {
   )
   const docs = await attachContentRelations(rows.map(mapContentRow))
   return docs.map(slimContent)
+}
+
+/**
+ * Lounge Keeper's watchlist: the community's, not its own. Every title at least one
+ * member has completed, shown as completed, rated with the average of members' own
+ * AniLounge scores (to the tenth; null when nobody rated it). Bots, demo, and banned
+ * accounts (and unverified sign-ups) don't count. Latest completion first.
+ * @returns {Promise<object[]>} Public watchlist rows (`content`, `status`, `rating`, ...).
+ */
+async function loadCommunityWatchlist() {
+  const members = `SELECT id FROM users
+     WHERE NOT is_demo AND banned_at IS NULL AND email_verified_at IS NOT NULL
+       AND email <> ALL($1::text[])`
+  const { rows } = await query(
+    `WITH done AS (
+       SELECT w.content_id, min(w.added_at) AS added_at, max(w.updated_at) AS updated_at
+       FROM watchlist w
+       WHERE w.status = 'completed' AND w.user_id IN (${members})
+       GROUP BY w.content_id
+     ),
+     scores AS (
+       SELECT r.content_id, round(avg(r.score)::numeric, 1) AS average
+       FROM ratings r
+       WHERE r.content_id IN (SELECT content_id FROM done) AND r.user_id IN (${members})
+       GROUP BY r.content_id
+     )
+     SELECT wk.*, done.added_at AS community_added_at, done.updated_at AS community_updated_at,
+            scores.average AS community_rating
+     FROM done
+     JOIN works wk ON wk.id = done.content_id
+     LEFT JOIN scores ON scores.content_id = done.content_id
+     ORDER BY done.updated_at DESC`,
+    [BOT_EMAILS],
+  )
+  const docs = await attachContentRelations(rows.map(mapContentRow))
+  return docs.map((content, index) => {
+    const row = rows[index]
+    return {
+      content: slimContent(content),
+      status: 'completed',
+      rating: row.community_rating === null ? null : Number(row.community_rating),
+      currentEpisode: content.episodeCount || content.malEpisodes || 0,
+      addedAt: row.community_added_at,
+      updatedAt: row.community_updated_at,
+    }
+  })
 }
 
 /**
@@ -194,16 +240,18 @@ export const getPublicProfile = async (req, res) => {
         isOwner,
         tabs: visibleTabs,
         favorites: shows('favorites') ? { content: favoriteContent, ...favoriteEntities } : null,
-        watchlist: shows('watchlist')
-          ? watchlistRows.map((item) => ({
-              content: slimContent(item.content),
-              status: item.status,
-              rating: item.rating,
-              currentEpisode: item.currentEpisode,
-              addedAt: item.addedAt,
-              updatedAt: item.updatedAt,
-            }))
-          : null,
+        watchlist: !shows('watchlist')
+          ? null
+          : bot === LOUNGE_KEEPER
+            ? await loadCommunityWatchlist()
+            : watchlistRows.map((item) => ({
+                content: slimContent(item.content),
+                status: item.status,
+                rating: item.rating,
+                currentEpisode: item.currentEpisode,
+                addedAt: item.addedAt,
+                updatedAt: item.updatedAt,
+              })),
         stats: shows('stats') ? computeProfileStats(watchlistRows, new Date(), history) : null,
         friends,
       },
