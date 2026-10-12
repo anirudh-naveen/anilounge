@@ -449,8 +449,9 @@ const save = () =>
 .preview {
   display: flex;
   align-items: center;
-  gap: 1.2rem;
-  padding: 1.3rem 1.1rem 1rem;
+  /* Room for the frame, which extends a quarter of the avatar past its circle. */
+  gap: 1.6rem;
+  padding: 2rem 1.4rem 1.3rem 1.6rem;
   border-radius: 12px;
   background: color-mix(in srgb, var(--profile-accent) 10%, var(--bg-primary));
   border: 1px solid color-mix(in srgb, var(--profile-accent) 25%, var(--border-color));
