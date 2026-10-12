@@ -527,7 +527,8 @@ export const adminAPI = {
 
 /** Public list of accounts with badges and the emblem each shows by their name. */
 export const badgesAPI = {
-  list: () => api.get('/badges'),
+  /** `fresh` skips the 60-second HTTP cache, right after the user changes their own. */
+  list: (fresh = false) => api.get('/badges', fresh ? { params: { t: Date.now() } } : undefined),
 }
 
 export const watchlistAPI = {

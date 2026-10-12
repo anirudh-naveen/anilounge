@@ -29,19 +29,14 @@ describe('UserAvatar', () => {
     expect(plain.classes()).not.toContain('ringed')
   })
 
-  it('crops to the emblem silhouette, or crowns Creator and caps Bot', () => {
+  it('keeps the picture round, with the badge silhouette behind it', () => {
     const spade = mount(UserAvatar, { props: { badge: 'artist', size: 40 } })
-    expect(spade.classes()).toContain('shaped')
     expect(spade.find('.frame').exists()).toBe(true)
-    expect(spade.get('.user-avatar-inner').attributes('style')).toContain('mask')
-    const creator = mount(UserAvatar, { props: { badge: 'creator' } })
-    expect(creator.classes()).toContain('round')
-    expect(creator.find('.crown').exists()).toBe(true)
-    expect(
-      mount(UserAvatar, { props: { badge: 'bot' } })
-        .find('.crown.jester')
-        .exists(),
-    ).toBe(true)
+    expect(spade.find('.ring').exists()).toBe(true)
+    expect(spade.get('.user-avatar-inner').attributes('style')).toBeUndefined()
+    const plain = mount(UserAvatar, { props: { badge: null } })
+    expect(plain.find('.frame').exists()).toBe(false)
+    expect(plain.find('.ring').exists()).toBe(false)
   })
 
   it('frames in silver until the user picks an accent', () => {

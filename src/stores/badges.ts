@@ -33,7 +33,7 @@ export const useBadgesStore = defineStore('badges', () => {
     if (!force && loadedAt && Date.now() - loadedAt < STALE_MS) return Promise.resolve()
     if (!loading) {
       loading = badgesAPI
-        .list()
+        .list(force)
         .then((response) => {
           const rows = (response.data?.data || []) as Array<Holder & { username: string }>
           holders.value = new Map(
