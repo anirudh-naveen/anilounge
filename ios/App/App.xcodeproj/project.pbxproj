@@ -83,8 +83,8 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
-		547169CB8C6F9DE727DEC3EE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		58C81595B7B73D90FFB066B5 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		547169CB8C6F9DE727DEC3EE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		58C81595B7B73D90FFB066B5 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		79528C5C4C8A00594E084317 /* AniLoungeShare.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = AniLoungeShare.entitlements; sourceTree = "<group>"; };
 		814196F9631A7F82AB7B15A1 /* AniLoungeWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AniLoungeWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		928CB8FE43A942923BDEB6CD /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
@@ -156,7 +156,6 @@
 				AB8D508F77983E352F9B8DAC /* AniLoungeWidgets.entitlements */,
 				547169CB8C6F9DE727DEC3EE /* PrivacyInfo.xcprivacy */,
 			);
-			name = AniLoungeWidgets;
 			path = AniLoungeWidgets;
 			sourceTree = "<group>";
 		};
@@ -210,7 +209,6 @@
 				79528C5C4C8A00594E084317 /* AniLoungeShare.entitlements */,
 				58C81595B7B73D90FFB066B5 /* PrivacyInfo.xcprivacy */,
 			);
-			name = AniLoungeShare;
 			path = AniLoungeShare;
 			sourceTree = "<group>";
 		};
