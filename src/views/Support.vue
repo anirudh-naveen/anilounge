@@ -11,7 +11,7 @@
         <h1 class="doc-title">Support</h1>
         <p class="doc-date">For the AniLounge website and iOS app</p>
 
-        <h2>Contact us</h2>
+        <h2>Contact Us</h2>
         <ul>
           <li>
             Email <a :href="`mailto:${SUPPORT_EMAIL}`">{{ SUPPORT_EMAIL }}</a> for account help,
@@ -27,35 +27,35 @@
           </li>
         </ul>
 
-        <h2>Common questions</h2>
+        <h2>Common Questions</h2>
 
-        <h3>I can't sign in</h3>
+        <h3>I Can't Sign In</h3>
         <p>
           After several wrong passwords your account locks for a while; the email we send has a link
           to unlock it sooner. If you've forgotten your password, email us from the address on your
           account.
         </p>
 
-        <h3>How do I delete my account?</h3>
+        <h3>How Do I Delete My Account?</h3>
         <p>
           Go to Settings, then Privacy &amp; Security, and choose Delete account. This removes your
           account along with your lists, posts, comments, and messages. It can't be undone.
         </p>
 
-        <h3>How do I block or report someone?</h3>
+        <h3>How Do I Block Or Report Someone?</h3>
         <p>
           Open their profile and choose Block. They stop being your friend, can't send you requests
           or messages, and you won't see their forum posts or comments. Unblock them any time in
           Settings. To report a forum post or comment, use Report on it, and we'll review it.
         </p>
 
-        <h3>How do I bring over my list from another site?</h3>
+        <h3>How Do I Bring Over My List From Another Site?</h3>
         <p>
           Go to Connections to link AniList, MyAnimeList, or TMDB. You can import your list and keep
           it in sync, or import a MyAnimeList export file without connecting.
         </p>
 
-        <h3>Do I need to update the app?</h3>
+        <h3>Do I Need To Update the App?</h3>
         <p>
           Most new features appear in the app automatically, without an App Store update. Keep the
           app updated anyway so you get fixes to the app itself.

@@ -174,7 +174,7 @@ describe('Home', () => {
       },
     })
     const wrapper = await mountHome()
-    expect(wrapper.text()).toContain('Welcome back, ani.')
+    expect(wrapper.text()).toContain('Welcome Back, ani.')
 
     const items = wrapper.findAll('[data-testid="activity-item"]')
     expect(items).toHaveLength(2)
@@ -221,7 +221,7 @@ describe('Home', () => {
     const wrapper = await mountHome()
     const panel = wrapper.get('[data-testid="updates-panel"]')
     expect(panel.get('.panel-title').text()).toBe('Updates')
-    expect(panel.text()).toContain('New episodes')
+    expect(panel.text()).toContain('New Episodes')
     expect(panel.text()).toContain('Ep 12 · in 5h')
     expect(panel.text()).toContain('Upcoming')
     expect(panel.text()).toContain('Premiere date TBA')

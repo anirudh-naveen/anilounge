@@ -93,7 +93,7 @@
 
     <!-- Title: Recent News -->
     <div class="news-recent">
-      <h3 class="news-heading">In inboxes now</h3>
+      <h3 class="news-heading">In Inboxes Now</h3>
       <div v-if="loading" class="social-loading"><div class="spinner"></div></div>
       <p v-else-if="!recent.length" class="social-empty">
         No news in the last {{ NEWS_DAYS }} days.

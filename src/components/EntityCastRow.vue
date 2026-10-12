@@ -1,12 +1,18 @@
 <!--
   EntityCastRow.vue — horizontal character cards (component).
 
-  Used on movie/series detail pages and under every expanded episode so
-  characters appear on every title they are in, with their role.
+  Used on movie/series detail pages so characters appear on every title they are
+  in, with their role. The `aside` slot goes at the right of the section heading.
 -->
 <template>
-  <section v-if="loading || items.length" class="entity-cast-row" data-testid="entity-cast-row">
-    <h3>{{ title }}</h3>
+  <DetailSection
+    v-if="loading || items.length"
+    :name="title.toLowerCase()"
+    :title="title"
+    class="entity-cast-row"
+    data-testid="entity-cast-row"
+  >
+    <template v-if="$slots.aside" #aside><slot name="aside" /></template>
     <div v-if="loading" class="cast-loading">
       <div class="spinner"></div>
       <p>Loading {{ title.toLowerCase() }}...</p>
@@ -35,13 +41,14 @@
       </button>
       <p v-if="overflowCount" class="cast-overflow">+{{ overflowCount }} more</p>
     </div>
-  </section>
+  </DetailSection>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { CatalogEntity } from '@/types/content'
+import DetailSection from '@/components/DetailSection.vue'
 import { getDetailsRouteName, getPosterUrl } from '@/services/api'
 import {
   appearanceForContent,
@@ -103,16 +110,6 @@ const handleImageError = (event: Event) => {
 </script>
 
 <style scoped>
-.entity-cast-row {
-  margin-bottom: 2rem;
-}
-
-.entity-cast-row h3 {
-  font-size: 1.2rem;
-  margin: 0 0 0.75rem;
-  color: var(--text-primary);
-}
-
 .cast-loading {
   display: flex;
   align-items: center;

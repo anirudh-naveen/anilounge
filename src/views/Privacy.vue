@@ -10,7 +10,7 @@
     <div class="container">
       <article class="doc-card fade-in">
         <p class="kicker">Legal</p>
-        <h1 class="doc-title">Privacy policy</h1>
+        <h1 class="doc-title">Privacy Policy</h1>
         <p class="doc-date">Last updated {{ POLICY_DATE }}</p>
 
         <p>
@@ -20,7 +20,7 @@
           >.
         </p>
 
-        <h2>What we collect</h2>
+        <h2>What We Collect</h2>
         <ul>
           <li>
             <strong>Your account:</strong> username, email address, password (stored only as a
@@ -55,14 +55,14 @@
           </li>
         </ul>
 
-        <h2>Cookies and device storage</h2>
+        <h2>Cookies And Device Storage</h2>
         <p>
           We use one cookie, which keeps you signed in for up to 30 days. Your device also stores a
           few preferences, such as your theme and banners you've dismissed, and the random usage ID
           above. There are no advertising or third-party tracking cookies.
         </p>
 
-        <h2>How we use it</h2>
+        <h2>How We Use It</h2>
         <ul>
           <li>To run AniLounge: your lists, profile, forum, friends, and messages.</li>
           <li>To sync your list with sites you connect.</li>
@@ -74,7 +74,7 @@
           <li>To understand, in total, which features get used.</li>
         </ul>
 
-        <h2>What others can see</h2>
+        <h2>What Others Can See</h2>
         <p>
           Your username, profile picture, and forum posts and comments are public. Your profile is
           public unless you make it private in Customize, and you choose which of its tabs show.
@@ -82,7 +82,7 @@
           address is never shown.
         </p>
 
-        <h2>Services we use</h2>
+        <h2>Services We Use</h2>
         <p>These companies process data for us, only to provide AniLounge:</p>
         <ul>
           <li><strong>Vercel</strong> hosts the website.</li>
@@ -103,7 +103,7 @@
           </li>
         </ul>
 
-        <h2>How long we keep it</h2>
+        <h2>How Long We Keep It</h2>
         <ul>
           <li>Your data stays until you delete your account.</li>
           <li>
@@ -114,7 +114,7 @@
           <li>Site usage records are deleted after 400 days.</li>
         </ul>
 
-        <h2>Your choices</h2>
+        <h2>Your Choices</h2>
         <ul>
           <li>Edit your profile, email, and email preferences in Settings.</li>
           <li>

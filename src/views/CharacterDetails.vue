@@ -17,7 +17,7 @@
     </div>
 
     <div v-else-if="error" class="error">
-      <h2>Error loading character</h2>
+      <h2>Error Loading Character</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>
@@ -83,7 +83,7 @@
       </div>
 
       <div v-if="voiceActors.length" class="voice-actors" data-testid="voice-actor-row">
-        <h2>Voice actors</h2>
+        <h2>Voice Actors</h2>
         <div class="voice-actor-list">
           <button
             v-for="credit in voiceActors"
@@ -122,7 +122,7 @@
       />
 
       <div v-if="appearanceTitles.length" class="appearances">
-        <h2>Appears in</h2>
+        <h2>Appears In</h2>
         <section
           v-for="group in appearanceGroups"
           :key="group.franchise || 'other'"
@@ -137,7 +137,7 @@
               class="franchise-chip"
               >{{ group.franchise }}</component
             >
-            <template v-else>Other titles</template>
+            <template v-else>Other Titles</template>
           </h3>
           <div class="content-grid">
             <div

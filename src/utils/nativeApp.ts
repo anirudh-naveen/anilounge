@@ -117,6 +117,55 @@ export function viewerRegion(): string {
   return 'US'
 }
 
+/** US time zones (IANA names and their `US/*` aliases), for telling US viewers apart. */
+const US_TIME_ZONES = new Set([
+  'America/New_York',
+  'America/Detroit',
+  'America/Chicago',
+  'America/Menominee',
+  'America/Denver',
+  'America/Boise',
+  'America/Phoenix',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'America/Juneau',
+  'America/Sitka',
+  'America/Metlakatla',
+  'America/Yakutat',
+  'America/Nome',
+  'America/Adak',
+  'Pacific/Honolulu',
+])
+const US_TIME_ZONE_PREFIXES = [
+  'America/Indiana/',
+  'America/Kentucky/',
+  'America/North_Dakota/',
+  'US/',
+]
+
+/**
+ * Whether the viewer is in the United States: by the device's time zone when it
+ * has one (it follows where the device is, unlike the language), else by the
+ * language's country.
+ * @param timeZone - Override for tests; defaults to the device's zone.
+ */
+export function isViewerInUS(timeZone?: string): boolean {
+  let zone = timeZone
+  if (zone === undefined) {
+    try {
+      zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+    } catch {
+      zone = ''
+    }
+  }
+  if (zone && zone !== 'UTC' && zone !== 'Etc/UTC') {
+    return (
+      US_TIME_ZONES.has(zone) || US_TIME_ZONE_PREFIXES.some((prefix) => zone.startsWith(prefix))
+    )
+  }
+  return viewerRegion() === 'US'
+}
+
 /**
  * Share a link with the system share sheet (the app's native sheet, or the browser's
  * where it has one), falling back to copying the link.

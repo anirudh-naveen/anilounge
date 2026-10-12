@@ -9,7 +9,7 @@
   <section v-if="DONATE_URL" class="support-card" data-testid="support-card">
     <BadgeEmblem badge="supporter" size="xl" :tooltip="false" class="support-emblem" />
     <div class="support-body">
-      <h2 class="support-title">Keep the lounge open</h2>
+      <h2 class="support-title">Keep the Lounge Open</h2>
       <p class="support-text">
         AniLounge is free and ad-free.
         <template v-if="authStore.isAuthenticated">

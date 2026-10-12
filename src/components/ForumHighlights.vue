@@ -8,15 +8,16 @@
   it never blocks the page.
 -->
 <template>
-  <section
+  <DetailSection
     v-if="data"
+    name="forum"
+    title="In the Forum"
     class="forum-highlights"
     :class="{ empty: !data.total }"
     data-testid="forum-highlights"
   >
     <header class="highlights-head">
       <div>
-        <h2 v-if="data.total">Hot in the Forum</h2>
         <p class="social-meta">
           <template v-if="data.total">
             {{ data.total }} {{ data.total === 1 ? 'post' : 'posts' }} about {{ name }}
@@ -56,7 +57,7 @@
 
     <!-- Title: Highlighted Comments -->
     <div v-if="data.comments.length" class="highlights-comments">
-      <h3>Highlighted comments</h3>
+      <h3>Highlighted Comments</h3>
       <ul>
         <li v-for="comment in data.comments" :key="comment.id" class="highlight-comment">
           <blockquote>{{ excerpt(comment.body) }}</blockquote>
@@ -83,11 +84,12 @@
     >
       See all {{ data.total }} posts →
     </router-link>
-  </section>
+  </DetailSection>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import DetailSection from '@/components/DetailSection.vue'
 import ForumIcon from '@/components/ForumIcon.vue'
 import ForumPostCard from '@/components/ForumPostCard.vue'
 import { forumAPI } from '@/services/api'
@@ -127,44 +129,21 @@ watch(
 </script>
 
 <style scoped>
-.forum-highlights {
-  margin: 2rem 0;
-  padding: 1.5rem;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  box-shadow: var(--shadow-md);
-}
-
 .highlights-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
 }
 
-.forum-highlights.empty {
-  padding: 0.85rem 1.25rem;
-  box-shadow: none;
-}
-
 .forum-highlights.empty .highlights-head {
-  align-items: center;
   margin-bottom: 0;
 }
 
-.forum-highlights.empty .social-meta {
+.highlights-head .social-meta {
   margin: 0;
-  font-size: 0.92rem;
-}
-
-.highlights-head h2 {
-  margin: 0 0 0.2rem;
-  font-family: var(--font-display);
-  font-size: 1.4rem;
-  color: var(--text-primary);
 }
 
 .highlights-actions {

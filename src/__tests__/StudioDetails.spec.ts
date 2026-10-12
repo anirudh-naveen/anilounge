@@ -171,7 +171,7 @@ describe('studio helpers', () => {
 
   it('falls back to production companies and dedupes studio names', () => {
     expect(studioLinksForContent({ studios: [], productionCompanies: ['Pixar', 'pixar'] })).toEqual(
-      [{ name: 'Pixar', id: '' }],
+      [{ name: 'Pixar', id: '', imagePath: '' }],
     )
   })
 

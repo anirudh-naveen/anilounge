@@ -8,7 +8,8 @@
   season's own catalog title when one exists, otherwise the show with TMDB's
   season poster/overview. With no season picked, the first season shows. From a
   season's own page, picking another season moves to the series route with that
-  season picked. Opening an episode narrows characters and staff to it.
+  season picked. Opening an episode narrows the characters to it (its staff show
+  in the episode panel). Every section below the header folds away.
 -->
 <template>
   <div class="tv-details">
@@ -27,7 +28,7 @@
 
     <!-- Title: Error State -->
     <div v-else-if="error" class="error">
-      <h2>Error loading series</h2>
+      <h2>Error Loading Series</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>
@@ -49,65 +50,50 @@
           </div>
         </div>
 
-        <div class="show-info">
+        <div class="show-info title-info">
           <!-- Title: Titles -->
-          <h1 class="show-title">{{ getDisplayTitle(show) }}</h1>
-          <p v-if="show.series" class="season-label" data-testid="season-label">
+          <p v-if="show.series" class="eyebrow" data-testid="season-label">
             <router-link
               :to="detailPath('/tv-show', show.series._id, show.series.title)"
               class="series-link"
               data-testid="series-link"
               >{{ show.series.title }}</router-link
-            >
-            · {{ show.seasonLabel || seasonLabel }}
+            ><span class="eyebrow-sep" aria-hidden="true">/</span
+            ><span>{{ show.seasonLabel || seasonLabel }}</span>
           </p>
-          <p v-else-if="seasonLabel" class="season-label" data-testid="season-label">
+          <p v-else-if="seasonLabel" class="eyebrow" data-testid="season-label">
             {{ seasonLabel }}
           </p>
-          <p v-if="getNativeTitle(show)" class="original-title">
-            Native Title: {{ getNativeTitle(show) }}
+          <h1 class="show-title title-heading">{{ getDisplayTitle(show) }}</h1>
+          <p v-if="getNativeTitle(show)" class="original-title" lang="ja">
+            {{ getNativeTitle(show) }}
           </p>
-          <FranchiseLink :content="show" />
 
-          <!-- Title: Meta -->
-          <div class="show-meta">
-            <div class="rating">
-              <i class="fas fa-star"></i>
-              <span>{{ getDisplayScore(show) }}</span>
-              <span v-if="getDisplayVoteCount(show)" class="vote-count">
-                ({{ getDisplayVoteCount(show).toLocaleString() }} votes)
+          <!-- Title: Facts -->
+          <ul class="title-facts">
+            <li class="fact-rating">
+              <ForumIcon name="star" filled class="fact-star" />
+              <strong>{{ getDisplayScore(show) }}</strong>
+              <span v-if="getDisplayVoteCount(show)" class="fact-muted">
+                {{ formatVotes(getDisplayVoteCount(show)) }} votes
               </span>
-            </div>
-
-            <div class="first-air-date">
-              <i class="fas fa-calendar"></i>
-              <span>{{ show.releaseDate ? formatDate(show.releaseDate) : 'N/A' }}</span>
-            </div>
-
-            <div v-if="show.seasonCount && show.contentType !== 'season'" class="seasons">
-              <i class="fas fa-layer-group"></i>
-              <span>{{ show.seasonCount }} season{{ show.seasonCount > 1 ? 's' : '' }}</span>
-            </div>
-
-            <div v-if="show.episodeCount || show.malEpisodes" class="episodes">
-              <i class="fas fa-play-circle"></i>
-              <span
-                >{{ show.episodeCount || show.malEpisodes }} episode{{
-                  (show.episodeCount || show.malEpisodes || 0) > 1 ? 's' : ''
-                }}</span
-              >
-            </div>
-
-            <div v-if="isCurrentlyAiring(show) || isUpcoming(show)" class="status airing-status">
+            </li>
+            <li v-if="show.releaseDate">{{ formatDate(show.releaseDate) }}</li>
+            <li v-if="show.seasonCount && show.contentType !== 'season'">
+              {{ show.seasonCount }} season{{ show.seasonCount > 1 ? 's' : '' }}
+            </li>
+            <li v-if="show.episodeCount || show.malEpisodes">
+              {{ show.episodeCount || show.malEpisodes }} episode{{
+                (show.episodeCount || show.malEpisodes || 0) > 1 ? 's' : ''
+              }}
+            </li>
+            <li v-if="isCurrentlyAiring(show) || isUpcoming(show)" class="fact-badge">
               <AiringBadge :content="show" variant="detail" />
-            </div>
-            <div v-else-if="show.malStatus" class="status">
-              <i class="fas fa-info-circle"></i>
-              <span>{{ formatAiringStatus(show.malStatus) }}</span>
-            </div>
-          </div>
+            </li>
+            <li v-else-if="show.malStatus">{{ formatAiringStatus(show.malStatus) }}</li>
+          </ul>
 
-          <div class="genres">
+          <div v-if="show.genres?.length" class="genres">
             <span
               v-for="genre in show.genres"
               :key="typeof genre === 'string' ? genre : genre.name || genre.id"
@@ -117,8 +103,10 @@
             </span>
           </div>
 
+          <FranchiseLink :content="show" />
+
           <!-- Title: Actions -->
-          <div class="show-actions">
+          <div class="show-actions title-actions">
             <button @click="shareShow" class="btn-outline">Share</button>
             <button
               v-if="hasUpcomingEpisode"
@@ -127,7 +115,7 @@
               data-testid="add-to-calendar"
               @click="addToCalendar"
             >
-              Add to calendar
+              Add to Calendar
             </button>
           </div>
         </div>
@@ -149,16 +137,20 @@
 
       <!-- Body -->
       <!-- Title: Overview -->
-      <div class="show-description">
-        <h2>Overview</h2>
+      <DetailSection name="overview" title="Overview" :collapsible="false" class="show-description">
         <p>{{ show.overview || 'No overview available.' }}</p>
-      </div>
+      </DetailSection>
 
       <!-- Title: Seasons -->
       <!-- Picking a season swaps the page above and below to that season's details. -->
-      <section v-if="seriesSeasons.length" class="series-seasons" data-testid="series-seasons">
-        <h2>Seasons</h2>
-        <p class="seasons-hint">Pick a season to see, track, and rate it.</p>
+      <DetailSection
+        v-if="seriesSeasons.length"
+        name="seasons"
+        title="Seasons"
+        class="series-seasons"
+        data-testid="series-seasons"
+      >
+        <template #aside>Pick a season to see, track, and rate it</template>
         <div class="season-cards">
           <button
             v-for="season in seriesSeasons"
@@ -176,7 +168,7 @@
               :alt="season.label"
               @error="hideBrokenImage"
             />
-            <div v-else class="no-poster"><i class="fas fa-tv"></i></div>
+            <div v-else class="no-poster"></div>
             <div class="season-card-info">
               <p class="season-card-label">{{ season.label }}</p>
               <p class="season-card-meta">
@@ -190,8 +182,9 @@
                 }}
               </p>
               <p class="season-card-meta">
-                <span v-if="season.unifiedScore"
-                  ><i class="fas fa-star"></i> {{ season.unifiedScore.toFixed(1) }}</span
+                <span v-if="season.unifiedScore" class="season-score"
+                  ><ForumIcon name="star" filled class="fact-star" />
+                  {{ season.unifiedScore.toFixed(1) }}</span
                 >
                 <span v-if="season.airingStatus === 'airing'" class="season-airing">Airing</span>
                 <span v-else-if="season.airingStatus === 'upcoming'" class="season-airing"
@@ -204,7 +197,7 @@
             </div>
           </button>
         </div>
-      </section>
+      </DetailSection>
 
       <!-- Title: Episodes -->
       <EpisodeRow
@@ -219,18 +212,19 @@
         @select-episode="selectedEpisode = $event"
       />
 
-      <!-- Title: Episode Focus -->
-      <div v-if="episodeFocus" class="episode-focus" data-testid="episode-focus">
-        <span
-          >Showing characters and staff for <strong>{{ episodeFocus }}</strong></span
-        >
-        <button type="button" class="btn-outline" @click="episodeRow?.closeEpisode()">
-          Show all
-        </button>
-      </div>
-
       <!-- Title: Characters -->
-      <EntityCastRow :items="shownCharacters" :content-id="show._id" :loading="charactersLoading" />
+      <EntityCastRow :items="shownCharacters" :content-id="show._id" :loading="charactersLoading">
+        <template v-if="episodeFocus" #aside>
+          <span class="episode-focus" data-testid="episode-focus">
+            <span
+              >In <strong>{{ episodeFocus }}</strong></span
+            >
+            <button type="button" class="focus-clear" @click="episodeRow?.closeEpisode()">
+              Show All
+            </button>
+          </span>
+        </template>
+      </EntityCastRow>
       <p v-if="shownCharacters.some((item) => isTvmazeImage(item.imagePath))" class="image-credit">
         Character images from
         <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA).
@@ -247,13 +241,13 @@
       <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
 
       <!-- Title: Credits -->
-      <TitleExtras :content="staffContent" :sections="['staff']" />
       <StudioLinks :content="show" />
+      <TitleExtras :content="show" :sections="['staff']" />
     </div>
 
     <JoinPrompt
       list-sync
-      title="Track this series"
+      title="Track This Series"
       message="Sign up free to follow new episodes, log your progress, and rate every season."
     />
   </div>
@@ -274,6 +268,8 @@ import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
 import FranchiseLink from '@/components/FranchiseLink.vue'
+import DetailSection from '@/components/DetailSection.vue'
+import ForumIcon from '@/components/ForumIcon.vue'
 import { isTvmazeImage } from '@/utils/imageCredits'
 import type {
   CatalogEntity,
@@ -324,7 +320,7 @@ const seasons = ref<SeasonSummary[]>([])
 /** Title the episodes and seasons belong to (differs from the route when it is one season). */
 const seriesId = ref('')
 const selectedSeason = ref<number | null>(null)
-/** Episode open in the episode row; characters and staff narrow to it. */
+/** Episode open in the episode row; characters narrow to it. */
 const selectedEpisode = ref<Episode | null>(null)
 const episodeRow = useTemplateRef<InstanceType<typeof EpisodeRow>>('episodeRow')
 let detailsRequestId = 0
@@ -372,16 +368,10 @@ const episodeCharacters = computed(() => {
 const shownCharacters = computed(() =>
   episodeCharacters.value.length ? episodeCharacters.value : characters.value,
 )
-/** The title with the open episode's staff in place of the title's, when it has any. */
-const staffContent = computed(() => {
-  const staff = selectedEpisode.value?.staff
-  if (!show.value || !staff?.length) return show.value!
-  return { ...show.value, staff, episodeStaff: [] }
-})
-/** "S1E3 · Title" for the open episode, when something on the page narrowed to it. */
+/** "S1E3 · Title" for the open episode, when the characters narrowed to it. */
 const episodeFocus = computed(() => {
   const episode = selectedEpisode.value
-  if (!episode || (!episodeCharacters.value.length && !episode.staff?.length)) return ''
+  if (!episode || !episodeCharacters.value.length) return ''
   const index = formatEpisodeIndex(episode, seasons.value.length > 1 && !seasonNames.value)
   return `${index} · ${episode.title}`
 })
@@ -551,6 +541,9 @@ const shareShow = async () => {
   if (result === 'failed') toast.error("Couldn't share this page.")
 }
 
+const formatVotes = (count: number) =>
+  new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(count)
+
 const formatDate = (date: string | Date) => {
   if (!date) return 'N/A'
   const dateObj = typeof date === 'string' ? new Date(date) : date
@@ -664,29 +657,14 @@ usePageMeta(() =>
 useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) : null))
 </script>
 
+<style scoped src="@/assets/styles/titleHeader.css"></style>
+
 <style scoped>
 .tv-details {
   min-height: 100vh;
   background: var(--bg-primary);
   color: var(--text-primary);
   padding: 2rem;
-}
-
-.episode-focus {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--coral-primary);
-  border-radius: 12px;
-  background: var(--bg-card);
-}
-
-.episode-focus .btn-outline {
-  padding: 0.5rem 1rem;
 }
 
 .image-credit {
@@ -697,28 +675,6 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
 
 .image-credit a {
   color: var(--coral-primary);
-}
-
-.series-link {
-  color: var(--coral-primary);
-  text-decoration: none;
-}
-
-.series-link:hover {
-  text-decoration: underline;
-}
-
-.series-seasons {
-  margin-bottom: 2rem;
-}
-
-.series-seasons h2 {
-  margin-bottom: 0.25rem;
-}
-
-.seasons-hint {
-  color: var(--text-muted);
-  margin-bottom: 1rem;
 }
 
 .season-cards {
@@ -879,89 +835,6 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   color: var(--text-muted);
 }
 
-.no-poster i {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-}
-
-.show-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.show-title {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin: 0;
-  line-height: 1.2;
-}
-
-.original-title {
-  font-size: 1.1rem;
-  color: var(--text-muted);
-  font-style: italic;
-  margin: 0;
-}
-
-.season-label {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: var(--coral-deep);
-}
-
-.show-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  margin: 1rem 0;
-}
-
-.show-meta > div {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1rem;
-}
-
-.airing-status {
-  padding: 0;
-}
-
-.show-meta i {
-  color: var(--highlight-color);
-  width: 16px;
-}
-
-.vote-count {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.genres {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 1rem 0;
-}
-
-.genre-tag {
-  background: var(--blend-color);
-  color: white;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.show-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 1.5rem;
-}
-
 .btn-primary,
 .btn-secondary,
 .btn-outline {
@@ -1011,20 +884,43 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   border-color: var(--highlight-color);
 }
 
-.show-description {
-  margin-bottom: 2rem;
+.show-description p {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
-.show-description h2 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
+.episode-focus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.8rem;
+  border: 1px solid var(--coral-primary);
+  border-radius: 999px;
   color: var(--text-primary);
 }
 
-.show-description p {
-  font-size: 1.1rem;
-  line-height: 1.6;
-  color: var(--text-muted);
+.focus-clear {
+  padding: 0.2rem 0.7rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.focus-clear:hover {
+  background: var(--coral-primary);
+  color: var(--bg-primary);
+}
+
+.season-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 @media (max-width: 768px) {
@@ -1036,46 +932,5 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
-
-  .show-title {
-    font-size: 2rem;
-  }
-
-  .show-meta {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .show-actions {
-    flex-direction: column;
-  }
-}
-
-/* Fix text readability issues */
-.show-description p,
-.show-description h2,
-.show-description h3,
-.show-description h4 {
-  color: var(--text-primary);
-}
-
-.show-description p {
-  color: var(--text-secondary);
-}
-
-.original-title {
-  color: var(--text-muted) !important;
-}
-
-.vote-count {
-  color: var(--text-muted) !important;
-}
-
-.show-meta span {
-  color: var(--text-primary) !important;
-}
-
-.genre-tag {
-  color: var(--text-on-accent) !important;
 }
 </style>
