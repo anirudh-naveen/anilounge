@@ -1,5 +1,6 @@
 /**
- * Favorites: a ranked top 10 per category (titles, characters, voice actors, studios).
+ * Favorites: a ranked top 10 per category (movies, series, characters, voice actors,
+ * studios). Series, seasons, and specials share the series top 10.
  *
  * Layer: service. Rows live in `favorites`; `position` ranks them per user (one
  * sequence across categories, so reordering one category reuses its own slots). New
@@ -17,19 +18,25 @@ export const FAVORITES_MAX = 10
 export const FAVORITE_ORDER_SQL = 'f.position ASC NULLS LAST, f.added_at DESC'
 
 const CATEGORY_LABELS = {
-  title: 'titles',
+  movie: 'movies',
+  series: 'series',
   character: 'characters',
   voice: 'voice actors',
   studio: 'studios',
 }
 
+/** Watchable kinds ranked with series (everything but movies). */
+const SERIES_KINDS = WATCHABLE_KINDS.filter((kind) => kind !== 'movie')
+
 /**
- * Category a content kind is ranked in: every watchable kind counts as a title.
+ * Category a content kind is ranked in: movies on their own, every other watchable
+ * kind (series, seasons, specials) as a series.
  * @param {string} kind - `content.kind`.
  * @returns {string}
  */
 export function favoriteCategory(kind) {
-  return WATCHABLE_KINDS.includes(kind) ? 'title' : kind
+  if (kind === 'movie') return 'movie'
+  return SERIES_KINDS.includes(kind) ? 'series' : kind
 }
 
 /**
@@ -38,7 +45,7 @@ export function favoriteCategory(kind) {
  * @returns {string[]}
  */
 function categoryKinds(category) {
-  return category === 'title' ? WATCHABLE_KINDS : [category]
+  return category === 'series' ? SERIES_KINDS : [category]
 }
 
 /**

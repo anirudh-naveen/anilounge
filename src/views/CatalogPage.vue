@@ -68,7 +68,6 @@
               {{ getCardContentTypeDisplay(item.contentType) }}
             </div>
             <AiringBadge :content="item" variant="card" />
-            <FavoriteHeart :content-id="item._id" />
           </div>
           <div class="card-info">
             <h3 class="card-title">{{ getDisplayTitle(item) }}</h3>
@@ -92,7 +91,7 @@
                 <span v-if="item.episodeCount || item.malEpisodes" class="meta-chip">
                   {{ item.episodeCount || item.malEpisodes }} episodes
                 </span>
-                <span v-if="item.seasonCount" class="meta-chip"
+                <span v-if="(item.seasonCount || 0) > 1" class="meta-chip"
                   >{{ item.seasonCount }} seasons</span
                 >
               </template>
@@ -141,7 +140,6 @@ import { useToast } from 'vue-toastification'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
-import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import type { UnifiedContent } from '@/types/content'
 import { usePageMeta } from '@/composables/usePageMeta'
 import { getDisplayTitle } from '@/utils/titles'

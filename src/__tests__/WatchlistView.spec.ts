@@ -71,7 +71,7 @@ const mountPage = async () => {
   const wrapper = mount(Watchlist, {
     global: {
       plugins: [router],
-      stubs: { AiringBadge: true },
+      stubs: { AiringBadge: true, FavoriteHeart: true },
     },
   })
   await flushPromises()
@@ -97,6 +97,36 @@ describe('Watchlist status sections', () => {
     expect(wrapper.get('[data-testid="watchlist-section-completed"]').text()).toContain(
       'Spirited Away',
     )
+  })
+
+  it('filters by status and type with chips like a profile watchlist', async () => {
+    const wrapper = await mountPage()
+    const titles = () => wrapper.findAll('.item-title').map((title) => title.text())
+
+    expect(wrapper.get('[data-testid="watchlist-status-all"]').text()).toBe('All 2')
+    expect(wrapper.get('[data-testid="watchlist-type-movie"]').text()).toBe('Movies 1')
+
+    await wrapper.get('[data-testid="watchlist-status-watching"]').trigger('click')
+    expect(titles()).toEqual(['Frieren'])
+    expect(wrapper.get('[data-testid="watchlist-type-movie"]').text()).toBe('Movies 0')
+
+    await wrapper.get('[data-testid="watchlist-status-all"]').trigger('click')
+    await wrapper.get('[data-testid="watchlist-type-movie"]').trigger('click')
+    expect(titles()).toEqual(['Spirited Away'])
+    expect(wrapper.get('[data-testid="watchlist-status-watching"]').text()).toBe('Watching 0')
+
+    await wrapper.get('[data-testid="watchlist-status-watching"]').trigger('click')
+    expect(titles()).toEqual([])
+    expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
+      'Nothing here with these filters',
+    )
+  })
+
+  it('offers a favorite heart on every row', async () => {
+    const wrapper = await mountPage()
+    const hearts = wrapper.findAllComponents({ name: 'FavoriteHeart' })
+    expect(hearts.map((heart) => heart.props('contentId'))).toEqual(['tv-1', 'movie-1'])
+    expect(hearts.every((heart) => heart.props('variant') === 'inline')).toBe(true)
   })
 
   it('lists watching titles before completed ones', async () => {

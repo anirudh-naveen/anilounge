@@ -98,11 +98,13 @@ function dayKey(date) {
  * Daily (and monthly) watch time follows each title's watch history: its minutes are
  * shared out over the logged units at the row's minutes per unit. Minutes beyond what
  * the history covers (rows from before it was kept) fall on the row's last update;
- * history beyond the row (progress later lowered) is scaled down to fit.
+ * history beyond the row (progress later lowered) is scaled down to fit. Backlog units
+ * (`placed: false`) count as covered but land on no day, so watch time logged in
+ * backlog mode adds to the totals without filling in the day it was logged.
  *
  * @param {Array<{ status: string, rating?: number|null, currentEpisode?: number, updatedAt?: string|Date, addedAt?: string|Date, content: object }>} watchlist - Rows with `content` populated.
  * @param {Date} [now=new Date()] - Reference point for the trailing 12 months.
- * @param {Map<string, Array<{ day: string, units: number }>>} [history] - Watch history by content id.
+ * @param {Map<string, Array<{ day: string, units: number, placed?: boolean }>>} [history] - Watch history by content id.
  * @returns {{
  *   totals: { titles: number, completed: number, watching: number, planToWatch: number, onHold: number, dropped: number, completedSeries: number, completedMovies: number, episodesWatched: number, minutesWatched: number, averageRating: number|null, ratedCount: number },
  *   monthly: Array<{ month: string, minutes: number }>,
@@ -172,7 +174,9 @@ export function computeProfileStats(watchlist, now = new Date(), history = new M
       const covered = Math.min(logged, units)
       const perUnit = units ? minutes / units : 0
       const scale = logged ? covered / logged : 0
-      for (const event of events) addMinutes(event.day, event.units * scale * perUnit)
+      for (const event of events) {
+        if (event.placed !== false) addMinutes(event.day, event.units * scale * perUnit)
+      }
       const when = new Date(item.updatedAt || item.addedAt || 0)
       if (!Number.isNaN(when.getTime())) addMinutes(dayKey(when), minutes - covered * perUnit)
     }

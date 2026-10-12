@@ -1,12 +1,12 @@
 /**
- * Daily cap on Gemini chat calls per account, or per IP when signed out, plus a
+ * Daily cap on Gemini chat calls per account (the assistant is signed-in only), plus a
  * site-wide daily cap so a traffic spike or many accounts can't run up the bill.
  *
  * Layer: services. Each call is paid and slow, and the general rate limit alone would
  * let one client spend hundreds an hour. Counts live in `ai_usage`, so the caps hold
- * across server instances. Env: AI_DAILY_LIMIT_USER (default 200), AI_DAILY_LIMIT_ANON
- * (default 30), AI_DAILY_LIMIT_GLOBAL (default 3000 chats). Fails open if the table is
- * missing or the database errors; the Google Cloud budget is the hard backstop.
+ * across server instances. Env: AI_DAILY_LIMIT_USER (default 200), AI_DAILY_LIMIT_GLOBAL
+ * (default 3000 chats). Fails open if the table is missing or the database errors; the
+ * Google Cloud budget is the hard backstop.
  */
 
 import cron from 'node-cron'
@@ -15,7 +15,6 @@ import { withJobLock } from '../utils/jobLock.js'
 import { HttpError } from '../utils/httpError.js'
 
 const DEFAULT_USER_LIMIT = 200
-const DEFAULT_ANON_LIMIT = 30
 const DEFAULT_GLOBAL_LIMIT = 3000
 /** `ai_usage` subject for the site-wide count. */
 export const GLOBAL_SUBJECT = 'all'
@@ -46,19 +45,13 @@ async function countCall(subject) {
 }
 
 /**
- * @param {{ user?: { _id: unknown } | null, ip?: string }} req
+ * @param {{ user: { _id: unknown } }} req
  * @returns {{ subject: string, limit: number }}
  */
 export function aiQuota(req) {
-  if (req.user?._id) {
-    return {
-      subject: `u:${req.user._id}`,
-      limit: Number(process.env.AI_DAILY_LIMIT_USER) || DEFAULT_USER_LIMIT,
-    }
-  }
   return {
-    subject: `ip:${req.ip}`,
-    limit: Number(process.env.AI_DAILY_LIMIT_ANON) || DEFAULT_ANON_LIMIT,
+    subject: `u:${req.user._id}`,
+    limit: Number(process.env.AI_DAILY_LIMIT_USER) || DEFAULT_USER_LIMIT,
   }
 }
 
@@ -85,9 +78,7 @@ export async function consumeAiCall(req) {
   if (calls > limit) {
     throw new HttpError(
       429,
-      req.user
-        ? "You've reached today's limit for the AI assistant. It resets tomorrow."
-        : "Today's AI assistant limit for signed-out visitors is used up. Sign in for more.",
+      "You've reached today's limit for the AI assistant. It resets tomorrow.",
     )
   }
 }

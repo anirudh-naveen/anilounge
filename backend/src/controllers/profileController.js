@@ -16,10 +16,10 @@ import { computeProfileStats } from '../utils/profileStats.js'
 import { loadWatchHistory } from '../services/watchEvents.js'
 import { getAvatar } from '../services/avatarService.js'
 import { moderationMessage } from '../utils/moderation.js'
-import { relationshipBetween } from '../services/friendService.js'
+import { listProfileFriends, relationshipBetween } from '../services/friendService.js'
 import { hasBlocked } from '../services/blockService.js'
 import { canMessageUser } from '../services/messageService.js'
-import { isBotEmail } from '../utils/botAccount.js'
+import { BOT_EMAILS, LOUNGE_KEEPER, botForEmail } from '../utils/botAccount.js'
 import { listProfileConnections } from '../services/connectionService.js'
 import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
 import { sendError } from '../utils/httpError.js'
@@ -89,6 +89,52 @@ async function loadFavoriteContent(userId) {
 }
 
 /**
+ * Lounge Keeper's watchlist: the community's, not its own. Every title at least one
+ * member has completed, shown as completed, rated with the average of members' own
+ * AniLounge scores (to the tenth; null when nobody rated it). Bots, demo, and banned
+ * accounts (and unverified sign-ups) don't count. Latest completion first.
+ * @returns {Promise<object[]>} Public watchlist rows (`content`, `status`, `rating`, ...).
+ */
+async function loadCommunityWatchlist() {
+  const members = `SELECT id FROM users
+     WHERE NOT is_demo AND banned_at IS NULL AND email_verified_at IS NOT NULL
+       AND email <> ALL($1::text[])`
+  const { rows } = await query(
+    `WITH done AS (
+       SELECT w.content_id, min(w.added_at) AS added_at, max(w.updated_at) AS updated_at
+       FROM watchlist w
+       WHERE w.status = 'completed' AND w.user_id IN (${members})
+       GROUP BY w.content_id
+     ),
+     scores AS (
+       SELECT r.content_id, round(avg(r.score)::numeric, 1) AS average
+       FROM ratings r
+       WHERE r.content_id IN (SELECT content_id FROM done) AND r.user_id IN (${members})
+       GROUP BY r.content_id
+     )
+     SELECT wk.*, done.added_at AS community_added_at, done.updated_at AS community_updated_at,
+            scores.average AS community_rating
+     FROM done
+     JOIN works wk ON wk.id = done.content_id
+     LEFT JOIN scores ON scores.content_id = done.content_id
+     ORDER BY done.updated_at DESC`,
+    [BOT_EMAILS],
+  )
+  const docs = await attachContentRelations(rows.map(mapContentRow))
+  return docs.map((content, index) => {
+    const row = rows[index]
+    return {
+      content: slimContent(content),
+      status: 'completed',
+      rating: row.community_rating === null ? null : Number(row.community_rating),
+      currentEpisode: content.episodeCount || content.malEpisodes || 0,
+      addedAt: row.community_added_at,
+      updatedAt: row.community_updated_at,
+    }
+  })
+}
+
+/**
  * Favorited entities for a user in the owner's ranking, grouped by type.
  * @param {object} user - Loaded `User` with `favoriteEntities`.
  * @returns {Promise<{ characters: object[], voiceActors: object[], studios: object[] }>}
@@ -123,7 +169,8 @@ async function loadFavoriteEntities(user) {
  * Private profiles and hidden tabs are only returned to the owner; email and
  * watchlist notes are never included. Signed-in visitors also get their
  * `relationship` to the owner (`friends`, `outgoing`, `incoming`, or `none`) and whether
- * they `blocked` the owner. `connections` lists the owner's linked AniList, MyAnimeList,
+ * they `blocked` the owner. `friends` lists the owner's friends for the Friends tab. Bot
+ * accounts show only their own fixed tabs (utils/botAccount.js). `connections` lists the owner's linked AniList, MyAnimeList,
  * and TMDB accounts unless `settings.showConnections` is off.
  *
  * @param {import('express').Request} req - Reads `params.username`; `req.user` when signed in.
@@ -143,9 +190,11 @@ export const getPublicProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Profile not found.' })
     }
 
-    const visibleTabs = settings.tabOrder.filter(
-      (tab) => isOwner || !settings.hiddenTabs.includes(tab),
-    )
+    // Bots show a fixed set of tabs (utils/botAccount.js), whatever their settings say.
+    const bot = botForEmail(user.email)
+    const visibleTabs = bot
+      ? settings.tabOrder.filter((tab) => bot.profileTabs.includes(tab))
+      : settings.tabOrder.filter((tab) => isOwner || !settings.hiddenTabs.includes(tab))
     const shows = (tab) => visibleTabs.includes(tab)
     const watchlistRows = (user.watchlist || []).filter(
       (item) => item.content && typeof item.content === 'object',
@@ -168,6 +217,7 @@ export const getPublicProfile = async (req, res) => {
         : false
     const history = shows('stats') ? await loadWatchHistory(user._id) : null
     const connections = settings.showConnections ? await listProfileConnections(user._id) : []
+    const friends = shows('friends') ? await listProfileFriends(user._id) : null
 
     res.json({
       success: true,
@@ -175,8 +225,8 @@ export const getPublicProfile = async (req, res) => {
         relationship,
         blocked,
         canMessage,
-        /** A bot account (Lounge Keeper / Lounge Cleaner): it can't be blocked. */
-        isBot: isBotEmail(user.email),
+        /** A bot account (Lounge Keeper / Cleaner / Guide): it can't be blocked. */
+        isBot: Boolean(bot),
         user: {
           id: user._id,
           username: user.username,
@@ -190,17 +240,20 @@ export const getPublicProfile = async (req, res) => {
         isOwner,
         tabs: visibleTabs,
         favorites: shows('favorites') ? { content: favoriteContent, ...favoriteEntities } : null,
-        watchlist: shows('watchlist')
-          ? watchlistRows.map((item) => ({
-              content: slimContent(item.content),
-              status: item.status,
-              rating: item.rating,
-              currentEpisode: item.currentEpisode,
-              addedAt: item.addedAt,
-              updatedAt: item.updatedAt,
-            }))
-          : null,
+        watchlist: !shows('watchlist')
+          ? null
+          : bot === LOUNGE_KEEPER
+            ? await loadCommunityWatchlist()
+            : watchlistRows.map((item) => ({
+                content: slimContent(item.content),
+                status: item.status,
+                rating: item.rating,
+                currentEpisode: item.currentEpisode,
+                addedAt: item.addedAt,
+                updatedAt: item.updatedAt,
+              })),
         stats: shows('stats') ? computeProfileStats(watchlistRows, new Date(), history) : null,
+        friends,
       },
     })
   } catch (error) {
@@ -322,8 +375,8 @@ export const toggleContentFavorite = async (req, res) => {
 }
 
 /**
- * Rank one category of the signed-in user's favorites (titles, characters, voice
- * actors, or studios).
+ * Rank one category of the signed-in user's favorites (movies, series, characters,
+ * voice actors, or studios).
  *
  * @param {import('express').Request} req - `body.ids`: that category's favorites in the new order.
  * @param {import('express').Response} res - 200 `{ data: ids }`, 400 not one whole category, or 500.

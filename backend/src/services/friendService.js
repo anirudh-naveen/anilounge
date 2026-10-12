@@ -162,6 +162,28 @@ export async function listFriends(userId) {
 }
 
 /**
+ * Friends shown on a profile's Friends tab: accepted friendships only, alphabetical,
+ * leaving out banned, demo, and unverified accounts.
+ * @param {string} userId
+ * @returns {Promise<Array<{ user: object, since: Date }>>}
+ */
+export async function listProfileFriends(userId) {
+  const { rows } = await query(
+    `SELECT DISTINCT ON (u.id) u.id, u.username, u.profile_picture,
+            COALESCE(f.responded_at, f.created_at) AS since
+     FROM friendships f
+     JOIN users u ON u.id = CASE WHEN f.follower_id = $1 THEN f.followee_id ELSE f.follower_id END
+     WHERE (f.follower_id = $1 OR f.followee_id = $1) AND f.status = 'accepted'
+       AND u.banned_at IS NULL AND NOT u.is_demo AND u.email_verified_at IS NOT NULL
+     ORDER BY u.id, since`,
+    [userId],
+  )
+  return rows
+    .map((row) => ({ user: publicUser(row), since: row.since }))
+    .sort((a, b) => a.user.username.localeCompare(b.user.username))
+}
+
+/**
  * @param {object} user - `publicUser` shape.
  * @param {{ message?: string | null, created_at: Date }} row
  * @returns {{ user: object, message: string, at: Date, expiresAt: Date }}

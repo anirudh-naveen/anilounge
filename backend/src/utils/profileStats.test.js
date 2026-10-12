@@ -93,6 +93,17 @@ describe('computeProfileStats', () => {
     assert.equal(withHistory.monthly[11].minutes, 30 * DEFAULT_EPISODE_MINUTES)
   })
 
+  it('counts backlog units in the totals but on no day', () => {
+    const show = { _id: 'show', contentType: 'tv', episodeCount: 12, genres: [] }
+    const stats = computeProfileStats(
+      [{ status: 'completed', currentEpisode: 12, updatedAt: '2026-09-10', content: show }],
+      now,
+      new Map([['show', [{ day: '2026-09-10', units: 12, placed: false }]]]),
+    )
+    assert.deepEqual(stats.daily, {})
+    assert.equal(stats.totals.minutesWatched, 12 * DEFAULT_EPISODE_MINUTES)
+  })
+
   it('scales history down when progress was lowered since', () => {
     const show = { _id: 'show', contentType: 'tv', episodeCount: 12, genres: [] }
     const stats = computeProfileStats(

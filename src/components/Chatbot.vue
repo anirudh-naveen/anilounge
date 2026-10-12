@@ -1,15 +1,22 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <!--
-  Chatbot.vue — catalog-grounded AI recommendation chat.
+  Chatbot.vue — catalog-grounded AI recommendation chat, voiced by Lounge Guide.
 
   Modal chat UI that sends queries to /ai/chat and renders returned catalog
-  rows with the same poster-card fields Search uses.
+  rows with the same poster-card fields Search uses. Signed-in only: signed-out
+  visitors get a log in / sign up prompt instead of the composer.
 -->
 <template>
   <div class="chatbot-container" data-testid="chatbot">
     <!-- Title: Header -->
     <div class="chatbot-header">
-      <h3>AI Assistant</h3>
+      <div class="chatbot-identity">
+        <img src="/anilounge-logo.png" alt="" class="guide-avatar" width="32" height="32" />
+        <div>
+          <h3>{{ GUIDE_NAME }}</h3>
+          <p class="chatbot-role">AI Assistant</p>
+        </div>
+      </div>
       <button
         @click="toggleChatbot"
         class="close-btn"
@@ -20,11 +27,42 @@
       </button>
     </div>
 
+    <!-- Title: Signed-out lock -->
+    <div v-if="!authStore.isAuthenticated" class="chatbot-locked" data-testid="chat-locked">
+      <img src="/anilounge-logo.png" alt="" class="locked-avatar" width="72" height="72" />
+      <h4>Sign in to chat with {{ GUIDE_NAME }}</h4>
+      <p>
+        {{ GUIDE_NAME }} is free for registered users. Make an account to ask for recommendations
+        picked from your watchlist, or about studios, voice actors, and genres.
+      </p>
+      <div class="locked-actions">
+        <router-link
+          :to="{ path: '/login', query: { redirect: route.fullPath } }"
+          class="btn btn-secondary"
+          data-testid="chat-login"
+          >Log in</router-link
+        >
+        <router-link
+          :to="{ path: '/register', query: { redirect: route.fullPath } }"
+          class="btn btn-primary"
+          data-testid="chat-signup"
+          >Sign up</router-link
+        >
+      </div>
+    </div>
+
     <!-- Title: Transcript -->
-    <div class="chatbot-messages" ref="messagesContainer">
+    <div v-else class="chatbot-messages" ref="messagesContainer">
       <div v-for="message in messages" :key="message.id" :class="['message', message.type]">
         <div class="message-content">
-          <div v-if="message.type === 'bot'" class="bot-avatar">AI</div>
+          <img
+            v-if="message.type === 'bot'"
+            src="/anilounge-logo.png"
+            :alt="GUIDE_NAME"
+            class="guide-avatar"
+            width="32"
+            height="32"
+          />
           <div class="message-text">{{ message.text }}</div>
         </div>
         <div v-if="message.results?.length" class="chat-results" data-testid="chat-results">
@@ -60,7 +98,13 @@
 
       <div v-if="isTyping" class="message bot">
         <div class="message-content">
-          <div class="bot-avatar">AI</div>
+          <img
+            src="/anilounge-logo.png"
+            :alt="GUIDE_NAME"
+            class="guide-avatar"
+            width="32"
+            height="32"
+          />
           <div class="typing-indicator">
             <span></span>
             <span></span>
@@ -71,7 +115,7 @@
     </div>
 
     <!-- Title: Composer -->
-    <div class="chatbot-input">
+    <div v-if="authStore.isAuthenticated" class="chatbot-input">
       <input
         v-model="inputMessage"
         data-testid="chat-input"
@@ -103,6 +147,7 @@ import {
   getPosterUrl,
 } from '@/services/api'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
+import { useAuthStore } from '@/stores/auth'
 import type { UnifiedContent } from '@/types/content'
 
 interface Message {
@@ -122,8 +167,12 @@ const emit = defineEmits<{
   'search-results': [results: UnifiedContent[]]
 }>()
 
+/** The bot account (backend utils/botAccount.js) the assistant speaks as. */
+const GUIDE_NAME = 'Lounge Guide'
+
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 const messages = ref<Message[]>([])
 const inputMessage = ref('')
@@ -222,7 +271,7 @@ onMounted(() => {
   const welcomeMessage: Message = {
     id: 'welcome',
     type: 'bot',
-    text: 'Hi! I can talk about animated movies, series, studios, voice actors, and genres in the AniLounge catalog. Try "Studio Ghibli movies", "what is isekai", or "something like Frieren".',
+    text: `Hi, I'm ${GUIDE_NAME}! I can talk about animated movies, series, studios, voice actors, and genres in the AniLounge catalog. Try "Studio Ghibli movies", "what is isekai", or "something like Frieren".`,
     timestamp: new Date(),
   }
   messages.value.push(welcomeMessage)
@@ -262,6 +311,65 @@ onMounted(() => {
   margin: 0;
   color: var(--text-primary);
   font-size: 1.1rem;
+}
+
+.chatbot-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.chatbot-role {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.guide-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border-color);
+}
+
+.chatbot-locked {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.locked-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border-color);
+}
+
+.chatbot-locked h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  color: var(--text-primary);
+}
+
+.chatbot-locked p {
+  max-width: 28rem;
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.locked-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 .close-btn {
@@ -311,11 +419,6 @@ onMounted(() => {
 
 .message.user .message-content {
   flex-direction: row-reverse;
-}
-
-.bot-avatar {
-  font-size: 1.2rem;
-  flex-shrink: 0;
 }
 
 .message-text {

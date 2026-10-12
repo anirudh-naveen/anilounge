@@ -259,6 +259,7 @@
         </div>
       </div>
     </header>
+    <BacklogModeBar />
 
     <!-- Page -->
     <!-- Title: Router Outlet -->
@@ -313,7 +314,7 @@
           <router-link to="/privacy">Privacy</router-link>
           <router-link to="/support">Help</router-link>
           <a v-if="DONATE_URL" :href="DONATE_URL" target="_blank" rel="noopener noreferrer">
-            Support
+            Donate
           </a>
         </nav>
         <p class="footer-copyright">&copy; 2026 AniLounge</p>
@@ -332,6 +333,7 @@ import { useInboxStore } from '@/stores/inbox'
 import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
+import BacklogModeBar from '@/components/BacklogModeBar.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { DONATE_URL } from '@/utils/donations'
 

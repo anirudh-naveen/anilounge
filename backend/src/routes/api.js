@@ -57,6 +57,7 @@ const watchlistFieldRules = () => [
   body('startedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
   body('completedOn').optional({ values: 'null' }).isISO8601({ strict: true }),
   body('rewatchCount').optional().isInt({ min: 0, max: 999 }),
+  body('backlog').optional().isBoolean(),
 ]
 
 /** 3-20 characters; letters, numbers, dot, dash, underscore (matches the DB length check). */
@@ -181,10 +182,10 @@ router.get(
   forumController.getHighlights,
 )
 
-/** Gemini-backed catalog chat. Optional auth personalizes from watchlist/preferences. */
+/** Gemini-backed catalog chat (Lounge Guide); signed-in only, personalized from the watchlist. */
 router.post(
   '/ai/chat',
-  optionalAuthenticate,
+  authMiddleware,
   [
     body('message')
       .isString()

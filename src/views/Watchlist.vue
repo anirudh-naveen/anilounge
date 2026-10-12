@@ -2,9 +2,11 @@
 <!--
   Watchlist.vue — authenticated watchlist view.
 
-  Sort toolbar over collapsible status sections (Watching, On Hold, Planned,
-  Completed, Dropped), each a compact expandable list of tracked titles.
-  Progress, rating, and status are editable per row.
+  Sort toolbar, then status chips (as on a profile's watchlist: All or one status,
+  with counts) and type chips (All, Movies, Series), over collapsible status
+  sections (Watching, On Hold, Planned, Completed, Dropped), each a compact
+  expandable list of tracked titles. Progress, rating, and status are editable per
+  row, and each row has a favorite heart.
 -->
 <template>
   <div class="watchlist-page">
@@ -19,6 +21,8 @@
 
       <!-- Toolbar -->
       <div class="watchlist-toolbar">
+        <!-- Title: Backlog Mode -->
+        <BacklogModeToggle />
         <!-- Title: Search -->
         <ListSearch
           v-model="searchQuery"
@@ -31,6 +35,38 @@
           v-model:sort-direction="sortDirection"
           :options="WATCHLIST_SORT_OPTIONS"
         />
+      </div>
+
+      <!-- Title: Filters -->
+      <div v-if="contentStore.watchlist.length" class="watchlist-filters">
+        <div class="status-filters" role="group" aria-label="Status">
+          <button
+            v-for="option in statusFilters"
+            :key="option.value"
+            type="button"
+            class="status-chip"
+            :class="{ active: statusFilter === option.value }"
+            :aria-pressed="statusFilter === option.value"
+            :data-testid="`watchlist-status-${option.value}`"
+            @click="statusFilter = option.value"
+          >
+            {{ option.label }} <span class="chip-count">{{ option.count }}</span>
+          </button>
+        </div>
+        <div class="status-filters type-filters" role="group" aria-label="Type">
+          <button
+            v-for="option in typeFilters"
+            :key="option.value"
+            type="button"
+            class="status-chip"
+            :class="{ active: typeFilter === option.value }"
+            :aria-pressed="typeFilter === option.value"
+            :data-testid="`watchlist-type-${option.value}`"
+            @click="typeFilter = option.value"
+          >
+            {{ option.label }} <span class="chip-count">{{ option.count }}</span>
+          </button>
+        </div>
       </div>
 
       <!-- List -->
@@ -146,6 +182,7 @@
                 </div>
 
                 <div class="item-actions">
+                  <FavoriteHeart :content-id="getContentId(item)" variant="inline" />
                   <button
                     class="expand-btn"
                     type="button"
@@ -377,9 +414,9 @@
                         <span class="info-label">Release Date:</span>
                         <span class="info-value">{{ getContentReleaseDate(item) }}</span>
                       </div>
-                      <div v-if="isTvContent(item)" class="info-item">
+                      <div v-if="isTvContent(item) && getTotalSeasons(item) > 1" class="info-item">
                         <span class="info-label">Seasons:</span>
-                        <span class="info-value">{{ getContentSeasons(item) }}</span>
+                        <span class="info-value">{{ getTotalSeasons(item) }}</span>
                       </div>
                       <div class="info-item">
                         <span class="info-label">Rating:</span>
@@ -394,7 +431,8 @@
         </section>
 
         <p v-if="!sections.length" class="no-matches" data-testid="watchlist-no-matches">
-          No titles match “{{ searchQuery.trim() }}”.
+          <template v-if="searchQuery.trim()">No titles match “{{ searchQuery.trim() }}”.</template>
+          <template v-else>Nothing here with these filters.</template>
         </p>
       </div>
 
@@ -444,6 +482,8 @@ import {
 } from '@/utils/watchlist'
 import ImportReminder from '@/components/ImportReminder.vue'
 import ListSearch from '@/components/ListSearch.vue'
+import BacklogModeToggle from '@/components/BacklogModeToggle.vue'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import { usePageTitle } from '@/composables/usePageMeta'
 
 usePageTitle('Watchlist')
@@ -570,14 +610,6 @@ const getContentReleaseDate = (item: WatchlistItem) => {
   return date ? new Date(date).toLocaleDateString() : 'Unknown'
 }
 
-const getContentSeasons = (item: WatchlistItem) => {
-  if (typeof item === 'string') return 'Unknown'
-  if (typeof item.content === 'string') return 'Unknown'
-  const content = item.content
-  if (!content) return 'Unknown'
-  return isEpisodic(content.contentType) ? content.seasonCount || 'Unknown' : 'N/A'
-}
-
 const getContentRating = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'N/A'
   if (typeof item.content === 'string' || !item.content) return 'N/A'
@@ -650,10 +682,54 @@ const matchesSearch = (item: WatchlistItem, query: string) => {
 }
 
 /** Non-empty status sections in display order, filtered by search and sorted by the toolbar. */
+type TypeFilter = 'all' | 'movie' | 'series'
+const statusFilter = ref<'all' | WatchlistStatus>('all')
+const typeFilter = ref<TypeFilter>('all')
+
+/** Movies, or everything episodic (series, seasons, specials) as series. */
+const itemType = (item: WatchlistItem): Exclude<TypeFilter, 'all'> =>
+  typeof item !== 'string' &&
+  typeof item.content !== 'string' &&
+  item.content?.contentType === 'movie'
+    ? 'movie'
+    : 'series'
+
+const ofType = (type: TypeFilter) =>
+  contentStore.watchlist.filter((item) => type === 'all' || itemType(item) === type)
+
+/** Status chips with counts for the picked type, as on a profile's watchlist. */
+const statusFilters = computed(() => {
+  const rows = ofType(typeFilter.value)
+  return [
+    { value: 'all' as const, label: 'All', count: rows.length },
+    ...WATCHLIST_STATUS_OPTIONS.map((option) => ({
+      value: option.value,
+      label: option.label,
+      count: rows.filter((row) => row.status === option.value).length,
+    })),
+  ]
+})
+
+/** Type chips with counts for the picked status. */
+const typeFilters = computed(() => {
+  const count = (type: TypeFilter) =>
+    ofType(type).filter((row) => statusFilter.value === 'all' || row.status === statusFilter.value)
+      .length
+  return [
+    { value: 'all' as const, label: 'All', count: count('all') },
+    { value: 'movie' as const, label: 'Movies', count: count('movie') },
+    { value: 'series' as const, label: 'Series', count: count('series') },
+  ]
+})
+
 const sections = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   const sorted = applySort(
-    contentStore.watchlist.filter((item) => matchesSearch(item, query)),
+    ofType(typeFilter.value).filter(
+      (item) =>
+        (statusFilter.value === 'all' || item.status === statusFilter.value) &&
+        matchesSearch(item, query),
+    ),
     sortBy.value,
     sortDirection.value,
     getContentTitle,
@@ -1067,7 +1143,7 @@ onUnmounted(() => {
 .list-column-header,
 .item-header {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 5.5rem 3.5rem 7.5rem 2rem;
+  grid-template-columns: 48px minmax(0, 1fr) 5.5rem 3.5rem 7.5rem 4rem;
   align-items: center;
   column-gap: 0.25rem;
 }
@@ -1257,7 +1333,53 @@ onUnmounted(() => {
 .item-actions {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
+  gap: 0.1rem;
+}
+
+/* Status and type chips (same look as a profile's watchlist filters). */
+.watchlist-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.status-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.status-chip:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.status-chip.active {
+  background: var(--coral-primary);
+  border-color: var(--coral-primary);
+  color: var(--text-on-accent, #fff);
+}
+
+.chip-count {
+  opacity: 0.75;
+  font-weight: 500;
 }
 
 .expand-btn {
@@ -1642,7 +1764,7 @@ onUnmounted(() => {
   }
 
   .item-header {
-    grid-template-columns: 40px minmax(0, 1fr) auto auto 1.75rem;
+    grid-template-columns: 40px minmax(0, 1fr) auto auto 3.5rem;
     grid-template-rows: 56px;
     min-height: 56px;
   }

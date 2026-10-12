@@ -5,7 +5,8 @@
  * preferences into the stored shape, dropping unknown keys and bad values.
  */
 
-export const PROFILE_TABS = ['favorites', 'watchlist', 'stats', 'forum']
+/** Profile tabs. A tab added later (Friends) joins existing profiles visible, at the end. */
+export const PROFILE_TABS = ['favorites', 'watchlist', 'stats', 'forum', 'friends']
 export const PROFILE_ACCENTS = ['coral', 'teal', 'violet', 'gold', 'rose', 'sky']
 /** A custom accent from the color wheel: `#rrggbb`. */
 const HEX_ACCENT = /^#[0-9a-f]{6}$/i
