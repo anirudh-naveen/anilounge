@@ -3,7 +3,8 @@
 
   Email/password sign-in form against the auth store, followed by an
   authenticator-code step for accounts with 2FA. Unverified accounts are sent
-  to email verification; locked accounts get a link to the unlock page.
+  to email verification; locked accounts get a link to the unlock page, and
+  "Forgot password?" opens the reset page.
   `?redirect=/path` (an in-site path) is where signing in returns to.
 -->
 <template>
@@ -67,7 +68,16 @@
 
           <!-- Title: Password -->
           <div class="form-group">
-            <label for="password" class="form-label">Password</label>
+            <div class="label-row">
+              <label for="password" class="form-label">Password</label>
+              <router-link
+                :to="{ name: 'resetPassword', query: form.email ? { email: form.email } : {} }"
+                class="link forgot-link"
+                data-testid="forgot-password-link"
+              >
+                Forgot password?
+              </router-link>
+            </div>
             <input
               id="password"
               v-model="form.password"
@@ -247,6 +257,17 @@ const resetTwoFactor = () => {
   color: var(--text-primary);
   font-weight: 500;
   font-size: 0.9rem;
+}
+
+.label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.forgot-link {
+  font-size: 0.85rem;
 }
 
 .btn-large {

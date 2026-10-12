@@ -39,6 +39,7 @@
     "email:announce": "node src/scripts/sendAnnouncement.js",
     "db:drop-legacy": "node src/scripts/dropLegacyTables.js",
     "role:creator": "node src/scripts/setCreator.js",
+    "user:password": "node src/scripts/setPassword.js",
     "db:ingest-relations": "node src/scripts/ingestMalRelations.js",
     "db:merge-characters": "node src/scripts/mergeFranchiseCharacters.js",
     "db:reload": "node src/scripts/reloadCatalog.js",

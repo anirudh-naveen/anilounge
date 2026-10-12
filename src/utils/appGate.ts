@@ -16,6 +16,7 @@ export const APP_PUBLIC_ROUTES = new Set([
   'register',
   'verifyEmail',
   'unlockAccount',
+  'resetPassword',
   'privacy',
   'support',
 ])
