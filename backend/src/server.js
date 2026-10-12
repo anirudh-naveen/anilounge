@@ -354,7 +354,7 @@ app.use((err, req, res, next) => {
 
 // Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync and
 // catalog-maintenance schedulers
-// creates/syncs the bot accounts (Lounge Keeper, Lounge Cleaner),
+// creates/syncs the bot accounts (Lounge Keeper, Lounge Cleaner, Lounge Guide),
 // and makes sure the README demo login exists and is unlocked (and resets it nightly).
 app
   .listen(PORT, () => {

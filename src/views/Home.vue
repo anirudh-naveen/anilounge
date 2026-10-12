@@ -70,7 +70,7 @@
                 <span class="preview-poster" aria-hidden="true">{{ example.title.charAt(0) }}</span>
                 <div class="activity-body">
                   <p class="activity-text">
-                    <span class="activity-user">iMaji</span>
+                    <span class="activity-user">Lounge Guide</span>
                     {{ example.action }}
                     <span class="activity-title">{{ example.title }}</span>
                   </p>
@@ -341,7 +341,7 @@ const FEED_TABS: { value: FeedTab; label: string }[] = [
   { value: 'friends', label: 'Friends' },
 ]
 
-/** Sample feed (from iMaji's account) shown to signed-out visitors beside the sign-up copy. */
+/** Sample feed (as the Lounge Guide bot) shown to signed-out visitors beside the sign-up copy. */
 const EXAMPLE_ACTIVITY: {
   action: string
   title: string
