@@ -63,19 +63,27 @@ export function formatSeasonLabel(season: Pick<SeasonSummary, 'seasonNumber' | '
 }
 
 /**
- * Season a details route points at: the `?season=` number when that season
- * has no title of its own (or is this title), else the season this title is.
+ * Season a details route points at: the `?season=` number when the route is the
+ * series itself, or that season has no title of its own (or is this title), else
+ * the season this title is.
  * @param seasons - Season guide for the show.
  * @param contentId - Route content id.
  * @param requested - Raw `season` query value.
+ * @param seriesId - Title the guide belongs to.
  * @returns Matching season, or null.
  */
-export function findRouteSeason(seasons: SeasonSummary[], contentId: string, requested?: unknown) {
+export function findRouteSeason(
+  seasons: SeasonSummary[],
+  contentId: string,
+  requested?: unknown,
+  seriesId?: string,
+) {
   const number = Number(Array.isArray(requested) ? requested[0] : requested)
   return (
     seasons.find(
       (season) =>
-        season.seasonNumber === number && (!season.contentId || season.contentId === contentId),
+        season.seasonNumber === number &&
+        (!season.contentId || season.contentId === contentId || contentId === seriesId),
     ) ||
     seasons.find((season) => season.contentId === contentId) ||
     null
