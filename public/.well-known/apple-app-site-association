@@ -2,7 +2,7 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["TEAMID.net.anilounge.app"],
+        "appIDs": ["GH4YAT565S.net.anilounge.app"],
         "components": [
           { "/": "/api/*", "exclude": true },
           { "/": "/uploads/*", "exclude": true },

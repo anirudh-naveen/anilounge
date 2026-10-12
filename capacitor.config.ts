@@ -5,8 +5,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
  * without an App Store release; `ios-shell/` only holds the offline fallback page.
  */
 const config: CapacitorConfig = {
-  // Universal links need the Apple Team ID in place of TEAMID in
-  // public/.well-known/apple-app-site-association.
+  // Apple Team GH4YAT565S; public/.well-known/apple-app-site-association uses it too.
   appId: 'net.anilounge.app',
   appName: 'AniLounge',
   webDir: 'ios-shell',
