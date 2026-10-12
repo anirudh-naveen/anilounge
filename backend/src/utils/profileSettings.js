@@ -5,6 +5,8 @@
  * preferences into the stored shape, dropping unknown keys and bad values.
  */
 
+import { BADGES, NO_EMBLEM } from './badges.js'
+
 /** Profile tabs. A tab added later (Friends) joins existing profiles visible, at the end. */
 export const PROFILE_TABS = ['favorites', 'watchlist', 'stats', 'forum', 'friends']
 export const PROFILE_ACCENTS = ['coral', 'teal', 'violet', 'gold', 'rose', 'sky']
@@ -21,13 +23,17 @@ export function normalizeAccent(value) {
   if (typeof value === 'string' && HEX_ACCENT.test(value.trim())) return value.trim().toLowerCase()
   return null
 }
+/** Avatar frame picks: an emblem badge id or 'none'; anything else (null) = match the emblem. */
+const FRAME_CHOICES = [...BADGES.filter((badge) => badge.emblem).map((badge) => badge.id), NO_EMBLEM]
 export const PROFILE_HEADLINE_MAX = 80
 export const PROFILE_BIO_MAX = 300
 const PREFERENCE_LIST_MAX = 30
 
+// accent null = never picked: the profile uses coral and the avatar frame stays silver.
 export const DEFAULT_PROFILE_SETTINGS = Object.freeze({
   isPublic: true,
-  accent: 'coral',
+  accent: null,
+  frame: null,
   headline: '',
   defaultTab: 'favorites',
   tabOrder: [...PROFILE_TABS],
@@ -42,7 +48,7 @@ export const DEFAULT_PROFILE_SETTINGS = Object.freeze({
  *
  * @param {unknown} input - Raw settings object (DB JSON or request body).
  * @param {object} [base=DEFAULT_PROFILE_SETTINGS] - Values kept when `input` omits a key.
- * @returns {{ isPublic: boolean, accent: string, headline: string, defaultTab: string, tabOrder: string[], hiddenTabs: string[], showConnections: boolean }}
+ * @returns {{ isPublic: boolean, accent: string | null, frame: string | null, headline: string, defaultTab: string, tabOrder: string[], hiddenTabs: string[], showConnections: boolean }}
  */
 export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS) {
   const raw = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
@@ -51,7 +57,9 @@ export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS)
   const isPublic = typeof pick('isPublic') === 'boolean' ? pick('isPublic') : true
   const showConnections =
     typeof pick('showConnections') === 'boolean' ? pick('showConnections') : true
-  const accent = normalizeAccent(pick('accent')) || 'coral'
+  const accent = normalizeAccent(pick('accent'))
+  // Whether they still hold the badge is checked when the frame is shown (badgeService).
+  const frame = FRAME_CHOICES.includes(pick('frame')) ? pick('frame') : null
   const headline =
     typeof pick('headline') === 'string'
       ? pick('headline').trim().slice(0, PROFILE_HEADLINE_MAX)
@@ -68,7 +76,7 @@ export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS)
   const visible = tabOrder.filter((tab) => !hiddenTabs.includes(tab))
   const defaultTab = visible.includes(pick('defaultTab')) ? pick('defaultTab') : visible[0]
 
-  return { isPublic, accent, headline, defaultTab, tabOrder, hiddenTabs, showConnections }
+  return { isPublic, accent, frame, headline, defaultTab, tabOrder, hiddenTabs, showConnections }
 }
 
 /**

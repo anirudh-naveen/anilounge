@@ -1,6 +1,7 @@
 /**
  * accent.ts — profile accent colors: the presets plus custom `#rrggbb` colors from
- * the color wheel, and a readable text color to put on top of an accent.
+ * the color wheel, a readable text color to put on top of an accent, and the avatar
+ * frame colors an accent gives a badge holder (silver when they never picked one).
  */
 
 import type { ProfileAccent, ProfilePresetAccent } from '@/types/profile'
@@ -40,4 +41,34 @@ export const readableOn = (accent?: ProfileAccent | null): string => {
   }
   const luminance = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5)
   return 1.05 / (luminance + 0.05) >= 2.3 ? '#ffffff' : '#152238'
+}
+
+/** Mix two `#rrggbb` colors; `amount` is how much of `other` to blend in. */
+const mix = (color: string, other: string, amount: number): string => {
+  const channels = [1, 3, 5].map((offset) => {
+    const from = parseInt(color.slice(offset, offset + 2), 16)
+    const to = parseInt(other.slice(offset, offset + 2), 16)
+    return Math.round(from + (to - from) * amount)
+      .toString(16)
+      .padStart(2, '0')
+  })
+  return `#${channels.join('')}`
+}
+
+const SILVER_FRAME = ['#f8fafc', '#cbd5e1', '#8b97a8', '#e2e8f0']
+
+/**
+ * Gradient stops for a badge holder's avatar frame: silver until they pick an accent,
+ * then light-to-dark shades of it.
+ * @param accent - Their stored accent, or null when never picked.
+ */
+export const frameColors = (accent?: ProfileAccent | null): string[] => {
+  if (!accent) return SILVER_FRAME
+  const color = accentColor(accent)
+  return [
+    mix(color, '#ffffff', 0.6),
+    color,
+    mix(color, '#000000', 0.3),
+    mix(color, '#ffffff', 0.35),
+  ]
 }
