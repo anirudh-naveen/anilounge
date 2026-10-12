@@ -135,6 +135,31 @@ describe('Search empty query gating', () => {
     expect(spy).toHaveBeenCalledWith('naruto', 'all')
   })
 
+  it('turns Search into Reset until the query changes, and Reset returns to the rails', async () => {
+    const { wrapper, store } = await mountPage()
+    vi.spyOn(store, 'searchContent').mockImplementation(async (query: string) => {
+      store.lastSearchQuery = query
+      return { success: true, data: { content: [], pagination: store.pagination } }
+    })
+    const submit = () => wrapper.get('[data-testid="search-submit"]')
+
+    await wrapper.get('[data-testid="search-query"]').setValue('naruto')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(submit().text()).toBe('Reset')
+    expect(wrapper.find('.no-results').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="search-query"]').setValue('naruto shippuden')
+    expect(submit().text()).toBe('Search')
+
+    await wrapper.get('[data-testid="search-query"]').setValue('naruto')
+    await submit().trigger('click')
+    await flushPromises()
+    expect((wrapper.get('[data-testid="search-query"]').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.find('.no-results').exists()).toBe(false)
+    expect(submit().text()).toBe('Search')
+  })
+
   it('allows Search with a status or a country of origin and no query', async () => {
     const { wrapper, store } = await mountPage()
     const spy = vi.spyOn(store, 'searchContent').mockResolvedValue({

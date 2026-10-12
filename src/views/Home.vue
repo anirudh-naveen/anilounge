@@ -401,9 +401,8 @@ const emptyActivityCopy = computed(() => {
 const updatesTitle = computed(() => (updates.value.source === 'watchlist' ? 'Updates' : 'Trending'))
 
 const updatesSubtitle = computed(() => {
-  if (updates.value.source === 'watchlist')
-    return 'New episodes and upcoming titles from your list.'
-  if (authStore.isAuthenticated) return "Nothing new on your watchlist, so here's what's trending."
+  if (updates.value.source === 'watchlist') return 'New and upcoming from your list.'
+  if (authStore.isAuthenticated) return 'Trending while your list is quiet.'
   return "What's airing and premiering soon."
 })
 
