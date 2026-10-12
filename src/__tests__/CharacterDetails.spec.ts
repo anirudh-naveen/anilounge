@@ -143,7 +143,7 @@ describe('CharacterDetails', () => {
     expect(groups).toHaveLength(2)
     expect(groups[0]!.get('.group-title').text()).toBe('One Piece')
     expect(groups[0]!.findAll('h5').map((h) => h.text())).toEqual(['One Piece', 'Film Red'])
-    expect(groups[1]!.get('.group-title').text()).toBe('Other titles')
+    expect(groups[1]!.get('.group-title').text()).toBe('Other Titles')
     expect(groups[1]!.findAll('h5').map((h) => h.text())).toEqual(['Standalone'])
   })
 

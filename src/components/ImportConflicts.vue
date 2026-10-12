@@ -10,7 +10,7 @@
   <div v-if="conflicts.length" class="import-conflicts" data-testid="import-conflicts">
     <div class="conflicts-header">
       <h4>
-        {{ conflicts.length }} {{ conflicts.length === 1 ? 'title needs' : 'titles need' }} you
+        {{ conflicts.length }} {{ conflicts.length === 1 ? 'Title Needs' : 'Titles Need' }} You
       </h4>
       <p>
         These came in differently from each site, or differently from what's already on your

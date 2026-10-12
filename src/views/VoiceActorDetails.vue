@@ -18,7 +18,7 @@
     </div>
 
     <div v-else-if="error" class="error">
-      <h2>Error loading voice actor</h2>
+      <h2>Error Loading Voice Actor</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>
@@ -70,7 +70,7 @@
       </div>
 
       <div v-if="staffWork.length" class="appearances" data-testid="staff-work">
-        <h2>Staff work</h2>
+        <h2>Staff Work</h2>
         <div class="content-grid">
           <router-link
             v-for="row in staffWork"

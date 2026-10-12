@@ -157,7 +157,6 @@ const mountPage = async (path: string) => {
       plugins: [router],
       stubs: {
         WatchlistPanel: true,
-        EntityCastRow: true,
         StudioLinks: true,
         WhereToWatch: true,
         ForumHighlights: true,
@@ -257,7 +256,7 @@ describe('TVShowDetails series', () => {
       'show-description',
       'series-seasons',
       'episode-row',
-      'entity-cast-row-stub',
+      'data-testid="entity-cast-row"',
       'where-to-watch-stub',
       'forum-highlights-stub',
     ].map((marker) => html.indexOf(marker))
@@ -266,7 +265,7 @@ describe('TVShowDetails series', () => {
     expect(wrapper.text()).not.toContain('Related Content')
   })
 
-  it('narrows characters and staff to the open episode', async () => {
+  it('narrows characters to the open episode and lists its staff in the panel', async () => {
     const { wrapper } = await mountPage('/tv-show/naruto')
     expect(castIds(wrapper)).toEqual(['char-naruto', 'char-sasuke'])
 
@@ -274,7 +273,7 @@ describe('TVShowDetails series', () => {
 
     expect(castIds(wrapper)).toEqual(['char-naruto'])
     expect(wrapper.get('[data-testid="episode-focus"]').text()).toContain('Enter Naruto')
-    expect(wrapper.text()).toContain('Hayato Date')
+    expect(wrapper.get('[data-testid="episode-staff"]').text()).toContain('Hayato Date')
 
     await wrapper.get('[data-testid="episode-focus"] button').trigger('click')
     expect(castIds(wrapper)).toEqual(['char-naruto', 'char-sasuke'])

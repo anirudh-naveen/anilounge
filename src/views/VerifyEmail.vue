@@ -10,7 +10,7 @@
     <div class="code-container">
       <!-- Page Header -->
       <div class="code-header">
-        <h1 class="code-title">Verify your email</h1>
+        <h1 class="code-title">Verify Your Email</h1>
         <p class="code-subtitle">
           We sent a 6-digit code to <strong>{{ email || 'your email' }}</strong
           >.

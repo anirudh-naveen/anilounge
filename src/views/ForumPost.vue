@@ -22,7 +22,7 @@
       <template v-else-if="post">
         <!-- Title: Edit -->
         <section v-if="editing" class="social-panel">
-          <h2 class="social-panel-title edit-title">Edit post</h2>
+          <h2 class="social-panel-title edit-title">Edit Post</h2>
           <ForumComposer :post="post" @saved="onEdited" @cancel="editing = false" />
         </section>
 

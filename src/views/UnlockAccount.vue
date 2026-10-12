@@ -9,7 +9,7 @@
     <div class="code-container">
       <!-- Page Header -->
       <div class="code-header">
-        <h1 class="code-title">Unlock your account</h1>
+        <h1 class="code-title">Unlock Your Account</h1>
         <p class="code-subtitle">
           Enter the code from the "account locked" email we sent after several failed sign-ins.
         </p>

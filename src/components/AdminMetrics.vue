@@ -45,7 +45,7 @@
 
       <div class="metrics-chart-card">
         <div class="metrics-chart-head">
-          <h3 class="metrics-heading">Per day</h3>
+          <h3 class="metrics-heading">Per Day</h3>
           <div class="kind-tabs compact" role="tablist" aria-label="Chart series">
             <button
               v-for="option in SERIES"
@@ -158,8 +158,14 @@ const tiles = computed<Array<{ label: string; value: number; note: string; bot?:
   const d = data.value
   if (!d) return []
   return [
-    { label: 'Total users', value: d.users.total, note: `+${format(d.users.new)} new` },
     { label: 'Active users', value: d.users.active, note: 'signed in and active' },
+    { label: 'Total users', value: d.users.total, note: `+${format(d.users.new)} new` },
+    {
+      label: 'Bots & crawlers',
+      value: d.bots?.visitors ?? 0,
+      note: `${format(d.bots?.views ?? 0)} page views, not counted`,
+      bot: true,
+    },
     {
       label: 'Real visitors',
       value: d.totals.visitors,
@@ -167,12 +173,6 @@ const tiles = computed<Array<{ label: string; value: number; note: string; bot?:
     },
     { label: 'Page views', value: d.totals.views, note: perVisitor(d.totals.views) },
     { label: 'Clicks', value: d.totals.clicks, note: perVisitor(d.totals.clicks) },
-    {
-      label: 'Bots & crawlers',
-      value: d.bots?.visitors ?? 0,
-      note: `${format(d.bots?.views ?? 0)} page views, not counted`,
-      bot: true,
-    },
   ]
 })
 
@@ -193,12 +193,12 @@ const lists = computed(() => {
   if (!d) return []
   return [
     {
-      title: 'Top pages',
+      title: 'Top Pages',
       note: 'By page views.',
       rows: d.pages.map((row) => ({ name: row.path, count: row.views })),
     },
     {
-      title: 'Top clicks',
+      title: 'Top Clicks',
       note: 'link: inside the site, out: other sites.',
       rows: d.clicks.map((row) => ({ name: row.target, count: row.clicks })),
     },
@@ -208,7 +208,7 @@ const lists = computed(() => {
       rows: d.referrers.map((row) => ({ name: row.host, count: row.visitors })),
     },
     {
-      title: 'Bots & crawlers',
+      title: 'Bots & Crawlers',
       note: 'By visitor ids; not counted anywhere else. Most crawlers never run the site, so only some show.',
       rows: (d.bots?.top ?? []).map((row) => ({ name: row.name, count: row.visitors })),
     },

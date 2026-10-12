@@ -9,7 +9,7 @@
     <div class="container">
       <section class="feedback-card fade-in">
         <p class="kicker">Beta</p>
-        <h1 class="feedback-title">Report bugs or suggestions</h1>
+        <h1 class="feedback-title">Report Bugs Or Suggestions</h1>
         <p class="feedback-copy">
           Tell us about a bug, a missing feature, or anything else that would make AniLounge better.
         </p>

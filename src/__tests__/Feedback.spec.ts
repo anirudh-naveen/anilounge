@@ -10,7 +10,7 @@ import Feedback from '@/views/Feedback.vue'
 describe('Feedback page', () => {
   it('renders the bug and suggestion form', () => {
     const wrapper = mount(Feedback)
-    expect(wrapper.text()).toContain('Report bugs or suggestions')
+    expect(wrapper.text()).toContain('Report Bugs Or Suggestions')
     expect(wrapper.find('[data-testid="feedback-form"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Bug report')
   })

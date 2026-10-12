@@ -12,7 +12,7 @@
       <div class="login-container">
         <!-- Page Header -->
         <div class="login-header">
-          <h1 class="login-title">Log in</h1>
+          <h1 class="login-title">Log In</h1>
           <p class="login-subtitle">Welcome back to the lobby</p>
         </div>
 

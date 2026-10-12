@@ -225,3 +225,17 @@ describe('nativeApp (inside the iOS app)', () => {
     expect(DONATE_URL).toBe('')
   })
 })
+
+describe('isViewerInUS', () => {
+  it('goes by the time zone, falling back to the language country', async () => {
+    const { isViewerInUS } = await import('@/utils/nativeApp')
+    expect(isViewerInUS('America/Los_Angeles')).toBe(true)
+    expect(isViewerInUS('America/Indiana/Indianapolis')).toBe(true)
+    expect(isViewerInUS('America/Toronto')).toBe(false)
+    expect(isViewerInUS('Europe/London')).toBe(false)
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB'])
+    expect(isViewerInUS('UTC')).toBe(false)
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US'])
+    expect(isViewerInUS('')).toBe(true)
+  })
+})
