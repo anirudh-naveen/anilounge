@@ -13,7 +13,22 @@ vi.mock('@/services/api', () => ({
   },
 }))
 
+const auth = vi.hoisted(() => ({
+  user: null as { username: string; profilePicture: string | null } | null,
+}))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
+
 describe('UserAvatar', () => {
+  it("shows the signed-in user's current picture over the page's copy", () => {
+    setActivePinia(createPinia())
+    auth.user = { username: 'Mika', profilePicture: 'https://cdn.test/new.png' }
+    const mine = mount(UserAvatar, { props: { name: 'mika', src: 'https://cdn.test/old.png' } })
+    expect(mine.get('img').attributes('src')).toBe('https://cdn.test/new.png')
+    const theirs = mount(UserAvatar, { props: { name: 'kai', src: 'https://cdn.test/kai.png' } })
+    expect(theirs.get('img').attributes('src')).toBe('https://cdn.test/kai.png')
+    auth.user = null
+  })
+
   it('rings the picture with the badge the caller passes', () => {
     const wrapper = mount(UserAvatar, { props: { name: 'kai', badge: 'admin', size: 40 } })
     expect(wrapper.classes()).toContain('ring-admin')

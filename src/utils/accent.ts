@@ -21,10 +21,13 @@ const HEX = /^#[0-9a-f]{6}$/i
 export const isCustomAccent = (accent: unknown): accent is `#${string}` =>
   typeof accent === 'string' && HEX.test(accent)
 
-/** The CSS color for a stored accent (unknown values fall back to coral). */
+/** The default accent, until the user picks one: silver, like the default avatar frame. */
+export const DEFAULT_ACCENT = '#8b97a8'
+
+/** The CSS color for a stored accent (none or unknown values give the silver default). */
 export const accentColor = (accent?: ProfileAccent | null): string => {
   if (isCustomAccent(accent)) return accent
-  return ACCENT_PRESETS[(accent as ProfilePresetAccent) || 'coral'] ?? ACCENT_PRESETS.coral
+  return ACCENT_PRESETS[accent as ProfilePresetAccent] ?? DEFAULT_ACCENT
 }
 
 /**

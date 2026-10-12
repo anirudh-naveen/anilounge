@@ -5,7 +5,8 @@ describe('accent colors', () => {
   it('resolves presets and custom colors', () => {
     expect(accentColor('teal')).toBe('#2bbbad')
     expect(accentColor('#3a7bff')).toBe('#3a7bff')
-    expect(accentColor(undefined)).toBe('#e07a5f')
+    expect(accentColor(undefined)).toBe('#8b97a8')
+    expect(accentColor(null)).toBe('#8b97a8')
     expect(isCustomAccent('#abcdef')).toBe(true)
     expect(isCustomAccent('coral')).toBe(false)
   })
