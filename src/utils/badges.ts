@@ -1,11 +1,11 @@
 /**
  * badges.ts — badge registry (frontend copy of backend/src/utils/badges.js).
  *
- * Every badge a user can hold, in display order. `emblem` badges can be chosen as
- * the one emblem next to a username; emblem-less badges (future ones) only appear in
- * the profile Badges section. `grantable` badges are toggled on the admin page; the
+ * Every badge a user can hold, highest first (the automatic avatar frame is the
+ * highest held). `emblem` badges have an avatar frame; emblem-less badges (future
+ * ones) only appear in the profile Badges section. `grantable` badges are toggled on the admin page; the
  * Admin toggle sets admin access itself (creator only; never stored as a badge);
- * Bot is worn only by the bot accounts (Lounge Keeper, Cleaner, Guide);
+ * Mascot (id `bot`) is worn only by the bot accounts (Lounge Keeper, Cleaner, Guide);
  * Supporter is also granted automatically for a Ko-fi donation, and Influencer for 5 forum
  * posts or 10 comments in a week.
  */
@@ -27,6 +27,13 @@ export const BADGES: BadgeDef[] = [
     grantable: false,
   },
   {
+    id: 'bot',
+    label: 'Mascot',
+    description: "One of AniLounge's own mascots.",
+    emblem: true,
+    grantable: false,
+  },
+  {
     id: 'admin',
     label: 'Admin',
     description: 'Helps run AniLounge.',
@@ -37,6 +44,13 @@ export const BADGES: BadgeDef[] = [
     id: 'developer',
     label: 'Developer',
     description: 'Helps build AniLounge.',
+    emblem: true,
+    grantable: true,
+  },
+  {
+    id: 'supporter',
+    label: 'Supporter',
+    description: 'Donates to keep AniLounge running.',
     emblem: true,
     grantable: true,
   },
@@ -54,20 +68,6 @@ export const BADGES: BadgeDef[] = [
     emblem: true,
     grantable: true,
   },
-  {
-    id: 'supporter',
-    label: 'Supporter',
-    description: 'Donates to keep AniLounge running.',
-    emblem: true,
-    grantable: true,
-  },
-  {
-    id: 'bot',
-    label: 'Bot',
-    description: "One of AniLounge's own mascots.",
-    emblem: true,
-    grantable: false,
-  },
 ]
 
 const BY_ID = new Map(BADGES.map((badge) => [badge.id, badge]))
@@ -75,8 +75,8 @@ const BY_ID = new Map(BADGES.map((badge) => [badge.id, badge]))
 /** Badges admins can grant from the Users tab. */
 export const GRANTABLE_BADGES = BADGES.filter((badge) => badge.grantable).map((badge) => badge.id)
 
-/** `featured_badge` value meaning "show no emblem". */
-export const NO_EMBLEM = 'none'
+/** The plain ring frame every user can wear (`profile_settings.frame`). */
+export const USER_FRAME = 'user'
 
 /** Registry entry for a badge id; unknown ids (newer than this build) get a plain entry. */
 export const badgeInfo = (id: string): BadgeDef =>

@@ -29,8 +29,8 @@ vi.mock('@/stores/badges', () => ({
   useBadgesStore: () => ({
     load: () => Promise.resolve(),
     badgesFor: () => [],
-    featuredFor: () => null,
-    choiceFor: () => null,
+    frameFor: () => 'user',
+    accentFor: () => null,
   }),
 }))
 

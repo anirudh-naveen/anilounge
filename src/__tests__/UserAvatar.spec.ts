@@ -8,7 +8,7 @@ vi.mock('@/services/api', () => ({
   badgesAPI: {
     list: () =>
       Promise.resolve({
-        data: { data: [{ username: 'iMaji', badges: ['creator'], featured: 'creator' }] },
+        data: { data: [{ username: 'iMaji', badges: ['creator'], frame: 'creator' }] },
       }),
   },
 }))
@@ -35,13 +35,15 @@ describe('UserAvatar', () => {
     expect(wrapper.find('[data-testid="avatar-ring-admin"]').exists()).toBe(true)
   })
 
-  it("looks up the user's emblem from the badges store", async () => {
+  it("looks up the user's frame from the badges store", async () => {
     setActivePinia(createPinia())
     await useBadgesStore().load(true)
     const wrapper = mount(UserAvatar, { props: { name: 'iMaji' } })
     expect(wrapper.classes()).toContain('ring-creator')
+    // Everyone else wears the plain User ring, with nothing behind it.
     const plain = mount(UserAvatar, { props: { name: 'nobody' } })
-    expect(plain.classes()).not.toContain('ringed')
+    expect(plain.classes()).toContain('ring-user')
+    expect(plain.find('.frame').exists()).toBe(false)
   })
 
   it('keeps the picture round, with the badge silhouette behind it', () => {
@@ -54,8 +56,10 @@ describe('UserAvatar', () => {
     expect(plain.find('.ring').exists()).toBe(false)
   })
 
-  it('frames in silver until the user picks an accent', () => {
-    const silver = mount(UserAvatar, { props: { badge: 'admin', accent: null } })
+  it('frames in coral until the user picks an accent, and silver has its own sheen', () => {
+    const coral = mount(UserAvatar, { props: { badge: 'admin', accent: null } })
+    expect(coral.findAll('stop')[1]!.attributes('stop-color')).toBe('#e07a5f')
+    const silver = mount(UserAvatar, { props: { badge: 'admin', accent: 'silver' } })
     expect(silver.get('stop').attributes('stop-color')).toBe('#f8fafc')
     const teal = mount(UserAvatar, { props: { badge: 'admin', accent: 'teal' } })
     expect(teal.findAll('stop')[1]!.attributes('stop-color')).toBe('#2bbbad')

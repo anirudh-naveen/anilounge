@@ -858,7 +858,7 @@
               <UserAvatar :src="user.profilePicture" :name="user.username" :size="40" />
               <div class="social-row-body">
                 <router-link :to="profileRoute(user.username)" class="social-name">
-                  {{ user.username }}<RoleBadge :username="user.username" />
+                  {{ user.username }}
                 </router-link>
                 <div class="social-meta">
                   {{ user.email }}
@@ -1048,7 +1048,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import AdminMetrics from '@/components/AdminMetrics.vue'
 import AdminNews from '@/components/AdminNews.vue'
-import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { adminAPI, forumAPI, getDetailsRouteName, getImageUrl } from '@/services/api'
 import { postRoute } from '@/utils/forum'
