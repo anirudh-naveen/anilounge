@@ -163,7 +163,9 @@ export function malListStatusFields(item) {
   const rating = Number(item.rating)
   const fields = {
     status: STATUS_TO_ANILIST[item.status] ? item.status : 'plan_to_watch',
-    score: String(Number.isFinite(rating) && rating > 0 ? Math.min(10, Math.max(1, Math.round(rating))) : 0),
+    score: String(
+      Number.isFinite(rating) && rating > 0 ? Math.min(10, Math.max(1, Math.round(rating))) : 0,
+    ),
     num_watched_episodes: String(Math.max(0, Number(item.currentEpisode) || 0)),
     num_times_rewatched: String(Math.max(0, Number(item.rewatchCount) || 0)),
   }
@@ -282,7 +284,9 @@ const ADAPTERS = {
     async push(row, mediaId, item) {
       const token = await accessTokenFor(row)
       if (item) {
-        const data = await anilistRequest(SAVE_MUTATION, anilistEntryVariables(mediaId, item), { token })
+        const data = await anilistRequest(SAVE_MUTATION, anilistEntryVariables(mediaId, item), {
+          token,
+        })
         if (!data?.SaveMediaListEntry) throw new Error(`save failed for media ${mediaId}`)
         return
       }
@@ -290,7 +294,8 @@ const ADAPTERS = {
       const entryId = found?.Media?.mediaListEntry?.id
       if (!entryId) return
       const data = await anilistRequest(DELETE_MUTATION, { id: entryId }, { token })
-      if (!data?.DeleteMediaListEntry?.deleted) throw new Error(`delete failed for media ${mediaId}`)
+      if (!data?.DeleteMediaListEntry?.deleted)
+        throw new Error(`delete failed for media ${mediaId}`)
     },
     async recent(row, cursor) {
       const token = await accessTokenFor(row)
@@ -349,7 +354,9 @@ const ADAPTERS = {
         fresh.push(...newer)
         const next = body.paging?.next
         url =
-          newer.length === entries.length && typeof next === 'string' && next.startsWith(`${MAL_API}/`)
+          newer.length === entries.length &&
+          typeof next === 'string' &&
+          next.startsWith(`${MAL_API}/`)
             ? next
             : null
       }
@@ -369,7 +376,8 @@ const ADAPTERS = {
         media_id: id,
         watchlist: item?.status === 'plan_to_watch',
       })
-      if (watch.status === 401) throw new ConnectionError('TMDB sign-in expired. Reconnect TMDB.', RECONNECT_STATUS)
+      if (watch.status === 401)
+        throw new ConnectionError('TMDB sign-in expired. Reconnect TMDB.', RECONNECT_STATUS)
       const value = tmdbRatingValue(item?.rating)
       if (value) await tmdbFetch(row, `/${type}/${id}/rating`, 'POST', { value })
       else await tmdbFetch(row, `/${type}/${id}/rating`, 'DELETE')
@@ -580,7 +588,13 @@ async function applyEntry(userId, entry, provider) {
       return null
     }
     const { maxEpisodes, maxSeasons } = progressLimits(content)
-    const progress = maxEpisodes ? Math.min(entry.progress, maxEpisodes) : entry.progress
+    // Completed rows sit on the last episode, like every other watchlist write.
+    const progress =
+      entry.status === 'completed' && maxEpisodes > 0
+        ? maxEpisodes
+        : maxEpisodes
+          ? Math.min(entry.progress, maxEpisodes)
+          : entry.progress
     let item = user.watchlist.find((row) => row.content.toString() === contentId)
     const stale = item && new Date(item.updatedAt).getTime() >= updatedAt
     if (item && (stale || rowMatchesEntry(item, entry, progress, provider))) {

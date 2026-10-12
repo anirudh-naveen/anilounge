@@ -1276,6 +1276,5 @@ usePageMeta(() => ({
 
 .home-import-reminder {
   margin: 1rem 0 0;
-  max-width: 720px;
 }
 </style>
