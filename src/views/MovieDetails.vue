@@ -78,8 +78,8 @@
           </div>
 
           <div class="title-pills">
-            <MainStudio :content="movie" />
             <FranchiseLink :content="movie" />
+            <MainStudio :content="movie" />
           </div>
 
           <!-- Title: Actions -->

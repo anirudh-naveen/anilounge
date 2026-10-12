@@ -92,7 +92,7 @@
                 <span v-if="item.episodeCount || item.malEpisodes" class="meta-chip">
                   {{ item.episodeCount || item.malEpisodes }} episodes
                 </span>
-                <span v-if="item.seasonCount" class="meta-chip"
+                <span v-if="(item.seasonCount || 0) > 1" class="meta-chip"
                   >{{ item.seasonCount }} seasons</span
                 >
               </template>

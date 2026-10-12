@@ -8,7 +8,10 @@
   season's own catalog title when one exists, otherwise the show with TMDB's
   season poster/overview. With no season picked, the first season shows. From a
   season's own page, picking another season moves to the series route with that
-  season picked. Opening an episode narrows the characters to it (its staff show
+  season picked. A series with a single season is shown as the series: no season
+  cards, label, or count (its lone season's own page moves to the series). A
+  season's own title borrows the overview, genres, and studios it lacks from its
+  series. Opening an episode narrows the characters to it (its staff show
   in the episode panel). Every section below the header folds away.
 -->
 <template>
@@ -79,8 +82,8 @@
               </span>
             </li>
             <li v-if="show.releaseDate">{{ formatDate(show.releaseDate) }}</li>
-            <li v-if="show.seasonCount && show.contentType !== 'season'">
-              {{ show.seasonCount }} season{{ show.seasonCount > 1 ? 's' : '' }}
+            <li v-if="(show.seasonCount || 0) > 1 && show.contentType !== 'season'">
+              {{ show.seasonCount }} seasons
             </li>
             <li v-if="show.episodeCount || show.malEpisodes">
               {{ show.episodeCount || show.malEpisodes }} episode{{
@@ -104,8 +107,8 @@
           </div>
 
           <div class="title-pills">
-            <MainStudio :content="show" />
             <FranchiseLink :content="show" />
+            <MainStudio :content="show" />
           </div>
 
           <!-- Title: Actions -->
@@ -332,11 +335,16 @@ let episodesRequestId = 0
 let charactersRequestId = 0
 let detailsForId = ''
 
-const selectedSeasonInfo = computed(
-  () => seasons.value.find((season) => season.seasonNumber === selectedSeason.value) || null,
+/** One season only: the page stays on the series and never mentions seasons. */
+const singleSeason = computed(() => seasons.value.length === 1)
+const selectedSeasonInfo = computed(() =>
+  singleSeason.value
+    ? null
+    : seasons.value.find((season) => season.seasonNumber === selectedSeason.value) || null,
 )
 /** Title whose details are on screen: the selected season's own title, else its show. */
 const displayId = computed(() => {
+  if (singleSeason.value) return seriesId.value
   const season = selectedSeasonInfo.value
   if (!season) return route.params.id as string
   return season.contentId || seriesId.value
@@ -347,10 +355,11 @@ const seasonLabel = computed(() =>
     : '',
 )
 
-/** The series' season cards, on the series page and on each season's page. */
+/** The series' season cards, on the series page and on each season's page (two or more). */
 const seriesSeasons = computed(() => {
   const series = loaded.value[seriesId.value]
-  return series?.contentType === 'tv' ? series.seasons || [] : []
+  const cards = series?.contentType === 'tv' ? series.seasons || [] : []
+  return cards.length > 1 && !singleSeason.value ? cards : []
 })
 /** Guide number of the first season, shown until another season is picked. */
 const firstSeason = computed(() => seasons.value[0]?.seasonNumber ?? null)
@@ -423,6 +432,26 @@ const loadDetails = async (contentId: string) => {
 }
 
 /**
+ * A season's own title with the overview, genres, and studios it lacks taken from
+ * its series (season rows often carry only dates, counts, and scores).
+ */
+const withSeriesDetails = (title: UnifiedContent): UnifiedContent => {
+  const series = loaded.value[seriesId.value]
+  if (!series || title._id === series._id) return title
+  const filled = (own?: unknown[]) => !!own?.length
+  return {
+    ...title,
+    overview: title.overview || series.overview,
+    genres: filled(title.genres) ? title.genres : series.genres,
+    studios: filled(title.studios) ? title.studios : series.studios,
+    studioEntities: filled(title.studioEntities) ? title.studioEntities : series.studioEntities,
+    animationStudios: filled(title.animationStudios)
+      ? title.animationStudios
+      : series.animationStudios,
+  }
+}
+
+/**
  * Show the details for the selected season. Until that title's details
  * arrive, the previous ones stay on screen.
  */
@@ -431,7 +460,10 @@ const renderShow = () => {
   if (!base) return
   const season = selectedSeasonInfo.value
   const latest = seasons.value[seasons.value.length - 1]
-  show.value = season && !season.contentId ? seasonContent(base, season, season === latest) : base
+  show.value =
+    season && !season.contentId
+      ? seasonContent(base, season, season === latest)
+      : withSeriesDetails(base)
   contentStore.cacheContent(base, true)
 }
 
@@ -572,7 +604,17 @@ const fetchEpisodes = async (contentId: string) => {
       findRouteSeason(seasons.value, contentId, route.query.season, seriesId.value) ||
       seasons.value.find((item) => item.seasonNumber === guide.currentSeason)
     selectedSeason.value = season?.seasonNumber ?? firstSeason.value
-    if (seasons.value.length) {
+    if (singleSeason.value) {
+      // The lone season's own page shows as its series.
+      if (contentId !== seriesId.value) {
+        void router.replace({
+          name: 'TVShowDetails',
+          params: { id: seriesId.value },
+          query: { ...route.query, season: undefined },
+        })
+      }
+      loadDetails(seriesId.value).catch((err) => console.error('Failed to load series:', err))
+    } else if (seasons.value.length) {
       // Every season and the series itself, so picks swap instantly and the cards show.
       const ids = new Set([
         seriesId.value,
@@ -642,8 +684,12 @@ watch(
   { immediate: true },
 )
 
-/** Name of the title the URL points at (its slug), loaded or on screen. */
+/**
+ * Name of the title the URL points at (its slug), loaded or on screen. None while a
+ * lone season's page is moving to its series, so the slug fix doesn't undo the move.
+ */
 const routeTitle = computed(() => {
+  if (singleSeason.value && String(route.params.id) !== seriesId.value) return null
   const content = loaded.value[String(route.params.id)] || show.value
   return content ? getDisplayTitle(content) : null
 })
