@@ -379,9 +379,9 @@
                         <span class="info-label">Release Date:</span>
                         <span class="info-value">{{ getContentReleaseDate(item) }}</span>
                       </div>
-                      <div v-if="isTvContent(item)" class="info-item">
+                      <div v-if="isTvContent(item) && getTotalSeasons(item) > 1" class="info-item">
                         <span class="info-label">Seasons:</span>
-                        <span class="info-value">{{ getContentSeasons(item) }}</span>
+                        <span class="info-value">{{ getTotalSeasons(item) }}</span>
                       </div>
                       <div class="info-item">
                         <span class="info-label">Rating:</span>
@@ -571,14 +571,6 @@ const getContentReleaseDate = (item: WatchlistItem) => {
   if (!content) return 'Unknown'
   const date = content.releaseDate
   return date ? new Date(date).toLocaleDateString() : 'Unknown'
-}
-
-const getContentSeasons = (item: WatchlistItem) => {
-  if (typeof item === 'string') return 'Unknown'
-  if (typeof item.content === 'string') return 'Unknown'
-  const content = item.content
-  if (!content) return 'Unknown'
-  return isEpisodic(content.contentType) ? content.seasonCount || 'Unknown' : 'N/A'
 }
 
 const getContentRating = (item: WatchlistItem) => {
