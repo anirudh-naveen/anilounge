@@ -140,7 +140,7 @@ export interface Episode {
   airDate?: string | null
   runtime?: number | null
   cast: EpisodeCastMember[]
-  /** Romaji and Japanese titles (from MyAnimeList via Jikan), when known. */
+  /** Romaji and Japanese titles, when a source has them. */
   titleRomaji?: string
   titleNative?: string
   isFiller?: boolean

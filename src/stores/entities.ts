@@ -10,7 +10,7 @@ import type { CatalogEntity } from '@/types/content'
 
 export const useEntityStore = defineStore('entities', () => {
   /**
-   * Characters attached to a movie or series (ingests from Jikan/TMDB on the server).
+   * Characters attached to a movie or series (ingests from AniList/TMDB on the server).
    */
   const getContentCharacters = async (contentId: string): Promise<CatalogEntity[]> => {
     const response = await entityAPI.getContentCharacters(contentId)
