@@ -434,7 +434,7 @@
       <section v-else-if="activeTab === 'log'" class="social-panel" data-testid="admin-log">
         <header class="social-panel-header">
           <div>
-            <h2 class="social-panel-title">Admin log</h2>
+            <h2 class="social-panel-title">Admin Log</h2>
             <p class="social-panel-sub">
               Content changes, moderation, and sync changes by month (UTC), plus bug reports and
               suggestions from the Feedback page. None of it can be edited or deleted.
@@ -494,7 +494,7 @@
           <!-- Title: Sync Changes (actionable, last 14 days) -->
           <div v-if="logCategory === 'sync'" class="sync-review" data-testid="admin-sync-changes">
             <h3 class="link-title">
-              Needs a look <span class="social-count">{{ syncCount }}</span>
+              Needs a Look <span class="social-count">{{ syncCount }}</span>
             </h3>
             <p class="social-meta sync-intro">
               The hourly sync updates unlocked fields and never blanks one out; locked fields keep
@@ -702,7 +702,7 @@
 
           <template v-else>
             <h3 v-if="logCategory === 'sync'" class="link-title log-heading">
-              This month's sync log
+              This Month's Sync Log
             </h3>
             <div v-if="logLoading" class="social-loading"><div class="spinner"></div></div>
             <p v-else-if="!logEntries.length" class="social-empty">Nothing logged here.</p>

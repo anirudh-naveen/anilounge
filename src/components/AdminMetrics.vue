@@ -45,7 +45,7 @@
 
       <div class="metrics-chart-card">
         <div class="metrics-chart-head">
-          <h3 class="metrics-heading">Per day</h3>
+          <h3 class="metrics-heading">Per Day</h3>
           <div class="kind-tabs compact" role="tablist" aria-label="Chart series">
             <button
               v-for="option in SERIES"
@@ -193,12 +193,12 @@ const lists = computed(() => {
   if (!d) return []
   return [
     {
-      title: 'Top pages',
+      title: 'Top Pages',
       note: 'By page views.',
       rows: d.pages.map((row) => ({ name: row.path, count: row.views })),
     },
     {
-      title: 'Top clicks',
+      title: 'Top Clicks',
       note: 'link: inside the site, out: other sites.',
       rows: d.clicks.map((row) => ({ name: row.target, count: row.clicks })),
     },
@@ -208,7 +208,7 @@ const lists = computed(() => {
       rows: d.referrers.map((row) => ({ name: row.host, count: row.visitors })),
     },
     {
-      title: 'Bots & crawlers',
+      title: 'Bots & Crawlers',
       note: 'By visitor ids; not counted anywhere else. Most crawlers never run the site, so only some show.',
       rows: (d.bots?.top ?? []).map((row) => ({ name: row.name, count: row.visitors })),
     },

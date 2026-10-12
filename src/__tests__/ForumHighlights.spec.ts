@@ -51,7 +51,7 @@ describe('ForumHighlights', () => {
     const wrapper = await mountHighlights({ contentId: 's1', name: 'Frieren', reviewable: true })
     expect(highlights).toHaveBeenCalledWith('s1')
     const panel = wrapper.get('[data-testid="forum-highlights"]')
-    expect(panel.text()).toContain('Hot in the Forum')
+    expect(panel.text()).toContain('In the Forum')
     expect(panel.text()).toContain('7 posts about Frieren or the Frieren franchise')
     expect(panel.text()).toContain('Episode 5 thoughts')
     expect(panel.text()).toContain('Beautiful episode.')

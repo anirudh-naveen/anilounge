@@ -149,7 +149,7 @@
             <!-- Title: Account Emails -->
             <div class="setting-item">
               <div class="setting-info">
-                <h3>Account &amp; security emails</h3>
+                <h3>Account &amp; Security Emails</h3>
                 <p>Always on</p>
               </div>
               <div class="setting-control">
@@ -175,7 +175,7 @@
           <div class="settings-card">
             <div v-if="pushState !== 'granted'" class="setting-item" data-testid="push-off">
               <div class="setting-info">
-                <h3>Push notifications</h3>
+                <h3>Push Notifications</h3>
                 <p>
                   Hear about friend requests, replies, messages, and new episodes from your
                   watchlist.
@@ -235,7 +235,7 @@
             <!-- Title: Allow Profanity -->
             <div class="setting-item">
               <div class="setting-info">
-                <h3>Allow profanity</h3>
+                <h3>Allow Profanity</h3>
                 <p>
                   In private messages, curse words go through unfiltered when both you and your
                   friend turn this on. Slurs are always blocked, and public text is always filtered.
@@ -265,7 +265,7 @@
 
         <!-- Title: Blocked Users -->
         <div id="blocked" class="settings-section">
-          <h2>Blocked users</h2>
+          <h2>Blocked Users</h2>
           <div class="settings-card">
             <p v-if="!blockedUsers.length" class="blocked-empty" data-testid="blocked-empty">
               You haven't blocked anyone. To block someone, open their profile and choose Block.
@@ -836,7 +836,7 @@ const deleteAccount = async () => {
 const EMAIL_OPTIONS: { key: keyof EmailPreferences; title: string; description: string }[] = [
   {
     key: 'friend_requests',
-    title: 'Friend requests',
+    title: 'Friend Requests',
     description: 'An email when someone sends you a friend request',
   },
   {
@@ -899,7 +899,7 @@ const PUSH_OPTIONS: { key: keyof PushSettings; title: string; description: strin
   { key: 'forum', title: 'Forum', description: 'Comments on your posts and replies to you' },
   {
     key: 'releases',
-    title: 'New releases',
+    title: 'New Releases',
     description: 'New episodes and releases of titles on your watchlist',
   },
 ]

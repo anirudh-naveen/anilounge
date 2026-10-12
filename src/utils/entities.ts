@@ -186,22 +186,23 @@ export function collectStudioWorks(entity?: CatalogEntity | null): {
 }
 
 /**
- * Studio chips for a title: persisted studio rows when present, otherwise bare names.
+ * Studio chips for a title: persisted studio rows (with their logo) when present,
+ * otherwise bare names.
  */
 export function studioLinksForContent(
   content?: Pick<UnifiedContent, 'studios' | 'studioEntities' | 'productionCompanies'> | null,
-): Array<{ name: string; id: string }> {
+): Array<{ name: string; id: string; imagePath: string }> {
   const refs: StudioRef[] = content?.studioEntities || []
   const names = (content?.studios || []).filter(Boolean)
   const source = names.length ? names : (content?.productionCompanies || []).filter(Boolean)
   const seen = new Set<string>()
-  const links: Array<{ name: string; id: string }> = []
+  const links: Array<{ name: string; id: string; imagePath: string }> = []
   for (const name of source) {
     const key = fold(name)
     if (!key || seen.has(key)) continue
     seen.add(key)
     const ref = refs.find((row) => fold(row.name) === key)
-    links.push({ name, id: ref?._id || '' })
+    links.push({ name, id: ref?._id || '', imagePath: ref?.imagePath || '' })
   }
   return links
 }

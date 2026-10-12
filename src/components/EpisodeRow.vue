@@ -2,18 +2,21 @@
   EpisodeRow.vue — horizontal TV episode strip (component).
 
   Renders season pills and a left-to-right episode scroller on the show
-  details page. Clicking a card expands its title and description in place and
-  emits `select-episode` so the page can narrow its characters and staff to that
-  episode (null when it closes); episodes are not routed to their own page. With
-  no catalog characters, the panel lists the episode's TMDB cast itself. Picking a season emits
+  details page. Clicking a card expands its title, description, and the people who
+  worked on that episode in place, and emits `select-episode` so the page can
+  narrow its characters to it (null when it closes); episodes are not routed to
+  their own page. With no catalog characters, the panel lists the episode's TMDB
+  cast itself. Picking a season emits
   `select-season`; a parent passing `selectedSeason` controls the pills, and
   `seasonPicker: false` hides them when the parent has its own season picker.
 -->
 <template>
-  <section v-if="loading || episodes.length" class="episode-row">
-    <!-- Title: Heading -->
-    <h2>Episodes</h2>
-
+  <DetailSection
+    v-if="loading || episodes.length"
+    name="episodes"
+    title="Episodes"
+    class="episode-row"
+  >
     <!-- Title: Loading State -->
     <div v-if="loading" class="episode-loading">
       <div class="spinner"></div>
@@ -107,9 +110,26 @@
             </div>
           </div>
         </div>
+        <!-- Title: Episode Staff -->
+        <div v-if="episodeStaffGroups.length" class="expanded-staff" data-testid="episode-staff">
+          <h4>Staff On This Episode</h4>
+          <dl>
+            <template v-for="group in episodeStaffGroups" :key="group.role">
+              <dt>{{ group.role }}</dt>
+              <dd>
+                <template v-for="(person, index) in group.people" :key="person._id">
+                  <router-link :to="detailPath('/staff', person._id, person.name)">{{
+                    person.name
+                  }}</router-link
+                  ><span v-if="index < group.people.length - 1">, </span>
+                </template>
+              </dd>
+            </template>
+          </dl>
+        </div>
       </div>
     </template>
-  </section>
+  </DetailSection>
 </template>
 
 <script setup lang="ts">
@@ -123,6 +143,8 @@ import {
   getSeasonNumbers,
 } from '@/utils/episodes'
 import { cleanCharacterName } from '@/utils/entities'
+import { detailPath } from '@/utils/slug'
+import DetailSection from '@/components/DetailSection.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -187,6 +209,16 @@ const isSelected = (episode: Episode) => episodeKey(episode) === selectedKey.val
 
 watch(selectedEpisode, (episode) => emit('select-episode', episode))
 
+/** The open episode's staff, one line per role. */
+const episodeStaffGroups = computed(() => {
+  const groups = new Map<string, Array<{ _id: string; name: string }>>()
+  for (const person of selectedEpisode.value?.staff || []) {
+    if (!groups.has(person.role)) groups.set(person.role, [])
+    groups.get(person.role)!.push(person)
+  }
+  return [...groups].map(([role, people]) => ({ role, people }))
+})
+
 const indexLabel = (episode: Episode) =>
   formatEpisodeIndex(episode, multiSeason.value && !props.seasonNames)
 
@@ -238,16 +270,6 @@ const handleImageError = (event: Event) => {
 </script>
 
 <style scoped>
-.episode-row {
-  margin-bottom: 2rem;
-}
-
-.episode-row h2 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
 .episode-loading {
   display: flex;
   flex-direction: column;
@@ -376,6 +398,40 @@ const handleImageError = (event: Event) => {
 
 .no-still i {
   font-size: 1.4rem;
+}
+
+.expanded-staff {
+  margin-top: 1rem;
+}
+
+.expanded-staff h4 {
+  margin-bottom: 0.5rem;
+}
+
+.expanded-staff dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.expanded-staff dt {
+  color: var(--text-muted);
+}
+
+.expanded-staff dd {
+  margin: 0;
+}
+
+.expanded-staff a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.expanded-staff a:hover {
+  color: var(--coral-primary);
+  text-decoration: underline;
 }
 
 .episode-flag {

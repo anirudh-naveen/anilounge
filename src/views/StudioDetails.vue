@@ -17,7 +17,7 @@
     </div>
 
     <div v-else-if="error" class="error">
-      <h2>Error loading studio</h2>
+      <h2>Error Loading Studio</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>

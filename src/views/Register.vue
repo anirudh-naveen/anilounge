@@ -12,7 +12,7 @@
       <div class="register-container">
         <!-- Page Header -->
         <div class="register-header">
-          <h1 class="register-title">Sign up</h1>
+          <h1 class="register-title">Sign Up</h1>
           <p class="register-subtitle">Create your AniLounge account</p>
         </div>
 

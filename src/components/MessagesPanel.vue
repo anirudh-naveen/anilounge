@@ -61,7 +61,7 @@
         <!-- Title: Requests -->
         <template v-if="list.requests.length">
           <h3 class="conversation-heading">
-            Friend requests <span class="social-count">{{ list.requests.length }}</span>
+            Friend Requests <span class="social-count">{{ list.requests.length }}</span>
           </h3>
           <ul class="conversation-list" data-testid="message-requests">
             <li v-for="request in list.requests" :key="`r-${request.user.id}`">

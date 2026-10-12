@@ -8,11 +8,28 @@ vi.mock('@/services/api', () => ({
   contentAPI: { whereToWatch: (...args: unknown[]) => whereToWatch(...args) },
 }))
 
+const inUS = vi.hoisted(() => ({ value: true }))
+
+vi.mock('@/utils/nativeApp', () => ({
+  isNativeApp: false,
+  isViewerInUS: () => inUS.value,
+  openInOtherApp: vi.fn(),
+}))
+
 const reply = (data: object) => ({ data: { data } })
 
 describe('WhereToWatch', () => {
   beforeEach(() => {
     whereToWatch.mockReset()
+    inUS.value = true
+  })
+
+  it('stays hidden, without asking, for viewers outside the United States', async () => {
+    inUS.value = false
+    const wrapper = mount(WhereToWatch, { props: { contentId: 'c1' } })
+    await flushPromises()
+    expect(whereToWatch).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="where-to-watch"]').exists()).toBe(false)
   })
 
   it('shows one logo per service, named on hover, with the JustWatch credit', async () => {

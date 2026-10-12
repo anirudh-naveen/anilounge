@@ -8,7 +8,7 @@
     <div class="container">
       <article class="doc-card fade-in">
         <p class="kicker">404</p>
-        <h1 class="doc-title">Page not found</h1>
+        <h1 class="doc-title">Page Not Found</h1>
         <p>This page doesn't exist, or it has moved.</p>
         <ul>
           <li><router-link to="/">Home</router-link></li>

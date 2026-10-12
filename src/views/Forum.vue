@@ -69,7 +69,7 @@
 
       <!-- Title: Composer -->
       <section v-if="composing" class="social-panel composer-panel">
-        <h2 class="social-panel-title">New post</h2>
+        <h2 class="social-panel-title">New Post</h2>
         <ForumComposer
           :key="composeKey"
           :preset-tags="presetTags"

@@ -1,17 +1,18 @@
 <!--
   StudioLinks.vue — animation-studio chips for a title (component).
 
-  Used on movie, series, and expanded-episode views. Chips backed by a
-  persisted studio open its detail screen; bare names render as plain tags.
+  Used on movie and series pages, each studio as its logo (or initial) and name.
+  Studios backed by a persisted row open their detail screen; bare names render
+  as plain tiles.
 -->
 <template>
-  <div
+  <DetailSection
     v-if="links.length"
+    name="studios"
+    :title="title"
     class="studio-links"
-    :class="{ compact: headingTag === 'h4' }"
     data-testid="studio-links"
   >
-    <component :is="headingTag" class="studio-links-heading">{{ title }}</component>
     <div class="studio-chips">
       <button
         v-for="link in links"
@@ -23,29 +24,38 @@
         :data-testid="`studio-link-${link.id || link.name}`"
         @click.stop="openStudio(link)"
       >
-        <i class="fas fa-building"></i>
-        {{ link.name }}
+        <span class="studio-logo">
+          <img
+            v-if="link.imagePath && !failedLogos.has(link.imagePath)"
+            :src="getPosterUrl(link.imagePath)"
+            :alt="''"
+            loading="lazy"
+            @error="failedLogos.add(link.imagePath)"
+          />
+          <span v-else class="studio-initial" aria-hidden="true">{{ link.name.charAt(0) }}</span>
+        </span>
+        <span class="studio-name">{{ link.name }}</span>
       </button>
     </div>
-  </div>
+  </DetailSection>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { UnifiedContent } from '@/types/content'
+import DetailSection from '@/components/DetailSection.vue'
+import { getPosterUrl } from '@/services/api'
 import { studioLinksForContent } from '@/utils/entities'
 
 const props = withDefaults(
   defineProps<{
     content?: Pick<UnifiedContent, 'studios' | 'studioEntities' | 'productionCompanies'> | null
     title?: string
-    headingTag?: 'h3' | 'h4'
   }>(),
   {
     content: null,
-    title: 'Animation studios',
-    headingTag: 'h3',
+    title: 'Animation Studios',
   },
 )
 
@@ -53,6 +63,8 @@ const route = useRoute()
 const router = useRouter()
 
 const links = computed(() => studioLinksForContent(props.content))
+/** Logos that failed to load; those studios show their initial instead. */
+const failedLogos = reactive(new Set<string>())
 
 const openStudio = (link: { id: string }) => {
   if (!link.id) return
@@ -65,48 +77,60 @@ const openStudio = (link: { id: string }) => {
 </script>
 
 <style scoped>
-.studio-links {
-  margin-bottom: 2rem;
-}
-
-.studio-links-heading {
-  font-size: 1.2rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-primary);
-}
-
-.studio-links.compact {
-  margin: 1.25rem 0 0;
-}
-
-.compact .studio-links-heading {
-  font-size: 1rem;
-  margin-bottom: 0.75rem;
-}
-
 .studio-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .studio-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.75rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.5rem 1rem 0.5rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
   background: var(--bg-card);
   color: var(--text-primary);
-  padding: 0.3rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-family: inherit;
-  border: 1px solid var(--border-color);
+  font: inherit;
+  font-weight: 600;
   cursor: default;
 }
 
-.studio-chip i {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+.studio-chip:disabled {
+  opacity: 1;
+}
+
+.studio-logo {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.studio-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.studio-initial {
+  color: #1a1a2e;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.studio-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .studio-chip.clickable {

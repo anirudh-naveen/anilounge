@@ -51,7 +51,7 @@ describe('ImportConflicts', () => {
     const wrapper = mount(ImportConflicts)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('2 titles need you')
+    expect(wrapper.text()).toContain('2 Titles Need You')
     const frieren = wrapper.findAll('.conflict')[0]!.text()
     expect(frieren).toContain('AniList')
     expect(frieren).toContain('Completed · 28/28 eps · 9/10')
