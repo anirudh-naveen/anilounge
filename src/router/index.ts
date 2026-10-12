@@ -14,6 +14,7 @@ import { useContentStore } from '@/stores/content'
 import { trackPageView } from '@/services/metrics'
 import { appGateRedirect } from '@/utils/appGate'
 import { isNativeApp } from '@/utils/nativeApp'
+import { isChunkLoadError, reloadForNewBuild } from '@/utils/staleBuild'
 
 /**
  * Wait (briefly) until the page is tall enough to scroll to `top`, so going
@@ -286,6 +287,13 @@ router.afterEach((to, from, failure) => {
     const contentStore = useContentStore()
     contentStore.clearAllScrollPositions()
   }
+})
+
+// A page chunk from an older deploy is gone: load the target page fresh instead of
+// leaving the click doing nothing.
+router.onError((error, to) => {
+  if (isChunkLoadError(error) && reloadForNewBuild(to.fullPath)) return
+  console.error('Navigation failed:', error)
 })
 
 export default router
