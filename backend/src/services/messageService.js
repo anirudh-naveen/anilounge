@@ -179,6 +179,11 @@ export async function listConversations(userId) {
      latest AS (
        SELECT DISTINCT ON (other_id) * FROM mine ORDER BY other_id, created_at DESC
      ),
+     received AS (
+       SELECT DISTINCT ON (sender_id) sender_id AS other_id, body, created_at
+       FROM messages WHERE recipient_id = $1
+       ORDER BY sender_id, created_at DESC
+     ),
      unread AS (
        SELECT sender_id AS other_id, count(*)::int AS unread
        FROM messages WHERE recipient_id = $1 AND read_at IS NULL
@@ -187,6 +192,7 @@ export async function listConversations(userId) {
      SELECT l.sender_id, l.body, l.created_at,
             u.id, u.username, u.profile_picture,
             COALESCE(un.unread, 0) AS unread,
+            r.body AS received_body, r.created_at AS received_at,
             (EXISTS (
               SELECT 1 FROM friendships f
               WHERE f.status = 'accepted'
@@ -198,6 +204,7 @@ export async function listConversations(userId) {
      FROM latest l
      JOIN users u ON u.id = l.other_id
      LEFT JOIN unread un ON un.other_id = l.other_id
+     LEFT JOIN received r ON r.other_id = l.other_id
      WHERE NOT ${blockedByViewerSql('$1', 'l.other_id')}
      ORDER BY l.created_at DESC
      LIMIT ${CONVERSATION_LIMIT}`,
@@ -212,6 +219,8 @@ export async function listConversations(userId) {
         at: row.created_at,
         fromMe: String(row.sender_id) === String(userId),
       },
+      // Newest message they sent the viewer, for the Messages tab's inbox view.
+      lastReceived: row.received_at ? { body: row.received_body, at: row.received_at } : null,
       unread: row.unread,
       canMessage: row.can_message,
     })),

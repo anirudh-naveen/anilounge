@@ -3,7 +3,8 @@
 
   The Messages tab of the Friends page. Conversation list on the left (incoming
   friend requests first, so a request's note reads like an opening message), the
-  open thread on the right. Only friends can send; history stays readable after an
+  open thread on the right; with no thread open, the right side lists the newest
+  message each person sent you, newest first. Only friends can send; history stays readable after an
   unfriend. The open thread polls for new messages. `?user=<id>` on the Friends
   route picks the open thread (a query, so switching chats doesn't remount the page).
 -->
@@ -124,7 +125,34 @@
 
     <!-- Title: Thread -->
     <section class="social-panel thread-panel" data-testid="message-thread">
-      <p v-if="!activeId" class="social-empty thread-placeholder">
+      <!-- Title: Latest Received -->
+      <div v-if="!activeId && receivedMessages.length" class="inbox" data-testid="latest-received">
+        <header class="thread-header">
+          <h2 class="social-panel-title">Latest messages</h2>
+        </header>
+        <ul class="inbox-list">
+          <li v-for="convo in receivedMessages" :key="convo.user.id">
+            <button
+              type="button"
+              class="inbox-row"
+              :class="{ 'is-unread': convo.unread > 0 }"
+              :data-testid="`latest-${convo.user.username}`"
+              @click="openThread(convo.user.id)"
+            >
+              <UserAvatar :src="convo.user.profilePicture" :name="convo.user.username" :size="44" />
+              <span class="conversation-body">
+                <span class="conversation-top">
+                  <span class="social-name">{{ convo.user.username }}</span>
+                  <span class="social-meta">{{ timeAgo(convo.lastReceived.at) }}</span>
+                </span>
+                <span class="inbox-message">{{ convo.lastReceived.body }}</span>
+              </span>
+              <span v-if="convo.unread" class="social-count">{{ convo.unread }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+      <p v-else-if="!activeId" class="social-empty thread-placeholder">
         Pick a conversation, or start a new one.
       </p>
       <div v-else-if="threadLoading && !thread" class="social-loading">
@@ -322,6 +350,15 @@ let threadTimer: ReturnType<typeof setInterval> | undefined
 let listTimer: ReturnType<typeof setInterval> | undefined
 /** Bumped on every thread switch so stale responses are dropped. */
 let threadSeq = 0
+
+/** Each conversation's newest message to the viewer, newest first (the panel's default view). */
+const receivedMessages = computed(() =>
+  list.value.conversations
+    .flatMap((convo) =>
+      convo.lastReceived ? [{ ...convo, lastReceived: convo.lastReceived }] : [],
+    )
+    .sort((a, b) => Date.parse(b.lastReceived.at) - Date.parse(a.lastReceived.at)),
+)
 
 const activeId = computed(() => {
   const id = route.query.user
@@ -688,6 +725,68 @@ onUnmounted(() => {
 
 .thread-placeholder {
   margin: auto;
+}
+
+.inbox {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.inbox .social-panel-title {
+  margin: 0;
+}
+
+.inbox-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.75rem;
+  overflow-y: auto;
+}
+
+.inbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  width: 100%;
+  padding: 0.85rem;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inbox-row:hover {
+  background: var(--bg-hover);
+}
+
+.inbox-row:focus-visible {
+  outline: 2px solid var(--coral-primary);
+  outline-offset: 2px;
+}
+
+.inbox-row .social-count {
+  align-self: center;
+}
+
+/* The whole message, up to three lines. */
+.inbox-message {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.inbox-row.is-unread .inbox-message {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .thread-header {
