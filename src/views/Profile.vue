@@ -1435,6 +1435,13 @@ const handleImageError = showPosterPlaceholder
   box-shadow: var(--shadow-md);
 }
 
+/* A badge ring keeps its glow alongside the card shadow. */
+.profile-picture.ringed {
+  box-shadow:
+    var(--shadow-md),
+    0 0 18px var(--ring-glow);
+}
+
 .hero-info {
   flex: 1;
   min-width: 0;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { badgesForUser, featuredEmblem, isValidEmblemChoice } from './badges.js'
+import { badgesForUser, earnsInfluencer, featuredEmblem, isValidEmblemChoice } from './badges.js'
 
 describe('badgesForUser', () => {
   it('combines the role badge with granted badges in registry order', () => {
@@ -43,5 +43,13 @@ describe('featuredEmblem', () => {
     assert.equal(isValidEmblemChoice(badges, null), true)
     assert.equal(isValidEmblemChoice(badges, 'none'), true)
     assert.equal(isValidEmblemChoice(badges, 'developer'), false)
+  })
+})
+
+describe('earnsInfluencer', () => {
+  it('takes 5 posts or 10 comments in a week', () => {
+    assert.equal(earnsInfluencer({ posts: 5, comments: 0 }), true)
+    assert.equal(earnsInfluencer({ posts: 0, comments: 10 }), true)
+    assert.equal(earnsInfluencer({ posts: 4, comments: 9 }), false)
   })
 })
