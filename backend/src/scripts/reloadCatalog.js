@@ -1,5 +1,5 @@
 /**
- * Reload the catalog from TMDB, MyAnimeList (official API + Jikan), and AniList
+ * Reload the catalog from TMDB, MyAnimeList (official API), and AniList
  * and bring every connection in line with `db/schema.sql`.
  *
  * Phases (run in this order; pick a subset with --phases):
@@ -16,8 +16,8 @@
  *               studios, then TMDB companies), genres, aliases, MAL relations.
  *               After the series migration this runs the seasons phase instead.
  *   characters  Re-ingest characters and voice actors for every title from
- *               Jikan and AniList (merged by id and name), TMDB credits otherwise.
- *   studios     Fill studio ids, logos, and about (Jikan, else TMDB); merge
+ *               AniList (by AniList or MAL id), TMDB credits otherwise.
+ *   studios     Fill studio ids, logos, and about (TMDB); merge
  *               studio rows that resolve to the same MAL producer.
  *   cleanup     Merge titles whose names differ only by case/spacing, franchise
  *               characters, and same-name studios; enforce links, prune
@@ -27,8 +27,7 @@
  *               services/catalogImport.js: source snapshots, fields by source
  *               priority, tags, key staff, ids on other sites. Run after
  *               `npm run db:restructure-series`.
- *   episodes    (Only when named.) Per-episode details: MAL episode titles and
- *               filler/recap flags (Jikan), and episode staff (AniList, TMDB).
+ *   episodes    (Only when named.) Per-episode staff (AniList staff pages, TMDB crew).
  *   photos      (Only when named.) Photos for people without one: TMDB's profile
  *               photo, else their Wikidata image (services/personPhotos.js).
  *
@@ -52,12 +51,7 @@ import Content from '../models/Content.js'
 import Entity from '../models/Entity.js'
 import DatabasePopulator from '../services/contentSyncService.js'
 import unifiedContentService from '../services/unifiedContentService.js'
-import {
-  ensureCharactersForContent,
-  ensureStudioDetails,
-  jikanStatus,
-  probeJikan,
-} from '../services/entityService.js'
+import { ensureCharactersForContent, ensureStudioDetails } from '../services/entityService.js'
 import {
   anilistStatus,
   configureAnilistCache,
@@ -585,10 +579,10 @@ function failing(status) {
 }
 
 async function phaseCharacters(options, checkpoint) {
-  const [jikanUp, anilistUp] = await Promise.all([probeJikan(), probeAnilist()])
-  console.log(`  Sources: Jikan ${jikanUp ? 'up' : 'down'}, AniList ${anilistUp ? 'up' : 'down'}`)
-  if (!jikanUp && !anilistUp) {
-    console.log('  Neither Jikan nor AniList is reachable; deferring characters.')
+  const anilistUp = await probeAnilist()
+  console.log(`  Sources: AniList ${anilistUp ? 'up' : 'down'}, TMDB as a fallback`)
+  if (!anilistUp) {
+    console.log('  AniList is unreachable; deferring characters.')
     return false
   }
   const ids = await watchableIds(options.limit)
@@ -599,11 +593,11 @@ async function phaseCharacters(options, checkpoint) {
   const todo = groups.flat()
   console.log(`  ${todo.length} titles in ${groups.length} families to ingest characters for`)
   console.log(`  AniList media cached: ${await prefetchAnilist(todo, { withCharacters: true })}`)
-  const stats = { titles: 0, withCharacters: 0, withoutMalIds: 0, deferred: 0, failed: 0 }
+  const stats = { titles: 0, withCharacters: 0, deferred: 0, failed: 0 }
   let stopped = false
   await runQueue('character families', groups, options.workers, async (group) => {
     for (const id of group) {
-      if (!jikanStatus().available && !anilistStatus().available) {
+      if (!anilistStatus().available) {
         stopped = true
         return 'stop'
       }
@@ -614,13 +608,10 @@ async function phaseCharacters(options, checkpoint) {
         stats.titles += 1
         if (characters.length) stats.withCharacters += 1
         const sourced = content.malId || content.anilistId
-        const jikanFailed = Boolean(content.malId) && failing(jikanStatus)
-        const anilistFailed = failing(anilistStatus)
-        if (sourced && jikanFailed && anilistFailed) {
+        if (sourced && failing(anilistStatus)) {
           stats.deferred += 1
           continue
         }
-        if (jikanFailed) stats.withoutMalIds += 1
         checkpoint.mark('characters', id)
       } catch (error) {
         stats.failed += 1
@@ -630,21 +621,11 @@ async function phaseCharacters(options, checkpoint) {
   })
   checkpoint.flush()
   console.log('  Characters:', stats)
-  if (stats.withoutMalIds) {
-    console.log(
-      `  ${stats.withoutMalIds} titles got AniList characters while Jikan was down; ` +
-        'their MAL character ids fill in when those pages are opened after Jikan recovers.',
-    )
-  }
-  if (stopped) console.log('  Both sources went down mid-phase; rerun --phases characters,cleanup.')
+  if (stopped) console.log('  AniList went down mid-phase; rerun --phases characters,cleanup.')
   return !stopped && stats.deferred === 0
 }
 
 async function phaseStudios(options, checkpoint) {
-  const jikanUp = await probeJikan()
-  if (!jikanUp) {
-    console.log('  Jikan is down: logos/about come from TMDB; studios stay unchecked for MAL.')
-  }
   const { rows } = await query(
     `SELECT s.id::text AS id FROM content s
      WHERE s.kind = 'studio'
@@ -668,8 +649,7 @@ async function phaseStudios(options, checkpoint) {
       } else {
         stats.enriched += 1
       }
-      if (failing(jikanStatus)) stats.deferred += 1
-      else checkpoint.mark('studios', id)
+      checkpoint.mark('studios', id)
     } catch (error) {
       stats.failed += 1
       console.error(`  Studio ${id} failed: ${error.message}`)
@@ -719,7 +699,7 @@ async function phaseSeasons(options, checkpoint) {
   let failed = 0
   await runQueue('seasons', todo, options.workers, async (row) => {
     try {
-      // Per-episode details (Jikan, staff pages) come in the `episodes` phase.
+      // Per-episode staff (AniList staff pages) comes in the `episodes` phase.
       if (row.kind === 'series') await importSeries(row.id, { details: false })
       else await importStandalone(row.id)
       checkpoint.mark('seasons', row.id)
@@ -734,9 +714,8 @@ async function phaseSeasons(options, checkpoint) {
 }
 
 /**
- * Per-episode details for every series: MAL episode titles and filler/recap flags
- * (Jikan), and who worked on each episode (AniList staff pages, TMDB crew). Slow, so
- * apart from the seasons phase; rerun it once Jikan is back if it was down.
+ * Per-episode staff for every series (AniList staff pages, TMDB crew). Slow, so apart
+ * from the seasons phase.
  * @param {{ workers: number, limit: number | null }} options
  * @param {Checkpoint} checkpoint
  * @returns {Promise<boolean>} False when some series failed.
@@ -744,9 +723,6 @@ async function phaseSeasons(options, checkpoint) {
 async function phaseEpisodes(options, checkpoint) {
   if (!(await hasSeriesStructure())) {
     throw new Error('Run `npm run db:restructure-series` before the episodes phase')
-  }
-  if (!(await probeJikan())) {
-    console.log('  Jikan is down: episodes keep TMDB titles; rerun this phase once it is back')
   }
   const { rows } = await query(
     `SELECT DISTINCT c.id::text AS id, c.catalog_score FROM content c

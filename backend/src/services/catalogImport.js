@@ -16,7 +16,6 @@ import { malStatusFromAiring } from '../db/kinds.js'
 import unifiedContentService from './unifiedContentService.js'
 import { fetchAnilistDetailsBatch, fetchAnilistStaffCredits } from './anilistService.js'
 import { anilistEpisodeCredits, tmdbEpisodeCredits } from '../utils/staffCredits.js'
-import { jikanGet } from './entityService.js'
 import { mergeVoiceInto } from './catalogRepair.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 import { isAnime, resolveFields } from '../utils/sourcePriority.js'
@@ -24,7 +23,6 @@ import {
   anilistSnapshot,
   compactSnapshot,
   malSnapshot,
-  isPlaceholderTitle,
   mergeEpisodes,
   tmdbSeasonSnapshot,
   tmdbSnapshot,
@@ -35,21 +33,19 @@ import { seasonRowName } from '../utils/seasonPlan.js'
 import { uniqueTitles } from '../utils/titles.js'
 import { personNameKey, romajiNameKey } from '../utils/entities.js'
 
-/** Jikan lists 100 episodes a page; long shows (One Piece) need many pages. */
-const MAX_JIKAN_EPISODE_PAGES = 15
-
 /**
  * Each source's snapshot of a watchable. Seasons skip TMDB's show (their series
  * holds it); AniList is looked up by MAL id when the row has no AniList id.
  * @param {object} doc - Content document
  * @param {{ anilist?: object | null }} [options] - The row's AniList media when already
  *   fetched (null: AniList has none); fetched here otherwise.
- * @returns {Promise<{ snapshots: Record<string, object>, schedule: object[] }>}
- *   `schedule`: AniList airing times by episode.
+ * @returns {Promise<{ snapshots: Record<string, object>, schedule: object[], streaming: object[] }>}
+ *   `schedule`: AniList airing times by episode; `streaming`: AniList streaming episodes.
  */
 export async function fetchSnapshots(doc, { anilist } = {}) {
   const snapshots = {}
   let schedule = []
+  let streaming = []
 
   if (doc.anilistId || doc.malId) {
     const [media] =
@@ -61,6 +57,7 @@ export async function fetchSnapshots(doc, { anilist } = {}) {
     if (media) {
       snapshots.anilist = compactSnapshot(anilistSnapshot(media))
       schedule = media.airingSchedule?.nodes || []
+      streaming = media.streamingEpisodes || []
     }
   }
 
@@ -78,7 +75,7 @@ export async function fetchSnapshots(doc, { anilist } = {}) {
     if (details) snapshots.tmdb = compactSnapshot(tmdbSnapshot(details, tmdbType))
   }
 
-  return { snapshots, schedule }
+  return { snapshots, schedule, streaming }
 }
 
 /**
@@ -487,22 +484,6 @@ export async function saveResolved(doc, snapshots, { save = {}, adjust } = {}) {
 }
 
 /**
- * Jikan's episode list for a MAL entry (titles, filler/recap flags, air dates).
- * @param {number} malId
- * @returns {Promise<object[]>}
- */
-export async function fetchJikanEpisodes(malId) {
-  const episodes = []
-  for (let page = 1; page <= MAX_JIKAN_EPISODE_PAGES; page += 1) {
-    const body = await jikanGet(`/anime/${malId}/episodes?page=${page}`)
-    if (!body?.data?.length) break
-    episodes.push(...body.data)
-    if (!body.pagination?.has_next_page) break
-  }
-  return episodes
-}
-
-/**
  * Replace a season's episodes (rows past the new list are kept only when the new
  * list is empty, so a failed fetch never wipes a season).
  * @param {string} seasonId
@@ -661,7 +642,7 @@ export async function importSeason(
   season,
   { siblings, tmdb = null, seriesTmdbId = null, save = {}, anilist, details = true },
 ) {
-  const { snapshots, schedule } = await fetchSnapshots(season, { anilist })
+  const { snapshots, schedule, streaming } = await fetchSnapshots(season, { anilist })
   if (season.tmdbSeasonNumber == null && tmdb) {
     // A season the airing dates couldn't place (announced, or added later): Fribb's
     // placement, when it fits TMDB's seasons.
@@ -693,10 +674,15 @@ export async function importSeason(
   })
 
   const tmdbEpisodes = tmdb ? tmdbEpisodesForSeason(season, siblings, tmdb.episodes) : []
-  const jikan = details && season.malId ? await fetchJikanEpisodes(season.malId) : []
   await writeEpisodes(
     String(season._id),
-    mergeEpisodes({ anime, count: season.episodeCount, tmdb: tmdbEpisodes, jikan, schedule }),
+    mergeEpisodes({
+      anime,
+      count: season.episodeCount,
+      tmdb: tmdbEpisodes,
+      schedule,
+      streaming,
+    }),
   )
   if (details) await importEpisodeCredits(season, tmdbEpisodes)
   return season
@@ -721,10 +707,8 @@ export async function importEpisodeCredits(season, tmdbEpisodes) {
 }
 
 /**
- * The slow, per-episode details of a series' seasons, apart from `importSeries`:
- * MAL episode titles, romaji/Japanese titles, and filler/recap flags (Jikan), and who
- * worked on each episode (AniList staff pages, TMDB crew). Episodes it has no row for
- * are left alone.
+ * Who worked on each episode of a series' seasons (AniList staff pages, TMDB crew),
+ * apart from `importSeries` because AniList's staff pages are slow to page through.
  * @param {string} seriesId
  * @returns {Promise<{ seasons: number, credits: number }>}
  */
@@ -737,35 +721,6 @@ export async function importEpisodeDetails(seriesId) {
     : null
   let credits = 0
   for (const season of seasons) {
-    const anime = Boolean(season.malId || season.anilistId)
-    const jikan = season.malId ? await fetchJikanEpisodes(season.malId) : []
-    for (const episode of jikan) {
-      const number = Number(episode?.mal_id)
-      if (!(number > 0)) continue
-      const title = isPlaceholderTitle(episode.title) ? null : String(episode.title).trim()
-      await query(
-        `UPDATE episodes SET
-           title = CASE WHEN $3::text IS NOT NULL AND ($7 OR title ~* '^episode \\d+$')
-                        THEN $3 ELSE title END,
-           title_romaji = COALESCE($4, title_romaji),
-           title_native = COALESCE($5, title_native),
-           is_filler = $6, is_recap = $8,
-           air_at = COALESCE(air_at, $9::timestamptz),
-           updated_at = now()
-         WHERE season_id = $1 AND number = $2`,
-        [
-          String(season._id),
-          number,
-          title,
-          episode.title_romanji || null,
-          episode.title_japanese || null,
-          Boolean(episode.filler),
-          anime,
-          Boolean(episode.recap),
-          episode.aired || null,
-        ],
-      )
-    }
     const tmdbEpisodes = tmdb ? tmdbEpisodesForSeason(season, seasons, tmdb.episodes) : []
     credits += await importEpisodeCredits(season, tmdbEpisodes)
   }

@@ -19,12 +19,8 @@ import {
   highlightedCharacters,
   isCharacterPortrait,
   isUsableCharacterName,
-  mapJikanCharacterRow,
-  mapJikanPersonVoiceRow,
-  mapJikanProducer,
   mapTmdbCharacterCredits,
   mapVoiceActorFromCredit,
-  pickJikanProducer,
   pickPrimaryCharacter,
   pickTmdbCompany,
   serializeEntity,
@@ -42,49 +38,7 @@ describe('entity name matching', () => {
   })
 })
 
-describe('Jikan / TMDB mappers', () => {
-  it('maps a Jikan character row with Japanese voice credits and a picture', () => {
-    const mapped = mapJikanCharacterRow(
-      {
-        role: 'Main',
-        favorites: 42000,
-        character: {
-          mal_id: 40,
-          name: 'Monkey D. Luffy',
-          name_kanji: 'モンキー・D・ルフィ',
-          nicknames: ['Straw Hat'],
-          images: { jpg: { image_url: 'https://cdn.myanimelist.net/images/characters/luffy.jpg' } },
-        },
-        voice_actors: [
-          {
-            language: 'Japanese',
-            person: {
-              mal_id: 8,
-              name: 'Tanaka, Mayumi',
-              images: {
-                jpg: { image_url: 'https://cdn.myanimelist.net/images/voiceactors/mayumi.jpg' },
-              },
-            },
-          },
-        ],
-      },
-      'content-1',
-    )
-    assert.equal(mapped.malId, 40)
-    assert.equal(mapped.name, 'Monkey D. Luffy')
-    assert.equal(mapped.nativeName, 'モンキー・D・ルフィ')
-    assert.equal(mapped.appearance.role, 'Main')
-    assert.equal(mapped.appearance.content, 'content-1')
-    assert.equal(mapped.appearance.importance > 1_000_000, true)
-    assert.equal(mapped.imagePath.includes('luffy.jpg'), true)
-    assert.equal(mapped.appearance.voiceActors[0].name, 'Tanaka, Mayumi')
-  })
-
-  it('drops Jikan rows without a character name or mal id', () => {
-    assert.equal(mapJikanCharacterRow({ character: { name: 'X' } }, 'c1'), null)
-    assert.equal(mapJikanCharacterRow(null, 'c1'), null)
-  })
-
+describe('TMDB mappers', () => {
   it('groups TMDB credits by character name', () => {
     const mapped = mapTmdbCharacterCredits(
       [
@@ -135,23 +89,6 @@ describe('Jikan / TMDB mappers', () => {
     assert.equal(mapped.appearance.character, 'char-1')
     assert.equal(mapped.appearance.language, 'Japanese')
     assert.equal(mapped.imagePath.includes('voiceactors'), true)
-  })
-
-  it('maps Jikan people-voices rows onto voiced characters', () => {
-    const mapped = mapJikanPersonVoiceRow({
-      role: 'Main',
-      anime: { mal_id: 21, title: 'One Piece' },
-      character: {
-        mal_id: 40,
-        name: 'Monkey D. Luffy',
-        images: { jpg: { image_url: 'https://cdn.myanimelist.net/images/characters/9/luffy.jpg' } },
-      },
-    })
-    assert.equal(mapped.name, 'Monkey D. Luffy')
-    assert.equal(mapped.malId, 40)
-    assert.equal(mapped.role, 'Main')
-    assert.equal(mapped.animeMalId, 21)
-    assert.equal(mapped.imagePath.includes('characters'), true)
   })
 })
 
@@ -329,37 +266,6 @@ describe('studio lookups', () => {
     assert.equal(studioNamesEqual('Production I.G', 'production i g'), true)
     assert.equal(studioNamesEqual('Pixar', 'Pixar Canada'), false)
     assert.equal(displayStudioName('  Studio   Ghibli '), 'Studio Ghibli')
-  })
-
-  it('maps a Jikan producer and picks the matching search hit', () => {
-    const rows = [
-      {
-        mal_id: 99,
-        titles: [{ type: 'Default', title: 'Kyoto Animation Tokyo' }],
-      },
-      {
-        mal_id: 2,
-        titles: [
-          { type: 'Default', title: 'Kyoto Animation' },
-          { type: 'Japanese', title: '京都アニメーション' },
-          { type: 'Synonym', title: 'KyoAni' },
-        ],
-        images: { jpg: { image_url: 'https://cdn.myanimelist.net/images/company/2.png' } },
-        about: 'Studio in Uji.',
-      },
-    ]
-    const picked = pickJikanProducer(rows, 'Kyoto Animation Co., Ltd.')
-    assert.equal(picked.mal_id, 2)
-    assert.deepEqual(mapJikanProducer(picked), {
-      malId: 2,
-      name: 'Kyoto Animation',
-      nativeName: '京都アニメーション',
-      alternativeNames: ['京都アニメーション', 'KyoAni'],
-      imagePath: 'https://cdn.myanimelist.net/images/company/2.png',
-      about: 'Studio in Uji.',
-    })
-    assert.equal(mapJikanProducer({ mal_id: 0, titles: [] }), null)
-    assert.equal(pickJikanProducer(rows, 'MAPPA'), null)
   })
 
   it('prefers the TMDB company with a logo among exact name matches', () => {

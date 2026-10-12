@@ -1,7 +1,7 @@
 /**
  * Normalized snapshots of a watchable from each source, in the field names
  * utils/sourcePriority.js resolves (`title`, `posterPath`, `airingStatus`, ...), plus
- * the merge of a season's episodes from TMDB, Jikan (MAL), and AniList.
+ * the merge of a season's episodes from TMDB and AniList.
  *
  * Utils layer: pure. Fetching lives in services/catalogImport.js; snapshots are stored
  * in `content_source_data`. Only fields the catalog uses are kept.
@@ -393,19 +393,53 @@ export function isPlaceholderTitle(title) {
 }
 
 /**
- * One season's episodes from every source, numbered within the season.
- * Titles follow the row's source order (Jikan's titles are MAL's, so anime takes
- * them before TMDB's); stills, overviews, runtimes, and TMDB ids come from TMDB;
- * filler/recap flags and romaji/native titles from Jikan; air times from AniList's
- * schedule (exact), then Jikan, then TMDB's air date.
- * @param {{ anime: boolean, count?: number | null, tmdb?: object[], jikan?: object[],
- *   schedule?: { episode: number, airingAt: number }[] }} input
+ * AniList's streaming episodes ("Episode 3 - The Title", with a thumbnail from the
+ * streaming site) by episode number within the entry. Lists numbered across a whole
+ * show ("Episode 26" for a second season's first) are renumbered from 1.
+ * @param {Array<{ title?: string, thumbnail?: string }>} [episodes] - `streamingEpisodes`
+ * @returns {Map<number, { title: string, thumbnail: string }>}
+ */
+export function anilistStreamingEpisodes(episodes = []) {
+  const parsed = []
+  for (const episode of episodes || []) {
+    const match = /^(?:episode|ep\.?)\s*(\d+)\s*[-–:]\s*(.+)$/i.exec(text(episode?.title))
+    if (match)
+      parsed.push({
+        number: Number(match[1]),
+        title: match[2].trim(),
+        thumbnail: text(episode.thumbnail),
+      })
+  }
+  const first = Math.min(...parsed.map((episode) => episode.number))
+  const offset = Number.isFinite(first) && first > 1 ? first - 1 : 0
+  const byNumber = new Map()
+  for (const episode of parsed) {
+    const number = episode.number - offset
+    if (number > 0 && !byNumber.has(number)) byNumber.set(number, episode)
+  }
+  return byNumber
+}
+
+/**
+ * One season's episodes from every source, numbered within the season. Titles come
+ * from TMDB, then AniList's streaming episodes (titles TMDB hasn't got yet, and anime
+ * often has them first); stills, overviews, runtimes, and TMDB ids from TMDB, with
+ * AniList's streaming thumbnails where TMDB has no still; air times from AniList's
+ * schedule (exact), then TMDB's air date.
+ * @param {{ anime?: boolean, count?: number | null, tmdb?: object[],
+ *   schedule?: { episode: number, airingAt: number }[], streaming?: object[] }} input
  *   `tmdb`: planned TMDB episodes (`number`, `title`, `overview`, `stillPath`,
- *   `airDate`, `runtime`, `tmdbEpisodeId`, `tmdbScore`); `jikan`: Jikan
- *   `/anime/{id}/episodes` rows; `schedule`: AniList `airingSchedule` nodes.
+ *   `airDate`, `runtime`, `tmdbEpisodeId`, `tmdbScore`); `schedule`: AniList
+ *   `airingSchedule` nodes; `streaming`: AniList `streamingEpisodes`.
  * @returns {object[]} Rows for the `episodes` table, by number.
  */
-export function mergeEpisodes({ anime, count = null, tmdb = [], jikan = [], schedule = [] }) {
+export function mergeEpisodes({
+  anime = false,
+  count = null,
+  tmdb = [],
+  schedule = [],
+  streaming = [],
+}) {
   const byNumber = new Map()
   const row = (number) => {
     if (!byNumber.has(number)) byNumber.set(number, { number })
@@ -426,19 +460,6 @@ export function mergeEpisodes({ anime, count = null, tmdb = [], jikan = [], sche
     target.tmdbScore = positive(episode.tmdbScore)
   }
 
-  const jikanTitles = new Map()
-  for (const episode of jikan) {
-    const number = positive(episode?.mal_id)
-    if (!number) continue
-    const target = row(number)
-    if (!isPlaceholderTitle(episode.title)) jikanTitles.set(number, text(episode.title))
-    target.titleRomaji = text(episode.title_romanji) || null
-    target.titleNative = text(episode.title_japanese) || null
-    target.isFiller = Boolean(episode.filler)
-    target.isRecap = Boolean(episode.recap)
-    if (episode.aired) target.airAt = new Date(episode.aired).toISOString()
-  }
-
   for (const node of schedule) {
     const number = positive(node?.episode)
     if (!number || !positive(node.airingAt)) continue
@@ -446,7 +467,16 @@ export function mergeEpisodes({ anime, count = null, tmdb = [], jikan = [], sche
     row(number).airAt = new Date(node.airingAt * 1000).toISOString()
   }
 
-  const titleOrder = anime ? [jikanTitles, tmdbTitles] : [tmdbTitles, jikanTitles]
+  const streamTitles = new Map()
+  for (const [number, episode] of anilistStreamingEpisodes(streaming)) {
+    if (count && number > count) continue
+    const target = row(number)
+    if (!isPlaceholderTitle(episode.title)) streamTitles.set(number, episode.title)
+    if (!target.stillPath && episode.thumbnail) target.stillPath = episode.thumbnail
+  }
+
+  // Anime: the streaming site's titles (often out first) ahead of TMDB's.
+  const titleOrder = anime ? [streamTitles, tmdbTitles] : [tmdbTitles, streamTitles]
   return [...byNumber.values()]
     .filter((episode) => !count || episode.number <= count || tmdbTitles.has(episode.number))
     .sort((left, right) => left.number - right.number)
@@ -455,14 +485,14 @@ export function mergeEpisodes({ anime, count = null, tmdb = [], jikan = [], sche
       return {
         number: episode.number,
         title: title || `Episode ${episode.number}`,
-        titleRomaji: episode.titleRomaji ?? null,
-        titleNative: episode.titleNative ?? null,
+        titleRomaji: null,
+        titleNative: null,
         overview: episode.overview ?? null,
         stillPath: episode.stillPath ?? null,
         airAt: episode.airAt ?? null,
         runtime: episode.runtime ?? null,
-        isFiller: episode.isFiller ?? false,
-        isRecap: episode.isRecap ?? false,
+        isFiller: false,
+        isRecap: false,
         tmdbEpisodeId: episode.tmdbEpisodeId ?? null,
         tmdbScore: episode.tmdbScore ?? null,
       }

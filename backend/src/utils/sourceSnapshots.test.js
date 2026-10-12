@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   anilistKeyStaff,
+  anilistStreamingEpisodes,
   anilistSnapshot,
   compactSnapshot,
   dateString,
@@ -184,45 +185,32 @@ describe('mergeEpisodes', () => {
     { number: 1, title: 'Déjà Vu', stillPath: '/1.jpg', airDate: '2026-10-04', tmdbEpisodeId: 1 },
     { number: 2, title: 'Episode 27', stillPath: '/2.jpg', airDate: '2026-10-11' },
   ]
-  const jikan = [
-    { mal_id: 1, title: 'Deja Vu', title_romanji: 'Déjà vu', title_japanese: 'デジャヴ' },
-    { mal_id: 2, title: 'Rally', recap: false, filler: true },
-  ]
 
-  it("takes anime titles from MAL, stills from TMDB, and AniList's exact air times", () => {
+  it("takes TMDB titles and stills, and AniList's exact air times", () => {
     const episodes = mergeEpisodes({
       anime: true,
       count: 12,
       tmdb,
-      jikan,
       schedule: [
         { episode: 3, airingAt: 1791158400 },
         { episode: 13, airingAt: 1800000000 },
       ],
     })
     assert.deepEqual(
-      episodes.map(({ number, title, stillPath, isFiller }) => [
-        number,
-        title,
-        stillPath,
-        isFiller,
-      ]),
+      episodes.map(({ number, title, stillPath }) => [number, title, stillPath]),
       [
-        [1, 'Deja Vu', '/1.jpg', false],
-        [2, 'Rally', '/2.jpg', true],
-        [3, 'Episode 3', null, false],
+        [1, 'Déjà Vu', '/1.jpg'],
+        [2, 'Episode 2', '/2.jpg'],
+        [3, 'Episode 3', null],
       ],
     )
-    assert.equal(episodes[0].titleNative, 'デジャヴ')
     assert.equal(episodes[2].airAt, new Date(1791158400 * 1000).toISOString())
   })
 
-  it('takes TMDB titles first for other shows, skipping placeholders', () => {
-    const episodes = mergeEpisodes({ anime: false, tmdb, jikan })
-    assert.deepEqual(
-      episodes.map(({ title }) => title),
-      ['Déjà Vu', 'Rally'],
-    )
+  it("puts an anime's streaming titles ahead of TMDB's, and TMDB's first otherwise", () => {
+    const streaming = [{ title: 'Episode 1 - Deja Vu (streaming)', thumbnail: 's1.jpg' }]
+    assert.equal(mergeEpisodes({ anime: true, tmdb, streaming })[0].title, 'Deja Vu (streaming)')
+    assert.equal(mergeEpisodes({ anime: false, tmdb, streaming })[0].title, 'Déjà Vu')
   })
 })
 
@@ -237,6 +225,45 @@ describe('compactSnapshot', () => {
         externalIds: { imdb: undefined },
       }),
       { title: 'A', score: 0 },
+    )
+  })
+})
+
+describe('anilistStreamingEpisodes', () => {
+  it('reads "Episode N - Title" and renumbers lists counted across a show', () => {
+    const own = anilistStreamingEpisodes([
+      { title: 'Episode 1 - To You, 2,000 Years in the Future', thumbnail: 't1.jpg' },
+      { title: 'Episode 2 - That Day', thumbnail: 't2.jpg' },
+    ])
+    assert.deepEqual(own.get(1), {
+      number: 1,
+      title: 'To You, 2,000 Years in the Future',
+      thumbnail: 't1.jpg',
+    })
+    const later = anilistStreamingEpisodes([
+      { title: 'Episode 26 - Beast Titan', thumbnail: 'a.jpg' },
+      { title: "Episode 27 - I'm Home", thumbnail: 'b.jpg' },
+    ])
+    assert.equal(later.get(1).title, 'Beast Titan')
+    assert.equal(later.get(2).title, "I'm Home")
+  })
+
+  it('fills titles and stills nothing else has', () => {
+    const episodes = mergeEpisodes({
+      anime: true,
+      count: 2,
+      tmdb: [{ number: 1, title: 'Episode 1', stillPath: '/tmdb.jpg' }],
+      streaming: [
+        { title: 'Episode 1 - First', thumbnail: 'cr1.jpg' },
+        { title: 'Episode 2 - Second', thumbnail: 'cr2.jpg' },
+      ],
+    })
+    assert.deepEqual(
+      episodes.map(({ title, stillPath }) => [title, stillPath]),
+      [
+        ['First', '/tmdb.jpg'],
+        ['Second', 'cr2.jpg'],
+      ],
     )
   })
 })
