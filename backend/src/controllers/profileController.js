@@ -21,7 +21,7 @@ import { hasBlocked } from '../services/blockService.js'
 import { canMessageUser } from '../services/messageService.js'
 import { BOT_EMAILS, LOUNGE_KEEPER, botForEmail } from '../utils/botAccount.js'
 import { listProfileConnections } from '../services/connectionService.js'
-import { listBadgeHolders, setFeaturedBadge } from '../services/badgeService.js'
+import { listBadgeHolders } from '../services/badgeService.js'
 import { sendError } from '../utils/httpError.js'
 import { addFavorite, FAVORITE_ORDER_SQL, reorderFavorites } from '../services/favoriteService.js'
 import {
@@ -425,11 +425,11 @@ export const getAvatarImage = async (req, res) => {
 }
 
 /**
- * Public: accounts with badges and the emblem each shows next to their name, for
- * usernames site-wide and the profile Badges section.
+ * Public: badge holders and accent pickers, with each one's avatar frame and accent,
+ * for avatars site-wide and the profile Badges section.
  *
  * @param {import('express').Request} req
- * @param {import('express').Response} res - 200 `{ data: [{ id, username, badges, featured }] }` or 500.
+ * @param {import('express').Response} res - 200 `{ data: [{ id, username, badges, frame, accent }] }` or 500.
  * @returns {Promise<void>}
  */
 export const listBadges = async (req, res) => {
@@ -441,25 +441,8 @@ export const listBadges = async (req, res) => {
   }
 }
 
-/**
- * Pick which of your badges shows as the emblem next to your name.
- *
- * @param {import('express').Request} req - `body.badge`: a badge id you hold, null (your highest), or 'none'.
- * @param {import('express').Response} res - 200 `{ data: { badges, featured, choice } }`, 400, or 500.
- * @returns {Promise<void>}
- */
-export const updateFeaturedBadge = async (req, res) => {
-  try {
-    const data = await setFeaturedBadge(req.user, req.body?.badge ?? null)
-    res.json({ success: true, message: 'Saved.', data })
-  } catch (error) {
-    sendError(res, error, 'Error saving your badge')
-  }
-}
-
 export default {
   listBadges,
-  updateFeaturedBadge,
   getAvatarImage,
   getPublicProfile,
   updateProfileSettings,

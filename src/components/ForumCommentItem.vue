@@ -27,7 +27,6 @@
             :size="24"
           />
           {{ comment.author.username }}
-          <RoleBadge :username="comment.author.username" />
         </router-link>
         <span class="social-meta" :title="new Date(comment.createdAt).toLocaleString()">
           {{ timeAgo(comment.createdAt) }}<template v-if="comment.editedAt"> · edited</template>
@@ -118,7 +117,6 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import ForumIcon from '@/components/ForumIcon.vue'
-import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'

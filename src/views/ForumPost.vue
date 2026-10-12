@@ -54,7 +54,6 @@
                     :size="28"
                   />
                   {{ post.author.username }}
-                  <RoleBadge :username="post.author.username" />
                 </router-link>
                 <span class="social-meta" :title="new Date(post.createdAt).toLocaleString()">
                   {{ timeAgo(post.createdAt) }}
@@ -261,7 +260,6 @@ import ForumRichText from '@/components/ForumRichText.vue'
 import ForumIcon from '@/components/ForumIcon.vue'
 import ForumTags from '@/components/ForumTags.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
-import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { forumAPI, getPosterUrl } from '@/services/api'
 import { usePageMeta } from '@/composables/usePageMeta'
