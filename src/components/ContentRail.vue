@@ -79,7 +79,7 @@ withDefaults(
     loading: false,
     emptyText: 'Nothing to show here yet.',
     isAuthenticated: false,
-    inWatchlist: () => () => false,
+    inWatchlist: () => false,
   },
 )
 

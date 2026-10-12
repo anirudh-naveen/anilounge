@@ -7,6 +7,7 @@ const getActivity = vi.fn()
 const getUpdates = vi.fn()
 const getCharacterOfTheDay = vi.fn()
 const getHomeForum = vi.fn()
+const getContent = vi.fn()
 const auth = { isAuthenticated: false, user: null as { username: string } | null }
 
 vi.mock('@/services/api', async (importOriginal) => {
@@ -19,6 +20,7 @@ vi.mock('@/services/api', async (importOriginal) => {
       getCharacterOfTheDay: () => getCharacterOfTheDay(),
     },
     forumAPI: { ...actual.forumAPI, home: () => getHomeForum() },
+    contentAPI: { ...actual.contentAPI, getContent: (params: object) => getContent(params) },
   }
 })
 
@@ -125,6 +127,8 @@ const mountHome = async () => {
       { path: '/register', component: stub },
       { path: '/login', component: stub },
       { path: '/search', component: stub },
+      { path: '/tv', component: stub },
+      { path: '/movies', component: stub },
       { path: '/forum', name: 'forum', component: stub },
       { path: '/forum/post/:id', name: 'forumPost', component: stub },
       { path: '/u/:username', name: 'publicProfile', component: stub },
@@ -132,7 +136,9 @@ const mountHome = async () => {
   })
   await router.push('/')
   await router.isReady()
-  const wrapper = mount(Home, { global: { plugins: [router] } })
+  const wrapper = mount(Home, {
+    global: { plugins: [router], stubs: { FavoriteHeart: true, ContentHoverPreview: true } },
+  })
   await flushPromises()
   return wrapper
 }
@@ -144,6 +150,15 @@ describe('Home', () => {
     getUpdates.mockReset()
     getCharacterOfTheDay.mockReset()
     getHomeForum.mockReset()
+    getContent.mockReset()
+    getContent.mockImplementation(({ type }: { type: string }) =>
+      Promise.resolve({
+        data: {
+          success: true,
+          data: [{ _id: `${type}-1`, title: `Trending ${type}`, contentType: type, genres: [] }],
+        },
+      }),
+    )
     getHomeForum.mockResolvedValue({
       data: { data: { items: [], personalized: false, refreshesAt: '2026-10-06T12:00:00Z' } },
     })
@@ -159,6 +174,18 @@ describe('Home', () => {
     expect(wrapper.find('[data-testid="status-signup"]').text()).toContain('Sign up')
     expect(getActivity).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="updates-panel"] .panel-title').text()).toBe('Trending')
+  })
+
+  it('shows guests trending series and movies between Status and the character of the day', async () => {
+    const wrapper = await mountHome()
+    const trending = wrapper.get('[data-testid="home-trending"]')
+    expect(trending.text()).toContain('Trending tv')
+    expect(trending.text()).toContain('Trending movie')
+    const html = wrapper.html()
+    const order = ['status-panel', 'home-trending', 'character-of-the-day'].map((id) =>
+      html.indexOf(`data-testid="${id}"`),
+    )
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
   })
 
   it('shows personal and friend activity with tabs', async () => {
@@ -185,6 +212,8 @@ describe('Home', () => {
     await wrapper.get('[data-testid="feed-tab-friends"]').trigger('click')
     expect(wrapper.findAll('[data-testid="activity-item"]')).toHaveLength(1)
     expect(wrapper.get('[data-testid="activity-item"]').text()).toContain('kai')
+    expect(wrapper.find('[data-testid="home-trending"]').exists()).toBe(false)
+    expect(getContent).not.toHaveBeenCalled()
   })
 
   it('says "You are" for your own updates and "is" for friends', async () => {

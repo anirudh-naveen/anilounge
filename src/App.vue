@@ -314,7 +314,7 @@
           <router-link to="/privacy">Privacy</router-link>
           <router-link to="/support">Help</router-link>
           <a v-if="DONATE_URL" :href="DONATE_URL" target="_blank" rel="noopener noreferrer">
-            Support
+            Donate
           </a>
         </nav>
         <p class="footer-copyright">&copy; 2026 AniLounge</p>
