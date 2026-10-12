@@ -2,15 +2,15 @@
   App.vue — root application shell (view).
 
   Owns site-wide chrome: beta banner, primary navigation, authenticated user
-  menu, router outlet, and footer. The AI assistant lives in the Search view.
+  menu, router outlet, and footer (hidden on `meta.bare` routes). The AI assistant lives in the Search view.
 -->
 <template>
   <div id="app" class="min-h-screen">
     <!-- Banner -->
-    <BetaBanner />
+    <BetaBanner v-if="!bare" />
 
     <!-- Navigation -->
-    <header class="header">
+    <header v-if="!bare" class="header">
       <div class="container">
         <div class="nav-content">
           <!-- Title: Logo -->
@@ -259,7 +259,7 @@
         </div>
       </div>
     </header>
-    <BacklogModeBar />
+    <BacklogModeBar v-if="!bare" />
 
     <!-- Page -->
     <!-- Title: Router Outlet -->
@@ -269,7 +269,7 @@
 
     <!-- Footer -->
     <!-- Title: Copyright -->
-    <footer class="footer">
+    <footer v-if="!bare" class="footer">
       <div class="container">
         <!-- TMDB's API terms require this notice and their logo on the site. -->
         <p class="footer-attribution">
@@ -336,9 +336,16 @@ import BetaBanner from '@/components/BetaBanner.vue'
 import BacklogModeBar from '@/components/BacklogModeBar.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { DONATE_URL } from '@/utils/donations'
+import { isNativeApp } from '@/utils/nativeApp'
 
 const router = useRouter()
 const route = useRoute()
+/**
+ * Pages that show without the site chrome (the iOS app's welcome screen). The app also
+ * holds the chrome back until the first page resolves, so a signed-out launch doesn't
+ * flash the site header before the welcome screen.
+ */
+const bare = computed(() => Boolean(route.meta.bare) || (isNativeApp && !route.matched.length))
 /**
  * Remount the page when it shows something else, but not when only the readable slug
  * in a detail URL changes (`/movie/<id>` → `/movie/<slug>/<id>`).

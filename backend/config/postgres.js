@@ -163,6 +163,29 @@ export function query(text, params) {
 }
 
 /**
+ * Check out a pool client that survives its connection dropping: pg emits `error` on a
+ * checked-out client with no listener, which would crash the process. The query in
+ * flight still rejects, so only that caller fails.
+ * @returns {Promise<pg.PoolClient & { lost?: Error }>}
+ */
+async function checkoutClient() {
+  const client = await getPool().connect()
+  const onError = (error) => {
+    client.lost = error
+    console.error('PostgreSQL connection lost:', error.message)
+  }
+  client.on('error', onError)
+  const release = client.release.bind(client)
+  // A lost connection is destroyed instead of going back to the pool.
+  client.release = (error) => {
+    client.off('error', onError)
+    client.release = release
+    return release(error || client.lost)
+  }
+  return client
+}
+
+/**
  * Mongoose-shaped session used by watchlist/rating handlers.
  * `startTransaction` binds this client to the caller's async context so its
  * later `query` calls (and only those) join the tx. It is deliberately not
@@ -170,7 +193,7 @@ export function query(text, params) {
  * @returns {Promise<{ startTransaction: Function, commitTransaction: Function, abortTransaction: Function, endSession: Function }>}
  */
 export async function startSession() {
-  const client = await getPool().connect()
+  const client = await checkoutClient()
   let outerStack = null
   return {
     startTransaction() {
@@ -207,7 +230,7 @@ export async function startSession() {
  * @template T
  */
 export async function withTransaction(fn) {
-  const client = await getPool().connect()
+  const client = await checkoutClient()
   const outer = txContext.getStore() || []
   try {
     await client.query('BEGIN')
