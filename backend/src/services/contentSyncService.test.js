@@ -37,7 +37,7 @@ describe('studio references from upstream payloads', () => {
   it('keeps MAL producer ids', () => {
     const content = unifiedContentService.convertMalToContent(malPayload)
     assert.deepEqual(content.studios, ['MAPPA'])
-    assert.deepEqual(content.studioRefs, [{ name: 'MAPPA', malId: 569 }])
+    assert.deepEqual(content.studioRefs, [{ name: 'MAPPA', malId: 569, role: 'animation' }])
   })
 })
 
@@ -48,7 +48,7 @@ describe('studio merge policy', () => {
     const malData = unifiedContentService.convertMalToContent(malPayload)
     await populator.mergeMalIntoExisting(existing, malData, { save: false })
     assert.deepEqual(existing.studios, ['MAPPA'])
-    assert.deepEqual(existing.studioRefs, [{ name: 'MAPPA', malId: 569 }])
+    assert.deepEqual(existing.studioRefs, [{ name: 'MAPPA', malId: 569, role: 'animation' }])
   })
 
   it('keeps MAL studios when TMDB production companies arrive', async () => {
@@ -145,6 +145,10 @@ describe('AniList search input', () => {
       contentType: 'tv',
       releaseDate: '2022-10-12',
     })
-    assert.deepEqual(input, { titles: ['Chainsaw Man', 'チェンソーマン'], contentType: 'tv', year: 2022 })
+    assert.deepEqual(input, {
+      titles: ['Chainsaw Man', 'チェンソーマン'],
+      contentType: 'tv',
+      year: 2022,
+    })
   })
 })

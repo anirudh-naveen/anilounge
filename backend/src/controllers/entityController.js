@@ -40,7 +40,7 @@ async function userHasFavorite(user, entityId) {
 }
 
 /**
- * Characters appearing in a catalog title. Triggers Jikan/TMDB ingest when stale.
+ * Characters appearing in a catalog title. Triggers AniList/TMDB ingest when stale.
  *
  * @param {import('express').Request} req - Reads `params.id`.
  * @param {import('express').Response} res

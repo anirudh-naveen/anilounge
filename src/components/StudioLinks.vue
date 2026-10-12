@@ -2,20 +2,23 @@
   StudioLinks.vue — animation-studio chips for a title (component).
 
   Used on movie and series pages, each studio as its logo (or initial) and name.
-  Studios backed by a persisted row open their detail screen; bare names render
-  as plain tiles.
+  Animation studios and production companies get their own sections when the
+  sources say which is which; otherwise one "Studios & Production Companies"
+  section. Studios backed by a persisted row open their detail screen; bare names
+  render as plain tiles.
 -->
 <template>
   <DetailSection
-    v-if="links.length"
-    name="studios"
-    :title="title"
+    v-for="section in sections"
+    :key="section.name"
+    :name="section.name"
+    :title="section.title"
     class="studio-links"
-    data-testid="studio-links"
+    :data-testid="`studio-links-${section.name}`"
   >
     <div class="studio-chips">
       <button
-        v-for="link in links"
+        v-for="link in section.links"
         :key="`studio-${link.id || link.name}`"
         type="button"
         class="studio-chip"
@@ -46,23 +49,27 @@ import { useRoute, useRouter } from 'vue-router'
 import type { UnifiedContent } from '@/types/content'
 import DetailSection from '@/components/DetailSection.vue'
 import { getPosterUrl } from '@/services/api'
-import { studioLinksForContent } from '@/utils/entities'
+import { studioGroups, type StudioLink } from '@/utils/entities'
 
-const props = withDefaults(
-  defineProps<{
-    content?: Pick<UnifiedContent, 'studios' | 'studioEntities' | 'productionCompanies'> | null
-    title?: string
-  }>(),
-  {
-    content: null,
-    title: 'Animation Studios',
-  },
-)
+const props = defineProps<{
+  content?: Pick<
+    UnifiedContent,
+    'studios' | 'studioEntities' | 'productionCompanies' | 'animationStudios'
+  > | null
+}>()
 
 const route = useRoute()
 const router = useRouter()
 
-const links = computed(() => studioLinksForContent(props.content))
+const sections = computed(() => {
+  const groups = studioGroups(props.content)
+  const all: Array<{ name: string; title: string; links: StudioLink[] }> = [
+    { name: 'studios', title: 'Animation Studios', links: groups.animation },
+    { name: 'production-companies', title: 'Production Companies', links: groups.production },
+    { name: 'studios-production', title: 'Studios & Production Companies', links: groups.mixed },
+  ]
+  return all.filter((section) => section.links.length)
+})
 /** Logos that failed to load; those studios show their initial instead. */
 const failedLogos = reactive(new Set<string>())
 

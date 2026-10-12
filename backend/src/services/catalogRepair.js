@@ -117,8 +117,8 @@ export async function mergeWorkInto(fromId, toId) {
     [fromId, toId],
   )
   await query(
-    `INSERT INTO studio_credits (work_id, studio_id)
-     SELECT $2, studio_id FROM studio_credits WHERE work_id = $1
+    `INSERT INTO studio_credits (work_id, studio_id, role, is_main)
+     SELECT $2, studio_id, role, is_main FROM studio_credits WHERE work_id = $1
      ON CONFLICT DO NOTHING`,
     [fromId, toId],
   )
@@ -282,8 +282,8 @@ export async function mergeStudioInto(fromId, toId) {
     )
     if (!source[0]) return
     await query(
-      `INSERT INTO studio_credits (work_id, studio_id)
-       SELECT work_id, $2 FROM studio_credits WHERE studio_id = $1
+      `INSERT INTO studio_credits (work_id, studio_id, role, is_main)
+       SELECT work_id, $2, role, is_main FROM studio_credits WHERE studio_id = $1
        ON CONFLICT DO NOTHING`,
       [fromId, toId],
     )

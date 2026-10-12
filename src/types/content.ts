@@ -44,6 +44,11 @@ export interface UnifiedContent {
   studios?: string[]
   /** Studio rows behind `studios`, linking to their detail screens. */
   studioEntities?: StudioRef[]
+  /**
+   * Animation studios alone, main first (from AniList, else MAL). Empty when no source
+   * tells them apart from the production companies in `studios`.
+   */
+  animationStudios?: string[]
   productionCompanies?: string[]
   /** ISO 3166-1 alpha-2 origin countries (`JP`, `US`, …). */
   originCountries?: string[]
@@ -135,7 +140,7 @@ export interface Episode {
   airDate?: string | null
   runtime?: number | null
   cast: EpisodeCastMember[]
-  /** Romaji and Japanese titles (from MyAnimeList via Jikan), when known. */
+  /** Romaji and Japanese titles, when a source has them. */
   titleRomaji?: string
   titleNative?: string
   isFiller?: boolean

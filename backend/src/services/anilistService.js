@@ -80,6 +80,7 @@ const DETAIL_FIELDS = `
     edges { role node { id name { full native } image { large } } }
   }
   airingSchedule(perPage: 50) { nodes { episode airingAt } }
+  streamingEpisodes { title thumbnail }
 `
 /** Staff and schedule pages make detail queries costly; AniList caps query complexity. */
 const DETAIL_BATCH_SIZE = 5
@@ -557,7 +558,7 @@ export function anilistStudioRefs(media, { animationOnly = false } = {}) {
 
 /**
  * Map one AniList character edge onto the character upsert payload shape used
- * for Jikan rows (Japanese then English voice actors, at most three).
+ * as character rows (Japanese then English voice actors, at most three).
  * @param {object} edge
  * @param {unknown} contentId
  * @returns {object | null}

@@ -103,7 +103,10 @@
             </span>
           </div>
 
-          <FranchiseLink :content="show" />
+          <div class="title-pills">
+            <MainStudio :content="show" />
+            <FranchiseLink :content="show" />
+          </div>
 
           <!-- Title: Actions -->
           <div class="show-actions title-actions">
@@ -268,6 +271,7 @@ import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
 import FranchiseLink from '@/components/FranchiseLink.vue'
+import MainStudio from '@/components/MainStudio.vue'
 import DetailSection from '@/components/DetailSection.vue'
 import ForumIcon from '@/components/ForumIcon.vue'
 import { isTvmazeImage } from '@/utils/imageCredits'

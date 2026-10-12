@@ -207,6 +207,50 @@ export function studioLinksForContent(
   return links
 }
 
+export type StudioLink = ReturnType<typeof studioLinksForContent>[number]
+
+/**
+ * A title's studios split by role. With known animation studios: those (main first)
+ * and the production companies left over; otherwise every credit under `mixed`,
+ * since studio credits don't record which is which.
+ */
+export function studioGroups(
+  content?: Pick<
+    UnifiedContent,
+    'studios' | 'studioEntities' | 'productionCompanies' | 'animationStudios'
+  > | null,
+): { animation: StudioLink[]; production: StudioLink[]; mixed: StudioLink[] } {
+  const animationNames = (content?.animationStudios || []).filter(Boolean)
+  if (!animationNames.length) {
+    return { animation: [], production: [], mixed: studioLinksForContent(content) }
+  }
+  const animation = studioLinksForContent({
+    studios: animationNames,
+    studioEntities: content?.studioEntities,
+  })
+  const animationKeys = new Set(animationNames.map(fold))
+  const production = studioLinksForContent({
+    studios: [...(content?.studios || []), ...(content?.productionCompanies || [])].filter(
+      (name) => name && !animationKeys.has(fold(name)),
+    ),
+    studioEntities: content?.studioEntities,
+  })
+  return { animation, production, mixed: [] }
+}
+
+/**
+ * The studio a title's header names: its main animation studio, or (when roles are
+ * unknown) its first credited studio or production company.
+ */
+export function mainStudio(
+  content?: Parameters<typeof studioGroups>[0],
+): { link: StudioLink; label: string } | null {
+  const groups = studioGroups(content)
+  if (groups.animation[0]) return { link: groups.animation[0], label: 'Studio' }
+  if (groups.mixed[0]) return { link: groups.mixed[0], label: 'Studio / Production' }
+  return null
+}
+
 export interface VoicedCharacterCard {
   id: string
   name: string

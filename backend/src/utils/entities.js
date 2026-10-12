@@ -209,24 +209,6 @@ export function highlightedCharacters(
 }
 
 /**
- * Picture URL from a Jikan `images` object or a TMDB path.
- * @param {object} [images]
- * @param {string} [tmdbPath]
- * @returns {string}
- */
-export function entityImagePath(images, tmdbPath = '') {
-  const jpg =
-    images?.jpg?.large_image_url ||
-    images?.jpg?.image_url ||
-    images?.webp?.large_image_url ||
-    images?.webp?.image_url ||
-    ''
-  const fromJikan = normalizeEntityName(jpg)
-  if (fromJikan && !/questionmark/i.test(fromJikan)) return fromJikan
-  return normalizeEntityName(tmdbPath)
-}
-
-/**
  * AniList serves `default.jpg` when a character or staff member has no picture.
  * @param {string} value
  * @returns {boolean}
@@ -428,7 +410,7 @@ export function voiceActorImagePath(path) {
 }
 
 /**
- * Studio logo URL (Jikan producer image or TMDB `logo_path`).
+ * Studio logo URL (TMDB `logo_path`).
  * @param {unknown} path
  * @returns {string}
  */
@@ -471,48 +453,6 @@ export function studioNamesEqual(left, right) {
 }
 
 /**
- * Map a Jikan `/producers` row onto studio fields.
- * @param {object} [row]
- * @returns {{ malId: number, name: string, nativeName: string, alternativeNames: string[], imagePath: string, about: string } | null}
- */
-export function mapJikanProducer(row) {
-  const malId = Number(row?.mal_id)
-  if (!Number.isFinite(malId) || malId < 1) return null
-  const titles = Array.isArray(row?.titles) ? row.titles : []
-  const titleOf = (type) =>
-    normalizeEntityName(titles.find((entry) => entry?.type === type)?.title)
-  const name = displayStudioName(titleOf('Default') || titles[0]?.title || row?.name)
-  if (!name) return null
-  return {
-    malId,
-    name,
-    nativeName: titleOf('Japanese'),
-    alternativeNames: uniqueEntityNames(titles.map((entry) => entry?.title)).filter(
-      (title) => title !== name,
-    ),
-    imagePath: studioImagePath(entityImagePath(row?.images)),
-    about: normalizeEntityName(row?.about),
-  }
-}
-
-/**
- * Jikan producer search hit whose titles match the studio name.
- * @param {object[]} [rows]
- * @param {string} name
- * @returns {object | null}
- */
-export function pickJikanProducer(rows, name) {
-  const list = Array.isArray(rows) ? rows : []
-  return (
-    list.find((row) =>
-      (Array.isArray(row?.titles) ? row.titles : []).some((entry) =>
-        studioNamesEqual(entry?.title, name),
-      ),
-    ) || null
-  )
-}
-
-/**
  * TMDB `/search/company` hit that names the same studio, preferring one with a logo.
  * @param {object[]} [results]
  * @param {string} name
@@ -551,54 +491,6 @@ export function entityUpsertFilter(entityType, payload) {
  */
 export function characterUpsertFilter(payload) {
   return entityUpsertFilter('character', payload)
-}
-
-/**
- * Map one Jikan `/anime/{id}/characters` row onto an upsert payload.
- * @param {object} [row]
- * @param {string} contentId
- * @returns {{ malId: number, name: string, nativeName: string, alternativeNames: string[], imagePath: string, appearance: object } | null}
- */
-export function mapJikanCharacterRow(row, contentId) {
-  const character = row?.character && typeof row.character === 'object' ? row.character : null
-  const name =
-    cleanCharacterName(character?.name) || cleanCharacterName(character?.name_kanji)
-  const malId = Number(character?.mal_id)
-  if (!isUsableCharacterName(name) || !Number.isFinite(malId) || malId < 1) return null
-
-  const voiceActors = (Array.isArray(row?.voice_actors) ? row.voice_actors : [])
-    .map((entry) => {
-      const person = entry?.person && typeof entry.person === 'object' ? entry.person : null
-      const vaName = normalizeEntityName(person?.name)
-      const vaMalId = Number(person?.mal_id)
-      if (!vaName) return null
-      return {
-        name: vaName,
-        language: normalizeEntityName(entry.language) || 'Japanese',
-        malId: Number.isFinite(vaMalId) && vaMalId > 0 ? vaMalId : undefined,
-        imagePath: entityImagePath(person?.images),
-      }
-    })
-    .filter(Boolean)
-    .sort((left, right) => Number(/japanese/i.test(right.language)) - Number(/japanese/i.test(left.language)))
-    .slice(0, 3)
-
-  const role = normalizeEntityName(row?.role) || 'Supporting'
-  const favorites = Number(row?.favorites ?? character?.favorites) || 0
-
-  return {
-    malId,
-    name,
-    nativeName: normalizeEntityName(character?.name_kanji),
-    alternativeNames: uniqueEntityNames(character?.nicknames),
-    imagePath: entityImagePath(character?.images),
-    appearance: {
-      content: contentId,
-      role,
-      importance: characterImportanceScore({ role, favorites }),
-      voiceActors,
-    },
-  }
 }
 
 /**
@@ -695,26 +587,6 @@ export function mapVoiceActorFromCredit(
     tmdbId: Number.isFinite(tmdbId) && tmdbId > 0 ? tmdbId : undefined,
     anilistId: Number.isFinite(anilistId) && anilistId > 0 ? anilistId : undefined,
     appearance,
-  }
-}
-
-/**
- * Map one Jikan `/people/{id}/voices` row onto a voiced-character payload.
- * @param {object} [row]
- * @returns {{ malId: number, name: string, imagePath: string, role: string, animeMalId?: number } | null}
- */
-export function mapJikanPersonVoiceRow(row) {
-  const character = row?.character && typeof row.character === 'object' ? row.character : null
-  const name = cleanCharacterName(character?.name)
-  const malId = Number(character?.mal_id)
-  if (!isUsableCharacterName(name) || !Number.isFinite(malId) || malId < 1) return null
-  const animeMalId = Number(row?.anime?.mal_id)
-  return {
-    malId,
-    name,
-    imagePath: entityImagePath(character?.images),
-    role: normalizeEntityName(row?.role) || 'Supporting',
-    animeMalId: Number.isFinite(animeMalId) && animeMalId > 0 ? animeMalId : undefined,
   }
 }
 

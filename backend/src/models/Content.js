@@ -143,11 +143,14 @@ export async function attachContentRelations(docs) {
       [ids],
     ),
     query('SELECT content_id, name FROM content_akas WHERE content_id = ANY($1::uuid[])', [ids]),
+    // Main animation studio first, then other animation studios, then the rest.
     query(
-      `SELECT sc.work_id AS content_id, st.id AS studio_id, st.name, st.image_path
+      `SELECT sc.work_id AS content_id, st.id AS studio_id, st.name, st.image_path, sc.role,
+              sc.is_main
        FROM studio_credits sc
        JOIN content st ON st.id = sc.studio_id
-       WHERE sc.work_id = ANY($1::uuid[])`,
+       WHERE sc.work_id = ANY($1::uuid[])
+       ORDER BY sc.is_main DESC, (sc.role = 'animation') DESC NULLS LAST, st.name`,
       [ids],
     ),
     // Each title's franchise with its nicknames and rating: the average unified score
@@ -205,6 +208,10 @@ export async function attachContentRelations(docs) {
       name: row.name,
       imagePath: row.image_path || '',
     }))
+    // Empty when the roles aren't known (TMDB-only titles): pages then show every credit.
+    doc.animationStudios = (byStudio.get(id) || [])
+      .filter((row) => row.role === 'animation')
+      .map((row) => row.name)
     const franchise = franchiseById.get(id)
     doc.franchise = franchise?.name || null
     doc.franchiseId = franchise ? String(franchise.franchise_id) : null
@@ -586,6 +593,21 @@ async function upsertSubtype(table, id, columns) {
   )
 }
 
+/**
+ * What a studio did on a title, from its source ref: AniList says whether it is an
+ * animation studio (`animation` / `isAnimationStudio`) and the main one (`isMain`); MAL
+ * refs (`malId`) are animation studios; TMDB companies have no role.
+ * @param {{ role?: string, animation?: boolean, isMain?: boolean, malId?: number } | undefined} ref
+ * @returns {{ role: 'animation' | 'production' | null, isMain: boolean }}
+ */
+export function studioRole(ref) {
+  let role = ref?.role === 'animation' || ref?.role === 'production' ? ref.role : null
+  if (!role && typeof ref?.animation === 'boolean')
+    role = ref.animation ? 'animation' : 'production'
+  if (!role && ref?.malId) role = 'animation'
+  return { role, isMain: role === 'animation' && Boolean(ref?.isMain) }
+}
+
 async function upsertGenre(name) {
   const existing = await query('SELECT id FROM genres WHERE lower(name) = lower($1)', [name])
   if (existing.rows[0]) return existing.rows[0].id
@@ -735,9 +757,6 @@ async function replaceChildren(doc) {
   }
   if (hasGenres) await query('DELETE FROM content_genres WHERE content_id = $1', [id])
   if (hasAkas) await query('DELETE FROM content_akas WHERE content_id = $1', [id])
-  if (hasStudios) {
-    await query('DELETE FROM studio_credits WHERE work_id = $1 AND NOT admin_added', [id])
-  }
   if (franchiseName) await query('DELETE FROM franchise_members WHERE member_id = $1', [id])
 
   for (const genre of doc.genres || []) {
@@ -768,16 +787,31 @@ async function replaceChildren(doc) {
     const key = ref.name.toLowerCase()
     refsByName.set(key, { ...ref, ...refsByName.get(key) })
   }
+  const keptStudioIds = []
   for (const name of studioNames) {
-    const studioId = await upsertStudio(name, refsByName.get(name.toLowerCase()))
+    const ref = refsByName.get(name.toLowerCase())
+    const studioId = await upsertStudio(name, ref)
+    keptStudioIds.push(studioId)
+    const { role, isMain } = studioRole(ref)
     await query(
-      `INSERT INTO studio_credits (work_id, studio_id)
-       SELECT $1, $2 WHERE NOT EXISTS (
+      `INSERT INTO studio_credits (work_id, studio_id, role, is_main)
+       SELECT $1, $2, $3, $4 WHERE NOT EXISTS (
          SELECT 1 FROM admin_link_removals r
          WHERE r.link_kind = 'studio_credit' AND r.work_id = $1 AND r.other_id = $2
        )
-       ON CONFLICT DO NOTHING`,
-      [id, studioId],
+       ON CONFLICT (work_id, studio_id) DO UPDATE SET
+         role = COALESCE(EXCLUDED.role, studio_credits.role),
+         is_main = EXCLUDED.is_main OR (EXCLUDED.role IS NULL AND studio_credits.is_main)`,
+      [id, studioId, role, isMain],
+    )
+  }
+  // Credits are updated in place, so a save that doesn't know roles (a title loaded and
+  // saved again) keeps them; only studios the title no longer lists are dropped.
+  if (hasStudios) {
+    await query(
+      `DELETE FROM studio_credits
+       WHERE work_id = $1 AND NOT admin_added AND studio_id <> ALL($2::uuid[])`,
+      [id, keptStudioIds],
     )
   }
 

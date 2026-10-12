@@ -270,7 +270,6 @@
     <!-- Title: Copyright -->
     <footer class="footer">
       <div class="container">
-        <p>&copy; 2026 AniLounge. Created by Anirudh Naveen.</p>
         <!-- TMDB's API terms require this notice and their logo on the site. -->
         <p class="footer-attribution">
           <a
@@ -310,13 +309,14 @@
             APIs but is not endorsed or certified by TMDB, AniList or MyAnimeList.
           </span>
         </p>
-        <p class="footer-links">
+        <nav class="footer-links" aria-label="Footer">
           <router-link to="/privacy">Privacy</router-link>
-          <router-link to="/support">Help &amp; support</router-link>
-        </p>
-        <p v-if="DONATE_URL" class="footer-support">
-          <a :href="DONATE_URL" target="_blank" rel="noopener noreferrer">Support AniLounge</a>
-        </p>
+          <router-link to="/support">Help</router-link>
+          <a v-if="DONATE_URL" :href="DONATE_URL" target="_blank" rel="noopener noreferrer">
+            Support
+          </a>
+        </nav>
+        <p class="footer-copyright">&copy; 2026 AniLounge</p>
       </div>
     </footer>
   </div>
@@ -814,25 +814,20 @@ const handleLogout = async () => {
 .footer {
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
-  padding: 1.75rem 0;
+  padding: 1.1rem 0;
   text-align: center;
   color: var(--text-muted);
-  letter-spacing: 0.01em;
+  font-size: 0.8rem;
 }
 
-.footer-links {
+.footer-attribution {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
-  gap: 1.25rem;
-  margin-top: 0.75rem;
-}
-
-.footer-support {
-  margin-top: 0.75rem;
-}
-
-.footer-logo {
-  display: inline-flex;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  opacity: 0.85;
 }
 
 .footer-attribution span a {
@@ -840,31 +835,31 @@ const handleLogout = async () => {
   text-decoration: underline;
 }
 
-.footer-attribution {
-  margin-top: 0.6rem;
-  font-size: 0.8rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-.footer-tmdb {
+.footer-tmdb,
+.footer-logo {
   display: inline-flex;
 }
 
-.footer-support a {
-  color: var(--coral-primary);
-  font-weight: 600;
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
 }
 
 .footer-links a {
   color: var(--text-secondary);
+  text-decoration: none;
 }
 
 .footer-links a:hover {
   color: var(--coral-primary);
+}
+
+.footer-copyright {
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
 }
 
 @media (max-width: 768px) {
