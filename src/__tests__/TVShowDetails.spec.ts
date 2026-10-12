@@ -184,6 +184,7 @@ const mountPage = async (path: string) => {
       plugins: [router],
       stubs: {
         WatchlistPanel: true,
+        FavoriteHeart: true,
         StudioLinks: true,
         WhereToWatch: true,
         ForumHighlights: true,

@@ -113,6 +113,7 @@
 
           <!-- Title: Actions -->
           <div class="show-actions title-actions">
+            <FavoriteHeart :content-id="show._id" variant="button" />
             <button @click="shareShow" class="btn-outline">Share</button>
             <button
               v-if="hasUpcomingEpisode"
@@ -275,6 +276,7 @@ import StudioLinks from '@/components/StudioLinks.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
 import FranchiseLink from '@/components/FranchiseLink.vue'
 import MainStudio from '@/components/MainStudio.vue'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import DetailSection from '@/components/DetailSection.vue'
 import ForumIcon from '@/components/ForumIcon.vue'
 import { isTvmazeImage } from '@/utils/imageCredits'

@@ -84,6 +84,7 @@
 
           <!-- Title: Actions -->
           <div class="movie-actions title-actions">
+            <FavoriteHeart :content-id="movie._id" variant="button" />
             <button @click="shareMovie" class="btn-outline">Share</button>
           </div>
         </div>
@@ -157,6 +158,7 @@ import WhereToWatch from '@/components/WhereToWatch.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
 import FranchiseLink from '@/components/FranchiseLink.vue'
 import MainStudio from '@/components/MainStudio.vue'
+import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import DetailSection from '@/components/DetailSection.vue'
 import ForumIcon from '@/components/ForumIcon.vue'
 import { useToast } from 'vue-toastification'

@@ -62,7 +62,7 @@ const mountPage = async () => {
   const wrapper = mount(MovieDetails, {
     global: {
       plugins: [router],
-      stubs: { EntityCastRow: true },
+      stubs: { EntityCastRow: true, FavoriteHeart: true },
     },
   })
   await flushPromises()
