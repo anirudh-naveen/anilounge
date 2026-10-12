@@ -302,8 +302,6 @@ export const profileAPI = {
     api.put('/profile/settings', data),
 
   /** Emblem next to your name: a badge id you hold, null (your highest), or 'none'. */
-  setFeaturedBadge: (badge: string | null) => api.put('/profile/featured-badge', { badge }),
-
   getFavoriteContentIds: () => api.get('/favorites/content'),
 
   favoriteContent: (id: string) => api.post(`/content/${id}/favorite`),
@@ -525,7 +523,7 @@ export const adminAPI = {
     api.post(`/admin/users/${id}/ban`, { banned, reason }),
 }
 
-/** Public list of accounts with badges and the emblem each shows by their name. */
+/** Public list of badge holders and accent pickers, with each one's avatar frame and accent. */
 export const badgesAPI = {
   /** `fresh` skips the 60-second HTTP cache, right after the user changes their own. */
   list: (fresh = false) => api.get('/badges', fresh ? { params: { t: Date.now() } } : undefined),

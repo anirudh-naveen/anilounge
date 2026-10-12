@@ -1,22 +1,21 @@
 /**
  * badges.ts — Pinia store for who holds which badges.
  *
- * Loads the public `/badges` list once so `RoleBadge` (the emblem next to usernames)
- * and the profile Badges section work anywhere without every endpoint returning
- * badges, and carries each holder's accent for their `UserAvatar` frame. Failures leave
- * the list empty (no badges) rather than breaking the page.
+ * Loads the public `/badges` list once so `UserAvatar` frames and the profile Badges
+ * section work anywhere without every endpoint returning badges. It lists badge holders
+ * and anyone who picked an accent, with each one's frame and accent; everyone else wears
+ * the default User ring. Failures leave the list empty rather than breaking the page.
  */
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { badgesAPI } from '@/services/api'
+import { USER_FRAME } from '@/utils/badges'
 import type { ProfileAccent } from '@/types/profile'
 
 type Holder = {
   badges: string[]
-  featured: string | null
-  frame: string | null
-  choice: string | null
+  frame: string
   accent: ProfileAccent | null
 }
 
@@ -44,10 +43,7 @@ export const useBadgesStore = defineStore('badges', () => {
               row.username.toLowerCase(),
               {
                 badges: row.badges || [],
-                featured: row.featured ?? null,
-                // Older APIs send no frame: it matches the emblem.
-                frame: row.frame !== undefined ? row.frame : (row.featured ?? null),
-                choice: row.choice ?? null,
+                frame: row.frame || USER_FRAME,
                 accent: row.accent ?? null,
               },
             ]),
@@ -68,19 +64,12 @@ export const useBadgesStore = defineStore('badges', () => {
   /** Every badge a user holds, in registry order. */
   const badgesFor = (username?: string | null): string[] => holder(username)?.badges || []
 
-  /** The emblem shown next to their name, or null. */
-  const featuredFor = (username?: string | null): string | null =>
-    holder(username)?.featured ?? null
-
-  /** The badge framing their avatar, or null. */
-  const frameFor = (username?: string | null): string | null => holder(username)?.frame ?? null
-
-  /** Their raw pick: a badge id, null (automatic), or 'none'. */
-  const choiceFor = (username?: string | null): string | null => holder(username)?.choice ?? null
+  /** Their avatar frame: a badge id, or the User ring for everyone not listed. */
+  const frameFor = (username?: string | null): string => holder(username)?.frame ?? USER_FRAME
 
   /** Their profile accent (tints their avatar frame), or null when never picked. */
   const accentFor = (username?: string | null): ProfileAccent | null =>
     holder(username)?.accent ?? null
 
-  return { load, badgesFor, featuredFor, frameFor, choiceFor, accentFor }
+  return { load, badgesFor, frameFor, accentFor }
 })

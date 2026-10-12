@@ -53,27 +53,16 @@
                     v-for="badge in profileBadges"
                     :key="badge.id"
                     class="badge-card"
-                    :class="{ featured: badge.id === featuredBadge }"
                     tabindex="0"
                     :aria-label="badge.label"
                   >
                     <BadgeEmblem :badge="badge.id" size="md" :tooltip="false" />
-                    <span
-                      v-if="badge.id === featuredBadge"
-                      class="badge-featured"
-                      aria-hidden="true"
-                    >
-                      ★
-                    </span>
                     <!-- Shown on hover / keyboard focus. -->
                     <span class="badge-tooltip" role="tooltip">
                       <span class="badge-name">{{ badge.label }}</span>
                       <span v-if="badge.description" class="badge-desc">{{
                         badge.description
                       }}</span>
-                      <span v-if="badge.id === featuredBadge" class="badge-desc">
-                        ★ Shown next to the name
-                      </span>
                     </span>
                   </li>
                 </ul>
@@ -84,8 +73,7 @@
             <div class="hero-info">
               <div class="hero-name-row">
                 <h1 data-testid="profile-username">
-                  {{ profile.user.username
-                  }}<RoleBadge :username="profile.user.username" size="lg" />
+                  {{ profile.user.username }}
                 </h1>
                 <span v-if="!profile.settings.isPublic" class="private-badge"> Private </span>
               </div>
@@ -380,7 +368,7 @@
             <SortByControls
               v-model:sort-by="watchlistSortBy"
               v-model:sort-direction="watchlistSortDirection"
-              :options="WATCHLIST_SORT_OPTIONS"
+              :options="watchlistSortOptions"
             />
           </div>
 
@@ -595,9 +583,7 @@
                   :name="friend.user.username"
                   :size="48"
                 />
-                <span class="friend-name">
-                  {{ friend.user.username }}<RoleBadge :username="friend.user.username" />
-                </span>
+                <span class="friend-name">{{ friend.user.username }}</span>
               </router-link>
             </li>
           </ul>
@@ -621,7 +607,6 @@
       :settings="profile.settings"
       :bio="profile.user.bio || ''"
       :genres="profile.user.preferences.favoriteGenres"
-      :emblem="emblemChoice"
       :emblem-badges="emblemBadges"
       :username="profile.user.username"
       :picture="profile.user.profilePicture ?? null"
@@ -661,7 +646,6 @@ import { getTotalVoteCount } from '@/utils/ratings'
 import { getSearchCategoryDate } from '@/utils/searchFilters'
 import ProfileCustomizePanel, { type CustomizeResult } from '@/components/ProfileCustomizePanel.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import RoleBadge from '@/components/RoleBadge.vue'
 import BadgeEmblem from '@/components/BadgeEmblem.vue'
 import { useBadgesStore } from '@/stores/badges'
 import { badgeInfo } from '@/utils/badges'
@@ -703,14 +687,22 @@ const watchlistTypeFilter = ref<WatchlistTypeFilter>('all')
 const watchlistQuery = ref('')
 const watchlistSortBy = ref<SortByOption>('relevance')
 const watchlistSortDirection = ref<SortDirection>('desc')
-/** "Relevance" here is recency: the order titles were last updated. */
-const WATCHLIST_SORT_OPTIONS: { value: SortByOption; label: string }[] = [
+/**
+ * "Relevance" here is recency: the order titles were last updated. The rating is the
+ * profile owner's: "Your rating" on your own profile, "<name>'s rating" on someone else's.
+ */
+const watchlistSortOptions = computed<{ value: SortByOption; label: string }[]>(() => [
   { value: 'relevance', label: 'Last updated' },
   { value: 'alphabetical', label: 'Alphabetical' },
-  { value: 'rating', label: 'Their rating' },
+  {
+    value: 'rating',
+    label: profile.value?.isOwner
+      ? 'Your rating'
+      : `${profile.value?.user.username ?? 'Their'}'s rating`,
+  },
   { value: 'popularity', label: 'Popularity' },
   { value: 'date', label: 'Release date' },
-]
+])
 
 const showCustomize = ref(false)
 const isSaving = ref(false)
@@ -773,9 +765,6 @@ const badgesStore = useBadgesStore()
 const profileUsername = computed(() => profile.value?.user.username)
 const profileBadges = computed(() => badgesStore.badgesFor(profileUsername.value).map(badgeInfo))
 const emblemBadges = computed(() => profileBadges.value.filter((badge) => badge.emblem))
-const featuredBadge = computed(() => badgesStore.featuredFor(profileUsername.value))
-/** Badge next to the name: '' = automatic, a badge id, or 'none'. */
-const emblemChoice = computed(() => badgesStore.choiceFor(profileUsername.value) ?? '')
 
 onMounted(() => {
   badgesStore.load()
@@ -1168,8 +1157,6 @@ const saveCustomize = async (result: CustomizeResult) => {
     const preferences = { favoriteGenres: result.genres }
     const genresChanged =
       result.genres.join('|') !== profile.value.user.preferences.favoriteGenres.join('|')
-    // null = the badge picker wasn't touched (it may have opened before the badges loaded).
-    const emblemChanged = result.emblem !== null && result.emblem !== emblemChoice.value
     // The frame and its accent show on avatars everywhere, from the badges list.
     const frameChanged =
       result.settings.accent !== profile.value.settings.accent ||
@@ -1181,8 +1168,7 @@ const saveCustomize = async (result: CustomizeResult) => {
       bio: result.bio,
     })
     if (genresChanged) await authStore.updateProfile({ preferences })
-    if (emblemChanged) await profileAPI.setFeaturedBadge(result.emblem || null)
-    if (emblemChanged || frameChanged) await badgesStore.load(true)
+    if (frameChanged) await badgesStore.load(true)
     const { settings, bio } = response.data.data as { settings: ProfileSettings; bio: string }
     profile.value.settings = settings
     profile.value.user.bio = bio
@@ -1403,20 +1389,6 @@ const handleImageError = showPosterPlaceholder
   border-color: var(--border-hover);
 }
 
-.badge-card.featured {
-  border-color: var(--border-hover);
-  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.12);
-}
-
-.badge-featured {
-  position: absolute;
-  top: -0.35rem;
-  right: -0.3rem;
-  font-size: 0.65rem;
-  line-height: 1;
-  color: var(--coral-primary);
-}
-
 .badge-tooltip {
   position: absolute;
   bottom: calc(100% + 0.5rem);
@@ -1459,6 +1431,36 @@ const handleImageError = showPosterPlaceholder
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, 0);
+}
+
+/* The hero clips overflow: the end badges' tooltips open inward, arrow still on the badge. */
+.badge-card:first-child .badge-tooltip {
+  left: 0;
+  transform: translate(0, 4px);
+}
+
+.badge-card:last-child:not(:first-child) .badge-tooltip {
+  left: auto;
+  right: 0;
+  transform: translate(0, 4px);
+}
+
+.badge-card:first-child:hover .badge-tooltip,
+.badge-card:first-child:focus-visible .badge-tooltip,
+.badge-card:last-child:hover .badge-tooltip,
+.badge-card:last-child:focus-visible .badge-tooltip {
+  transform: translate(0, 0);
+}
+
+.badge-card:first-child .badge-tooltip::after {
+  left: 1.25rem;
+}
+
+.badge-card:last-child:not(:first-child) .badge-tooltip::after {
+  left: auto;
+  right: 1.25rem;
+  margin-left: 0;
+  margin-right: -5px;
 }
 
 .badge-name {

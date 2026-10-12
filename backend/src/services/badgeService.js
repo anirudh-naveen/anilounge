@@ -1,12 +1,12 @@
 /**
- * Badges shown on usernames and profiles, and each user's pick of emblem.
+ * Badges shown on profiles and as avatar frames.
  *
  * Layer: domain service. Which badges exist lives in `utils/badges.js`; creator/admin
  * badges come from the account role (and ADMIN_EMAILS), the bot badge from the bot
  * accounts' emails (`utils/botAccount.js`), the rest from
  * `users.cosmetic_roles`. Influencer is also stored automatically once someone's forum
- * activity reaches the weekly bar (`grantInfluencerIfEarned`). The public list feeds the emblem next to usernames and the
- * profile Badges section.
+ * activity reaches the weekly bar (`grantInfluencerIfEarned`). The public list feeds avatar frames and the profile
+ * Badges section.
  */
 
 import { query } from '../../config/postgres.js'
@@ -15,32 +15,30 @@ import {
   avatarFrame,
   badgesForUser,
   earnsInfluencer,
-  featuredEmblem,
-  isValidEmblemChoice,
 } from '../utils/badges.js'
-import { BOT_EMAILS, isBotEmail } from '../utils/botAccount.js'
-import { HttpError } from '../utils/httpError.js'
+import { BOT_EMAILS } from '../utils/botAccount.js'
 import { normalizeAccent } from '../utils/profileSettings.js'
 import { logAction } from './adminLog.js'
 
 /**
- * Every account holding at least one badge. Banned, demo, and unverified accounts are
- * left out (they show no badges).
- * @returns {Promise<Array<{ id: string, username: string, badges: string[], featured: string | null, frame: string | null, choice: string | null, accent: string | null }>>}
- *   `featured` is the emblem to show next to the name and `frame` the badge framing their
- *   avatar (null = none); `accent` tints that frame (null = never picked: silver).
+ * Every account whose avatar frame isn't the silver default: badge holders and anyone who
+ * picked a profile accent. Everyone missing from the list wears the plain silver User
+ * ring. Banned, demo, and unverified accounts are left out.
+ * @returns {Promise<Array<{ id: string, username: string, badges: string[], frame: string, accent: string | null }>>}
+ *   `frame` is a badge id or 'user' (the plain ring); `accent` tints it (null = silver).
  */
 export async function listBadgeHolders() {
   const owners = [...parseAdminEmails()]
   const { rows } = await query(
-    `SELECT id, username, role, cosmetic_roles, featured_badge,
+    `SELECT id, username, role, cosmetic_roles,
             to_jsonb(users) #>> '{profile_settings,accent}' AS accent,
             to_jsonb(users) #>> '{profile_settings,frame}' AS frame,
             lower(email) = ANY($1::text[]) AS owner, email = ANY($2::text[]) AS bot
      FROM users
      WHERE banned_at IS NULL AND NOT is_demo AND email_verified_at IS NOT NULL
        AND (role IN ('admin', 'creator') OR lower(email) = ANY($1::text[])
-            OR cardinality(cosmetic_roles) > 0 OR email = ANY($2::text[]))`,
+            OR cardinality(cosmetic_roles) > 0 OR email = ANY($2::text[])
+            OR to_jsonb(users) #>> '{profile_settings,accent}' IS NOT NULL)`,
     [owners, BOT_EMAILS],
   )
   return rows
@@ -51,42 +49,15 @@ export async function listBadgeHolders() {
         isBot: row.bot,
         granted: row.cosmetic_roles,
       })
-      const featured = featuredEmblem(badges, row.featured_badge)
       return {
         id: String(row.id),
         username: row.username,
         badges,
-        featured,
-        frame: avatarFrame(badges, featured, row.frame),
-        // Their raw pick (null = automatic), so the owner's picker shows it.
-        choice: row.featured_badge || null,
+        frame: avatarFrame(badges, row.frame),
         accent: normalizeAccent(row.accent),
       }
     })
-    .filter((row) => row.badges.length)
-}
-
-/**
- * Choose the emblem shown next to your name: a badge you hold, null for automatic
- * (your highest), or 'none'.
- * @param {object} user - `req.user`.
- * @param {unknown} choice
- * @returns {Promise<{ badges: string[], featured: string | null, choice: string | null }>}
- */
-export async function setFeaturedBadge(user, choice) {
-  const normalized = choice === undefined || choice === '' ? null : choice
-  const owners = parseAdminEmails()
-  const badges = badgesForUser({
-    role: user.role,
-    isStaff: owners.has(String(user.email || '').toLowerCase()),
-    isBot: isBotEmail(user.email),
-    granted: user.cosmeticRoles,
-  })
-  if (!isValidEmblemChoice(badges, normalized)) {
-    throw new HttpError(400, 'You can only show a badge you have.')
-  }
-  await query('UPDATE users SET featured_badge = $2 WHERE id = $1', [user._id, normalized])
-  return { badges, featured: featuredEmblem(badges, normalized), choice: normalized }
+    .filter((row) => row.badges.length || row.accent)
 }
 
 /**

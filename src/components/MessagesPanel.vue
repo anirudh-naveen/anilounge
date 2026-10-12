@@ -171,7 +171,6 @@
           <UserAvatar :src="thread.user.profilePicture" :name="thread.user.username" :size="40" />
           <router-link :to="profileRoute(thread.user.username)" class="social-name">
             {{ thread.user.username }}
-            <RoleBadge :username="thread.user.username" />
           </router-link>
           <span
             v-if="thread.profanityAllowed"
@@ -304,7 +303,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import FriendButton from '@/components/FriendButton.vue'
-import RoleBadge from '@/components/RoleBadge.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { friendsAPI, messagesAPI } from '@/services/api'
 import { useMessagesStore } from '@/stores/messages'

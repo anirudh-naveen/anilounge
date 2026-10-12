@@ -65,9 +65,10 @@ describe('normalizePreferences', () => {
 })
 
 describe('avatar frame pick', () => {
-  it('keeps emblem badge ids and none, else null (match the emblem)', () => {
+  it('keeps emblem badge ids and user (old none), else null (automatic)', () => {
     assert.equal(normalizeProfileSettings({ frame: 'artist' }).frame, 'artist')
-    assert.equal(normalizeProfileSettings({ frame: 'none' }).frame, 'none')
+    assert.equal(normalizeProfileSettings({ frame: 'user' }).frame, 'user')
+    assert.equal(normalizeProfileSettings({ frame: 'none' }).frame, 'user')
     assert.equal(normalizeProfileSettings({ frame: 'emperor' }).frame, null)
     assert.equal(normalizeProfileSettings({}).frame, null)
   })

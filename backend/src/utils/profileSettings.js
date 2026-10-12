@@ -5,11 +5,11 @@
  * preferences into the stored shape, dropping unknown keys and bad values.
  */
 
-import { BADGES, NO_EMBLEM } from './badges.js'
+import { BADGES, USER_FRAME } from './badges.js'
 
 /** Profile tabs. A tab added later (Friends) joins existing profiles visible, at the end. */
 export const PROFILE_TABS = ['favorites', 'watchlist', 'stats', 'forum', 'friends']
-export const PROFILE_ACCENTS = ['coral', 'teal', 'violet', 'gold', 'rose', 'sky']
+export const PROFILE_ACCENTS = ['coral', 'teal', 'violet', 'gold', 'rose', 'sky', 'silver']
 /** A custom accent from the color wheel: `#rrggbb`. */
 const HEX_ACCENT = /^#[0-9a-f]{6}$/i
 
@@ -23,13 +23,13 @@ export function normalizeAccent(value) {
   if (typeof value === 'string' && HEX_ACCENT.test(value.trim())) return value.trim().toLowerCase()
   return null
 }
-/** Avatar frame picks: an emblem badge id or 'none'; anything else (null) = match the emblem. */
-const FRAME_CHOICES = [...BADGES.filter((badge) => badge.emblem).map((badge) => badge.id), NO_EMBLEM]
+/** Avatar frame picks: an emblem badge id or 'user' (plain ring); anything else (null) = automatic. */
+const FRAME_CHOICES = [...BADGES.filter((badge) => badge.emblem).map((badge) => badge.id), USER_FRAME]
 export const PROFILE_HEADLINE_MAX = 80
 export const PROFILE_BIO_MAX = 300
 const PREFERENCE_LIST_MAX = 30
 
-// accent null = never picked: the profile and avatar frame are silver.
+// accent null = never picked: the profile and avatar frame use the coral default.
 export const DEFAULT_PROFILE_SETTINGS = Object.freeze({
   isPublic: true,
   accent: null,
@@ -59,7 +59,9 @@ export function normalizeProfileSettings(input, base = DEFAULT_PROFILE_SETTINGS)
     typeof pick('showConnections') === 'boolean' ? pick('showConnections') : true
   const accent = normalizeAccent(pick('accent'))
   // Whether they still hold the badge is checked when the frame is shown (badgeService).
-  const frame = FRAME_CHOICES.includes(pick('frame')) ? pick('frame') : null
+  // The old 'none' (no frame) is now the plain User ring.
+  const frameInput = pick('frame') === 'none' ? USER_FRAME : pick('frame')
+  const frame = FRAME_CHOICES.includes(frameInput) ? frameInput : null
   const headline =
     typeof pick('headline') === 'string'
       ? pick('headline').trim().slice(0, PROFILE_HEADLINE_MAX)

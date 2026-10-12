@@ -6,7 +6,6 @@ import type { PublicProfile } from '@/types/profile'
 
 const getPublicProfile = vi.fn()
 const updateSettings = vi.fn()
-const setFeaturedBadge = vi.fn()
 const updateProfile = vi.fn()
 const reorderFavorites = vi.fn()
 const listPosts = vi.fn()
@@ -27,7 +26,6 @@ vi.mock('@/services/api', async (importOriginal) => {
       ...actual.profileAPI,
       getPublicProfile: (...args: unknown[]) => getPublicProfile(...args),
       updateSettings: (...args: unknown[]) => updateSettings(...args),
-      setFeaturedBadge: (...args: unknown[]) => setFeaturedBadge(...args),
       reorderFavorites: (...args: unknown[]) => reorderFavorites(...args),
     },
     forumAPI: {
@@ -58,16 +56,14 @@ vi.mock('@/stores/auth', () => ({
 
 const badges = vi.hoisted(() => ({
   held: [] as string[],
-  featured: null as string | null,
-  choice: null as string | null,
 }))
 
 vi.mock('@/stores/badges', () => ({
   useBadgesStore: () => ({
     load: () => Promise.resolve(),
     badgesFor: () => badges.held,
-    featuredFor: () => badges.featured,
-    choiceFor: () => badges.choice,
+    frameFor: () => 'user',
+    accentFor: () => null,
   }),
 }))
 
@@ -521,43 +517,19 @@ describe('Profile', () => {
     expect(wrapper.find('[data-testid="picture-input"]').exists()).toBe(false)
   })
 
-  it('lists badges under the name for visitors, without the emblem picker', async () => {
-    Object.assign(badges, { held: ['admin', 'artist'], featured: 'artist', choice: 'artist' })
+  it('lists badges under the name for visitors, without the frame picker', async () => {
+    Object.assign(badges, { held: ['admin', 'artist'] })
     getPublicProfile.mockResolvedValue({ data: { data: buildProfile() } })
     const { wrapper } = await mountAt('/u/mika')
 
     const section = wrapper.get('[data-testid="profile-badges"]')
     expect(section.findAll('.badge-name').map((name) => name.text())).toEqual(['Admin', 'Artist'])
-    expect(section.find('.badge-card.featured').text()).toContain('Artist')
-    expect(section.find('[data-testid="emblem-picker"]').exists()).toBe(false)
-    Object.assign(badges, { held: [], featured: null, choice: null })
-  })
-
-  it('lets the owner pick the badge next to their name from Customize', async () => {
-    Object.assign(badges, { held: ['admin', 'artist'], featured: 'admin', choice: null })
-    setFeaturedBadge.mockResolvedValue({ data: { data: {} } })
-    updateSettings.mockResolvedValue({
-      data: { data: { settings: buildProfile().settings, bio: '' } },
-    })
-    getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
-    const { wrapper } = await mountAt('/u/mika')
-
-    // Not in the Badges section any more.
-    expect(wrapper.get('[data-testid="profile-badges"]').find('select').exists()).toBe(false)
-
-    await wrapper.get('[data-testid="customize-profile"]').trigger('click')
-    const picker = wrapper.get('[data-testid="emblem-picker"]')
-    const choices = picker.findAll('[role="radio"]')
-    expect(choices.map((choice) => choice.text())).toEqual(['Automatic', 'Admin', 'Artist', 'None'])
-    await choices[2]!.trigger('click')
-    await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
-    await flushPromises()
-    expect(setFeaturedBadge).toHaveBeenCalledWith('artist')
-    Object.assign(badges, { held: [], featured: null, choice: null })
+    expect(wrapper.find('[data-testid="frame-picker"]').exists()).toBe(false)
+    Object.assign(badges, { held: [] })
   })
 
   it('lets the owner pick their avatar frame from Customize', async () => {
-    Object.assign(badges, { held: ['admin', 'artist'], featured: 'admin', choice: null })
+    Object.assign(badges, { held: ['admin', 'artist'] })
     updateSettings.mockResolvedValue({
       data: { data: { settings: { ...buildProfile().settings, frame: 'artist' }, bio: '' } },
     })
@@ -567,10 +539,10 @@ describe('Profile', () => {
     await wrapper.get('[data-testid="customize-profile"]').trigger('click')
     const picker = wrapper.get('[data-testid="frame-picker"]')
     expect(picker.findAll('.frame-label').map((label) => label.text())).toEqual([
-      'Match badge',
+      'Automatic',
       'Admin',
       'Artist',
-      'None',
+      'User',
     ])
     await wrapper.get('[data-testid="frame-artist"]').trigger('click')
     await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
@@ -578,22 +550,23 @@ describe('Profile', () => {
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ settings: expect.objectContaining({ frame: 'artist' }) }),
     )
-    Object.assign(badges, { held: [], featured: null, choice: null })
+    Object.assign(badges, { held: [] })
   })
 
-  it('does not touch the badge when Customize saves without changing it', async () => {
-    Object.assign(badges, { held: ['admin'], featured: 'admin', choice: null })
-    setFeaturedBadge.mockReset()
-    updateSettings.mockResolvedValue({
-      data: { data: { settings: buildProfile().settings, bio: '' } },
+  it('shows a frame whose badge was lost as the User ring', async () => {
+    Object.assign(badges, { held: ['admin'] })
+    getPublicProfile.mockResolvedValue({
+      data: {
+        data: buildProfile({
+          isOwner: true,
+          settings: { ...buildProfile().settings, frame: 'artist' },
+        }),
+      },
     })
-    getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
     const { wrapper } = await mountAt('/u/mika')
     await wrapper.get('[data-testid="customize-profile"]').trigger('click')
-    await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
-    await flushPromises()
-    expect(setFeaturedBadge).not.toHaveBeenCalled()
-    Object.assign(badges, { held: [], featured: null, choice: null })
+    expect(wrapper.get('[data-testid="frame-user"]').attributes('aria-checked')).toBe('true')
+    Object.assign(badges, { held: [] })
   })
 
   it('has no Badges section for people without badges', async () => {
