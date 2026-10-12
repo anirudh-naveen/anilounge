@@ -4,9 +4,9 @@
 
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type { WatchlistStatus } from '@/utils/watchlist'
-import type { Relationship } from '@/types/social'
+import type { PublicUser, Relationship } from '@/types/social'
 
-export type ProfileTab = 'favorites' | 'watchlist' | 'stats' | 'forum'
+export type ProfileTab = 'favorites' | 'watchlist' | 'stats' | 'forum' | 'friends'
 export type ProfilePresetAccent = 'coral' | 'teal' | 'violet' | 'gold' | 'rose' | 'sky'
 /** A preset name, or a custom `#rrggbb` color from the color wheel. */
 export type ProfileAccent = ProfilePresetAccent | `#${string}`
@@ -82,7 +82,7 @@ export interface PublicProfile {
   blocked?: boolean
   /** Whether the signed-in visitor can message this user (friends, or the support bot). */
   canMessage?: boolean
-  /** A bot account (Lounge Keeper / Lounge Cleaner): no friending or blocking. */
+  /** A bot account (Lounge Keeper / Cleaner / Guide): no friending or blocking, fixed tabs. */
   isBot?: boolean
   /** Tabs in display order; hidden tabs are included only for the owner. The Forum
    * tab loads its posts and comments separately (see ProfileForum.vue). */
@@ -95,4 +95,6 @@ export interface PublicProfile {
   } | null
   watchlist: PublicWatchlistEntry[] | null
   stats: ProfileStats | null
+  /** The owner's friends (Friends tab), alphabetical; null when the tab is hidden. */
+  friends?: Array<{ user: PublicUser; since: string }> | null
 }

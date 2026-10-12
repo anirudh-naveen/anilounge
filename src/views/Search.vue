@@ -51,6 +51,16 @@
               :placeholder="browseType === 'tv' ? 'Search for series...' : 'Search for movies...'"
             />
             <button
+              v-if="showReset"
+              type="button"
+              class="search-btn"
+              data-testid="search-submit"
+              @click="clearSearch"
+            >
+              Reset
+            </button>
+            <button
+              v-else
               type="submit"
               class="search-btn"
               data-testid="search-submit"
@@ -251,10 +261,6 @@
                 {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
               <AiringBadge :content="item" variant="card" />
-              <FavoriteHeart
-                v-if="!(item as any).source && !isCatalogEntity(item)"
-                :content-id="item._id"
-              />
             </div>
             <div class="result-info">
               <h3 class="result-title">{{ getDisplayTitle(item) }}</h3>
@@ -301,7 +307,21 @@
 
       <!-- Title: Empty State -->
       <div v-else-if="hasSearched && filteredResults.length === 0" class="no-results">
-        <div class="no-results-icon">🔍</div>
+        <svg
+          class="no-results-icon"
+          viewBox="0 0 24 24"
+          width="56"
+          height="56"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="m15.5 15.5 5 5" />
+        </svg>
         <h3>No Results Found</h3>
         <p>Try adjusting your search terms or filters.</p>
         <button @click="clearSearch" class="btn btn-primary">Clear Search</button>
@@ -336,6 +356,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
 import { useContentStore, defaultSearchFilters, hasActiveSearchFilters } from '@/stores/content'
+import type { SearchFilters } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import {
   getPosterUrl,
@@ -377,7 +398,6 @@ import {
   normalizeBrowseType,
   type BrowseContentType,
 } from '@/utils/catalogTabs'
-import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -507,6 +527,20 @@ const paginatedResults = computed(() => {
 
 const canSearch = computed(
   () => Boolean(searchQuery.value.trim()) || hasActiveSearchFilters(filters.value),
+)
+
+/**
+ * After a search, while the query and filters still match what was searched, the
+ * Search button turns into Reset (back to the browse highlights).
+ */
+const showReset = computed(
+  () =>
+    hasSearched.value &&
+    !contentStore.isLoading &&
+    searchQuery.value === contentStore.lastSearchQuery &&
+    (Object.keys(filters.value) as (keyof SearchFilters)[]).every(
+      (key) => filters.value[key] === appliedFilters.value[key],
+    ),
 )
 
 const yearFilterOptions = computed(() => buildYearFilterOptions(contentStore.allContent))
@@ -1245,6 +1279,14 @@ usePageMeta({
 .initial-icon {
   font-size: 3rem;
   margin-bottom: 1rem;
+}
+
+.no-results-icon {
+  color: var(--coral-primary);
+}
+
+.no-results p {
+  margin-bottom: 1.5rem;
 }
 
 .btn {

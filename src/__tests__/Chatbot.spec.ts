@@ -4,6 +4,9 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import Chatbot from '@/components/Chatbot.vue'
 import { aiAPI } from '@/services/api'
 
+const auth = { isAuthenticated: true }
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
+
 vi.mock('@/services/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/api')>()
   return {
@@ -32,6 +35,8 @@ const mountChat = async () => {
     history: createMemoryHistory(),
     routes: [
       { path: '/search', name: 'search', component: { template: '<div />' } },
+      { path: '/login', component: { template: '<div />' } },
+      { path: '/register', component: { template: '<div />' } },
       {
         path: '/movie/:id',
         name: 'MovieDetails',
@@ -63,6 +68,19 @@ const mountChat = async () => {
 describe('Chatbot', () => {
   beforeEach(() => {
     vi.mocked(aiAPI.chat).mockReset()
+    auth.isAuthenticated = true
+  })
+
+  it('asks signed-out visitors to log in instead of chatting', async () => {
+    auth.isAuthenticated = false
+    const { wrapper } = await mountChat()
+    expect(wrapper.find('[data-testid="chat-locked"]').text()).toContain(
+      'Sign in to chat with Lounge Guide',
+    )
+    expect(wrapper.find('[data-testid="chat-input"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="chat-login"]').attributes('href')).toBe(
+      '/login?redirect=/search',
+    )
   })
 
   it('renders catalog cards from /ai/chat and emits them for Search', async () => {

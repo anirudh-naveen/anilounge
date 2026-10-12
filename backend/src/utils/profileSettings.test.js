@@ -21,17 +21,17 @@ describe('normalizeProfileSettings', () => {
     })
     assert.equal(settings.accent, 'coral')
     assert.equal(settings.headline.length, 80)
-    assert.deepEqual(settings.tabOrder, ['stats', 'favorites', 'watchlist', 'forum'])
+    assert.deepEqual(settings.tabOrder, ['stats', 'favorites', 'watchlist', 'forum', 'friends'])
     assert.deepEqual(settings.hiddenTabs, [])
   })
 
   it('keeps one tab visible and moves the default tab off hidden tabs', () => {
     const settings = normalizeProfileSettings({
-      hiddenTabs: ['favorites', 'watchlist', 'stats', 'forum'],
+      hiddenTabs: ['favorites', 'watchlist', 'stats', 'forum', 'friends'],
       defaultTab: 'favorites',
     })
-    assert.deepEqual(settings.hiddenTabs, ['favorites', 'watchlist', 'stats'])
-    assert.equal(settings.defaultTab, 'forum')
+    assert.deepEqual(settings.hiddenTabs, ['favorites', 'watchlist', 'stats', 'forum'])
+    assert.equal(settings.defaultTab, 'friends')
   })
 
   it('shows connected accounts unless turned off', () => {
@@ -70,5 +70,14 @@ describe('custom accent colors', () => {
     assert.equal(normalizeProfileSettings({ accent: ' #3A7BFF ' }).accent, '#3a7bff')
     assert.equal(normalizeProfileSettings({ accent: '#fff' }).accent, 'coral')
     assert.equal(normalizeProfileSettings({ accent: 'url(evil)' }).accent, 'coral')
+  })
+
+  it('shows the Friends tab on profiles saved before it existed', () => {
+    const settings = normalizeProfileSettings({
+      tabOrder: ['favorites', 'watchlist', 'stats', 'forum'],
+      hiddenTabs: ['stats'],
+    })
+    assert.equal(settings.tabOrder.at(-1), 'friends')
+    assert.ok(!settings.hiddenTabs.includes('friends'))
   })
 })

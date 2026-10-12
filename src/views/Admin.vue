@@ -2632,21 +2632,32 @@ onUnmounted(() => {
   border-style: solid;
   border-color: transparent;
   color: #fff;
+  box-shadow: 0 0 10px var(--toggle-glow, transparent);
+}
+
+/* Each badge's gradient and glow (same colors as its emblem). */
+.cosmetic-toggle.on.admin {
+  --toggle-glow: rgba(143, 122, 230, 0.55);
+  background: linear-gradient(135deg, #8f7ae6, #2bbbad);
 }
 
 .cosmetic-toggle.on.developer {
+  --toggle-glow: rgba(16, 185, 129, 0.45);
   background: linear-gradient(135deg, #34d399, #0ea5e9);
 }
 
 .cosmetic-toggle.on.artist {
+  --toggle-glow: rgba(236, 72, 153, 0.45);
   background: linear-gradient(135deg, #f472b6, #a855f7);
 }
 
 .cosmetic-toggle.on.influencer {
+  --toggle-glow: rgba(56, 189, 248, 0.45);
   background: linear-gradient(135deg, #38bdf8, #6366f1);
 }
 
 .cosmetic-toggle.on.supporter {
+  --toggle-glow: rgba(244, 123, 103, 0.45);
   background: linear-gradient(135deg, #f47b67, #e11d48);
 }
 

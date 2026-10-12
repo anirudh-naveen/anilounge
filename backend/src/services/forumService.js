@@ -42,6 +42,7 @@ import { screenText } from './languageWarningService.js'
 import { notify } from './notificationService.js'
 import { resolveReports } from './forumReportService.js'
 import { blockedByViewerSql } from './blockService.js'
+import { grantInfluencerIfEarned } from './badgeService.js'
 
 export const POST_KINDS = ['discussion', 'review', 'guide', 'article', 'megathread']
 /** Kinds people can post; megathreads come from Lounge Keeper. */
@@ -540,6 +541,7 @@ export async function createPost(user, input) {
   })
   const post = postEntry(await loadPost(postId, user), { full: true, viewer: user })
   queuePost(post)
+  await grantInfluencerIfEarned(user)
   return { post, warning: screened.warning }
 }
 
@@ -958,6 +960,7 @@ export async function createComment(user, postId, { body, parentId } = {}) {
   if (parent && !parent.deleted_at && String(parent.user_id) !== String(post.author_id)) {
     await notify(parent.user_id, 'comment_reply', { actorId: user._id, postId: post.id, commentId })
   }
+  await grantInfluencerIfEarned(user)
   return {
     comment: commentEntry(await loadComment(commentId, user), user),
     warning: screened.warning,

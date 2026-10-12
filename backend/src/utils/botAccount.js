@@ -1,5 +1,5 @@
 /**
- * Identities of AniLounge's two bot accounts, shared by the services that act as them
+ * Identities of AniLounge's bot accounts, shared by the services that act as them
  * and the badge service (only these accounts wear the Bot badge).
  *
  * Layer: utils (pure constants). Each bot is found by its email (or a `previousEmails`
@@ -11,8 +11,12 @@
  * - Lounge Cleaner sends moderation notices to inboxes and can message anyone. Its
  *   email is the support mailbox, so staff sign in as it (via password reset) to
  *   contact people.
+ * - Lounge Guide is the face of the AI assistant and the sample user in the signed-out
+ *   home feed. Its email is a plus address on the support mailbox (emails are unique per
+ *   account, and support@ itself is Lounge Cleaner's), so resets still land in support@.
  *
- * Neither can be blocked.
+ * None can be blocked. Each shows only its `profileTabs` on its profile (whatever its
+ * saved settings say), and the bots are all friends with each other.
  */
 
 /** Live-site logo, so the picture loads from every environment. */
@@ -26,6 +30,7 @@ export const LOUNGE_KEEPER = Object.freeze({
   previousEmails: ['release-bot@anilounge.invalid'],
   bio: 'I post site news and open a discussion megathread whenever a new episode or movie comes out.',
   profilePicture: BOT_PICTURE,
+  profileTabs: ['watchlist', 'forum', 'friends'],
 })
 
 export const LOUNGE_CLEANER = Object.freeze({
@@ -35,9 +40,20 @@ export const LOUNGE_CLEANER = Object.freeze({
   previousEmails: [],
   bio: 'I keep the lounge tidy: moderation notices come from me. Message me if you need help.',
   profilePicture: BOT_PICTURE,
+  profileTabs: ['forum', 'friends'],
 })
 
-export const BOTS = [LOUNGE_KEEPER, LOUNGE_CLEANER]
+export const LOUNGE_GUIDE = Object.freeze({
+  key: 'guide',
+  username: 'Lounge Guide',
+  email: 'support+guide@anilounge.net',
+  previousEmails: [],
+  bio: "I'm the AniLounge AI assistant. Ask me for recommendations, studios, voice actors, or genres from the search page.",
+  profilePicture: BOT_PICTURE,
+  profileTabs: ['friends'],
+})
+
+export const BOTS = [LOUNGE_KEEPER, LOUNGE_CLEANER, LOUNGE_GUIDE]
 /** Current and previous bot emails (a not-yet-moved account still counts as a bot). */
 export const BOT_EMAILS = BOTS.flatMap((bot) => [bot.email, ...bot.previousEmails])
 
@@ -46,3 +62,13 @@ export const BOT_EMAILS = BOTS.flatMap((bot) => [bot.email, ...bot.previousEmail
  * @returns {boolean}
  */
 export const isBotEmail = (email) => BOT_EMAILS.includes(String(email || '').toLowerCase())
+
+/**
+ * The bot with this email (current or previous), or null.
+ * @param {string | null | undefined} email
+ * @returns {typeof LOUNGE_KEEPER | null}
+ */
+export const botForEmail = (email) => {
+  const address = String(email || '').toLowerCase()
+  return BOTS.find((bot) => bot.email === address || bot.previousEmails.includes(address)) || null
+}

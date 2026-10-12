@@ -207,7 +207,8 @@
         >
           <div v-if="!hasAnyFavorites" class="empty-panel">
             <p v-if="profile.isOwner">
-              Hover a poster and tap the heart to start collecting favorites.
+              Tap Favorite on a title's page, or the heart on your watchlist, to start collecting
+              favorites.
             </p>
             <p v-else>No favorites yet.</p>
           </div>
@@ -275,7 +276,7 @@
             <div
               class="favorite-grid"
               :class="{
-                'entity-grid': group.key !== 'content',
+                'entity-grid': !isTitleGroup(group.key),
                 reordering: reordering === group.key,
               }"
             >
@@ -293,8 +294,9 @@
                 @dragover="onDragOver(index, $event)"
                 @dragend="dragIndex = null"
               >
+                <span class="slot-rank-badge" data-testid="favorite-rank">#{{ index + 1 }}</span>
                 <div
-                  v-if="group.key === 'content'"
+                  v-if="isTitleGroup(group.key)"
                   class="favorite-title-card"
                   @click="reordering !== group.key && openContent(asTitle(item))"
                 >
@@ -304,7 +306,6 @@
                       :alt="getDisplayTitle(asTitle(item))"
                       @error="handleImageError"
                     />
-                    <FavoriteHeart v-if="reordering !== group.key" :content-id="item._id" />
                   </div>
                   <span class="card-title">{{ getDisplayTitle(asTitle(item)) }}</span>
                   <span class="card-meta">{{
@@ -331,7 +332,6 @@
                 </button>
 
                 <div v-if="reordering === group.key" class="slot-controls">
-                  <span class="slot-rank">{{ index + 1 }}</span>
                   <button
                     type="button"
                     class="slot-move"
@@ -405,7 +405,6 @@
                 <span class="status-tag" :class="`status-${entry.status}`">
                   {{ getWatchlistStatusLabel(entry.status) }}
                 </span>
-                <FavoriteHeart :content-id="entry.content._id" />
               </div>
               <span class="card-title">{{ getDisplayTitle(entry.content) }}</span>
               <span class="card-meta">
@@ -581,6 +580,41 @@
         <!-- Title: Forum Tab -->
         <section v-else-if="activeTab === 'forum'" class="tab-panel" data-testid="panel-forum">
           <ProfileForum :username="profile.user.username" />
+        </section>
+
+        <!-- Title: Friends Tab -->
+        <section
+          v-else-if="activeTab === 'friends' && profile.friends"
+          class="tab-panel"
+          data-testid="panel-friends"
+        >
+          <ul v-if="profile.friends.length" class="friends-grid">
+            <li v-for="friend in profile.friends" :key="friend.user.id">
+              <router-link
+                :to="{ name: 'publicProfile', params: { username: friend.user.username } }"
+                class="friend-card"
+                data-testid="profile-friend"
+              >
+                <UserAvatar
+                  :src="friend.user.profilePicture"
+                  :name="friend.user.username"
+                  :size="48"
+                />
+                <span class="friend-name">
+                  {{ friend.user.username }}<RoleBadge :username="friend.user.username" />
+                </span>
+              </router-link>
+            </li>
+          </ul>
+          <div v-else class="empty-panel">
+            <p>{{ profile.isOwner ? 'No friends yet.' : 'No friends to show yet.' }}</p>
+            <router-link
+              v-if="profile.isOwner"
+              :to="{ name: 'friends', query: { tab: 'friends' } }"
+              class="btn btn-secondary btn-small"
+              >Find people</router-link
+            >
+          </div>
         </section>
       </template>
     </div>
@@ -775,7 +809,6 @@ import {
 import { getRatingColor, getRatingTextStyle } from '@/utils/ratingColors'
 import { getDisplayTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel, WATCHLIST_STATUS_OPTIONS } from '@/utils/watchlist'
-import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import ListSearch from '@/components/ListSearch.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
@@ -810,6 +843,7 @@ const TAB_LABELS: Record<ProfileTab, string> = {
   watchlist: 'Watchlist',
   stats: 'Stats',
   forum: 'Forum',
+  friends: 'Friends',
 }
 
 const route = useRoute()
@@ -871,7 +905,7 @@ const favoriteGenres = computed(() => profile.value?.user.preferences.favoriteGe
 // ---------------------------------------------------------------------------
 
 const isTab = (value: unknown): value is ProfileTab =>
-  value === 'favorites' || value === 'watchlist' || value === 'stats' || value === 'forum'
+  typeof value === 'string' && value in TAB_LABELS
 
 const loadProfile = async () => {
   if (!username.value) {
@@ -936,8 +970,11 @@ const favoriteTitles = computed(() => {
 /** Favorites shown per category: a ranked top 10 (the server enforces the same cap). */
 const FAVORITES_MAX = 10
 
-type FavoriteKey = 'content' | 'characters' | 'voiceActors' | 'studios'
+type FavoriteKey = 'movies' | 'series' | 'characters' | 'voiceActors' | 'studios'
 type FavoriteItem = UnifiedContent | CatalogEntity
+/** Movies and series are both ranked from `favorites.content`, split by type. */
+const isTitleGroup = (key: FavoriteKey) => key === 'movies' || key === 'series'
+const sourceKey = (key: FavoriteKey) => (isTitleGroup(key) ? 'content' : key)
 interface FavoriteGroup {
   key: FavoriteKey
   label: string
@@ -948,7 +985,16 @@ const favoriteGroups = computed<FavoriteGroup[]>(() => {
   const favorites = profile.value?.favorites
   if (!favorites) return []
   const groups: FavoriteGroup[] = [
-    { key: 'content', label: 'Titles', items: favoriteTitles.value },
+    {
+      key: 'movies',
+      label: 'Movies',
+      items: favoriteTitles.value.filter((item) => item.contentType === 'movie'),
+    },
+    {
+      key: 'series',
+      label: 'Series',
+      items: favoriteTitles.value.filter((item) => item.contentType !== 'movie'),
+    },
     { key: 'characters', label: 'Characters', items: favorites.characters },
     { key: 'voiceActors', label: 'Voice Actors', items: favorites.voiceActors },
     { key: 'studios', label: 'Studios', items: favorites.studios },
@@ -1018,16 +1064,17 @@ const saveOrder = async (key: FavoriteKey) => {
   if (!favorites) return
   // Titles un-hearted on this page are already gone server-side; leave them out.
   const ids = orderDraft.value.filter(
-    (id) => key !== 'content' || !favoritesStore.isLoaded || favoritesStore.isFavorite(id),
+    (id) => !isTitleGroup(key) || !favoritesStore.isLoaded || favoritesStore.isFavorite(id),
   )
   savingOrder.value = true
   try {
     await profileAPI.reorderFavorites(ids)
-    const list = favorites[key] as FavoriteItem[]
+    const source = sourceKey(key)
+    const list = favorites[source] as FavoriteItem[]
     const byId = new Map(list.map((item) => [item._id, item]))
     const ordered = ids.map((id) => byId.get(id)).filter((item) => item !== undefined)
     const rest = list.filter((item) => !ids.includes(item._id))
-    ;(favorites[key] as FavoriteItem[]) = [...ordered, ...rest]
+    ;(favorites[source] as FavoriteItem[]) = [...ordered, ...rest]
     cancelReorder()
     toast.success('Favorites reordered')
   } catch (error) {
@@ -1435,6 +1482,13 @@ const handleImageError = showPosterPlaceholder
   box-shadow: var(--shadow-md);
 }
 
+/* A badge ring keeps its glow alongside the card shadow. */
+.profile-picture.ringed {
+  box-shadow:
+    var(--shadow-md),
+    0 0 18px var(--ring-glow);
+}
+
 .hero-info {
   flex: 1;
   min-width: 0;
@@ -1747,6 +1801,40 @@ const handleImageError = showPosterPlaceholder
   gap: 2rem;
 }
 
+.friends-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.friend-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.friend-card:hover {
+  border-color: var(--profile-accent);
+}
+
+.friend-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .empty-panel {
   display: flex;
   flex-direction: column;
@@ -1801,6 +1889,7 @@ const handleImageError = showPosterPlaceholder
 }
 
 .favorite-slot {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -1828,14 +1917,27 @@ const handleImageError = showPosterPlaceholder
 .slot-controls {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.25rem;
 }
 
-.slot-rank {
-  margin-right: auto;
-  font-size: 0.8rem;
+/* The slot's place in the ranking, over the card's top-left corner. */
+.slot-rank-badge {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 2;
+  min-width: 1.6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(10, 14, 24, 0.78);
+  box-shadow: 0 0 0 1px var(--profile-accent, var(--coral-primary));
+  color: #fff;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: var(--profile-accent);
+  line-height: 1.3;
+  text-align: center;
+  pointer-events: none;
 }
 
 .slot-move {

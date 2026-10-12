@@ -10,6 +10,7 @@ import { ref, computed } from 'vue'
 import { contentAPI, entityAPI, watchlistAPI, matchesContentTypeFilter } from '@/services/api'
 import type { WatchlistData, WatchlistItem } from '@/types'
 import type { WatchlistStatus } from '@/utils/watchlist'
+import { isBacklogSave } from '@/composables/useBacklogMode'
 import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
 import { getSearchableTitles } from '@/utils/titles'
@@ -448,7 +449,8 @@ export const useContentStore = defineStore('content', () => {
   }
 
   /**
-   * Adds an item to the watchlist, then force-reloads the list.
+   * Adds an item to the watchlist, then force-reloads the list. In backlog mode the save
+   * is flagged so it doesn't count toward today's watch time.
    * @param contentId - Mongo content id.
    * @param status - Watch status (default `plan_to_watch`).
    * @param rating - Optional user rating.
@@ -476,6 +478,7 @@ export const useContentStore = defineStore('content', () => {
         currentSeason,
         notes,
         ...details,
+        ...(isBacklogSave() ? { backlog: true } : {}),
       })
 
       if (response.data.success) {
@@ -493,7 +496,8 @@ export const useContentStore = defineStore('content', () => {
   }
 
   /**
-   * Patches one watchlist row in place instead of reloading the whole list.
+   * Patches one watchlist row in place instead of reloading the whole list (flagged as a
+   * backlog save in backlog mode).
    * `item.content` may be a populated document or a bare id string.
    * @param contentId - Mongo content id.
    * @param updates - Fields to merge onto the existing item.
@@ -501,7 +505,10 @@ export const useContentStore = defineStore('content', () => {
    */
   const updateWatchlistItem = async (contentId: string, updates: Partial<WatchlistItem>) => {
     try {
-      const response = await watchlistAPI.updateWatchlistItem(contentId, updates)
+      const response = await watchlistAPI.updateWatchlistItem(contentId, {
+        ...updates,
+        ...(isBacklogSave() ? { backlog: true } : {}),
+      })
 
       if (response.data.success) {
         const itemIndex = watchlist.value.findIndex(

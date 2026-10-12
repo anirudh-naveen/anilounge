@@ -263,10 +263,59 @@ describe('Profile', () => {
     getPublicProfile.mockResolvedValue({ data: { data: profile } })
     const { wrapper } = await mountAt('/profile')
 
-    const group = wrapper.get('[data-testid="favorites-content"]')
+    const group = wrapper.get('[data-testid="favorites-series"]')
     expect(group.findAll('[data-testid="favorite-slot"]')).toHaveLength(10)
     expect(group.text()).toContain('12/10')
     expect(group.text()).toContain("2 more over the top-10 limit aren't shown")
+  })
+
+  it('ranks movies above series, each with its own numbered top 10', async () => {
+    const profile = buildProfile({ isOwner: true })
+    profile.favorites!.content = [
+      { _id: 's1', title: 'Gurren Lagann', overview: '', contentType: 'tv', genres: [] },
+      { _id: 'm1', title: 'Spirited Away', overview: '', contentType: 'movie', genres: [] },
+      { _id: 's2', title: 'Frieren', overview: '', contentType: 'tv', genres: [] },
+    ]
+    getPublicProfile.mockResolvedValue({ data: { data: profile } })
+    const { wrapper } = await mountAt('/profile')
+
+    const html = wrapper.html()
+    expect(html.indexOf('favorites-movies')).toBeLessThan(html.indexOf('favorites-series'))
+    const movies = wrapper.get('[data-testid="favorites-movies"]')
+    expect(movies.text()).toContain('1/10')
+    const series = wrapper.get('[data-testid="favorites-series"]')
+    expect(series.findAll('[data-testid="favorite-rank"]').map((rank) => rank.text())).toEqual([
+      '#1',
+      '#2',
+    ])
+    expect(series.text()).toContain('Frieren')
+    expect(series.text()).not.toContain('Spirited Away')
+  })
+
+  it('reorders series without touching movies', async () => {
+    const profile = buildProfile({ isOwner: true })
+    profile.favorites!.content = [
+      { _id: 's1', title: 'Gurren Lagann', overview: '', contentType: 'tv', genres: [] },
+      { _id: 'm1', title: 'Spirited Away', overview: '', contentType: 'movie', genres: [] },
+      { _id: 's2', title: 'Frieren', overview: '', contentType: 'tv', genres: [] },
+    ]
+    getPublicProfile.mockResolvedValue({ data: { data: profile } })
+    reorderFavorites.mockResolvedValue({ data: { data: ['s2', 's1'] } })
+    const { wrapper } = await mountAt('/profile')
+
+    await wrapper.get('[data-testid="favorites-reorder-series"]').trigger('click')
+    await wrapper.get('[aria-label="Move Frieren earlier"]').trigger('click')
+    await wrapper.get('[data-testid="favorites-save-order"]').trigger('click')
+    await flushPromises()
+
+    expect(reorderFavorites).toHaveBeenCalledWith(['s2', 's1'])
+    const titles = (testid: string) =>
+      wrapper
+        .get(`[data-testid="${testid}"]`)
+        .findAll('[data-testid="favorite-slot"] .card-title')
+        .map((title) => title.text())
+    expect(titles('favorites-series')).toEqual(['Frieren', 'Gurren Lagann'])
+    expect(titles('favorites-movies')).toEqual(['Spirited Away'])
   })
 
   it('lets the owner reorder a category and saves it', async () => {
@@ -290,6 +339,25 @@ describe('Profile', () => {
       .findAll('[data-testid="favorite-slot"] .card-title')
       .map((title) => title.text())
     expect(names).toEqual(['Simon', 'Kamina'])
+  })
+
+  it('lists friends on the Friends tab, linking to their profiles', async () => {
+    getPublicProfile.mockResolvedValue({
+      data: {
+        data: buildProfile({
+          tabs: ['favorites', 'friends'],
+          friends: [
+            { user: { id: 'u2', username: 'kai', profilePicture: null }, since: '2026-10-01' },
+            { user: { id: 'u3', username: 'mika', profilePicture: null }, since: '2026-10-02' },
+          ],
+        }),
+      },
+    })
+    const { wrapper } = await mountAt('/u/mika?tab=friends')
+
+    const friends = wrapper.findAll('[data-testid="profile-friend"]')
+    expect(friends.map((friend) => friend.get('.friend-name').text())).toEqual(['kai', 'mika'])
+    expect(friends[0]!.attributes('href')).toBe('/u/kai')
   })
 
   it("shows the user's forum posts and comments on the Forum tab", async () => {

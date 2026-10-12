@@ -3,7 +3,7 @@
   Home.vue — personal landing view.
 
   A status feed of the viewer's and friends' watchlist changes (or a sign-up
-  prompt for guests), a release sidebar for watchlist titles that falls back
+  prompt for guests, followed by trending series and movie rails), a release sidebar for watchlist titles that falls back
   to trending releases, the character of the day, and forum highlights (picked
   from the watchlist when signed in; the pick refreshes every few hours).
   Guests also get a "Join the Community" pop-up (`JoinPrompt`), and everyone a Ko-fi
@@ -70,7 +70,7 @@
                 <span class="preview-poster" aria-hidden="true">{{ example.title.charAt(0) }}</span>
                 <div class="activity-body">
                   <p class="activity-text">
-                    <span class="activity-user">iMaji</span>
+                    <span class="activity-user">Lounge Guide</span>
                     {{ example.action }}
                     <span class="activity-title">{{ example.title }}</span>
                   </p>
@@ -146,6 +146,29 @@
               Find something to watch
             </router-link>
           </div>
+        </section>
+
+        <!-- Trending (guests) -->
+        <section
+          v-if="!authStore.isAuthenticated"
+          class="panel trending-panel"
+          data-testid="home-trending"
+        >
+          <header class="panel-header stacked">
+            <h2 class="panel-title">Currently Trending</h2>
+            <p class="panel-sub">What the lounge is watching right now.</p>
+          </header>
+          <ContentRail
+            v-for="rail in TRENDING_RAILS"
+            :key="rail.type"
+            :rail-id="`home-${rail.type}`"
+            :title="rail.title"
+            :items="trending[rail.type]"
+            :loading="trendingLoading"
+            :view-all="catalogPath(rail.type, 'popular', 1)"
+            :empty-text="rail.empty"
+            @select="openTitle"
+          />
         </section>
 
         <!-- Character of the day -->
@@ -308,17 +331,20 @@
 <script setup lang="ts">
 import { showPosterPlaceholder } from '@/utils/posters'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import ImportReminder from '@/components/ImportReminder.vue'
+import ContentRail from '@/components/ContentRail.vue'
 import ForumPostCard from '@/components/ForumPostCard.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
 import ListSyncNote from '@/components/ListSyncNote.vue'
 import SupportCard from '@/components/SupportCard.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
 import { absoluteUrl } from '@/utils/pageMeta'
-import { forumAPI, getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
+import { contentAPI, forumAPI, getDetailsRouteName, getPosterUrl, homeAPI } from '@/services/api'
 import type { HomeForum } from '@/types/forum'
-import type { CatalogEntity, EntityAppearance } from '@/types/content'
+import type { CatalogEntity, EntityAppearance, UnifiedContent } from '@/types/content'
+import { catalogPath } from '@/utils/catalogTabs'
 import type { ActivityFeed, ReleaseUpdate, ReleaseUpdates } from '@/types/home'
 import { getDisplayTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel, type WatchlistStatus } from '@/utils/watchlist'
@@ -341,7 +367,7 @@ const FEED_TABS: { value: FeedTab; label: string }[] = [
   { value: 'friends', label: 'Friends' },
 ]
 
-/** Sample feed (from iMaji's account) shown to signed-out visitors beside the sign-up copy. */
+/** Sample feed (as the Lounge Guide bot) shown to signed-out visitors beside the sign-up copy. */
 const EXAMPLE_ACTIVITY: {
   action: string
   title: string
@@ -359,7 +385,15 @@ const EXAMPLE_ACTIVITY: {
   },
 ]
 
+/** Guest-only rails under Status: the catalog's Currently Trending lists. */
+const TRENDING_RAILS = [
+  { type: 'tv', title: 'Series', empty: 'No trending series right now.' },
+  { type: 'movie', title: 'Movies', empty: 'No trending movies right now.' },
+] as const
+const TRENDING_LIMIT = 16
+
 const authStore = useAuthStore()
+const router = useRouter()
 
 const now = ref(new Date())
 let clock: ReturnType<typeof setInterval> | undefined
@@ -370,6 +404,9 @@ const activityLoading = ref(false)
 
 const updates = ref<ReleaseUpdates>({ source: 'trending', items: [] })
 const updatesLoading = ref(true)
+
+const trending = ref<Record<'tv' | 'movie', UnifiedContent[]>>({ tv: [], movie: [] })
+const trendingLoading = ref(false)
 
 const character = ref<CatalogEntity | null>(null)
 const characterLoading = ref(true)
@@ -401,9 +438,8 @@ const emptyActivityCopy = computed(() => {
 const updatesTitle = computed(() => (updates.value.source === 'watchlist' ? 'Updates' : 'Trending'))
 
 const updatesSubtitle = computed(() => {
-  if (updates.value.source === 'watchlist')
-    return 'New episodes and upcoming titles from your list.'
-  if (authStore.isAuthenticated) return "Nothing new on your watchlist, so here's what's trending."
+  if (updates.value.source === 'watchlist') return 'New and upcoming from your list.'
+  if (authStore.isAuthenticated) return 'Trending while your list is quiet.'
   return "What's airing and premiering soon."
 })
 
@@ -449,6 +485,8 @@ const titleRoute = (content: { _id: string; contentType?: string }) => ({
 
 const handlePosterError = showPosterPlaceholder
 
+const openTitle = (content: UnifiedContent) => router.push(titleRoute(content))
+
 const handlePortraitError = (event: Event) => {
   ;(event.target as HTMLImageElement).style.visibility = 'hidden'
 }
@@ -474,6 +512,28 @@ const loadUpdates = async () => {
     console.error('Error loading release updates:', error)
   } finally {
     updatesLoading.value = false
+  }
+}
+
+const loadTrending = async () => {
+  if (authStore.isAuthenticated) return
+  trendingLoading.value = true
+  try {
+    const [tv, movie] = await Promise.all(
+      TRENDING_RAILS.map(async (rail) => {
+        const response = await contentAPI.getContent({
+          page: 1,
+          limit: TRENDING_LIMIT,
+          type: rail.type,
+        })
+        return response.data.success ? (response.data.data as UnifiedContent[]) : []
+      }),
+    )
+    trending.value = { tv: tv || [], movie: movie || [] }
+  } catch (error) {
+    console.error('Error loading trending titles:', error)
+  } finally {
+    trendingLoading.value = false
   }
 }
 
@@ -506,6 +566,7 @@ onMounted(() => {
   }, 60 * 1000)
   loadActivity()
   loadUpdates()
+  loadTrending()
   loadCharacter()
   loadForum()
 })
@@ -514,15 +575,17 @@ onUnmounted(() => {
   if (clock) clearInterval(clock)
 })
 
+// Same title and description as the server-rendered page (backend seoService.js).
 usePageMeta(() => ({
-  title: 'Home',
+  title: 'Discover, track, and discuss animation',
   description:
-    "Find new animated series and films, track everything you've watched, and talk about it with fans around the world.",
+    "Welcome to the Animation Lounge. Discover animated series and films, track what you've watched, and talk animation with fans around the world.",
   path: '/',
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'AniLounge',
+    alternateName: 'Animation Lounge',
     url: absoluteUrl('/'),
   },
 }))
@@ -906,6 +969,11 @@ usePageMeta(() => ({
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+/* Trending (guests) */
+.trending-panel :deep(.content-rail:last-child) {
+  margin-bottom: 0;
 }
 
 /* Character of the day */

@@ -16,7 +16,7 @@ const titles: Record<string, object> = {
     title: 'Naruto',
     overview: 'A ninja story.',
     contentType: 'tv',
-    genres: [],
+    genres: [{ name: 'Action' }],
     franchise: 'Naruto',
     franchiseId: 'naruto-franchise',
     seasons: [
@@ -43,6 +43,24 @@ const titles: Record<string, object> = {
     genres: [],
     series: { _id: 'naruto', title: 'Naruto' },
     seasonLabel: 'Season 2',
+  },
+  doraemon: {
+    _id: 'doraemon',
+    title: 'Doraemon',
+    overview: 'A robotic cat from the future.',
+    contentType: 'tv',
+    genres: [{ name: 'Comedy' }],
+    seasonCount: 1,
+    episodeCount: 1464,
+    seasons: [{ _id: 'd-s1', title: 'Doraemon Season 1', label: 'Season 1', seasonNumber: 1 }],
+  },
+  'd-s1': {
+    _id: 'd-s1',
+    title: 'Doraemon Season 1',
+    contentType: 'season',
+    genres: [],
+    series: { _id: 'doraemon', title: 'Doraemon' },
+    seasonLabel: 'Season 1',
   },
   'aot-s3': {
     _id: 'aot-s3',
@@ -93,19 +111,28 @@ const characterList = [
   { _id: 'char-sasuke', entityType: 'character', name: 'Sasuke Uchiha', appearances: [] },
 ]
 
+const doraemonGuide = {
+  episodes: [episode(1, 'The Future Arrives')],
+  seasons: [season(1, 'd-s1')],
+  seriesId: 'doraemon',
+  currentSeason: null,
+}
+
 const getContentEpisodes = vi.fn((id: string) =>
   id.startsWith('n')
     ? Promise.resolve({ data: { data: narutoGuide } })
-    : Promise.resolve({
-        data: {
+    : id.startsWith('d')
+      ? Promise.resolve({ data: { data: doraemonGuide } })
+      : Promise.resolve({
           data: {
-            episodes: [episode(1, 'Begin'), episode(2, 'Middle'), episode(3, 'Later')],
-            seasons: [season(1, 'aot'), season(2, null, 'Season two plot.'), season(3, 'aot-s3')],
-            seriesId: 'aot',
-            currentSeason: id === 'aot-s3' ? 3 : 1,
+            data: {
+              episodes: [episode(1, 'Begin'), episode(2, 'Middle'), episode(3, 'Later')],
+              seasons: [season(1, 'aot'), season(2, null, 'Season two plot.'), season(3, 'aot-s3')],
+              seriesId: 'aot',
+              currentSeason: id === 'aot-s3' ? 3 : 1,
+            },
           },
-        },
-      }),
+        }),
 )
 
 vi.mock('@/stores/content', () => ({
@@ -157,6 +184,7 @@ const mountPage = async (path: string) => {
       plugins: [router],
       stubs: {
         WatchlistPanel: true,
+        FavoriteHeart: true,
         StudioLinks: true,
         WhereToWatch: true,
         ForumHighlights: true,
@@ -234,6 +262,8 @@ describe('TVShowDetails series', () => {
     const { wrapper, router } = await mountPage('/tv-show/naruto')
     expect(wrapper.get('.show-title').text()).toBe('Naruto Season 1')
     expect(wrapper.text()).toContain('The academy years.')
+    // The season's own title has no genres, so the series' show.
+    expect(wrapper.get('.genres').text()).toBe('Action')
     expect(wrapper.get('[data-testid="season-card-n-s1"]').classes()).toContain('active')
     expect(wrapper.get('[data-testid="franchise"]').text()).toContain('Naruto')
 
@@ -278,5 +308,25 @@ describe('TVShowDetails series', () => {
     await wrapper.get('[data-testid="episode-focus"] button').trigger('click')
     expect(castIds(wrapper)).toEqual(['char-naruto', 'char-sasuke'])
     expect(wrapper.find('[data-testid="episode-focus"]').exists()).toBe(false)
+  })
+})
+
+describe('TVShowDetails single-season series', () => {
+  it('stays on the series without season cards, labels, or a season count', async () => {
+    const { wrapper } = await mountPage('/tv-show/doraemon')
+    expect(wrapper.get('.show-title').text()).toBe('Doraemon')
+    expect(wrapper.text()).toContain('A robotic cat from the future.')
+    expect(wrapper.get('.genres').text()).toBe('Comedy')
+    expect(wrapper.find('[data-testid="series-seasons"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="season-label"]').exists()).toBe(false)
+    expect(wrapper.get('.title-facts').text()).not.toMatch(/season/i)
+    expect(wrapper.text()).toContain('The Future Arrives')
+  })
+
+  it("moves the lone season's own page to its series", async () => {
+    const { wrapper, router } = await mountPage('/tv-show/d-s1')
+    expect(router.currentRoute.value.params.id).toBe('doraemon')
+    expect(wrapper.get('.show-title').text()).toBe('Doraemon')
+    expect(wrapper.find('[data-testid="season-label"]').exists()).toBe(false)
   })
 })
