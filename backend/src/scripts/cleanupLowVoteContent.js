@@ -10,10 +10,12 @@ import dotenv from 'dotenv'
 import { connectPostgres, closePostgres } from '../../config/postgres.js'
 import Content, { catalogStats } from '../models/Content.js'
 import User from '../models/User.js'
+import { WESTERN_MIN_VOTES } from '../services/tmdbImport.js'
 
 dotenv.config()
 
-export const LOW_VOTE_THRESHOLD = 100
+/** Same floor as the western import, so this never deletes what that phase adds. */
+export const LOW_VOTE_THRESHOLD = WESTERN_MIN_VOTES
 
 /**
  * Mongo filter for TMDB-only, unrated, low-vote catalog rows.
