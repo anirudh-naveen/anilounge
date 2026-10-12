@@ -2,7 +2,7 @@
 <!--
   Watchlist.vue — authenticated watchlist view.
 
-  Sort toolbar over collapsible status sections (Watching, On Hold, Planned,
+  Status and type filter chips and a sort toolbar over collapsible status sections (Watching, On Hold, Planned,
   Completed, Dropped), each a compact expandable list of tracked titles. Progress, rating, and status are editable per
   row, and each row has a favorite heart.
 -->
@@ -16,6 +16,15 @@
       </div>
 
       <ImportReminder />
+
+      <!-- Title: Status and Type Filters -->
+      <WatchlistFilters
+        v-if="contentStore.watchlist.length"
+        v-model:status="statusFilter"
+        v-model:type="typeFilter"
+        :rows="filterRows"
+        class="watchlist-filters-bar"
+      />
 
       <!-- Toolbar -->
       <div class="watchlist-toolbar">
@@ -397,7 +406,11 @@
         </section>
 
         <p v-if="!sections.length" class="no-matches" data-testid="watchlist-no-matches">
-          No titles match “{{ searchQuery.trim() }}”.
+          {{
+            searchQuery.trim()
+              ? `No titles match “${searchQuery.trim()}”.`
+              : 'No titles match these filters.'
+          }}
         </p>
       </div>
 
@@ -423,6 +436,7 @@ import {
   getPosterUrl,
   getCardContentTypeDisplay,
   getDetailsRouteName,
+  matchesContentTypeFilter,
   tracksEpisodes,
 } from '@/services/api'
 import { getRatingColor } from '@/utils/ratingColors'
@@ -445,7 +459,9 @@ import {
   WATCHLIST_STATUS_ORDER,
   watchedEpisodes,
   type WatchlistStatus,
+  type WatchlistTypeFilter,
 } from '@/utils/watchlist'
+import WatchlistFilters from '@/components/WatchlistFilters.vue'
 import ImportReminder from '@/components/ImportReminder.vue'
 import ListSearch from '@/components/ListSearch.vue'
 import BacklogModeToggle from '@/components/BacklogModeToggle.vue'
@@ -467,6 +483,8 @@ const isPhone =
     ? window.matchMedia('(max-width: 768px)').matches
     : false
 const searchQuery = ref('')
+const statusFilter = ref<'all' | WatchlistStatus>('all')
+const typeFilter = ref<WatchlistTypeFilter>('all')
 const sortBy = ref<SortByOption>('relevance')
 const sortDirection = ref<SortDirection>('desc')
 /** "Relevance" here is recency: the order titles were last updated. */
@@ -647,11 +665,27 @@ const matchesSearch = (item: WatchlistItem, query: string) => {
   )
 }
 
-/** Non-empty status sections in display order, filtered by search and sorted by the toolbar. */
+const getItemContentType = (item: WatchlistItem) =>
+  typeof item.content === 'string' ? undefined : item.content?.contentType
+
+/** Status and type of every row, for the filter chips' counts. */
+const filterRows = computed(() =>
+  contentStore.watchlist.map((item) => ({
+    status: item.status,
+    contentType: getItemContentType(item),
+  })),
+)
+
+/** Whether a row passes the status and type chips. */
+const matchesFilters = (item: WatchlistItem) =>
+  (statusFilter.value === 'all' || item.status === statusFilter.value) &&
+  matchesContentTypeFilter(getItemContentType(item), typeFilter.value)
+
+/** Non-empty status sections in display order, filtered by the chips and search, sorted by the toolbar. */
 const sections = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   const sorted = applySort(
-    contentStore.watchlist.filter((item) => matchesSearch(item, query)),
+    contentStore.watchlist.filter((item) => matchesFilters(item) && matchesSearch(item, query)),
     sortBy.value,
     sortDirection.value,
     getContentTitle,
@@ -924,6 +958,10 @@ onUnmounted(() => {
 .page-subtitle {
   color: var(--text-secondary);
   font-size: 1.1rem;
+}
+
+.watchlist-filters-bar {
+  margin-bottom: 1rem;
 }
 
 .watchlist-toolbar {

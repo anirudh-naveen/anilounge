@@ -362,18 +362,11 @@
           class="tab-panel"
           data-testid="panel-watchlist"
         >
-          <div class="status-filters">
-            <button
-              v-for="option in statusFilters"
-              :key="option.value"
-              type="button"
-              class="status-chip"
-              :class="{ active: watchlistFilter === option.value }"
-              @click="watchlistFilter = option.value"
-            >
-              {{ option.label }} <span class="chip-count">{{ option.count }}</span>
-            </button>
-          </div>
+          <WatchlistFilters
+            v-model:status="watchlistFilter"
+            v-model:type="watchlistTypeFilter"
+            :rows="watchlistFilterRows"
+          />
 
           <!-- Title: Search and Sort -->
           <div class="watchlist-tools">
@@ -804,11 +797,13 @@ import {
   getContentTypeDisplay,
   getDetailsRouteName,
   getPosterUrl,
+  matchesContentTypeFilter,
   profileAPI,
 } from '@/services/api'
 import { getRatingColor, getRatingTextStyle } from '@/utils/ratingColors'
 import { getDisplayTitle } from '@/utils/titles'
-import { getWatchlistStatusLabel, WATCHLIST_STATUS_OPTIONS } from '@/utils/watchlist'
+import { getWatchlistStatusLabel, type WatchlistTypeFilter } from '@/utils/watchlist'
+import WatchlistFilters from '@/components/WatchlistFilters.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import ListSearch from '@/components/ListSearch.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
@@ -856,6 +851,7 @@ const profile = ref<PublicProfile | null>(null)
 const isLoading = ref(true)
 const activeTab = ref<ProfileTab>('favorites')
 const watchlistFilter = ref<'all' | PublicWatchlistEntry['status']>('all')
+const watchlistTypeFilter = ref<WatchlistTypeFilter>('all')
 const watchlistQuery = ref('')
 const watchlistSortBy = ref<SortByOption>('relevance')
 const watchlistSortDirection = ref<SortDirection>('desc')
@@ -1088,22 +1084,18 @@ const saveOrder = async (key: FavoriteKey) => {
 // Watchlist
 // ---------------------------------------------------------------------------
 
-const statusFilters = computed(() => {
-  const rows = profile.value?.watchlist || []
-  return [
-    { value: 'all' as const, label: 'All', count: rows.length },
-    ...WATCHLIST_STATUS_OPTIONS.map((option) => ({
-      value: option.value,
-      label: option.label,
-      count: rows.filter((row) => row.status === option.value).length,
-    })),
-  ]
-})
+const watchlistFilterRows = computed(() =>
+  (profile.value?.watchlist || []).map((row) => ({
+    status: row.status,
+    contentType: row.content.contentType,
+  })),
+)
 
 const filteredWatchlist = computed(() => {
   const query = watchlistQuery.value.trim().toLowerCase()
   const rows = (profile.value?.watchlist || []).filter((row) => {
     if (watchlistFilter.value !== 'all' && row.status !== watchlistFilter.value) return false
+    if (!matchesContentTypeFilter(row.content.contentType, watchlistTypeFilter.value)) return false
     if (!query) return true
     const { title, englishTitle, originalTitle } = row.content
     return [getDisplayTitle(row.content), title, englishTitle, originalTitle].some((name) =>
@@ -2055,10 +2047,9 @@ const handleImageError = showPosterPlaceholder
 }
 
 /* Watchlist */
-.status-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+.tab-panel :deep(.watchlist-filters) {
+  --filter-accent: var(--profile-accent);
+  --filter-on-accent: var(--profile-on-accent, #fff);
 }
 
 .watchlist-tools {
@@ -2075,31 +2066,6 @@ const handleImageError = showPosterPlaceholder
 
 .watchlist-tools :deep(.sort-by-controls) {
   min-width: 220px;
-}
-
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.85rem;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.status-chip.active {
-  background: var(--profile-accent);
-  border-color: var(--profile-accent);
-  color: var(--profile-on-accent, #fff);
-}
-
-.chip-count {
-  opacity: 0.75;
-  font-weight: 500;
 }
 
 .status-tag {
