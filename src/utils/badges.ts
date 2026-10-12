@@ -36,7 +36,7 @@ export const BADGES: BadgeDef[] = [
   {
     id: 'developer',
     label: 'Developer',
-    description: 'Builds AniLounge.',
+    description: 'Helps build AniLounge.',
     emblem: true,
     grantable: true,
   },
@@ -50,23 +50,21 @@ export const BADGES: BadgeDef[] = [
   {
     id: 'influencer',
     label: 'Influencer',
-    description:
-      'Shares AniLounge with the world. Also earned with 5 forum posts or 10 comments in a week.',
+    description: 'Shares their thoughts with AniLounge.',
     emblem: true,
     grantable: true,
   },
   {
     id: 'supporter',
     label: 'Supporter',
-    description: 'Donated to keep AniLounge running.',
+    description: 'Donates to keep AniLounge running.',
     emblem: true,
     grantable: true,
   },
   {
     id: 'bot',
     label: 'Bot',
-    description:
-      "One of AniLounge's own bots: Lounge Keeper posts news and release threads, Lounge Cleaner handles moderation and support.",
+    description: "One of AniLounge's own mascots.",
     emblem: true,
     grantable: false,
   },
