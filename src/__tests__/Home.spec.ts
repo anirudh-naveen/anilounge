@@ -173,14 +173,17 @@ describe('Home', () => {
     expect(wrapper.find('[data-testid="status-signup"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="status-signup"]').text()).toContain('Sign up')
     expect(getActivity).not.toHaveBeenCalled()
-    expect(wrapper.get('[data-testid="updates-panel"] .panel-title').text()).toBe('Trending')
+    expect(wrapper.get('[data-testid="updates-panel"] .panel-title').text()).toBe('Airing')
   })
 
-  it('shows guests trending series and movies between Status and the character of the day', async () => {
+  it('shows guests trending movies above series between Status and the character of the day', async () => {
     const wrapper = await mountHome()
     const trending = wrapper.get('[data-testid="home-trending"]')
     expect(trending.text()).toContain('Trending tv')
     expect(trending.text()).toContain('Trending movie')
+    expect(trending.text().indexOf('Trending movie')).toBeLessThan(
+      trending.text().indexOf('Trending tv'),
+    )
     const html = wrapper.html()
     const order = ['status-panel', 'home-trending', 'character-of-the-day'].map((id) =>
       html.indexOf(`data-testid="${id}"`),

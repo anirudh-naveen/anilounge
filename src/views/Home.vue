@@ -387,8 +387,8 @@ const EXAMPLE_ACTIVITY: {
 
 /** Guest-only rails under Status: the catalog's Currently Trending lists. */
 const TRENDING_RAILS = [
-  { type: 'tv', title: 'Series', empty: 'No trending series right now.' },
   { type: 'movie', title: 'Movies', empty: 'No trending movies right now.' },
+  { type: 'tv', title: 'Series', empty: 'No trending series right now.' },
 ] as const
 const TRENDING_LIMIT = 16
 
@@ -435,7 +435,10 @@ const emptyActivityCopy = computed(() => {
   return "Your friends haven't updated their watchlists yet."
 })
 
-const updatesTitle = computed(() => (updates.value.source === 'watchlist' ? 'Updates' : 'Trending'))
+const updatesTitle = computed(() => {
+  if (updates.value.source === 'watchlist') return 'Updates'
+  return authStore.isAuthenticated ? 'Trending' : 'Airing'
+})
 
 const updatesSubtitle = computed(() => {
   if (updates.value.source === 'watchlist') return 'New and upcoming from your list.'
@@ -519,17 +522,18 @@ const loadTrending = async () => {
   if (authStore.isAuthenticated) return
   trendingLoading.value = true
   try {
-    const [tv, movie] = await Promise.all(
+    const results = await Promise.all(
       TRENDING_RAILS.map(async (rail) => {
         const response = await contentAPI.getContent({
           page: 1,
           limit: TRENDING_LIMIT,
           type: rail.type,
         })
-        return response.data.success ? (response.data.data as UnifiedContent[]) : []
+        const items = response.data.success ? (response.data.data as UnifiedContent[]) : []
+        return [rail.type, items || []] as const
       }),
     )
-    trending.value = { tv: tv || [], movie: movie || [] }
+    trending.value = { tv: [], movie: [], ...Object.fromEntries(results) }
   } catch (error) {
     console.error('Error loading trending titles:', error)
   } finally {
