@@ -92,6 +92,7 @@ const buildProfile = (overrides: Partial<PublicProfile> = {}): PublicProfile => 
   settings: {
     isPublic: true,
     accent: 'teal',
+    frame: null,
     headline: 'Giant robot fan',
     defaultTab: 'favorites',
     tabOrder: ['favorites', 'watchlist', 'stats'],
