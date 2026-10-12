@@ -186,20 +186,20 @@ class DatabasePopulator {
     console.log('Populating TMDB animated content...')
 
     let processed = 0
-    const pages = Math.ceil(limit / 20) // TMDB discover returns 20 per page
+    const pages = Math.ceil(limit / 40) // a TMDB discover page: 20 movies, then 20 shows
 
     for (let page = 1; page <= pages && processed < limit; page++) {
       try {
         console.log(`Processing TMDB page ${page}/${pages}`)
 
-        const movies = await unifiedContentService.getTmdbAnimatedMovies(page, 10)
+        const movies = await unifiedContentService.getTmdbAnimatedMovies(page)
         for (const movie of movies) {
           if (processed >= limit) break
           await this.saveTmdbContent(movie, 'movie')
           processed++
         }
 
-        const tvShows = await unifiedContentService.getTmdbAnimatedTVShows(page, 10)
+        const tvShows = await unifiedContentService.getTmdbAnimatedTVShows(page)
         for (const tvShow of tvShows) {
           if (processed >= limit) break
           await this.saveTmdbContent(tvShow, 'tv')
@@ -283,9 +283,12 @@ class DatabasePopulator {
    * Upsert a TMDB title: stable tmdbId match first, else fuzzy title merge, else insert.
    * @param {object} tmdbData - Discover list item (id used to fetch details)
    * @param {'movie' | 'tv'} contentType
-   * @returns {Promise<void>}
+   * @param {{ minVoteCount?: number, importDetails?: boolean }} [options] - `minVoteCount`:
+   *   fewest TMDB votes a title needs (default 50); `importDetails: false` leaves a new
+   *   show's seasons to the caller (see `placeNewSeries`).
+   * @returns {Promise<{ outcome: 'added' | 'merged' | 'updated' | 'skipped' | 'failed', contentId?: string }>}
    */
-  async saveTmdbContent(tmdbData, contentType) {
+  async saveTmdbContent(tmdbData, contentType, { minVoteCount, importDetails = true } = {}) {
     try {
       this.stats.totalProcessed++
 
@@ -296,15 +299,19 @@ class DatabasePopulator {
       if (!detailedTmdbData) {
         console.log(`Could not get detailed info for TMDB ${contentType}: ${tmdbData.title}`)
         this.stats.skipped++
-        return
+        return { outcome: 'skipped' }
       }
 
-      const contentData = unifiedContentService.convertTmdbToContent(detailedTmdbData, contentType)
+      const contentData = unifiedContentService.convertTmdbToContent(
+        detailedTmdbData,
+        contentType,
+        minVoteCount == null ? {} : { minVoteCount },
+      )
 
       // convertTmdbToContent returns null when votes are under the ingest threshold
       if (!contentData) {
         this.stats.skipped++
-        return
+        return { outcome: 'skipped' }
       }
 
       // Prefer stable upsert by tmdbId before fuzzy title matching
@@ -315,13 +322,13 @@ class DatabasePopulator {
           // the hourly pass only refreshes what TMDB alone says about it.
           await this.refreshTmdbFields(existingByTmdb, contentData)
           this.stats.updated++
-          return
+          return { outcome: 'updated', contentId: String(existingByTmdb._id) }
         }
         if (existingByTmdb) {
           await this.mergeTmdbIntoExisting(existingByTmdb, contentData)
           this.stats.updated++
           console.log(`Updated TMDB content: ${contentData.title}`)
-          return
+          return { outcome: 'updated', contentId: String(existingByTmdb._id) }
         }
       }
 
@@ -335,8 +342,9 @@ class DatabasePopulator {
           await this.mergeTmdbIntoExisting(existingContent, contentData)
           this.stats.merged++
           console.log(`Merged TMDB data into existing content: ${contentData.title}`)
+          return { outcome: 'merged', contentId: String(existingContent._id) }
         }
-        return
+        return { outcome: 'skipped' }
       }
 
       // AniList knows the MAL entry for an anime TMDB lists under another name.
@@ -353,14 +361,14 @@ class DatabasePopulator {
           [malOwner.seriesId, contentData.tmdbId],
         )
         this.stats.merged++
-        return
+        return { outcome: 'merged', contentId: String(malOwner.seriesId) }
       }
       if (malOwner && !malOwner.tmdbId) {
         await this.mergeTmdbIntoExisting(malOwner, contentData, { save: false })
         await this.mergeAnilistIntoExisting(malOwner, anilistData)
         this.stats.merged++
         console.log(`Merged TMDB data into MAL title via AniList: ${contentData.title}`)
-        return
+        return { outcome: 'merged', contentId: String(malOwner._id) }
       }
 
       contentData.unifiedScore = calculateUnifiedScore(
@@ -394,12 +402,14 @@ class DatabasePopulator {
         const malData = anime ? unifiedContentService.convertMalToContent(anime) : null
         if (malData) await this.mergeMalIntoExisting(newContent, malData)
       }
-      await this.placeNewSeries(newContent)
+      await this.placeNewSeries(newContent, { importDetails })
       this.stats.newAdded++
       console.log(`Added TMDB ${contentType}: ${contentData.title}`)
+      return { outcome: 'added', contentId: String(newContent._id) }
     } catch (error) {
       console.error(`Error saving TMDB content:`, error.message)
       this.stats.errors++
+      return { outcome: 'failed' }
     }
   }
 
