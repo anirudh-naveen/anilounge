@@ -9,10 +9,9 @@
   <div v-if="active && authStore.isAuthenticated" class="backlog-bar" role="status">
     <div class="backlog-content">
       <span class="backlog-badge">Backlog mode</span>
-      <span class="backlog-text">
-        Watchlist saves count toward your total watch time, not today. Add start and finish dates to
-        place them on your calendar.
-      </span>
+      <span class="backlog-text"
+        >Watchlist saves will not count for now towards the date tracking.</span
+      >
       <button
         type="button"
         class="backlog-off"
