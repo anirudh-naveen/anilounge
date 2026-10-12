@@ -19,6 +19,8 @@
 
       <!-- Toolbar -->
       <div class="watchlist-toolbar">
+        <!-- Title: Backlog Mode -->
+        <BacklogModeToggle />
         <!-- Title: Search -->
         <ListSearch
           v-model="searchQuery"
@@ -444,6 +446,7 @@ import {
 } from '@/utils/watchlist'
 import ImportReminder from '@/components/ImportReminder.vue'
 import ListSearch from '@/components/ListSearch.vue'
+import BacklogModeToggle from '@/components/BacklogModeToggle.vue'
 import { usePageTitle } from '@/composables/usePageMeta'
 
 usePageTitle('Watchlist')

@@ -723,6 +723,12 @@ CREATE TABLE IF NOT EXISTS watch_events (
   units       INTEGER NOT NULL CHECK (units > 0),
   PRIMARY KEY (user_id, content_id, watched_on, source)
 );
+-- 'backlog': units saved in backlog mode (titles watched long ago, no dates given). They
+-- count toward the title but the calendar places them on no day; `watched_on` is just
+-- when they were logged.
+ALTER TABLE watch_events DROP CONSTRAINT IF EXISTS watch_events_source_check;
+ALTER TABLE watch_events ADD CONSTRAINT watch_events_source_check
+  CHECK (source IN ('manual', 'import', 'backlog'));
 
 -- Import clashes waiting on the user (services/watchlistImportService.js): titles whose
 -- imported sources disagree, or disagree with the user's watchlist row. `options` holds

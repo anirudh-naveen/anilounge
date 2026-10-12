@@ -259,6 +259,7 @@
         </div>
       </div>
     </header>
+    <BacklogModeBar />
 
     <!-- Page -->
     <!-- Title: Router Outlet -->
@@ -332,6 +333,7 @@ import { useInboxStore } from '@/stores/inbox'
 import { useTheme } from '@/composables/useTheme'
 import { useToast } from 'vue-toastification'
 import BetaBanner from '@/components/BetaBanner.vue'
+import BacklogModeBar from '@/components/BacklogModeBar.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { DONATE_URL } from '@/utils/donations'
 

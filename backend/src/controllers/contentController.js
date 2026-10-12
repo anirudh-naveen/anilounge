@@ -41,7 +41,7 @@ import {
 import { validationResult } from 'express-validator'
 import { censorText } from '../utils/moderation.js'
 import { query as dbQuery, startSession, withReplica } from '../../config/postgres.js'
-import { clearWatchHistory, recordWatch } from '../services/watchEvents.js'
+import { clearWatchHistory, recordBacklog, recordWatch } from '../services/watchEvents.js'
 import { watchUnits } from '../utils/profileStats.js'
 import { mirrorWatchlistChange } from '../services/connectionSync.js'
 
@@ -409,7 +409,7 @@ export const addToWatchlist = async (req, res) => {
       })
     }
 
-    const { contentId, status, rating, currentEpisode, currentSeason, notes } = req.body
+    const { contentId, status, rating, currentEpisode, currentSeason, notes, backlog } = req.body
     const userId = req.user._id
 
     const user = await User.findById(userId).session(session)
@@ -454,8 +454,9 @@ export const addToWatchlist = async (req, res) => {
       existingItem.totalSeasons = maxSeasons
       existingItem.notes = notes || existingItem.notes
       applyListDetails(existingItem, req.body)
-      stampListDates(existingItem)
+      if (!backlog) stampListDates(existingItem)
       existingItem.updatedAt = new Date()
+      if (backlog) existingItem.importedAt = existingItem.updatedAt
     } else {
       user.watchlist.push({
         content: contentId,
@@ -473,8 +474,10 @@ export const addToWatchlist = async (req, res) => {
         addedAt: new Date(),
         updatedAt: new Date(),
       })
-      lockCompletedProgress(user.watchlist[user.watchlist.length - 1], maxEpisodes)
-      stampListDates(user.watchlist[user.watchlist.length - 1])
+      const added = user.watchlist[user.watchlist.length - 1]
+      lockCompletedProgress(added, maxEpisodes)
+      if (backlog) added.importedAt = added.updatedAt
+      else stampListDates(added)
     }
 
     syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
@@ -486,7 +489,10 @@ export const addToWatchlist = async (req, res) => {
 
     await user.save({ session })
     const savedItem = user.watchlist.find((item) => item.content.toString() === contentId)
-    await recordWatch(userId, contentId, watchUnits({ ...savedItem, content }) - unitsBefore)
+    await logWatchChange(userId, contentId, watchUnits({ ...savedItem, content }) - unitsBefore, {
+      backlog,
+      item: savedItem,
+    })
     await session.commitTransaction()
     mirrorWatchlistChange(user, content, savedItem)
 
@@ -609,6 +615,21 @@ export const removeFromWatchlist = async (req, res) => {
 }
 
 /**
+ * Log the units a watchlist change added: on today, or in backlog mode (titles watched
+ * long ago) on the row's start/finish dates or no day at all.
+ * @param {string} userId
+ * @param {string} contentId
+ * @param {number} units
+ * @param {{ backlog?: boolean, item: { startedOn?: string|Date|null, completedOn?: string|Date|null } }} options
+ * @returns {Promise<void>}
+ */
+function logWatchChange(userId, contentId, units, { backlog, item }) {
+  return backlog
+    ? recordBacklog(userId, contentId, units, item)
+    : recordWatch(userId, contentId, units)
+}
+
+/**
  * Patch an existing watchlist row (status, rating, progress) inside a transaction.
  *
  * @param {import('express').Request} req - `params.contentId`; `body` status/rating/episode/season/notes.
@@ -621,7 +642,7 @@ export const updateWatchlistItem = async (req, res) => {
   try {
     await session.startTransaction()
     const { contentId } = req.params
-    const { status, rating, currentEpisode, currentSeason, notes } = req.body
+    const { status, rating, currentEpisode, currentSeason, notes, backlog } = req.body
     const userId = req.user._id
 
     const user = await User.findById(userId).session(session)
@@ -670,12 +691,13 @@ export const updateWatchlistItem = async (req, res) => {
     if (currentSeason !== undefined) watchlistItem.currentSeason = currentSeason
     if (notes !== undefined) watchlistItem.notes = notes
     applyListDetails(watchlistItem, req.body)
-    stampListDates(watchlistItem)
+    if (!backlog) stampListDates(watchlistItem)
 
     if (!watchlistItem.totalEpisodes) watchlistItem.totalEpisodes = maxEpisodes
     if (!watchlistItem.totalSeasons) watchlistItem.totalSeasons = maxSeasons
 
     watchlistItem.updatedAt = new Date()
+    if (backlog) watchlistItem.importedAt = watchlistItem.updatedAt
 
     syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
     await applyContentRatingChange(
@@ -685,7 +707,12 @@ export const updateWatchlistItem = async (req, res) => {
     )
 
     await user.save({ session })
-    await recordWatch(userId, contentId, watchUnits({ ...watchlistItem, content }) - unitsBefore)
+    await logWatchChange(
+      userId,
+      contentId,
+      watchUnits({ ...watchlistItem, content }) - unitsBefore,
+      { backlog, item: watchlistItem },
+    )
     await session.commitTransaction()
     mirrorWatchlistChange(user, content, watchlistItem)
 
