@@ -120,6 +120,40 @@ describe('MessagesPanel', () => {
     expect(thread).not.toHaveBeenCalled()
   })
 
+  it('shows the newest message each person sent when no chat is open', async () => {
+    const payload = conversations()
+    payload.conversations = [
+      {
+        user: user('u4', 'asuka'),
+        lastMessage: { body: 'Hey', at: '2026-10-05T11:00:00Z', fromMe: true },
+        lastReceived: null,
+        unread: 0,
+        canMessage: true,
+      },
+      {
+        user: user('u2', 'rei'),
+        lastMessage: { body: 'Sure', at: '2026-10-05T10:30:00Z', fromMe: true },
+        lastReceived: { body: 'See you at the screening', at: '2026-10-05T10:00:00Z' },
+        unread: 1,
+        canMessage: true,
+      },
+    ]
+    list.mockResolvedValue({ data: { data: payload } })
+    const { wrapper, router } = await mountAt('/friends')
+    const latest = wrapper.get('[data-testid="latest-received"]')
+    expect(latest.text()).toContain('See you at the screening')
+    expect(latest.find('[data-testid="latest-asuka"]').exists()).toBe(false)
+    await latest.get('[data-testid="latest-rei"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.user).toBe('u2')
+  })
+
+  it('keeps the placeholder when nobody has messaged you', async () => {
+    const { wrapper } = await mountAt('/friends')
+    expect(wrapper.find('[data-testid="latest-received"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Pick a conversation')
+  })
+
   it('opens the thread from the query and refreshes the badge', async () => {
     const { wrapper } = await mountAt('/friends?user=u2')
     expect(thread).toHaveBeenCalledWith('u2')

@@ -52,6 +52,8 @@ export interface DirectMessage {
 export interface ConversationSummary {
   user: PublicUser
   lastMessage: { body: string; at: string; fromMe: boolean }
+  /** Newest message the other user sent the viewer; null when they never have. */
+  lastReceived?: { body: string; at: string } | null
   unread: number
   /** False once the two are no longer friends; history stays readable. */
   canMessage: boolean
