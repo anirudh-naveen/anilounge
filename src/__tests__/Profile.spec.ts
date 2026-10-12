@@ -546,16 +546,37 @@ describe('Profile', () => {
 
     await wrapper.get('[data-testid="customize-profile"]').trigger('click')
     const picker = wrapper.get('[data-testid="emblem-picker"]')
-    expect(picker.findAll('option').map((option) => option.text())).toEqual([
-      'Automatic (Admin)',
-      'Admin',
-      'Artist',
-      'No badge',
-    ])
-    await picker.setValue('artist')
+    const choices = picker.findAll('[role="radio"]')
+    expect(choices.map((choice) => choice.text())).toEqual(['Automatic', 'Admin', 'Artist', 'None'])
+    await choices[2]!.trigger('click')
     await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
     await flushPromises()
     expect(setFeaturedBadge).toHaveBeenCalledWith('artist')
+    Object.assign(badges, { held: [], featured: null, choice: null })
+  })
+
+  it('lets the owner pick their avatar frame from Customize', async () => {
+    Object.assign(badges, { held: ['admin', 'artist'], featured: 'admin', choice: null })
+    updateSettings.mockResolvedValue({
+      data: { data: { settings: { ...buildProfile().settings, frame: 'artist' }, bio: '' } },
+    })
+    getPublicProfile.mockResolvedValue({ data: { data: buildProfile({ isOwner: true }) } })
+    const { wrapper } = await mountAt('/u/mika')
+
+    await wrapper.get('[data-testid="customize-profile"]').trigger('click')
+    const picker = wrapper.get('[data-testid="frame-picker"]')
+    expect(picker.findAll('.frame-label').map((label) => label.text())).toEqual([
+      'Match badge',
+      'Admin',
+      'Artist',
+      'None',
+    ])
+    await wrapper.get('[data-testid="frame-artist"]').trigger('click')
+    await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
+    await flushPromises()
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ settings: expect.objectContaining({ frame: 'artist' }) }),
+    )
     Object.assign(badges, { held: [], featured: null, choice: null })
   })
 

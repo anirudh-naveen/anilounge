@@ -2,15 +2,15 @@
   UserAvatar.vue — profile picture with an initials fallback (component).
 
   Shows the user's picture, or their initials when there is none or the image
-  fails to load (for example a legacy upload lost from server disk). A user who
-  shows a badge emblem by their name gets that badge's frame, in the card-royalty
-  theme: Creator wears a crown over a round ring, Admin/Developer/Artist/Influencer/
-  Supporter crop the picture to their emblem's silhouette (shield, diamond, spade,
-  club, heart) with a border around it, and Bot (the mascots, so the deck's Joker)
-  wears a jester's hat over a round ring. Frames are silver
-  until the user picks a profile accent, then take its shades; Creator and Admin also
-  shimmer. The emblem and accent come from the badges store by `name`, or from
-  `badge` / `accent` when the caller knows them.
+  fails to load (for example a legacy upload lost from server disk). A badge holder
+  gets a frame in the card-royalty theme (the badge they picked for it, else the
+  emblem by their name): Creator wears a crown over a round ring, Admin/Developer/
+  Artist/Influencer/Supporter crop the picture to their emblem's silhouette (shield,
+  diamond, spade, club, heart) with a border around it, and Bot (the mascots, so the
+  deck's Joker) wears a jester's hat over a round ring. Frames are silver until the
+  user picks a profile accent, then take its shades; Creator and Admin also shimmer.
+  The frame and accent come from the badges store by `name`, or from `badge` /
+  `accent` when the caller knows them.
 -->
 <template>
   <span
@@ -152,7 +152,7 @@ const props = withDefaults(
     name?: string
     size?: number
     alt?: string
-    /** The emblem badge to frame with; null for none; leave out to look it up by `name`. */
+    /** The badge to frame with; null for none; leave out to look it up by `name`. */
     badge?: string | null
     /** Their profile accent for the frame color; leave out to look it up by `name`. */
     accent?: ProfileAccent | null
@@ -226,7 +226,7 @@ const url = computed(() => getAvatarUrl(props.src))
 const initials = computed(() => (props.name || '?').slice(0, 2).toUpperCase())
 const ring = computed(() => {
   const badge =
-    props.badge !== undefined ? props.badge : (badgesStore?.featuredFor(props.name) ?? null)
+    props.badge !== undefined ? props.badge : (badgesStore?.frameFor(props.name) ?? null)
   return badge && RINGS.has(badge) ? badge : null
 })
 const shape = computed(() => (ring.value ? SHAPES[ring.value] : undefined))

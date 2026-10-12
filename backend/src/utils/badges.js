@@ -79,3 +79,17 @@ export function isValidEmblemChoice(badges, choice) {
   if (choice === null || choice === NO_EMBLEM) return true
   return typeof choice === 'string' && badges.includes(choice) && Boolean(BY_ID.get(choice)?.emblem)
 }
+
+/**
+ * The badge whose frame goes around the avatar: the user's frame pick when they still
+ * hold it, nothing when they chose none, else the emblem by their name (null pick).
+ * @param {string[]} badges - From `badgesForUser`.
+ * @param {string | null} emblem - From `featuredEmblem`.
+ * @param {string | null | undefined} frame - `profile_settings.frame`.
+ * @returns {string | null}
+ */
+export function avatarFrame(badges, emblem, frame) {
+  if (frame === NO_EMBLEM) return null
+  if (frame && badges.includes(frame) && BY_ID.get(frame)?.emblem) return frame
+  return emblem
+}

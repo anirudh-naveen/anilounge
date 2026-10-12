@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { badgesForUser, earnsInfluencer, featuredEmblem, isValidEmblemChoice } from './badges.js'
+import {
+  avatarFrame,
+  badgesForUser,
+  earnsInfluencer,
+  featuredEmblem,
+  isValidEmblemChoice,
+} from './badges.js'
 
 describe('badgesForUser', () => {
   it('combines the role badge with granted badges in registry order', () => {
@@ -51,5 +57,16 @@ describe('earnsInfluencer', () => {
     assert.equal(earnsInfluencer({ posts: 5, comments: 0 }), true)
     assert.equal(earnsInfluencer({ posts: 0, comments: 10 }), true)
     assert.equal(earnsInfluencer({ posts: 4, comments: 9 }), false)
+  })
+})
+
+describe('avatarFrame', () => {
+  it('uses a held pick, hides on none, and otherwise matches the emblem', () => {
+    const held = ['admin', 'artist']
+    assert.equal(avatarFrame(held, 'admin', 'artist'), 'artist')
+    assert.equal(avatarFrame(held, 'admin', 'none'), null)
+    assert.equal(avatarFrame(held, 'admin', null), 'admin')
+    assert.equal(avatarFrame(held, null, null), null)
+    assert.equal(avatarFrame(held, 'admin', 'creator'), 'admin')
   })
 })

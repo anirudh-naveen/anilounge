@@ -15,6 +15,7 @@ import type { ProfileAccent } from '@/types/profile'
 type Holder = {
   badges: string[]
   featured: string | null
+  frame: string | null
   choice: string | null
   accent: ProfileAccent | null
 }
@@ -41,6 +42,8 @@ export const useBadgesStore = defineStore('badges', () => {
               {
                 badges: row.badges || [],
                 featured: row.featured ?? null,
+                // Older APIs send no frame: it matches the emblem.
+                frame: row.frame !== undefined ? row.frame : (row.featured ?? null),
                 choice: row.choice ?? null,
                 accent: row.accent ?? null,
               },
@@ -66,6 +69,9 @@ export const useBadgesStore = defineStore('badges', () => {
   const featuredFor = (username?: string | null): string | null =>
     holder(username)?.featured ?? null
 
+  /** The badge framing their avatar, or null. */
+  const frameFor = (username?: string | null): string | null => holder(username)?.frame ?? null
+
   /** Their raw pick: a badge id, null (automatic), or 'none'. */
   const choiceFor = (username?: string | null): string | null => holder(username)?.choice ?? null
 
@@ -73,5 +79,5 @@ export const useBadgesStore = defineStore('badges', () => {
   const accentFor = (username?: string | null): ProfileAccent | null =>
     holder(username)?.accent ?? null
 
-  return { load, badgesFor, featuredFor, choiceFor, accentFor }
+  return { load, badgesFor, featuredFor, frameFor, choiceFor, accentFor }
 })
