@@ -158,8 +158,14 @@ const tiles = computed<Array<{ label: string; value: number; note: string; bot?:
   const d = data.value
   if (!d) return []
   return [
-    { label: 'Total users', value: d.users.total, note: `+${format(d.users.new)} new` },
     { label: 'Active users', value: d.users.active, note: 'signed in and active' },
+    { label: 'Total users', value: d.users.total, note: `+${format(d.users.new)} new` },
+    {
+      label: 'Bots & crawlers',
+      value: d.bots?.visitors ?? 0,
+      note: `${format(d.bots?.views ?? 0)} page views, not counted`,
+      bot: true,
+    },
     {
       label: 'Real visitors',
       value: d.totals.visitors,
@@ -167,12 +173,6 @@ const tiles = computed<Array<{ label: string; value: number; note: string; bot?:
     },
     { label: 'Page views', value: d.totals.views, note: perVisitor(d.totals.views) },
     { label: 'Clicks', value: d.totals.clicks, note: perVisitor(d.totals.clicks) },
-    {
-      label: 'Bots & crawlers',
-      value: d.bots?.visitors ?? 0,
-      note: `${format(d.bots?.views ?? 0)} page views, not counted`,
-      bot: true,
-    },
   ]
 })
 
