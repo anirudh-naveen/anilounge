@@ -175,7 +175,7 @@ export const getPublicProfile = async (req, res) => {
         relationship,
         blocked,
         canMessage,
-        /** A bot account (Lounge Keeper / Lounge Cleaner): it can't be blocked. */
+        /** A bot account (Lounge Keeper / Cleaner / Guide): it can't be blocked. */
         isBot: isBotEmail(user.email),
         user: {
           id: user._id,

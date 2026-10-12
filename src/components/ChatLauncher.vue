@@ -1,8 +1,9 @@
 <!--
   ChatLauncher.vue — AI assistant trigger (component).
 
-  Floating button rendered only by the Search view. Opens the catalog chatbot
-  and loads its recommendation cards into the search results.
+  Floating Lounge Guide button rendered only by the Search view. Opens the
+  catalog chatbot (a sign-in prompt when signed out) and loads its
+  recommendation cards into the search results.
 -->
 <template>
   <div class="chat-launcher">
@@ -11,11 +12,11 @@
       type="button"
       class="chat-trigger"
       data-testid="chat-launcher"
-      title="AI Assistant"
-      aria-label="Open AI Assistant"
+      title="Lounge Guide (AI Assistant)"
+      aria-label="Open Lounge Guide, the AI assistant"
       @click="open = true"
     >
-      AI
+      <img src="/anilounge-logo.png" alt="" width="60" height="60" />
     </button>
     <Chatbot
       v-if="open"
@@ -55,13 +56,10 @@ const onSearchResults = (results: UnifiedContent[]) => {
   width: 60px;
   height: 60px;
   border-radius: 50%;
+  padding: 3px;
   background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
   border: none;
-  color: white;
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1;
+  overflow: hidden;
   cursor: pointer;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
@@ -69,6 +67,13 @@ const onSearchResults = (results: UnifiedContent[]) => {
   align-items: center;
   justify-content: center;
   text-align: center;
+}
+
+.chat-trigger img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .chat-trigger:hover {
@@ -85,7 +90,6 @@ const onSearchResults = (results: UnifiedContent[]) => {
   .chat-trigger {
     width: 50px;
     height: 50px;
-    font-size: 0.9rem;
   }
 }
 </style>

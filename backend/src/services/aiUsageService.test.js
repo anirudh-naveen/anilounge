@@ -3,12 +3,10 @@ import { describe, it } from 'node:test'
 import { GLOBAL_SUBJECT, aiQuota, globalAiLimit } from './aiUsageService.js'
 
 describe('aiQuota', () => {
-  it('counts signed-in calls per account and signed-out calls per IP', () => {
-    const user = aiQuota({ user: { _id: 'abc' }, ip: '198.51.100.2' })
-    const anon = aiQuota({ user: null, ip: '198.51.100.2' })
+  it('counts calls per account', () => {
+    const user = aiQuota({ user: { _id: 'abc' } })
     assert.equal(user.subject, 'u:abc')
-    assert.equal(anon.subject, 'ip:198.51.100.2')
-    assert.ok(user.limit > anon.limit)
+    assert.ok(user.limit > 0)
   })
 })
 
@@ -23,7 +21,7 @@ describe('globalAiLimit', () => {
     else process.env.AI_DAILY_LIMIT_GLOBAL = saved
   })
 
-  it('uses a subject no account or IP can collide with', () => {
-    assert.ok(!GLOBAL_SUBJECT.startsWith('u:') && !GLOBAL_SUBJECT.startsWith('ip:'))
+  it('uses a subject no account can collide with', () => {
+    assert.ok(!GLOBAL_SUBJECT.startsWith('u:'))
   })
 })

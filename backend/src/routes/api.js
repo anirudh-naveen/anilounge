@@ -182,10 +182,10 @@ router.get(
   forumController.getHighlights,
 )
 
-/** Gemini-backed catalog chat. Optional auth personalizes from watchlist/preferences. */
+/** Gemini-backed catalog chat (Lounge Guide); signed-in only, personalized from the watchlist. */
 router.post(
   '/ai/chat',
-  optionalAuthenticate,
+  authMiddleware,
   [
     body('message')
       .isString()
