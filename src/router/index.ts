@@ -12,6 +12,8 @@ import Home from '@/views/Home.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
 import { trackPageView } from '@/services/metrics'
+import { appGateRedirect } from '@/utils/appGate'
+import { isNativeApp } from '@/utils/nativeApp'
 
 /**
  * Wait (briefly) until the page is tall enough to scroll to `top`, so going
@@ -98,6 +100,13 @@ const router = createRouter({
       path: '/feedback',
       name: 'feedback',
       component: () => import('@/views/Feedback.vue'),
+    },
+    {
+      // The iOS app's sign-in wall (utils/appGate.ts); no site header or footer.
+      path: '/welcome',
+      name: 'appWelcome',
+      component: () => import('@/views/AppWelcome.vue'),
+      meta: { bare: true },
     },
     {
       path: '/privacy',
@@ -241,6 +250,10 @@ router.beforeEach(async (to) => {
 
   // Wait for the session cookie check so a signed-in reload is not bounced to /login.
   await authStore.restoreSession()
+
+  // The iOS app needs an account; signed-out visitors get the welcome screen.
+  const gate = appGateRedirect(to, { isNativeApp, isAuthenticated: authStore.isAuthenticated })
+  if (gate) return gate
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return '/login'

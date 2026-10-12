@@ -10,7 +10,7 @@
     <div class="backlog-content">
       <span class="backlog-badge">Backlog mode</span>
       <span class="backlog-text"
-        >Watchlist saves will not count for now towards the date tracking.</span
+        >Watchlist saves will not count towards the date tracking for now .</span
       >
       <button
         type="button"

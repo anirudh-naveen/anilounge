@@ -99,27 +99,10 @@ describe('Watchlist status sections', () => {
     )
   })
 
-  it('filters by status and type with chips like a profile watchlist', async () => {
+  it('has no status or type filter chips', async () => {
     const wrapper = await mountPage()
-    const titles = () => wrapper.findAll('.item-title').map((title) => title.text())
-
-    expect(wrapper.get('[data-testid="watchlist-status-all"]').text()).toBe('All 2')
-    expect(wrapper.get('[data-testid="watchlist-type-movie"]').text()).toBe('Movies 1')
-
-    await wrapper.get('[data-testid="watchlist-status-watching"]').trigger('click')
-    expect(titles()).toEqual(['Frieren'])
-    expect(wrapper.get('[data-testid="watchlist-type-movie"]').text()).toBe('Movies 0')
-
-    await wrapper.get('[data-testid="watchlist-status-all"]').trigger('click')
-    await wrapper.get('[data-testid="watchlist-type-movie"]').trigger('click')
-    expect(titles()).toEqual(['Spirited Away'])
-    expect(wrapper.get('[data-testid="watchlist-status-watching"]').text()).toBe('Watching 0')
-
-    await wrapper.get('[data-testid="watchlist-status-watching"]').trigger('click')
-    expect(titles()).toEqual([])
-    expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
-      'Nothing here with these filters',
-    )
+    expect(wrapper.find('.watchlist-filters').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(false)
   })
 
   it('offers a favorite heart on every row', async () => {
