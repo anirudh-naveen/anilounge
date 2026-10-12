@@ -19,7 +19,7 @@ describe('normalizeProfileSettings', () => {
       tabOrder: ['stats', 'bogus', 'stats'],
       hiddenTabs: ['bogus'],
     })
-    assert.equal(settings.accent, 'coral')
+    assert.equal(settings.accent, null)
     assert.equal(settings.headline.length, 80)
     assert.deepEqual(settings.tabOrder, ['stats', 'favorites', 'watchlist', 'forum', 'friends'])
     assert.deepEqual(settings.hiddenTabs, [])
@@ -64,12 +64,21 @@ describe('normalizePreferences', () => {
   })
 })
 
+describe('avatar frame pick', () => {
+  it('keeps emblem badge ids and none, else null (match the emblem)', () => {
+    assert.equal(normalizeProfileSettings({ frame: 'artist' }).frame, 'artist')
+    assert.equal(normalizeProfileSettings({ frame: 'none' }).frame, 'none')
+    assert.equal(normalizeProfileSettings({ frame: 'emperor' }).frame, null)
+    assert.equal(normalizeProfileSettings({}).frame, null)
+  })
+})
+
 describe('custom accent colors', () => {
   it('keeps presets and #rrggbb colors, and falls back to coral otherwise', () => {
     assert.equal(normalizeProfileSettings({ accent: 'sky' }).accent, 'sky')
     assert.equal(normalizeProfileSettings({ accent: ' #3A7BFF ' }).accent, '#3a7bff')
-    assert.equal(normalizeProfileSettings({ accent: '#fff' }).accent, 'coral')
-    assert.equal(normalizeProfileSettings({ accent: 'url(evil)' }).accent, 'coral')
+    assert.equal(normalizeProfileSettings({ accent: '#fff' }).accent, null)
+    assert.equal(normalizeProfileSettings({ accent: 'url(evil)' }).accent, null)
   })
 
   it('shows the Friends tab on profiles saved before it existed', () => {

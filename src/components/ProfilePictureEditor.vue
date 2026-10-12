@@ -3,12 +3,14 @@
 
   Used in the profile Customize panel. Picks an image, crops it square in a
   modal, and uploads it through the auth store; changes apply immediately.
+  `preview` off leaves just the buttons, beside the panel's own live preview.
   The shared demo account's picture is read-only.
 -->
 <template>
   <div class="picture-editor">
     <!-- Title: Preview -->
     <UserAvatar
+      v-if="preview"
       :src="authStore.user?.profilePicture"
       :name="authStore.user?.username"
       :size="72"
@@ -93,6 +95,14 @@ import VueCropper from 'vue-cropperjs'
 import 'cropperjs/dist/cropper.css'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { useAuthStore } from '@/stores/auth'
+
+withDefaults(
+  defineProps<{
+    /** Show the current picture; off where the caller shows its own preview. */
+    preview?: boolean
+  }>(),
+  { preview: true },
+)
 
 const emit = defineEmits<{ changed: [profilePicture: string | null] }>()
 

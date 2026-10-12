@@ -64,3 +64,12 @@ export function shouldShowImportReminder(
   if (Number.isNaN(created)) return false
   return now.getTime() - created < IMPORT_REMINDER_DAYS * 24 * 60 * 60 * 1000
 }
+
+export type WatchlistTypeFilter = 'all' | 'movie' | 'tv'
+
+/** Type chips on the watchlist and profile pages; values match `matchesContentTypeFilter`. */
+export const WATCHLIST_TYPE_FILTER_OPTIONS: { value: WatchlistTypeFilter; label: string }[] = [
+  { value: 'all', label: 'All Types' },
+  { value: 'movie', label: 'Movies' },
+  { value: 'tv', label: 'Series' },
+]

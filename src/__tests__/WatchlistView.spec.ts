@@ -99,10 +99,28 @@ describe('Watchlist status sections', () => {
     )
   })
 
-  it('has no status or type filter chips', async () => {
+  it('filters the sections by status and type chips', async () => {
     const wrapper = await mountPage()
-    expect(wrapper.find('.watchlist-filters').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(false)
+    const titles = () => wrapper.findAll('.item-title').map((title) => title.text())
+
+    await wrapper.get('[data-testid="watchlist-filter-type-movie"]').trigger('click')
+    expect(titles()).toEqual(['Spirited Away'])
+    expect(wrapper.get('[data-testid="watchlist-filter-status-watching"]').text()).toContain('0')
+
+    await wrapper.get('[data-testid="watchlist-filter-type-tv"]').trigger('click')
+    expect(titles()).toEqual(['Frieren'])
+
+    await wrapper.get('[data-testid="watchlist-filter-type-all"]').trigger('click')
+    await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
+    expect(titles()).toEqual(['Spirited Away'])
+    expect(wrapper.findAll('.section-header').map((header) => header.text())).toEqual([
+      'Completed1',
+    ])
+
+    await wrapper.get('[data-testid="watchlist-filter-status-dropped"]').trigger('click')
+    expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
+      'No titles match these filters.',
+    )
   })
 
   it('offers a favorite heart on every row', async () => {

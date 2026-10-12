@@ -195,7 +195,15 @@ class Checkpoint {
   flush() {
     for (const [phase, set] of this.sets) this.data[phase] = [...set]
     fs.mkdirSync(path.dirname(CHECKPOINT_PATH), { recursive: true })
-    fs.writeFileSync(CHECKPOINT_PATH, JSON.stringify(this.data))
+    // Written aside, then renamed over: a full disk can't leave a truncated checkpoint.
+    const pending = `${CHECKPOINT_PATH}.tmp`
+    try {
+      fs.writeFileSync(pending, JSON.stringify(this.data))
+      fs.renameSync(pending, CHECKPOINT_PATH)
+    } catch (error) {
+      fs.rmSync(pending, { force: true })
+      throw error
+    }
     this.dirty = 0
   }
 
