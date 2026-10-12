@@ -276,6 +276,31 @@ ${button(link, 'Unlock my account')}
 }
 
 /**
+ * Password reset code with a link that opens the reset form pre-filled.
+ * @param {{ email: string, username: string }} user
+ * @param {string} code - Six-digit reset code.
+ * @returns {Promise<{ delivered: boolean }>}
+ */
+export function sendPasswordResetEmail(user, code) {
+  const link = `${appUrl()}/reset-password?email=${encodeURIComponent(user.email)}&code=${code}`
+  return sendEmail({
+    to: user.email,
+    subject: 'Reset your AniLounge password',
+    text: withAccountFooter(
+      `Hi ${user.username},\n\nSomeone asked to reset your AniLounge password. Your reset code is ${code}, or open this link to choose a new password: ${link}\n\nThe code expires in 1 hour. If you didn't ask for this, ignore this email; your password stays the same.`,
+    ),
+    html: layout(
+      'Reset your password',
+      `<p>Hi ${escapeHtml(user.username)}, someone asked to reset your AniLounge password.</p>
+<p>Your reset code:</p>
+<p style="font-size:32px;letter-spacing:6px;font-weight:bold;margin:8px 0 24px">${code}</p>
+${button(link, 'Choose a new password')}
+<p style="color:#5b6578;font-size:14px">The code expires in 1 hour. If you didn't ask for this, ignore this email; your password stays the same.</p>`,
+    ),
+  })
+}
+
+/**
  * Security notice to the previous address after an email change.
  * @param {{ email: string, username: string }} previous - Old address and username.
  * @param {string} newEmail
