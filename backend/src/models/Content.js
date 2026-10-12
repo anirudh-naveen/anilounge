@@ -18,6 +18,7 @@ import { seriesEntryCounts } from '../utils/episodes.js'
 import { planSyncChanges } from '../utils/syncReview.js'
 import { recordSyncNotices } from '../services/syncGuard.js'
 import catalogEvents from '../services/catalogEvents.js'
+import { animationStudioNames } from '../utils/studioRoles.js'
 
 /**
  * @param {object} row
@@ -134,7 +135,7 @@ export function pick(doc, select) {
 export async function attachContentRelations(docs) {
   if (!docs.length) return docs
   const ids = docs.map((doc) => doc._id)
-  const [genres, alts, studios, members, relations] = await Promise.all([
+  const [genres, alts, studios, members, relations, snapshotStudios] = await Promise.all([
     query(
       `SELECT cg.content_id, g.name
        FROM content_genres cg
@@ -187,6 +188,15 @@ export async function attachContentRelations(docs) {
        WHERE from_id = ANY($1::uuid[])`,
       [ids],
     ),
+    // Studio credits mix animation studios with production companies (TMDB only has
+    // the latter). AniList's snapshot keeps animation studios alone, main first, and
+    // MAL's "studios" are its animation studios (producers are separate).
+    query(
+      `SELECT content_id, source, data->'studios' AS studios
+       FROM content_source_data
+       WHERE content_id = ANY($1::uuid[]) AND source IN ('anilist', 'mal')`,
+      [ids],
+    ),
   ])
 
   const byGenre = groupBy(genres.rows, 'content_id')
@@ -194,6 +204,7 @@ export async function attachContentRelations(docs) {
   const byStudio = groupBy(studios.rows, 'content_id')
   const franchiseById = new Map(members.rows.map((row) => [String(row.content_id), row]))
   const relByFrom = groupBy(relations.rows, 'from_id')
+  const snapshotStudiosById = groupBy(snapshotStudios.rows, 'content_id')
 
   for (const doc of docs) {
     const id = String(doc._id)
@@ -205,6 +216,7 @@ export async function attachContentRelations(docs) {
       name: row.name,
       imagePath: row.image_path || '',
     }))
+    doc.animationStudios = animationStudioNames(snapshotStudiosById.get(id) || [])
     const franchise = franchiseById.get(id)
     doc.franchise = franchise?.name || null
     doc.franchiseId = franchise ? String(franchise.franchise_id) : null
