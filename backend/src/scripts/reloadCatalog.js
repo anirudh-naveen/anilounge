@@ -11,6 +11,10 @@
  *   import      Add AniList's most popular anime the catalog lacks (top
  *               --import-limit, default 1000), linked to MAL and TMDB, with
  *               relations, characters, and studios.
+ *   western     Add TMDB's western animation the catalog lacks (every animated
+ *               movie and show with --western-min-votes votes, default 20, that
+ *               isn't Japanese, Korean, or Chinese), with seasons, episodes,
+ *               characters, and studios.
  *   titles      Re-fetch every movie/series/special from TMDB, MAL, and AniList;
  *               rebuild studio credits (MAL studios, then AniList animation
  *               studios, then TMDB companies), genres, aliases, MAL relations.
@@ -37,6 +41,7 @@
  *   npm run db:reload -- --fresh     (ignore the resume checkpoint)
  *   npm run db:reload -- --phases backup,import,cleanup --import-limit 2000
  *   npm run db:reload -- --phases seasons --workers 2
+ *   npm run db:reload -- --phases western,cleanup --western-min-votes 50
  *
  * Progress is checkpointed to backend/logs/reload-checkpoint.json so an
  * interrupted run resumes where it stopped. Titles or studios whose sources
@@ -62,6 +67,7 @@ import {
 } from '../services/anilistService.js'
 import { bridgeTmdbTitles, linkMalTitles } from '../services/anilistLinking.js'
 import { importPopularAnilist } from '../services/anilistImport.js'
+import { findMissingWesternTmdb, WESTERN_MIN_VOTES } from '../services/tmdbImport.js'
 import { mergeAllFranchiseCharacters } from '../services/characterMerge.js'
 import { applyFranchisePlan, loadFranchisePlan } from '../services/franchiseBuilder.js'
 import * as repair from '../services/catalogRepair.js'
@@ -81,6 +87,7 @@ const ALL_PHASES = [
   'repair',
   'anilist',
   'import',
+  'western',
   'titles',
   'characters',
   'studios',
@@ -96,6 +103,7 @@ const PHASE_ORDER = [
   'repair',
   'anilist',
   'import',
+  'western',
   'titles',
   'seasons',
   'episodes',
@@ -117,11 +125,19 @@ const FAMILY_KINDS = [
 const MAL_RELATION_KIND = Object.fromEntries(FAMILY_KINDS.map((kind) => [kind, kind]))
 
 /**
- * @returns {{ phases: string[], workers: number, limit: number | null, importLimit: number, fresh: boolean }}
+ * @returns {{ phases: string[], workers: number, limit: number | null, importLimit: number,
+ *   westernMinVotes: number, fresh: boolean }}
  */
 function parseArgs() {
   const args = process.argv.slice(2)
-  const options = { phases: ALL_PHASES, workers: 4, limit: null, importLimit: 1000, fresh: false }
+  const options = {
+    phases: ALL_PHASES,
+    workers: 4,
+    limit: null,
+    importLimit: 1000,
+    westernMinVotes: WESTERN_MIN_VOTES,
+    fresh: false,
+  }
   for (let i = 0; i < args.length; i += 1) {
     const next = args[i + 1]
     if (args[i] === '--phases' && next) {
@@ -138,6 +154,9 @@ function parseArgs() {
       i += 1
     } else if (args[i] === '--import-limit' && next) {
       options.importLimit = Math.max(1, parseInt(next, 10) || 1)
+      i += 1
+    } else if (args[i] === '--western-min-votes' && next) {
+      options.westernMinVotes = Math.max(1, parseInt(next, 10) || 1)
       i += 1
     } else if (args[i] === '--fresh') {
       options.fresh = true
@@ -473,6 +492,32 @@ async function mirrorMalRelations(id) {
   }
 }
 
+/**
+ * Fill logos and about for the studios credited on these titles that lack either, and
+ * merge studios that turn out to be the same one.
+ * @param {string[]} ids - Title ids
+ * @returns {Promise<number>} Studios checked
+ */
+async function enrichStudiosOf(ids) {
+  const { rows } = await query(
+    `SELECT DISTINCT s.id::text AS id FROM studio_credits sc JOIN content s ON s.id = sc.studio_id
+     WHERE sc.work_id = ANY($1::uuid[])
+       AND (coalesce(s.image_path, '') = '' OR coalesce(s.about, '') = '')`,
+    [ids],
+  )
+  for (const { id } of rows) {
+    try {
+      const entity = await Entity.findById(id)
+      if (!entity) continue
+      await ensureStudioDetails(entity, { force: true })
+      if (entity.duplicateOfId) await repair.mergeStudioInto(id, String(entity.duplicateOfId))
+    } catch (error) {
+      console.error(`  Studio ${id} failed: ${error.message}`)
+    }
+  }
+  return rows.length
+}
+
 async function phaseImport(options, checkpoint) {
   if (!(await probeAnilist())) {
     console.log('  AniList is unreachable right now; deferring import.')
@@ -518,26 +563,82 @@ async function phaseImport(options, checkpoint) {
     }
   })
 
-  const { rows: studios } = await query(
-    `SELECT DISTINCT s.id::text AS id FROM studio_credits sc JOIN content s ON s.id = sc.studio_id
-     WHERE sc.work_id = ANY($1::uuid[])
-       AND (coalesce(s.image_path, '') = '' OR coalesce(s.about, '') = '')`,
-    [touched],
-  )
-  const studioIds = studios.map((row) => row.id)
-  for (const id of studioIds) {
-    try {
-      const entity = await Entity.findById(id)
-      if (!entity) continue
-      await ensureStudioDetails(entity, { force: true })
-      if (entity.duplicateOfId) await repair.mergeStudioInto(id, String(entity.duplicateOfId))
-    } catch (error) {
-      console.error(`  Studio ${id} failed: ${error.message}`)
-    }
-  }
+  const studiosChecked = await enrichStudiosOf(touched)
   checkpoint.flush()
-  console.log('  Imported titles:', { ...counts, studiosChecked: studioIds.length })
+  console.log('  Imported titles:', { ...counts, studiosChecked })
   return stats.failed === 0 && counts.failed === 0
+}
+
+/**
+ * Add the western animation TMDB lists that the catalog lacks (services/tmdbImport.js),
+ * then import each one like the seasons phase does (seasons and episodes, or a movie's
+ * sources) and ingest its characters and studios. Per-episode staff is left to the
+ * episodes phase. Imported ids are checkpointed, so a rerun after an interruption
+ * still ingests characters for titles the last run added.
+ * @param {{ workers: number, limit: number | null, westernMinVotes: number }} options
+ * @param {Checkpoint} checkpoint
+ * @returns {Promise<boolean>} False when TMDB stopped answering or some titles failed.
+ */
+async function phaseWestern(options, checkpoint) {
+  if (!unifiedContentService.hasTmdbKey) {
+    console.log('  TMDB_API_KEY is not set; skipping western.')
+    return false
+  }
+  const { missing, stats, complete } = await findMissingWesternTmdb({
+    minVotes: options.westernMinVotes,
+    log: console.log,
+  })
+  console.log(`  Western animation with ${options.westernMinVotes}+ TMDB votes:`, stats)
+  const todo = missing.slice(0, options.limit || undefined)
+  const populator = new DatabasePopulator()
+  const counts = { added: 0, merged: 0, skipped: 0, failed: 0, withCharacters: 0 }
+  await runQueue('western titles', todo, options.workers, async (item) => {
+    const { outcome, contentId } = await populator.saveTmdbContent(
+      { id: item.tmdbId, title: item.title },
+      item.type,
+      { minVoteCount: options.westernMinVotes, importDetails: false },
+    )
+    if (outcome === 'added') counts.added += 1
+    else if (outcome === 'failed') counts.failed += 1
+    else if (contentId) counts.merged += 1
+    else counts.skipped += 1
+    if (!contentId) return
+    try {
+      const content = await Content.findById(contentId)
+      if (!content) return
+      if (content.contentType === 'tv') await importSeries(contentId, { details: false })
+      else await importStandalone(contentId)
+      checkpoint.mark('seasons', contentId)
+      checkpoint.mark('western', contentId)
+      console.log(`  ${outcome} "${item.title}" (TMDB ${item.type} ${item.tmdbId})`)
+    } catch (error) {
+      counts.failed += 1
+      console.error(`  "${item.title}" (TMDB ${item.type} ${item.tmdbId}) failed: ${error.message}`)
+    }
+  })
+
+  checkpoint.flush()
+  const charactersDone = checkpoint.done('characters')
+  const touched = [...checkpoint.done('western')].filter((id) => !charactersDone.has(id))
+  const families = await groupByFamily(touched)
+  await runQueue('western characters', families, options.workers, async (family) => {
+    for (const id of family) {
+      try {
+        const content = await Content.findById(id)
+        if (!content) continue
+        const characters = await ensureCharactersForContent(content, { force: true })
+        if (characters.length) counts.withCharacters += 1
+        checkpoint.mark('characters', id)
+      } catch (error) {
+        counts.failed += 1
+        console.error(`  Characters for western title ${id} failed: ${error.message}`)
+      }
+    }
+  })
+  const studiosChecked = touched.length ? await enrichStudiosOf(touched) : 0
+  checkpoint.flush()
+  console.log('  Western titles:', { ...counts, studiosChecked })
+  return complete && counts.failed === 0
 }
 
 async function phaseTitles(options, checkpoint) {
@@ -759,6 +860,7 @@ async function run() {
     repair: () => phaseRepair(),
     anilist: () => phaseAnilist(options, checkpoint),
     import: () => phaseImport(options, checkpoint),
+    western: () => phaseWestern(options, checkpoint),
     titles: () => phaseTitles(options, checkpoint),
     characters: () => phaseCharacters(options, checkpoint),
     studios: () => phaseStudios(options, checkpoint),
