@@ -10,7 +10,12 @@
 -->
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
-    <form class="customize-panel" data-testid="customize-panel" @submit.prevent="save">
+    <form
+      class="customize-panel"
+      :style="accentStyle"
+      data-testid="customize-panel"
+      @submit.prevent="save"
+    >
       <header class="panel-header">
         <h2>Customize profile</h2>
         <button type="button" class="icon-btn" aria-label="Close" @click="emit('close')">
@@ -20,7 +25,7 @@
 
       <div class="panel-body">
         <!-- Title: Preview -->
-        <section class="preview" :style="previewStyle" data-testid="customize-preview">
+        <section class="preview" data-testid="customize-preview">
           <UserAvatar
             :src="picture"
             :name="username"
@@ -340,7 +345,8 @@ const previewFrame = computed(() => {
   return previewEmblem.value
 })
 
-const previewStyle = computed(() => ({
+/** The whole panel follows the accent being picked. */
+const accentStyle = computed(() => ({
   '--profile-accent': accentColor(draft.value.accent),
   '--profile-on-accent': readableOn(draft.value.accent),
 }))
