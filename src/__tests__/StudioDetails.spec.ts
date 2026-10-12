@@ -4,7 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import StudioDetails from '@/views/StudioDetails.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import { getDetailsRouteName, isCatalogEntity } from '@/services/api'
-import { collectStudioWorks, studioLinksForContent } from '@/utils/entities'
+import { collectStudioWorks, mainStudio, studioLinksForContent } from '@/utils/entities'
 
 const getEntityDetails = vi.fn()
 const toggleFavorite = vi.fn()
@@ -157,6 +157,27 @@ describe('StudioLinks', () => {
       params: { id: 'studio-1' },
       query: { from: '/movie/movie-1' },
     })
+    expect(wrapper.text()).toContain('Studios & Production Companies')
+  })
+
+  it('splits animation studios from production companies when the sources say which', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    await router.push('/movie/movie-1')
+    await router.isReady()
+    const wrapper = mount(StudioLinks, {
+      props: {
+        content: {
+          studios: ['Pony Canyon', 'Kyoto Animation'],
+          animationStudios: ['Kyoto Animation'],
+        },
+      },
+      global: { plugins: [router] },
+    })
+    expect(wrapper.get('[data-testid="studio-links-studios"]').text()).toContain('Kyoto Animation')
+    expect(wrapper.get('[data-testid="studio-links-production-companies"]').text()).toContain(
+      'Pony Canyon',
+    )
+    expect(wrapper.text()).not.toContain('Studios & Production Companies')
   })
 })
 
@@ -167,6 +188,17 @@ describe('studio helpers', () => {
       'StudioDetails',
     )
     expect(isCatalogEntity({ contentType: 'studio' })).toBe(true)
+  })
+
+  it('names the main animation studio, or labels a mixed credit as both', () => {
+    expect(
+      mainStudio({ studios: ['Aniplex', 'MAPPA'], animationStudios: ['MAPPA', 'Other'] }),
+    ).toMatchObject({ label: 'Studio', link: { name: 'MAPPA' } })
+    expect(mainStudio({ studios: ['Aniplex', 'MAPPA'] })).toMatchObject({
+      label: 'Studio / Production',
+      link: { name: 'Aniplex' },
+    })
+    expect(mainStudio({ studios: [] })).toBeNull()
   })
 
   it('falls back to production companies and dedupes studio names', () => {

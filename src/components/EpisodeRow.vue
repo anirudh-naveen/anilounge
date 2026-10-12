@@ -55,6 +55,7 @@
           :data-testid="`episode-${episodeKey(episode)}`"
           :aria-expanded="isSelected(episode)"
           :aria-controls="isSelected(episode) ? 'episode-expanded' : undefined"
+          :aria-label="`${indexLabel(episode)}: ${episode.title}`"
           @click="toggleEpisode(episode)"
         >
           <div class="episode-still">
@@ -64,15 +65,16 @@
               :alt="episode.title"
               @error="handleImageError"
             />
-            <div v-else class="no-still">
-              <i class="fas fa-play"></i>
-            </div>
-            <span class="episode-index">{{ indexLabel(episode) }}</span>
+            <div v-else class="no-still"></div>
+            <span class="episode-index" aria-hidden="true">{{ episode.episodeNumber }}</span>
             <span v-if="episode.isFiller || episode.isRecap" class="episode-flag">
               {{ episode.isRecap ? 'Recap' : 'Filler' }}
             </span>
           </div>
-          <p class="episode-card-title">{{ episode.title }}</p>
+          <div class="episode-card-body">
+            <p class="episode-card-title">{{ episode.title }}</p>
+            <p v-if="cardMeta(episode)" class="episode-card-meta">{{ cardMeta(episode) }}</p>
+          </div>
         </button>
       </div>
 
@@ -204,6 +206,19 @@ const expandedMeta = computed(() => {
   }
   return parts.join(' · ')
 })
+
+/** "Jul 6, 2023 · 24 min" under a card's title. */
+const cardMeta = (episode: Episode) => {
+  const parts: string[] = []
+  const date = episode.airDate ? new Date(episode.airDate) : null
+  if (date && !Number.isNaN(date.getTime())) {
+    parts.push(
+      date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+    )
+  }
+  if (episode.runtime) parts.push(`${episode.runtime} min`)
+  return parts.join(' · ')
+}
 
 const isSelected = (episode: Episode) => episodeKey(episode) === selectedKey.value
 
@@ -351,7 +366,10 @@ const handleImageError = (event: Event) => {
 }
 
 .episode-card {
-  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 0 200px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -374,7 +392,7 @@ const handleImageError = (event: Event) => {
 
 .episode-still {
   position: relative;
-  height: 102px;
+  aspect-ratio: 16 / 9;
   background: var(--bg-hover);
 }
 
@@ -394,10 +412,6 @@ const handleImageError = (event: Event) => {
   justify-content: center;
   color: var(--text-muted);
   background: var(--bg-hover);
-}
-
-.no-still i {
-  font-size: 1.4rem;
 }
 
 .expanded-staff {
@@ -456,25 +470,43 @@ const handleImageError = (event: Event) => {
 
 .episode-index {
   position: absolute;
+  top: 6px;
   left: 6px;
-  bottom: 6px;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
+  min-width: 1.6rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.episode-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.55rem 0.65rem 0.65rem;
 }
 
 .episode-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   margin: 0;
-  padding: 0.55rem 0.65rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.episode-card-meta {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .episode-expanded {
