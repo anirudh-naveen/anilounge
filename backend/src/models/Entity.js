@@ -467,7 +467,13 @@ Entity.prototype.save = async function save() {
     ]
     // An empty list means "unknown": keep the credits. Admin-added credits always stay.
     if (workIds.length) {
-      await query('DELETE FROM studio_credits WHERE studio_id = $1 AND NOT admin_added', [this._id])
+      // Credits this studio keeps stay as they are, with their role (animation /
+      // production) and main flag; only titles it no longer has lose theirs.
+      await query(
+        `DELETE FROM studio_credits
+         WHERE studio_id = $1 AND NOT admin_added AND work_id <> ALL($2::uuid[])`,
+        [this._id, workIds],
+      )
       await query(
         `INSERT INTO studio_credits (work_id, studio_id)
          SELECT w.id, $2 FROM content w

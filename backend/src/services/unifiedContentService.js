@@ -582,7 +582,12 @@ class UnifiedContentService {
       malRating: anime.rating,
       genres: anime.genres?.map((genre) => ({ id: genre.id, name: genre.name })) || [],
       studios: anime.studios?.map((studio) => studio.name) || [],
-      studioRefs: anime.studios?.map((studio) => ({ name: studio.name, malId: studio.id })) || [],
+      studioRefs:
+        anime.studios?.map((studio) => ({
+          name: studio.name,
+          malId: studio.id,
+          role: 'animation',
+        })) || [],
       originCountries: [...MAL_ORIGIN_COUNTRIES],
       dataSources: {
         mal: {

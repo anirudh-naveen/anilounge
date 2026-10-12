@@ -72,7 +72,10 @@ describe('anilistSnapshot', () => {
     assert.equal(snapshot.sourceMaterial, 'manga')
     assert.deepEqual(snapshot.trailer, { site: 'youtube', key: 'abc123' })
     assert.equal(snapshot.score, 8.1)
-    assert.deepEqual(snapshot.studios, [{ name: 'Telecom Animation Film', anilistId: 1 }])
+    assert.deepEqual(snapshot.studios, [
+      { name: 'Telecom Animation Film', anilistId: 1, role: 'animation', isMain: false },
+      { name: 'Shueisha', anilistId: 2, role: 'production', isMain: false },
+    ])
     assert.equal(snapshot.tags[0].rank, 94)
   })
 

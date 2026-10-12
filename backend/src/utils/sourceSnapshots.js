@@ -184,9 +184,20 @@ export function anilistSnapshot(media) {
         isSpoiler: Boolean(tag.isMediaSpoiler || tag.isGeneralSpoiler),
         isAdult: Boolean(tag.isAdult),
       })),
+    // Every studio with what it did: animation studios (main first), then producers.
     studios: (media.studios?.edges || [])
-      .filter((edge) => edge?.node?.isAnimationStudio && text(edge.node.name))
-      .map((edge) => ({ name: text(edge.node.name), anilistId: positive(edge.node.id) })),
+      .filter((edge) => text(edge?.node?.name))
+      .map((edge) => ({
+        name: text(edge.node.name),
+        anilistId: positive(edge.node.id),
+        role: edge.node.isAnimationStudio ? 'animation' : 'production',
+        isMain: Boolean(edge.isMain && edge.node.isAnimationStudio),
+      }))
+      .sort(
+        (left, right) =>
+          Number(right.role === 'animation') - Number(left.role === 'animation') ||
+          Number(right.isMain) - Number(left.isMain),
+      ),
     staff: anilistKeyStaff(media.staff?.edges),
     originCountry: text(media.countryOfOrigin) || null,
     sourceMaterial: sourceMaterial(media.source),
@@ -234,7 +245,12 @@ export function malSnapshot(anime) {
     genres: (anime.genres || []).map((genre) => text(genre?.name)).filter(Boolean),
     studios: (anime.studios || [])
       .filter((studio) => text(studio?.name))
-      .map((studio) => ({ name: text(studio.name), malId: positive(studio.id) })),
+      // MAL's "studios" are the animation studios (producers are listed apart).
+      .map((studio) => ({
+        name: text(studio.name),
+        malId: positive(studio.id),
+        role: 'animation',
+      })),
     ageRating: text(anime.rating) || null,
     sourceMaterial: sourceMaterial(anime.source),
     score: positive(anime.mean),

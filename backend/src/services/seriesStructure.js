@@ -165,8 +165,10 @@ export async function finishSeries(seriesId, seasonIds, firstId) {
     [seriesId, seasonIds],
   )
   await query(
-    `INSERT INTO studio_credits (work_id, studio_id)
-     SELECT DISTINCT $1::uuid, studio_id FROM studio_credits WHERE work_id = ANY($2::uuid[])
+    `INSERT INTO studio_credits (work_id, studio_id, role, is_main)
+     SELECT DISTINCT ON (studio_id) $1::uuid, studio_id, role, is_main
+     FROM studio_credits WHERE work_id = ANY($2::uuid[])
+     ORDER BY studio_id, is_main DESC, role NULLS LAST
      ON CONFLICT DO NOTHING`,
     [seriesId, seasonIds],
   )

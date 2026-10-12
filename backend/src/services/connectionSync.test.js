@@ -5,6 +5,7 @@ import {
   malListStatusFields,
   pollConfig,
   providerPulls,
+  syncDelayConfig,
   syncEnabled,
   rowMatchesEntry,
   tmdbRatingValue,
@@ -107,5 +108,16 @@ describe('polling', () => {
     })
     assert.equal(custom.intervalSeconds, 30)
     assert.equal(custom.perMinute.anilist, 40)
+  })
+
+  it('waits for a quiet list before sending, within a max wait', () => {
+    assert.deepEqual(syncDelayConfig({}), { delaySeconds: 90, maxWaitSeconds: 600 })
+    assert.deepEqual(
+      syncDelayConfig({
+        CONNECTIONS_SYNC_DELAY_SECONDS: '1',
+        CONNECTIONS_SYNC_MAX_WAIT_SECONDS: '3',
+      }),
+      { delaySeconds: 5, maxWaitSeconds: 5 },
+    )
   })
 })
