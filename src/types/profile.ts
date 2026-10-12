@@ -15,6 +15,8 @@ export interface ProfileSettings {
   isPublic: boolean
   /** null = never picked: the profile uses coral and the avatar frame stays silver. */
   accent: ProfileAccent | null
+  /** Badge framing the avatar: an emblem badge id, 'none', or null to match the emblem. */
+  frame: string | null
   headline: string
   defaultTab: ProfileTab
   tabOrder: ProfileTab[]

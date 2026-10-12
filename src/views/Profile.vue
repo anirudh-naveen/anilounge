@@ -3,10 +3,11 @@
 
   Serves both `/profile` (the signed-in user) and the shareable `/u/:username`.
   A customizable hero (accent, headline, bio) sits above Favorites, Watchlist,
-  Stats, and Forum (the user's posts and comments) tabs whose order, default,
-  and visibility the owner controls from the Customize panel, which also edits the profile picture and favorite
-  genres. Favorite studios come only from hearting a studio's page. Data comes from `/users/:username`, which hides private
-  profiles and hidden tabs from visitors.
+  Stats, and Forum (the user's posts and comments) tabs whose order, default, and
+  visibility the owner controls from the Customize panel (ProfileCustomizePanel),
+  which also edits the picture, badge, avatar frame, and favorite genres. Favorite
+  studios come only from hearting a studio's page. Data comes from `/users/:username`,
+  which hides private profiles and hidden tabs from visitors.
 -->
 <template>
   <div class="profile-page" :style="accentStyle">
@@ -134,7 +135,7 @@
                 data-testid="share-profile"
                 @click="shareProfile"
               >
-                Share profile
+                Share
               </button>
               <FriendButton
                 v-if="profile.relationship && !profile.blocked && !profile.isBot"
@@ -615,184 +616,22 @@
 
     <!-- Customize -->
     <!-- Title: Customize Panel -->
-    <div v-if="showCustomize && draft" class="modal-backdrop" @click.self="showCustomize = false">
-      <form class="customize-panel" data-testid="customize-panel" @submit.prevent="saveCustomize">
-        <header class="panel-header">
-          <h2>Customize Profile</h2>
-          <button type="button" class="icon-btn" aria-label="Close" @click="showCustomize = false">
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </header>
-
-        <div class="field">
-          <span class="field-label">Profile picture</span>
-          <ProfilePictureEditor @changed="onPictureChanged" />
-        </div>
-
-        <label class="toggle-row">
-          <input v-model="draft.isPublic" type="checkbox" data-testid="toggle-public" />
-          <span>
-            <strong>Public profile</strong>
-            <small>Anyone with your link can view it. Turn off to keep it to yourself.</small>
-          </span>
-        </label>
-
-        <label class="toggle-row">
-          <input v-model="draft.showConnections" type="checkbox" data-testid="toggle-connections" />
-          <span>
-            <strong>Show connected accounts</strong>
-            <small>
-              Link to your AniList, MyAnimeList, and TMDB profiles under your name. Add accounts on
-              the Connections page.
-            </small>
-          </span>
-        </label>
-
-        <label v-if="emblemBadges.length" class="field">
-          <span class="field-label">Badge next to my name</span>
-          <select v-model="draftEmblem" class="form-control" data-testid="emblem-picker">
-            <option value="">Automatic ({{ emblemBadges[0]!.label }})</option>
-            <option v-for="badge in emblemBadges" :key="badge.id" :value="badge.id">
-              {{ badge.label }}
-            </option>
-            <option :value="NO_EMBLEM">No badge</option>
-          </select>
-        </label>
-
-        <div class="field">
-          <span class="field-label">Accent color</span>
-          <div class="swatches">
-            <!-- Default: never picked; coral profile, silver avatar frame. -->
-            <button
-              type="button"
-              class="swatch swatch-default"
-              :class="{ selected: !draft.accent }"
-              title="Default (silver avatar frame)"
-              aria-label="default"
-              data-testid="accent-default"
-              @click="draft.accent = null"
-            ></button>
-            <button
-              v-for="(color, name) in ACCENT_PRESETS"
-              :key="name"
-              type="button"
-              class="swatch"
-              :class="{ selected: draft.accent === name }"
-              :style="{ background: color }"
-              :aria-label="name"
-              @click="draft.accent = name"
-            ></button>
-            <!-- Color wheel: any custom color. -->
-            <label
-              class="swatch swatch-wheel"
-              :class="{ selected: isCustomAccent(draft.accent) }"
-              title="Pick any color"
-            >
-              <span
-                v-if="isCustomAccent(draft.accent)"
-                class="wheel-dot"
-                :style="{ background: draft.accent }"
-              ></span>
-              <input
-                type="color"
-                class="wheel-input"
-                :value="customAccent"
-                aria-label="Custom accent color"
-                data-testid="accent-wheel"
-                @input="pickCustomAccent"
-              />
-            </label>
-            <span v-if="isCustomAccent(draft.accent)" class="custom-hex">{{ draft.accent }}</span>
-          </div>
-        </div>
-
-        <label class="field">
-          <span class="field-label">Headline</span>
-          <input
-            v-model="draft.headline"
-            type="text"
-            class="form-control"
-            maxlength="80"
-            placeholder="Seasonal anime enjoyer"
-            :disabled="authStore.isDemoUser"
-          />
-        </label>
-
-        <label class="field">
-          <span class="field-label"
-            >Bio <small>{{ draftBio.length }}/300</small></span
-          >
-          <textarea
-            v-model="draftBio"
-            class="form-control"
-            maxlength="300"
-            rows="3"
-            placeholder="Tell people what you like to watch"
-            :disabled="authStore.isDemoUser"
-          ></textarea>
-          <small v-if="authStore.isDemoUser" class="field-note">
-            The shared demo account's headline and bio can't change.
-          </small>
-        </label>
-
-        <PreferencesEditor v-model:genres="draftGenres" />
-
-        <div class="field">
-          <span class="field-label">Tabs</span>
-          <ul class="tab-order">
-            <li v-for="(tab, index) in draft.tabOrder" :key="tab" class="tab-order-row">
-              <span class="tab-order-name">{{ TAB_LABELS[tab] }}</span>
-              <label class="inline-check">
-                <input
-                  type="checkbox"
-                  :checked="!draft.hiddenTabs.includes(tab)"
-                  :disabled="!draft.hiddenTabs.includes(tab) && visibleDraftTabs.length === 1"
-                  @change="toggleTabVisibility(tab)"
-                />
-                Visible
-              </label>
-              <button
-                type="button"
-                class="icon-btn"
-                :disabled="index === 0"
-                aria-label="Move up"
-                @click="moveTab(index, -1)"
-              >
-                <span aria-hidden="true">&uarr;</span>
-              </button>
-              <button
-                type="button"
-                class="icon-btn"
-                :disabled="index === draft.tabOrder.length - 1"
-                aria-label="Move down"
-                @click="moveTab(index, 1)"
-              >
-                <span aria-hidden="true">&darr;</span>
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <label class="field">
-          <span class="field-label">Open on</span>
-          <select v-model="draft.defaultTab" class="form-control">
-            <option v-for="tab in visibleDraftTabs" :key="tab" :value="tab">
-              {{ TAB_LABELS[tab] }}
-            </option>
-          </select>
-        </label>
-
-        <footer class="panel-footer">
-          <router-link to="/settings" class="settings-link">Account settings</router-link>
-          <button type="button" class="btn btn-secondary" @click="showCustomize = false">
-            Cancel
-          </button>
-          <button type="submit" class="btn btn-primary" :disabled="isSaving">
-            {{ isSaving ? 'Saving...' : 'Save' }}
-          </button>
-        </footer>
-      </form>
-    </div>
+    <ProfileCustomizePanel
+      v-if="showCustomize && profile"
+      :settings="profile.settings"
+      :bio="profile.user.bio || ''"
+      :genres="profile.user.preferences.favoriteGenres"
+      :emblem="emblemChoice"
+      :emblem-badges="emblemBadges"
+      :username="profile.user.username"
+      :picture="profile.user.profilePicture ?? null"
+      :tab-labels="TAB_LABELS"
+      :saving="isSaving"
+      :is-demo-user="authStore.isDemoUser"
+      @close="showCustomize = false"
+      @save="saveCustomize"
+      @picture="onPictureChanged"
+    />
   </div>
 </template>
 
@@ -820,21 +659,19 @@ import ListSearch from '@/components/ListSearch.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
 import { getTotalVoteCount } from '@/utils/ratings'
 import { getSearchCategoryDate } from '@/utils/searchFilters'
-import PreferencesEditor from '@/components/PreferencesEditor.vue'
-import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
+import ProfileCustomizePanel, { type CustomizeResult } from '@/components/ProfileCustomizePanel.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import RoleBadge from '@/components/RoleBadge.vue'
 import BadgeEmblem from '@/components/BadgeEmblem.vue'
 import { useBadgesStore } from '@/stores/badges'
-import { NO_EMBLEM, badgeInfo } from '@/utils/badges'
-import { ACCENT_PRESETS, accentColor, isCustomAccent, readableOn } from '@/utils/accent'
+import { badgeInfo } from '@/utils/badges'
+import { accentColor, readableOn } from '@/utils/accent'
 import FriendButton from '@/components/FriendButton.vue'
 import { shareLink } from '@/utils/nativeApp'
 import ProfileForum from '@/components/ProfileForum.vue'
 import { apiErrorMessage } from '@/utils/social'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
 import type {
-  ProfileAccent,
   ProfileSettings,
   ProfileTab,
   PublicProfile,
@@ -877,9 +714,6 @@ const WATCHLIST_SORT_OPTIONS: { value: SortByOption; label: string }[] = [
 
 const showCustomize = ref(false)
 const isSaving = ref(false)
-const draft = ref<ProfileSettings | null>(null)
-const draftBio = ref('')
-const draftGenres = ref<string[]>([])
 
 const username = computed(() =>
   typeof route.params.username === 'string' ? route.params.username : authStore.user?.username,
@@ -890,14 +724,6 @@ const accentStyle = computed(() => {
   const accent = profile.value?.settings.accent
   return { '--profile-accent': accentColor(accent), '--profile-on-accent': readableOn(accent) }
 })
-
-/** Color wheel value: the custom accent, or the current preset's color to start from. */
-const customAccent = computed(() => (draft.value ? accentColor(draft.value.accent) : '#e07a5f'))
-
-const pickCustomAccent = (event: Event) => {
-  if (draft.value)
-    draft.value.accent = (event.target as HTMLInputElement).value.toLowerCase() as ProfileAccent
-}
 
 const CONNECTION_LOGOS = {
   anilist: 'anilist-logo.svg',
@@ -948,11 +774,8 @@ const profileUsername = computed(() => profile.value?.user.username)
 const profileBadges = computed(() => badgesStore.badgesFor(profileUsername.value).map(badgeInfo))
 const emblemBadges = computed(() => profileBadges.value.filter((badge) => badge.emblem))
 const featuredBadge = computed(() => badgesStore.featuredFor(profileUsername.value))
-/** Select value: '' = automatic, a badge id, or 'none'. */
+/** Badge next to the name: '' = automatic, a badge id, or 'none'. */
 const emblemChoice = computed(() => badgesStore.choiceFor(profileUsername.value) ?? '')
-
-/** Customize panel's pick for the badge next to the name ('' = automatic). */
-const draftEmblem = ref('')
 
 onMounted(() => {
   badgesStore.load()
@@ -1330,16 +1153,7 @@ const toggleBlock = async () => {
 }
 
 const openCustomize = () => {
-  if (!profile.value) return
-  draft.value = {
-    ...profile.value.settings,
-    tabOrder: [...profile.value.settings.tabOrder],
-    hiddenTabs: [...profile.value.settings.hiddenTabs],
-  }
-  draftBio.value = profile.value.user.bio || ''
-  draftGenres.value = [...profile.value.user.preferences.favoriteGenres]
-  draftEmblem.value = emblemChoice.value
-  showCustomize.value = true
+  if (profile.value) showCustomize.value = true
 }
 
 /** Picture uploads apply immediately; mirror them in the hero. */
@@ -1347,43 +1161,22 @@ const onPictureChanged = (profilePicture: string | null) => {
   if (profile.value) profile.value.user.profilePicture = profilePicture
 }
 
-const visibleDraftTabs = computed(() =>
-  draft.value ? draft.value.tabOrder.filter((tab) => !draft.value!.hiddenTabs.includes(tab)) : [],
-)
-
-const moveTab = (index: number, delta: number) => {
-  if (!draft.value) return
-  const order = [...draft.value.tabOrder]
-  const [tab] = order.splice(index, 1)
-  order.splice(index + delta, 0, tab!)
-  draft.value.tabOrder = order
-}
-
-const toggleTabVisibility = (tab: ProfileTab) => {
-  if (!draft.value) return
-  const hidden = draft.value.hiddenTabs
-  draft.value.hiddenTabs = hidden.includes(tab)
-    ? hidden.filter((row) => row !== tab)
-    : [...hidden, tab]
-  if (!visibleDraftTabs.value.includes(draft.value.defaultTab)) {
-    draft.value.defaultTab = visibleDraftTabs.value[0]!
-  }
-}
-
-const saveCustomize = async () => {
-  if (!draft.value || !profile.value) return
+const saveCustomize = async (result: CustomizeResult) => {
+  if (!profile.value) return
   isSaving.value = true
   try {
-    const preferences = { favoriteGenres: draftGenres.value }
-    const emblemChanged = draftEmblem.value !== emblemChoice.value
-    // The accent tints their avatar frame everywhere, which comes from the badges list.
-    const accentChanged = draft.value.accent !== profile.value.settings.accent
+    const preferences = { favoriteGenres: result.genres }
+    const emblemChanged = result.emblem !== emblemChoice.value
+    // The frame and its accent show on avatars everywhere, from the badges list.
+    const frameChanged =
+      result.settings.accent !== profile.value.settings.accent ||
+      result.settings.frame !== profile.value.settings.frame
     const [response] = await Promise.all([
-      profileAPI.updateSettings({ settings: draft.value, bio: draftBio.value }),
+      profileAPI.updateSettings({ settings: result.settings, bio: result.bio }),
       authStore.updateProfile({ preferences }),
-      emblemChanged ? profileAPI.setFeaturedBadge(draftEmblem.value || null) : null,
+      emblemChanged ? profileAPI.setFeaturedBadge(result.emblem || null) : null,
     ])
-    if (emblemChanged || accentChanged) await badgesStore.load(true)
+    if (emblemChanged || frameChanged) await badgesStore.load(true)
     const { settings, bio } = response.data.data as { settings: ProfileSettings; bio: string }
     profile.value.settings = settings
     profile.value.user.bio = bio
@@ -2408,234 +2201,6 @@ const handleImageError = showPosterPlaceholder
   width: 10px;
   height: 10px;
   border-radius: 50%;
-}
-
-/* Customize */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(21, 34, 56, 0.45);
-}
-
-.customize-panel {
-  width: min(520px, 100%);
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
-  display: grid;
-  gap: 1.1rem;
-  padding: 1.5rem;
-  background: var(--bg-card);
-  border-radius: 14px;
-  box-shadow: var(--shadow-lg);
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.panel-header h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.4rem;
-  color: var(--text-primary);
-}
-
-.icon-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.icon-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.toggle-row {
-  display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-  cursor: pointer;
-}
-
-.toggle-row input {
-  margin-top: 0.3rem;
-}
-
-.toggle-row span {
-  display: grid;
-  gap: 0.15rem;
-  color: var(--text-primary);
-}
-
-.toggle-row small {
-  color: var(--text-muted);
-}
-
-.field {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.field-label {
-  display: flex;
-  justify-content: space-between;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-}
-
-.field-label small {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.field-note {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font: inherit;
-}
-
-textarea.form-control {
-  resize: vertical;
-}
-
-.swatches {
-  display: flex;
-  gap: 0.6rem;
-}
-
-.swatch {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 3px solid transparent;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
-}
-
-.swatch.selected {
-  border-color: var(--text-primary);
-}
-
-.swatches {
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-/* Default: silver, like the avatar frame it leaves. */
-.swatch-default {
-  background: linear-gradient(135deg, #f8fafc, #cbd5e1 45%, #8b97a8 75%, #e2e8f0);
-}
-
-.swatch-wheel {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: conic-gradient(
-    #ff4d4d,
-    #ffb84d,
-    #f5f54d,
-    #4dff88,
-    #4dd8ff,
-    #6d6dff,
-    #d64dff,
-    #ff4d4d
-  );
-  overflow: hidden;
-}
-
-.wheel-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  pointer-events: none;
-}
-
-/* The native picker covers the swatch invisibly so a click opens it. */
-.wheel-input {
-  position: absolute;
-  inset: -4px;
-  width: calc(100% + 8px);
-  height: calc(100% + 8px);
-  opacity: 0;
-  cursor: pointer;
-}
-
-.custom-hex {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-.tab-order {
-  display: grid;
-  gap: 0.4rem;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.tab-order-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-}
-
-.tab-order-name {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.inline-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-.panel-footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.settings-link {
-  margin-right: auto;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
 }
 
 @media (max-width: 768px) {

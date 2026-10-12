@@ -64,6 +64,15 @@ describe('normalizePreferences', () => {
   })
 })
 
+describe('avatar frame pick', () => {
+  it('keeps emblem badge ids and none, else null (match the emblem)', () => {
+    assert.equal(normalizeProfileSettings({ frame: 'artist' }).frame, 'artist')
+    assert.equal(normalizeProfileSettings({ frame: 'none' }).frame, 'none')
+    assert.equal(normalizeProfileSettings({ frame: 'emperor' }).frame, null)
+    assert.equal(normalizeProfileSettings({}).frame, null)
+  })
+})
+
 describe('custom accent colors', () => {
   it('keeps presets and #rrggbb colors, and falls back to coral otherwise', () => {
     assert.equal(normalizeProfileSettings({ accent: 'sky' }).accent, 'sky')
