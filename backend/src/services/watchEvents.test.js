@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { spreadImportedRow } from './watchEvents.js'
+import { spreadImportedRow, spreadUnits } from './watchEvents.js'
 
 const now = new Date('2026-10-03T12:00:00Z')
 
@@ -62,5 +62,19 @@ describe('spreadImportedRow', () => {
       now,
     )
     assert.deepEqual(days, [{ day: '2026-10-03', units: 1 }])
+  })
+})
+
+describe('spreadUnits', () => {
+  it('spreads units over a past range, clamping the end to today', () => {
+    assert.deepEqual(spreadUnits(3, '2026-09-01', '2026-12-01', now), [
+      { day: '2026-09-01', units: 1 },
+      { day: '2026-09-17', units: 1 },
+      { day: '2026-10-03', units: 1 },
+    ])
+  })
+
+  it('places nothing without a date', () => {
+    assert.deepEqual(spreadUnits(5, null, null, now), [])
   })
 })

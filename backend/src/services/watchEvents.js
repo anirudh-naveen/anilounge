@@ -6,8 +6,11 @@
  * calendar (utils/profileStats.js) reads this log to place watch time on the days it
  * happened. Progress changes in the app log what they add (`manual`); imports log an
  * estimate spread between the source's start and finish dates (`import`), replaced on
- * each re-import. Watch time a row has beyond its logged units still falls on the
- * row's last update, so rows from before this log keep their old placement.
+ * each re-import. Changes saved in backlog mode (titles watched long ago) log `backlog`
+ * units: they count toward the row but sit on no day of the calendar, unless the user
+ * gave start/finish dates, which spread them like an import. Watch time a row has
+ * beyond its logged units still falls on the row's last update, so rows from before
+ * this log keep their old placement.
  */
 
 import { query } from '../../config/postgres.js'
@@ -41,25 +44,20 @@ function toDay(value) {
 }
 
 /**
- * Estimate the days an imported row was watched: its units spread evenly from the
- * start date to the finish date (completed) or last update (in progress). With only
- * one end known, everything lands on it; with neither, nothing is estimated.
- * @param {{ status: string, current_episode: number, rewatch_count?: number, started_on?: string|null, completed_on?: string|null, updated_at?: string|null }} row
+ * Spread `units` evenly over the days from `start` to `end` (either may be missing:
+ * everything then lands on the one known; with neither, nothing is placed). Days past
+ * today are pulled back to today.
+ * @param {number} units
+ * @param {string|Date|null|undefined} startValue
+ * @param {string|Date|null|undefined} endValue
  * @param {Date} [now=new Date()]
  * @returns {Array<{ day: string, units: number }>}
  */
-export function spreadImportedRow(row, now = new Date()) {
-  const current = Number(row.current_episode || 0)
-  const watches = 1 + Math.max(0, Number(row.rewatch_count) || 0)
-  let units = 0
-  if (row.status === 'completed') units = Math.max(current, 1) * watches
-  else if (['watching', 'on_hold', 'dropped'].includes(row.status)) units = current
-  if (!units) return []
-
+export function spreadUnits(units, startValue, endValue, now = new Date()) {
+  if (!(units > 0)) return []
   const today = toDay(now)
-  const finish = row.status === 'completed' ? row.completed_on : null
-  let end = toDay(finish || row.updated_at) || toDay(row.started_on)
-  let start = toDay(row.started_on) || end
+  let end = toDay(endValue) || toDay(startValue)
+  let start = toDay(startValue) || end
   if (!end) return []
   if (end > today) end = today
   if (start > today) start = today
@@ -74,6 +72,24 @@ export function spreadImportedRow(row, now = new Date()) {
     byDay.set(day, (byDay.get(day) || 0) + 1)
   }
   return [...byDay].map(([day, count]) => ({ day, units: count }))
+}
+
+/**
+ * Estimate the days an imported row was watched: its units spread evenly from the
+ * start date to the finish date (completed) or last update (in progress). With only
+ * one end known, everything lands on it; with neither, nothing is estimated.
+ * @param {{ status: string, current_episode: number, rewatch_count?: number, started_on?: string|null, completed_on?: string|null, updated_at?: string|null }} row
+ * @param {Date} [now=new Date()]
+ * @returns {Array<{ day: string, units: number }>}
+ */
+export function spreadImportedRow(row, now = new Date()) {
+  const current = Number(row.current_episode || 0)
+  const watches = 1 + Math.max(0, Number(row.rewatch_count) || 0)
+  let units = 0
+  if (row.status === 'completed') units = Math.max(current, 1) * watches
+  else if (['watching', 'on_hold', 'dropped'].includes(row.status)) units = current
+  const finish = row.status === 'completed' ? row.completed_on : null
+  return spreadUnits(units, row.started_on, finish || row.updated_at, now)
 }
 
 /**
@@ -92,6 +108,32 @@ export async function recordWatch(userId, contentId, units) {
      ON CONFLICT (user_id, content_id, watched_on, source)
        DO UPDATE SET units = watch_events.units + EXCLUDED.units`,
     [userId, contentId, Math.round(units)],
+  )
+}
+
+/**
+ * Log units from a change saved in backlog mode. With a start or finish date they are
+ * spread over those days as in-app history; without, they are logged as `backlog`,
+ * which counts toward the row but places nothing on the calendar.
+ * @param {string} userId
+ * @param {string} contentId
+ * @param {number} units - Added units; nothing is logged unless positive.
+ * @param {{ startedOn?: string|Date|null, completedOn?: string|Date|null }} dates
+ * @returns {Promise<void>}
+ */
+export async function recordBacklog(userId, contentId, units, { startedOn, completedOn }) {
+  if (!(units > 0) || !(await hasWatchEvents())) return
+  const spread = spreadUnits(Math.round(units), startedOn, completedOn)
+  const events = spread.length
+    ? spread.map((event) => ({ ...event, source: 'manual' }))
+    : [{ day: toDay(new Date()), units: Math.round(units), source: 'backlog' }]
+  await query(
+    `INSERT INTO watch_events (user_id, content_id, watched_on, source, units)
+     SELECT $1, $2, e.day, e.source, e.units
+     FROM jsonb_to_recordset($3::jsonb) AS e(day date, source text, units int)
+     ON CONFLICT (user_id, content_id, watched_on, source)
+       DO UPDATE SET units = watch_events.units + EXCLUDED.units`,
+    [userId, contentId, JSON.stringify(events)],
   )
 }
 
@@ -167,23 +209,24 @@ export async function clearWatchHistory(userId, contentId) {
 }
 
 /**
- * A user's history grouped by title.
+ * A user's history grouped by title. `placed` is false for backlog units, which have
+ * no real day (`day` is just when they were logged).
  * @param {string} userId
- * @returns {Promise<Map<string, Array<{ day: string, units: number }>>>}
+ * @returns {Promise<Map<string, Array<{ day: string, units: number, placed: boolean }>>>}
  */
 export async function loadWatchHistory(userId) {
   const byContent = new Map()
   if (!(await hasWatchEvents())) return byContent
   const { rows } = await query(
     `SELECT content_id::text AS content_id, to_char(watched_on, 'YYYY-MM-DD') AS day,
-            sum(units)::int AS units
+            sum(units)::int AS units, source <> 'backlog' AS placed
      FROM watch_events WHERE user_id = $1
-     GROUP BY content_id, watched_on`,
+     GROUP BY content_id, watched_on, source <> 'backlog'`,
     [userId],
   )
   for (const row of rows) {
     if (!byContent.has(row.content_id)) byContent.set(row.content_id, [])
-    byContent.get(row.content_id).push({ day: row.day, units: row.units })
+    byContent.get(row.content_id).push({ day: row.day, units: row.units, placed: row.placed })
   }
   return byContent
 }

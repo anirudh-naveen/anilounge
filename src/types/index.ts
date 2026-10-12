@@ -78,6 +78,8 @@ export interface WatchlistData {
   startedOn?: string | null
   completedOn?: string | null
   rewatchCount?: number
+  /** Saved in backlog mode: watched long ago, so it doesn't count toward today. */
+  backlog?: boolean
 }
 
 export type WatchlistImportSource = 'anilist' | 'mal' | 'mal_file' | 'tmdb'
@@ -181,6 +183,7 @@ export interface UpdateWatchlistData {
   startedOn?: string | null
   completedOn?: string | null
   rewatchCount?: number
+  backlog?: boolean
 }
 
 export interface ContentParams {

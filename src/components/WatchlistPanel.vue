@@ -118,9 +118,13 @@
         />
       </label>
 
-      <details class="more-details full">
+      <details class="more-details full" :open="backlogMode || undefined">
         <summary>More details</summary>
-        <p class="panel-note">
+        <p v-if="backlogMode" class="panel-note">
+          Backlog mode is on: this counts toward your total watch time, not today. Set the dates you
+          watched it to place it on your calendar.
+        </p>
+        <p v-else class="panel-note">
           Start and finish dates fill in automatically when you save progress.
         </p>
         <div class="more-grid">
@@ -196,6 +200,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
 import { useContentStore } from '@/stores/content'
+import { useBacklogMode } from '@/composables/useBacklogMode'
 import {
   WATCHLIST_STATUS_OPTIONS,
   getWatchlistStatusLabel,
@@ -216,6 +221,7 @@ const props = withDefaults(
 const authStore = useAuthStore()
 const contentStore = useContentStore()
 const toast = useToast()
+const { active: backlogMode } = useBacklogMode()
 
 const existingItem = computed(() =>
   props.contentId ? contentStore.getWatchlistItem(props.contentId) : undefined,
@@ -302,7 +308,7 @@ const add = async () => {
     } else {
       await contentStore.addToWatchlist(props.contentId, form.status)
     }
-    toast.success('Added to watchlist!')
+    toast.success(backlogMode.value ? 'Added to watchlist (backlog)' : 'Added to watchlist!')
   } catch (error) {
     console.error('Error adding to watchlist:', error)
     toast.error('Failed to add to watchlist')
@@ -318,7 +324,7 @@ const save = async () => {
       status: form.status,
       ...editorFields(),
     })
-    toast.success('Watchlist updated!')
+    toast.success(backlogMode.value ? 'Watchlist updated (backlog)' : 'Watchlist updated!')
   } catch (error) {
     console.error('Error saving watchlist item:', error)
     toast.error('Failed to update watchlist')
