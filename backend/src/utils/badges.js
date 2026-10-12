@@ -6,7 +6,8 @@
  * the role (creator only), so it is never stored as a granted badge; `bot` is
  * worn only by the bot accounts (and is their only badge); the rest are
  * granted (stored in `users.cosmetic_roles`); `supporter` is also granted automatically
- * for a Ko-fi donation (services/donationService.js). `emblem` badges can be picked as the one
+ * for a Ko-fi donation (services/donationService.js), and `influencer` for forum activity
+ * (`earnsInfluencer`, services/badgeService.js). `emblem` badges can be picked as the one
  * emblem shown next to the username; emblem-less badges only appear in the profile's
  * Badges section. `grantable` badges are the ones admins hand out from the admin page.
  * Keep in step with the frontend copy in `src/utils/badges.ts`.
@@ -27,6 +28,18 @@ const BY_ID = new Map(BADGES.map((badge) => [badge.id, badge]))
 export const GRANTABLE_BADGES = BADGES.filter((badge) => badge.grantable).map((badge) => badge.id)
 /** `featured_badge` value meaning "show no emblem". */
 export const NO_EMBLEM = 'none'
+
+/** Forum activity over the last 7 days that earns the Influencer badge (either one). */
+export const INFLUENCER_WEEKLY_POSTS = 5
+export const INFLUENCER_WEEKLY_COMMENTS = 10
+
+/**
+ * Whether a week of forum activity earns the Influencer badge.
+ * @param {{ posts: number, comments: number }} week - Posts and comments in the last 7 days.
+ * @returns {boolean}
+ */
+export const earnsInfluencer = ({ posts, comments }) =>
+  posts >= INFLUENCER_WEEKLY_POSTS || comments >= INFLUENCER_WEEKLY_COMMENTS
 
 /**
  * Badges a user holds, in registry order.

@@ -5,8 +5,9 @@
  * the one emblem next to a username; emblem-less badges (future ones) only appear in
  * the profile Badges section. `grantable` badges are toggled on the admin page; the
  * Admin toggle sets admin access itself (creator only; never stored as a badge);
- * Bot is worn only by the bot accounts (Lounge Keeper, Lounge Cleaner);
- * Supporter is also granted automatically for a Ko-fi donation.
+ * Bot is worn only by the bot accounts (Lounge Keeper, Cleaner, Guide);
+ * Supporter is also granted automatically for a Ko-fi donation, and Influencer for 5 forum
+ * posts or 10 comments in a week.
  */
 
 export interface BadgeDef {
@@ -49,7 +50,8 @@ export const BADGES: BadgeDef[] = [
   {
     id: 'influencer',
     label: 'Influencer',
-    description: 'Shares AniLounge with the world.',
+    description:
+      'Shares AniLounge with the world. Also earned with 5 forum posts or 10 comments in a week.',
     emblem: true,
     grantable: true,
   },
