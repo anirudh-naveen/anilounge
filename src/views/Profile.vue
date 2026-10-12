@@ -581,6 +581,41 @@
         <section v-else-if="activeTab === 'forum'" class="tab-panel" data-testid="panel-forum">
           <ProfileForum :username="profile.user.username" />
         </section>
+
+        <!-- Title: Friends Tab -->
+        <section
+          v-else-if="activeTab === 'friends' && profile.friends"
+          class="tab-panel"
+          data-testid="panel-friends"
+        >
+          <ul v-if="profile.friends.length" class="friends-grid">
+            <li v-for="friend in profile.friends" :key="friend.user.id">
+              <router-link
+                :to="{ name: 'publicProfile', params: { username: friend.user.username } }"
+                class="friend-card"
+                data-testid="profile-friend"
+              >
+                <UserAvatar
+                  :src="friend.user.profilePicture"
+                  :name="friend.user.username"
+                  :size="48"
+                />
+                <span class="friend-name">
+                  {{ friend.user.username }}<RoleBadge :username="friend.user.username" />
+                </span>
+              </router-link>
+            </li>
+          </ul>
+          <div v-else class="empty-panel">
+            <p>{{ profile.isOwner ? 'No friends yet.' : 'No friends to show yet.' }}</p>
+            <router-link
+              v-if="profile.isOwner"
+              :to="{ name: 'friends', query: { tab: 'friends' } }"
+              class="btn btn-secondary btn-small"
+              >Find people</router-link
+            >
+          </div>
+        </section>
       </template>
     </div>
 
@@ -808,6 +843,7 @@ const TAB_LABELS: Record<ProfileTab, string> = {
   watchlist: 'Watchlist',
   stats: 'Stats',
   forum: 'Forum',
+  friends: 'Friends',
 }
 
 const route = useRoute()
@@ -869,7 +905,7 @@ const favoriteGenres = computed(() => profile.value?.user.preferences.favoriteGe
 // ---------------------------------------------------------------------------
 
 const isTab = (value: unknown): value is ProfileTab =>
-  value === 'favorites' || value === 'watchlist' || value === 'stats' || value === 'forum'
+  typeof value === 'string' && value in TAB_LABELS
 
 const loadProfile = async () => {
   if (!username.value) {
@@ -1763,6 +1799,40 @@ const handleImageError = showPosterPlaceholder
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 2rem;
+}
+
+.friends-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.friend-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.friend-card:hover {
+  border-color: var(--profile-accent);
+}
+
+.friend-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-panel {
