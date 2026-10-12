@@ -575,15 +575,17 @@ onUnmounted(() => {
   if (clock) clearInterval(clock)
 })
 
+// Same title and description as the server-rendered page (backend seoService.js).
 usePageMeta(() => ({
-  title: 'Home',
+  title: 'Discover, track, and discuss animation',
   description:
-    "Find new animated series and films, track everything you've watched, and talk about it with fans around the world.",
+    "Welcome to the Animation Lounge. Discover animated series and films, track what you've watched, and talk animation with fans around the world.",
   path: '/',
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'AniLounge',
+    alternateName: 'Animation Lounge',
     url: absoluteUrl('/'),
   },
 }))

@@ -261,10 +261,6 @@
                 {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
               <AiringBadge :content="item" variant="card" />
-              <FavoriteHeart
-                v-if="!(item as any).source && !isCatalogEntity(item)"
-                :content-id="item._id"
-              />
             </div>
             <div class="result-info">
               <h3 class="result-title">{{ getDisplayTitle(item) }}</h3>
@@ -402,7 +398,6 @@ import {
   normalizeBrowseType,
   type BrowseContentType,
 } from '@/utils/catalogTabs'
-import FavoriteHeart from '@/components/FavoriteHeart.vue'
 
 const router = useRouter()
 const route = useRoute()

@@ -207,7 +207,8 @@
         >
           <div v-if="!hasAnyFavorites" class="empty-panel">
             <p v-if="profile.isOwner">
-              Hover a poster and tap the heart to start collecting favorites.
+              Tap Favorite on a title's page, or the heart on your watchlist, to start collecting
+              favorites.
             </p>
             <p v-else>No favorites yet.</p>
           </div>
@@ -305,7 +306,6 @@
                       :alt="getDisplayTitle(asTitle(item))"
                       @error="handleImageError"
                     />
-                    <FavoriteHeart v-if="reordering !== group.key" :content-id="item._id" />
                   </div>
                   <span class="card-title">{{ getDisplayTitle(asTitle(item)) }}</span>
                   <span class="card-meta">{{
@@ -405,7 +405,6 @@
                 <span class="status-tag" :class="`status-${entry.status}`">
                   {{ getWatchlistStatusLabel(entry.status) }}
                 </span>
-                <FavoriteHeart :content-id="entry.content._id" />
               </div>
               <span class="card-title">{{ getDisplayTitle(entry.content) }}</span>
               <span class="card-meta">
@@ -775,7 +774,6 @@ import {
 import { getRatingColor, getRatingTextStyle } from '@/utils/ratingColors'
 import { getDisplayTitle } from '@/utils/titles'
 import { getWatchlistStatusLabel, WATCHLIST_STATUS_OPTIONS } from '@/utils/watchlist'
-import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import ListSearch from '@/components/ListSearch.vue'
 import { applySort, type SortByOption, type SortDirection } from '@/utils/sorting'
