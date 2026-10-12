@@ -29,7 +29,7 @@ export const PROFILE_HEADLINE_MAX = 80
 export const PROFILE_BIO_MAX = 300
 const PREFERENCE_LIST_MAX = 30
 
-// accent null = never picked: the profile uses coral and the avatar frame stays silver.
+// accent null = never picked: the profile and avatar frame are silver.
 export const DEFAULT_PROFILE_SETTINGS = Object.freeze({
   isPublic: true,
   accent: null,

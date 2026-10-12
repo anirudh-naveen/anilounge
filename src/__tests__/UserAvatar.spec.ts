@@ -13,7 +13,22 @@ vi.mock('@/services/api', () => ({
   },
 }))
 
+const auth = vi.hoisted(() => ({
+  user: null as { username: string; profilePicture: string | null } | null,
+}))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
+
 describe('UserAvatar', () => {
+  it("shows the signed-in user's current picture over the page's copy", () => {
+    setActivePinia(createPinia())
+    auth.user = { username: 'Mika', profilePicture: 'https://cdn.test/new.png' }
+    const mine = mount(UserAvatar, { props: { name: 'mika', src: 'https://cdn.test/old.png' } })
+    expect(mine.get('img').attributes('src')).toBe('https://cdn.test/new.png')
+    const theirs = mount(UserAvatar, { props: { name: 'kai', src: 'https://cdn.test/kai.png' } })
+    expect(theirs.get('img').attributes('src')).toBe('https://cdn.test/kai.png')
+    auth.user = null
+  })
+
   it('rings the picture with the badge the caller passes', () => {
     const wrapper = mount(UserAvatar, { props: { name: 'kai', badge: 'admin', size: 40 } })
     expect(wrapper.classes()).toContain('ring-admin')
@@ -29,19 +44,14 @@ describe('UserAvatar', () => {
     expect(plain.classes()).not.toContain('ringed')
   })
 
-  it('crops to the emblem silhouette, or crowns Creator and caps Bot', () => {
+  it('keeps the picture round, with the badge silhouette behind it', () => {
     const spade = mount(UserAvatar, { props: { badge: 'artist', size: 40 } })
-    expect(spade.classes()).toContain('shaped')
     expect(spade.find('.frame').exists()).toBe(true)
-    expect(spade.get('.user-avatar-inner').attributes('style')).toContain('mask')
-    const creator = mount(UserAvatar, { props: { badge: 'creator' } })
-    expect(creator.classes()).toContain('round')
-    expect(creator.find('.crown').exists()).toBe(true)
-    expect(
-      mount(UserAvatar, { props: { badge: 'bot' } })
-        .find('.crown.jester')
-        .exists(),
-    ).toBe(true)
+    expect(spade.find('.ring').exists()).toBe(true)
+    expect(spade.get('.user-avatar-inner').attributes('style')).toBeUndefined()
+    const plain = mount(UserAvatar, { props: { badge: null } })
+    expect(plain.find('.frame').exists()).toBe(false)
+    expect(plain.find('.ring').exists()).toBe(false)
   })
 
   it('frames in silver until the user picks an accent', () => {

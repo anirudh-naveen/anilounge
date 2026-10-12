@@ -10,7 +10,12 @@
 -->
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
-    <form class="customize-panel" data-testid="customize-panel" @submit.prevent="save">
+    <form
+      class="customize-panel"
+      :style="accentStyle"
+      data-testid="customize-panel"
+      @submit.prevent="save"
+    >
       <header class="panel-header">
         <h2>Customize profile</h2>
         <button type="button" class="icon-btn" aria-label="Close" @click="emit('close')">
@@ -20,7 +25,7 @@
 
       <div class="panel-body">
         <!-- Title: Preview -->
-        <section class="preview" :style="previewStyle" data-testid="customize-preview">
+        <section class="preview" data-testid="customize-preview">
           <UserAvatar
             :src="picture"
             :name="username"
@@ -45,13 +50,13 @@
           <div class="field">
             <span class="field-label">Accent color</span>
             <div class="swatches">
-              <!-- Default: never picked; coral profile, silver avatar frame. -->
+              <!-- Default: never picked; silver profile and avatar frame. -->
               <button
                 type="button"
                 class="swatch swatch-default"
                 :class="{ selected: !draft.accent }"
-                title="Default (silver avatar frame)"
-                aria-label="default"
+                title="Silver (default)"
+                aria-label="silver"
                 data-testid="accent-default"
                 @click="draft.accent = null"
               ></button>
@@ -100,7 +105,7 @@
                 class="choice"
                 :class="{ selected: emblem === option.value }"
                 :aria-checked="emblem === option.value"
-                @click="emblem = option.value"
+                @click="pickEmblem(option.value)"
               >
                 <BadgeEmblem v-if="option.badge" :badge="option.badge" size="md" :tooltip="false" />
                 {{ option.label }}
@@ -267,7 +272,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import BadgeEmblem from '@/components/BadgeEmblem.vue'
 import PreferencesEditor from '@/components/PreferencesEditor.vue'
@@ -280,8 +285,8 @@ export interface CustomizeResult {
   settings: ProfileSettings
   bio: string
   genres: string[]
-  /** Badge next to the name: '' = automatic, a badge id, or 'none'. */
-  emblem: string
+  /** Badge next to the name: '' = automatic, a badge id, 'none', or null if not touched. */
+  emblem: string | null
 }
 
 const props = defineProps<{
@@ -313,6 +318,14 @@ const draft = ref<ProfileSettings>({
 const bio = ref(props.bio)
 const genres = ref([...props.genres])
 const emblem = ref(props.emblem)
+const emblemTouched = ref(false)
+// The badges list may land after the panel opens; follow it until the user picks.
+watch(
+  () => props.emblem,
+  (value) => {
+    if (!emblemTouched.value) emblem.value = value
+  },
+)
 
 const emblemOptions = computed(() => [
   { value: '', label: `Automatic`, badge: props.emblemBadges[0]?.id ?? null },
@@ -340,7 +353,8 @@ const previewFrame = computed(() => {
   return previewEmblem.value
 })
 
-const previewStyle = computed(() => ({
+/** The whole panel follows the accent being picked. */
+const accentStyle = computed(() => ({
   '--profile-accent': accentColor(draft.value.accent),
   '--profile-on-accent': readableOn(draft.value.accent),
 }))
@@ -370,12 +384,17 @@ const toggleTabVisibility = (tab: ProfileTab) => {
   }
 }
 
+const pickEmblem = (value: string) => {
+  emblem.value = value
+  emblemTouched.value = true
+}
+
 const save = () =>
   emit('save', {
     settings: draft.value,
     bio: bio.value,
     genres: genres.value,
-    emblem: emblem.value,
+    emblem: emblemTouched.value ? emblem.value : null,
   })
 </script>
 
