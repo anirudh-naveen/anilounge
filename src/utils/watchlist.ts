@@ -21,6 +21,19 @@ export const getWatchlistStatusLabel = (status?: string) => {
   return option ? option.label : 'In Watchlist'
 }
 
+/**
+ * Episodes watched as shown and edited: completed titles sit on their last episode when
+ * the total is known (the server saves the same), whatever an older row stored.
+ * @param status - Watchlist status.
+ * @param currentEpisode - Saved episode progress.
+ * @param totalEpisodes - The title's episode count; 0 or missing when unknown.
+ */
+export const watchedEpisodes = (
+  status: string | undefined,
+  currentEpisode: number | undefined,
+  totalEpisodes: number | undefined,
+) => (status === 'completed' && totalEpisodes ? totalEpisodes : currentEpisode || 0)
+
 /** Order of the watchlist page's status sections: active titles first. */
 export const WATCHLIST_STATUS_ORDER: WatchlistStatus[] = [
   'watching',

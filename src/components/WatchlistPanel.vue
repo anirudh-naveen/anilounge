@@ -204,6 +204,7 @@ import { useBacklogMode } from '@/composables/useBacklogMode'
 import {
   WATCHLIST_STATUS_OPTIONS,
   getWatchlistStatusLabel,
+  watchedEpisodes,
   type WatchlistStatus,
 } from '@/utils/watchlist'
 import { toUserRating } from '@/utils/ratings'
@@ -250,7 +251,7 @@ const populate = () => {
   const item = existingItem.value
   form.status = item?.status ?? 'plan_to_watch'
   form.currentSeason = item?.currentSeason || 1
-  form.currentEpisode = item?.currentEpisode || 0
+  form.currentEpisode = watchedEpisodes(item?.status, item?.currentEpisode, props.totalEpisodes)
   form.rating = item?.rating ?? ''
   form.startedOn = item?.startedOn || ''
   form.completedOn = item?.completedOn || ''
