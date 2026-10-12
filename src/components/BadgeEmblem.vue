@@ -1,9 +1,9 @@
 <!--
   BadgeEmblem.vue — the emblem for one badge (component).
 
-  Creator: sparkly gold crown. Admin: sparkly violet shield. Developer: emerald hex
-  with </>. Artist: pink palette. Influencer: sky disc with a megaphone. Supporter: coral heart with a
-  coin glint. Bot (the bot accounts only): cyan robot head. All glow and
+  Card-royalty theme. Creator: sparkly gold crown. Admin: sparkly violet shield.
+  Developer: emerald diamond with </>. Artist: pink spade with a palette. Influencer:
+  sky club with a megaphone. Supporter: coral heart with a coin glint. Bot (the bot accounts only): cyan robot head. All glow and
   catch a light sweep; only creator/admin twinkle. Badges without an emblem (future
   ones) get a plain medal, used in the profile Badges section.
 -->
@@ -29,9 +29,12 @@
       </defs>
 
       <template v-if="kind === 'creator'">
-        <path :fill="fill" d="M3 8.5l4.2 3.3L12 4.5l4.8 7.3L21 8.5l-1.8 10H4.8L3 8.5z" />
-        <rect x="4.8" y="19.6" width="14.4" height="2" rx="1" :fill="fill" />
-        <circle cx="12" cy="14.6" r="1.6" fill="#fff" opacity="0.9" />
+        <!-- Spans y 3–21 so it sits on the same centre line as the other emblems. -->
+        <path
+          :fill="fill"
+          d="M3 7.6l4.2 3.3L12 3.6l4.8 7.3L21 7.6l-1.8 9.8H4.8L3 7.6zM6 18.7h12a1.1 1.1 0 0 1 0 2.2H6a1.1 1.1 0 0 1 0-2.2zM1.9 7.6a1.1 1.1 0 1 1 2.2 0 1.1 1.1 0 1 1-2.2 0zM10.9 3.6a1.1 1.1 0 1 1 2.2 0 1.1 1.1 0 1 1-2.2 0zM19.9 7.6a1.1 1.1 0 1 1 2.2 0 1.1 1.1 0 1 1-2.2 0z"
+        />
+        <circle cx="12" cy="13.4" r="1.6" fill="#fff" opacity="0.9" />
       </template>
 
       <template v-else-if="kind === 'admin'">
@@ -44,11 +47,12 @@
       </template>
 
       <template v-else-if="kind === 'developer'">
-        <path :fill="fill" d="M12 2.2l8.5 4.9v9.8L12 21.8l-8.5-4.9V7.1z" />
+        <path :fill="fill" d="M12 2Q15.6 7.4 20.4 12 15.6 16.6 12 22 8.4 16.6 3.6 12 8.4 7.4 12 2z" />
         <path
+          transform="translate(12 12) scale(0.82) translate(-12 -11.9)"
           fill="none"
           stroke="#fff"
-          stroke-width="1.9"
+          stroke-width="2.2"
           stroke-linecap="round"
           stroke-linejoin="round"
           d="M9.3 9.2 6.8 12l2.5 2.8M14.7 9.2l2.5 2.8-2.5 2.8M12.9 8.2l-1.8 7.6"
@@ -58,24 +62,36 @@
       <template v-else-if="kind === 'artist'">
         <path
           :fill="fill"
-          d="M12 3c-5 0-9 3.6-9 8.2 0 3.2 2.4 4.6 4.4 4.1 1.5-.4 2.6.6 2.6 2 0 1.7 1.3 3 3.1 2.7C18 19.4 21 16 21 11.5 21 6.8 17 3 12 3z"
+          d="M12 2.2C9.5 5.6 3.2 9.2 3.2 13.6 3.2 16.2 5.2 18 7.5 18c1.5 0 2.8-.7 3.5-1.7-.2 2-1 3.7-2.4 5.3h6.8c-1.4-1.6-2.2-3.3-2.4-5.3.7 1 2 1.7 3.5 1.7 2.3 0 4.3-1.8 4.3-4.4 0-4.4-6.3-8-8.8-11.4z"
         />
-        <circle cx="7.8" cy="10.6" r="1.35" fill="#fff" />
-        <circle cx="10.8" cy="7.2" r="1.35" fill="#fff" />
-        <circle cx="15" cy="7.6" r="1.35" fill="#fff" />
-        <circle cx="17.1" cy="11.2" r="1.35" fill="#fff" />
+        <g transform="translate(12 12.2) scale(0.44) translate(-12 -12)">
+          <path
+            fill="#fff"
+            d="M12 3c-5 0-9 3.6-9 8.2 0 3.2 2.4 4.6 4.4 4.1 1.5-.4 2.6.6 2.6 2 0 1.7 1.3 3 3.1 2.7C18 19.4 21 16 21 11.5 21 6.8 17 3 12 3z"
+          />
+          <circle cx="7.8" cy="10.6" r="1.8" fill="#db2777" />
+          <circle cx="11" cy="7" r="1.8" fill="#8b5cf6" />
+          <circle cx="15.2" cy="7.6" r="1.8" fill="#ec4899" />
+          <circle cx="17.2" cy="11.4" r="1.8" fill="#a855f7" />
+        </g>
       </template>
 
       <template v-else-if="kind === 'influencer'">
-        <circle cx="12" cy="12" r="9.5" :fill="fill" />
-        <path fill="#fff" d="M6.6 10.4v3.2h2l4.3 2.7V7.7L8.6 10.4h-2z" />
+        <!-- One path, so the gradient spans the whole club instead of each lobe. -->
         <path
-          fill="none"
-          stroke="#fff"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          d="M15 10.1a2.6 2.6 0 0 1 0 3.8M16.9 8.3a5.3 5.3 0 0 1 0 7.4"
+          :fill="fill"
+          d="M7.7 6.9a4.3 4.3 0 1 0 8.6 0 4.3 4.3 0 1 0-8.6 0zM3.1 12.9a4.3 4.3 0 1 0 8.6 0 4.3 4.3 0 1 0-8.6 0zM12.3 12.9a4.3 4.3 0 1 0 8.6 0 4.3 4.3 0 1 0-8.6 0zM8.8 11.6a3.2 3.2 0 1 0 6.4 0 3.2 3.2 0 1 0-6.4 0zM11 14c-.2 3-1 5.5-2.4 7.6h6.8C14 19.5 13.2 17 13 14z"
         />
+        <g transform="translate(12 11.6) scale(0.56) translate(-12.6 -12)">
+          <path fill="#fff" d="M6.6 10.4v3.2h2l4.3 2.7V7.7L8.6 10.4h-2z" />
+          <path
+            fill="none"
+            stroke="#fff"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            d="M15 10.1a2.6 2.6 0 0 1 0 3.8M16.9 8.3a5.3 5.3 0 0 1 0 7.4"
+          />
+        </g>
       </template>
 
       <template v-else-if="kind === 'supporter'">
