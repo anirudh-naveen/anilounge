@@ -346,12 +346,20 @@ export async function upsertPerson(staff, { workIds = [], show = null } = {}) {
   if (!incoming.anilistId && !incoming.tmdbId) return null
 
   const { rows: byId } = await query(
-    `SELECT id::text AS id, name, native_name, mal_id, anilist_id, tmdb_id, image_path
+    `SELECT id::text AS id, name, native_name, mal_id, anilist_id, tmdb_id, image_path,
+       EXISTS (SELECT 1 FROM voices v WHERE v.content_id = content.id) AS has_voice
      FROM content WHERE kind = 'voice' AND (anilist_id = $1 OR tmdb_id = $2)
      ORDER BY (anilist_id = $1) DESC NULLS LAST LIMIT 1`,
     [incoming.anilistId, incoming.tmdbId],
   )
   let match = byId[0] || null
+  if (match && !match.has_voice) {
+    // A person an interrupted run left without its voices row (credits need one).
+    await query(
+      `INSERT INTO voices (content_id, english_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [match.id, match.name],
+    )
+  }
 
   if (!match) {
     const people = show || (workIds.length ? await peopleOnShow(workIds) : [])
@@ -400,9 +408,13 @@ export async function upsertPerson(staff, { workIds = [], show = null } = {}) {
   }
 
   const id = crypto.randomUUID()
+  // One statement, so a dropped connection can't leave a person without a voices row.
   await query(
-    `INSERT INTO content (id, kind, name, native_name, image_path, anilist_id, tmdb_id)
-     VALUES ($1, 'voice', $2, $3, $4, $5, $6)`,
+    `WITH person AS (
+       INSERT INTO content (id, kind, name, native_name, image_path, anilist_id, tmdb_id)
+       VALUES ($1, 'voice', $2, $3, $4, $5, $6) RETURNING id
+     )
+     INSERT INTO voices (content_id, english_name) SELECT id, $2 FROM person`,
     [
       id,
       incoming.name,
@@ -412,7 +424,6 @@ export async function upsertPerson(staff, { workIds = [], show = null } = {}) {
       incoming.tmdbId,
     ],
   )
-  await query('INSERT INTO voices (content_id, english_name) VALUES ($1, $2)', [id, incoming.name])
   if (show) {
     show.push({
       id,
