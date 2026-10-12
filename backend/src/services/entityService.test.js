@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { jikanGet, jikanStatus, mergeAppearance, personIdsConflict } from './entityService.js'
+import { mergeAppearance, personIdsConflict } from './entityService.js'
 import { characterSourceIdsConflict } from './characterMerge.js'
 import { externalIdsConflict } from '../utils/titles.js'
 import { pickPrimaryCharacter } from '../utils/entities.js'
@@ -14,10 +14,15 @@ describe('voice credits on a character appearance', () => {
   it('labels an unlabeled TMDB credit instead of adding the same actor again', () => {
     const doc = character([{ name: 'Bryn Apprill', language: 'Unknown' }])
     assert.equal(
-      mergeAppearance(doc, { content: 'w1', voiceActors: [{ name: 'Bryn Apprill', language: 'English' }] }),
+      mergeAppearance(doc, {
+        content: 'w1',
+        voiceActors: [{ name: 'Bryn Apprill', language: 'English' }],
+      }),
       true,
     )
-    assert.deepEqual(doc.appearances[0].voiceActors, [{ name: 'Bryn Apprill', language: 'English' }])
+    assert.deepEqual(doc.appearances[0].voiceActors, [
+      { name: 'Bryn Apprill', language: 'English' },
+    ])
   })
 
   it('skips unlabeled repeats but keeps other dub languages', () => {
@@ -67,50 +72,5 @@ describe('cross-source identity', () => {
       ])._id,
       'b',
     )
-  })
-})
-
-function fakeFetch(responses) {
-  const calls = []
-  const fetchImpl = async (url) => {
-    calls.push(url)
-    const next = responses.shift()
-    return {
-      ok: next.status >= 200 && next.status < 300,
-      status: next.status,
-      json: async () => next.body,
-    }
-  }
-  return { fetchImpl, calls }
-}
-
-describe('jikanGet', () => {
-  it('backs off and retries after a 429', async () => {
-    const { fetchImpl, calls } = fakeFetch([
-      { status: 429, body: null },
-      { status: 200, body: { data: { mal_id: 1 } } },
-    ])
-    const body = await jikanGet('/anime/1/characters', { fetchImpl })
-    assert.deepEqual(body, { data: { mal_id: 1 } })
-    assert.equal(calls.length, 2)
-  })
-
-  it('does not retry a 404', async () => {
-    const { fetchImpl, calls } = fakeFetch([{ status: 404, body: null }])
-    assert.equal(await jikanGet('/characters/999999999', { fetchImpl }), null)
-    assert.equal(calls.length, 1)
-  })
-
-  it('retries a 5xx once, then stops calling Jikan during an outage', async () => {
-    const { fetchImpl, calls } = fakeFetch(
-      Array.from({ length: 10 }, () => ({ status: 504, body: null })),
-    )
-    for (let i = 0; i < 5; i += 1) {
-      assert.equal(await jikanGet(`/characters/${i}`, { fetchImpl }), null)
-    }
-    assert.equal(calls.length, 10)
-    assert.equal(jikanStatus().available, false)
-    assert.equal(await jikanGet('/characters/6', { fetchImpl }), null)
-    assert.equal(calls.length, 10)
   })
 })

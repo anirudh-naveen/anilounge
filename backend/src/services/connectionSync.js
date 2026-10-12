@@ -3,9 +3,13 @@
  * holds the connections). Only titles the catalog links to the site (AniList, MAL, or
  * TMDB id) take part.
  *
- * - AniLounge → sites: every watchlist write is sent, after its transaction commits, to
- *   each site the user connected. Writes go out one at a time per site and never fail the
- *   request. AniList and MyAnimeList get the full entry; TMDB keeps only a watchlist
+ * - AniLounge → sites: each watchlist write marks its title in `connection_pending_changes`.
+ *   Once the user's list has been quiet for CONNECTIONS_SYNC_DELAY_SECONDS (90), or their
+ *   oldest held change has waited CONNECTIONS_SYNC_MAX_WAIT_SECONDS (600), each marked
+ *   title's current watchlist row is sent to each site the user connected, and the user's
+ *   two-way sites are pulled. Held changes are in the database, so they survive restarts
+ *   and any instance can send them. Writes go out one at a time per site and never fail
+ *   the request. AniList and MyAnimeList get the full entry; TMDB keeps only a watchlist
  *   (plan to watch) and ratings, so that is what it gets.
  * - Sites → AniLounge (AniList and MyAnimeList): neither has webhooks, so each
  *   connection's recently updated entries are polled. An entry is applied when it is
@@ -60,6 +64,10 @@ const TICK_MS = 15 * 1000
 const MAX_PULL_PAGES = 5
 /** "Sync now" may run once per connection in this window. */
 const SYNC_NOW_COOLDOWN_MS = 30 * 1000
+/** How often held watchlist changes are checked for ones ready to send. */
+const FLUSH_TICK_MS = 5 * 1000
+/** Users sent per flush tick. */
+const FLUSH_BATCH = 50
 
 const STATUS_TO_ANILIST = {
   plan_to_watch: 'PLANNING',
@@ -96,7 +104,7 @@ const MAL_RECENT_FIELDS =
 
 /** @type {Map<string, Promise<void>>} provider -> tail of its write queue */
 const pushQueues = new Map()
-const scheduler = { timer: null, running: new Set() }
+const scheduler = { timer: null, flushTimer: null, flushing: false, running: new Set() }
 /** @type {Map<string, number>} `${userId}:${provider}` -> last "Sync now" */
 const syncNowAt = new Map()
 
@@ -395,6 +403,7 @@ export function providerPulls(provider) {
 /**
  * @param {string} provider
  * @param {() => Promise<void>} task
+ * @returns {Promise<void>} Settles when the task has run.
  */
 function enqueue(provider, task) {
   const tail = (pushQueues.get(provider) || Promise.resolve()).then(task)
@@ -402,31 +411,112 @@ function enqueue(provider, task) {
     provider,
     tail.catch(() => {}),
   )
+  return tail
 }
 
 /**
- * Send a watchlist change to each site the user connected. Returns immediately; call
- * only after the change has committed.
+ * Hold a watchlist change for the user's connected sites. It is sent with the user's
+ * other held changes once their list goes quiet (see flushDueChanges); the title's row
+ * is read then, so only its latest state goes out. Returns immediately; call only after
+ * the change has committed.
  * @param {{ _id?: unknown, id?: unknown }} user
- * @param {object | null} content - Catalog title (needs its AniList/MAL/TMDB ids).
- * @param {object | null} item - The saved watchlist row, or null when removed.
+ * @param {object | null} content - Catalog title.
+ * @param {object | null} _item - The saved watchlist row, or null when removed (read again when sent).
  * @param {{ except?: string }} [options] - Skip this site (the change came from it).
  * @returns {void}
  */
-export function mirrorWatchlistChange(user, content, item, { except } = {}) {
+export function mirrorWatchlistChange(user, content, _item, { except } = {}) {
   const userId = String(user?._id || user?.id || '')
-  if (!userId || !content || !syncEnabled()) return
-  const row = snapshot(item)
-  const targets = CONNECTION_PROVIDERS.filter(
-    (provider) => provider !== except && ADAPTERS[provider].remoteId(content),
-  )
-  if (!targets.length) return
-  loadConnections(userId)
-    .then((connections) => {
-      for (const connection of connections) {
-        if (!targets.includes(connection.provider)) continue
-        const adapter = ADAPTERS[connection.provider]
-        const remoteId = adapter.remoteId(content)
+  if (!userId || !content?._id || !syncEnabled()) return
+  // A site that sent one change still needs a later change made elsewhere.
+  query(
+    `INSERT INTO connection_pending_changes (user_id, content_id, except_provider)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, content_id) DO UPDATE SET
+       changed_at = now(),
+       except_provider = CASE
+         WHEN connection_pending_changes.except_provider IS NOT DISTINCT FROM EXCLUDED.except_provider
+           THEN EXCLUDED.except_provider
+       END`,
+    [userId, String(content._id), except || null],
+  ).catch((error) => console.warn(`Connections: holding a change failed: ${error.message}`))
+}
+
+/**
+ * Send the held changes of users whose list has gone quiet (or waited too long).
+ * @returns {Promise<number>} Users synced.
+ */
+export async function flushDueChanges() {
+  if (scheduler.flushing) return 0
+  scheduler.flushing = true
+  try {
+    const { delaySeconds, maxWaitSeconds } = syncDelayConfig()
+    // Deleting claims the rows, so two instances never send the same change.
+    const { rows } = await query(
+      `DELETE FROM connection_pending_changes
+       WHERE user_id IN (
+         SELECT user_id FROM connection_pending_changes
+         GROUP BY user_id
+         HAVING max(changed_at) < now() - make_interval(secs => $1)
+             OR min(first_changed_at) < now() - make_interval(secs => $2)
+         LIMIT $3
+       )
+       RETURNING user_id, content_id, except_provider`,
+      [delaySeconds, maxWaitSeconds, FLUSH_BATCH],
+    )
+    const byUser = new Map()
+    for (const row of rows) {
+      const userId = String(row.user_id)
+      if (!byUser.has(userId)) byUser.set(userId, [])
+      byUser.get(userId).push(row)
+    }
+    for (const [userId, held] of byUser) {
+      try {
+        await syncUser(userId, await currentChanges(userId, held))
+      } catch (error) {
+        console.warn(`Connections: syncing a user failed: ${error.message}`)
+      }
+    }
+    return byUser.size
+  } finally {
+    scheduler.flushing = false
+  }
+}
+
+/**
+ * The current watchlist state of each held title (null row when it was removed).
+ * @param {string} userId
+ * @param {Array<{ content_id: string, except_provider: string | null }>} held
+ * @returns {Promise<Array<{ content: object, row: object | null, except?: string }>>}
+ */
+async function currentChanges(userId, held) {
+  const user = await User.findById(userId)
+  if (!user) return []
+  const changes = []
+  for (const { content_id: contentId, except_provider: except } of held) {
+    const content = await Content.findById(String(contentId))
+    if (!content) continue
+    const item = user.watchlist.find((row) => row.content.toString() === String(contentId))
+    changes.push({ content, row: snapshot(item || null), except: except || undefined })
+  }
+  return changes
+}
+
+/**
+ * Send a user's held changes to their sites, then pull their two-way sites.
+ * @param {string} userId
+ * @param {Array<{ content: object, row: object | null, except?: string }>} changes
+ * @returns {Promise<void>}
+ */
+async function syncUser(userId, changes) {
+  const connections = await loadConnections(userId)
+  const sends = []
+  for (const { content, row, except } of changes) {
+    for (const connection of connections) {
+      const adapter = ADAPTERS[connection.provider]
+      const remoteId = adapter?.remoteId(content)
+      if (connection.provider === except || !remoteId) continue
+      sends.push(
         enqueue(connection.provider, async () => {
           try {
             await adapter.push(connection, remoteId, row)
@@ -436,10 +526,33 @@ export function mirrorWatchlistChange(user, content, item, { except } = {}) {
               await recordSync(connection, { error: error.message, synced: false }).catch(() => {})
             }
           }
-        })
+        }),
+      )
+    }
+  }
+  await Promise.allSettled(sends)
+
+  const pulls = connections
+    .map((row) => row.provider)
+    .filter((provider) => providerPulls(provider) && isProviderConfigured(provider))
+  if (!pulls.length) return
+  // Mark them polled so the scheduler doesn't pull the same accounts again right away.
+  const { rows } = await query(
+    `UPDATE account_connections SET last_polled_at = now()
+     WHERE user_id = $1 AND provider = ANY($2::text[])
+     RETURNING *`,
+    [userId, pulls],
+  )
+  for (const row of rows) {
+    try {
+      const { applied } = await pullConnection(row)
+      if (applied) console.log(`Connections: pulled ${applied} change(s) from ${row.provider}`)
+    } catch (error) {
+      if (!(error instanceof ConnectionError)) {
+        console.warn(`Connections: pulling ${row.provider} failed: ${error.message}`)
       }
-    })
-    .catch((error) => console.warn(`Connections: loading connections failed: ${error.message}`))
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -505,11 +618,7 @@ async function applyEntry(userId, entry, provider) {
     item.updatedAt = new Date()
 
     syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
-    await applyContentRatingChange(
-      content,
-      previousRating,
-      getEffectiveUserRating(user, contentId),
-    )
+    await applyContentRatingChange(content, previousRating, getEffectiveUserRating(user, contentId))
     await user.save({ session })
     await recordWatch(userId, contentId, watchUnits({ ...item, content }) - unitsBefore)
     await session.commitTransaction()
@@ -537,7 +646,9 @@ export async function pullConnection(row) {
     fresh = await adapter.recent(row, cursor)
   } catch (error) {
     const message =
-      error instanceof ConnectionError ? error.message : `Couldn't reach ${providerLabel(row.provider)}.`
+      error instanceof ConnectionError
+        ? error.message
+        : `Couldn't reach ${providerLabel(row.provider)}.`
     await recordSync(row, { error: message, synced: false })
     throw error
   }
@@ -619,6 +730,21 @@ export function pollConfig(env = process.env) {
 }
 
 /**
+ * How long a user's list must be quiet before their changes are sent, and the longest
+ * any change is held while they keep editing.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {{ delaySeconds: number, maxWaitSeconds: number }}
+ */
+export function syncDelayConfig(env = process.env) {
+  const number = (value, fallback, min) => Math.max(min, Number(value) || fallback)
+  const delaySeconds = number(env.CONNECTIONS_SYNC_DELAY_SECONDS, 90, 5)
+  return {
+    delaySeconds,
+    maxWaitSeconds: number(env.CONNECTIONS_SYNC_MAX_WAIT_SECONDS, 600, delaySeconds),
+  }
+}
+
+/**
  * Poll the connections of one site that have waited longest, within its budget.
  * @param {string} provider
  * @returns {Promise<number>} Connections polled.
@@ -660,7 +786,7 @@ async function pollProvider(provider) {
 }
 
 /**
- * Start polling the two-way sites (AniList, MyAnimeList).
+ * Start sending held watchlist changes and polling the two-way sites (AniList, MyAnimeList).
  * @returns {NodeJS.Timeout | null} null when CONNECTIONS_SYNC_ENABLED is off.
  */
 export function startConnectionSync() {
@@ -683,9 +809,19 @@ export function startConnectionSync() {
   }
   scheduler.timer = setInterval(run, TICK_MS)
   scheduler.timer.unref?.()
+  scheduler.flushTimer = setInterval(() => {
+    flushDueChanges().catch((error) => {
+      if (error?.code !== '42P01') {
+        console.warn(`Connections: sending held changes failed: ${error.message}`)
+      }
+    })
+  }, FLUSH_TICK_MS)
+  scheduler.flushTimer.unref?.()
   const { intervalSeconds, perMinute } = pollConfig()
+  const { delaySeconds } = syncDelayConfig()
   console.log(
-    `Connections sync: polling every ${intervalSeconds}s per account ` +
+    `Connections sync: sending changes ${delaySeconds}s after a user's last edit, ` +
+      `polling every ${intervalSeconds}s per account ` +
       `(budget ${perMinute.anilist}/min AniList, ${perMinute.mal}/min MyAnimeList)`,
   )
   return scheduler.timer

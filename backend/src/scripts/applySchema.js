@@ -91,7 +91,46 @@ async function applySchema() {
   console.log(`Applying ${statements.length} statements from ${schemaPath}`)
 
   try {
+    // The live server writes the same tables (catalog sync, watchlists). All statements
+    // run in one transaction, so a lock clash rolls everything back and it is tried
+    // again; lock_timeout keeps it from queueing behind a long write for minutes.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await applyOnce(client, statements)
+        console.log('Schema applied')
+        return
+      } catch (error) {
+        const retryable = RETRYABLE_CODES.has(error.code) && attempt < MAX_ATTEMPTS
+        console.error(
+          `Schema apply attempt ${attempt} failed: ${error.message}${retryable ? ' (rolled back; retrying)' : ''}`,
+        )
+        if (!retryable) throw error
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt))
+      }
+    }
+  } catch {
+    process.exitCode = 1
+  } finally {
+    await client.end()
+  }
+}
+
+/** Deadlock, lock timeout, serialization failure: safe to retry the whole transaction. */
+const RETRYABLE_CODES = new Set(['40P01', '55P03', '40001'])
+const MAX_ATTEMPTS = 5
+const RETRY_DELAY_MS = 5000
+
+/**
+ * Every statement, plus the legacy airing-status fill, in one transaction.
+ * @param {pg.Client} client
+ * @param {string[]} statements
+ * @returns {Promise<void>}
+ * @throws The failing statement's error, after rolling back.
+ */
+async function applyOnce(client, statements) {
+  try {
     await client.query('BEGIN')
+    await client.query("SET LOCAL lock_timeout = '10s'")
     for (const statement of statements) {
       await client.query(statement)
     }
@@ -124,13 +163,9 @@ async function applySchema() {
       `)
     }
     await client.query('COMMIT')
-    console.log('Schema applied')
   } catch (error) {
-    await client.query('ROLLBACK')
-    console.error('Schema apply failed:', error.message)
-    process.exitCode = 1
-  } finally {
-    await client.end()
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
   }
 }
 

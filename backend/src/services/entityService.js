@@ -1,11 +1,11 @@
 /**
  * entityService.js — ingest and lookup for catalog characters, voice actors, and studios.
  *
- * Domain service: Jikan (MAL) and AniList anime-character lists, then TMDB
- * credits as a fallback, are upserted into Entity documents. Rows from different
- * sources merge by MAL/AniList/TMDB id, then by name within the title's
- * franchise. Studio rows come from title sync; their logo and about are filled
- * from Jikan producers or TMDB companies. Title pages and search read the
+ * Domain service: AniList anime-character lists (found by a title's AniList or MAL
+ * id), then TMDB credits (with TVmaze character images) as a fallback, are upserted
+ * into Entity documents. Rows from different sources merge by MAL/AniList/TMDB id,
+ * then by name within the title's franchise. Studio rows come from title sync; their
+ * logo and about are filled from TMDB companies. Title pages and search read the
  * persisted rows.
  */
 
@@ -44,12 +44,8 @@ import {
   highlightedCharacters,
   isUsableCharacterName,
   knownVoiceLanguage,
-  mapJikanCharacterRow,
-  mapJikanPersonVoiceRow,
-  mapJikanProducer,
   mapTmdbCharacterCredits,
   mapVoiceActorFromCredit,
-  pickJikanProducer,
   pickTmdbCompany,
   serializeEntity,
   studioImagePath,
@@ -59,13 +55,11 @@ import {
   voiceActorImagePath,
 } from '../utils/entities.js'
 
-const JIKAN_BASE = 'https://api.jikan.moe/v4'
-const TMDB_BASE = 'https://api.themoviedb.org/3'
-const STALE_MS = 7 * 24 * 60 * 60 * 1000
-const JIKAN_GAP_MS = 450
 const FETCH_TIMEOUT_MS = 20000
 const MAX_CHARACTERS_PER_TITLE = 12
-/** A failed or partial Jikan/TMDB ingest is not retried on every page view. */
+const TMDB_BASE = 'https://api.themoviedb.org/3'
+const STALE_MS = 7 * 24 * 60 * 60 * 1000
+/** A failed or partial AniList/TMDB ingest is not retried on every page view. */
 const CHARACTER_RETRY_MS = 6 * 60 * 60 * 1000
 const characterSyncAttempts = new Map()
 const studioSyncAttempts = new Map()
@@ -92,31 +86,8 @@ async function withVoiceActorLock(key, fn) {
   }
 }
 const MAX_VOICED_CHARACTERS = 600
-const JIKAN_HEADERS = {
-  Accept: 'application/json',
-  'User-Agent': 'AniLounge/1.0 (https://find-animation.vercel.app; catalog characters)',
-}
 
-/** Jikan allows 3 requests/second and 60/minute per client. */
-const JIKAN_WINDOW_MS = 60 * 1000
-const JIKAN_MAX_PER_WINDOW = 55
-const JIKAN_RETRIES = 3
-const JIKAN_BACKOFF_MS = 2000
-const JIKAN_OUTAGE_THRESHOLD = 5
-const JIKAN_OUTAGE_COOLDOWN_MS = 2 * 60 * 1000
-const jikanWindow = []
-const jikanOutage = { failures: 0, downUntil: 0 }
-
-let lastJikanAt = 0
 const ingestLocks = new Map()
-
-/**
- * @param {number} ms
- * @returns {Promise<void>}
- */
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 /**
  * GET JSON with a timeout, keeping the HTTP status (0 on network failure).
@@ -150,92 +121,6 @@ async function requestJson(url, { headers = {}, fetchImpl = fetch } = {}) {
  */
 async function fetchJson(url, options = {}) {
   return (await requestJson(url, options)).body
-}
-
-/**
- * Wait until another Jikan request fits both the per-request gap and the
- * 60-per-minute window.
- * @returns {Promise<void>}
- */
-async function reserveJikanSlot() {
-  for (;;) {
-    const now = Date.now()
-    while (jikanWindow.length && now - jikanWindow[0] >= JIKAN_WINDOW_MS) jikanWindow.shift()
-    const gapWait = JIKAN_GAP_MS - (now - lastJikanAt)
-    const windowWait =
-      jikanWindow.length >= JIKAN_MAX_PER_WINDOW ? JIKAN_WINDOW_MS - (now - jikanWindow[0]) : 0
-    const wait = Math.max(gapWait, windowWait)
-    if (wait <= 0) break
-    await sleep(wait)
-  }
-  lastJikanAt = Date.now()
-  jikanWindow.push(lastJikanAt)
-}
-
-/**
- * Jikan outage state: consecutive calls that ended in 5xx/network failure, and
- * the time until which calls are skipped.
- * @returns {{ consecutiveFailures: number, downUntil: number, available: boolean }}
- */
-export function jikanStatus() {
-  return {
-    consecutiveFailures: jikanOutage.failures,
-    downUntil: jikanOutage.downUntil,
-    available: Date.now() >= jikanOutage.downUntil,
-  }
-}
-
-/**
- * Whether Jikan can currently reach MyAnimeList (its root reports 5xx when not).
- * @returns {Promise<boolean>}
- */
-export async function probeJikan() {
-  const { body } = await requestJson(JIKAN_BASE, { headers: JIKAN_HEADERS })
-  return Boolean(body) && !(Number(body.status) >= 500)
-}
-
-/**
- * Rate-limited Jikan GET. 429 backs off up to three times; 5xx/network
- * failures retry once; 404 and other client errors return null immediately.
- * After repeated outage failures Jikan is skipped for a cooldown so callers
- * fall back to TMDB without waiting.
- * @param {string} path
- * @param {{ fetchImpl?: typeof fetch }} [options]
- * @returns {Promise<object|null>}
- */
-export async function jikanGet(path, options = {}) {
-  if (!jikanStatus().available) return null
-  const request = {
-    ...options,
-    headers: { ...JIKAN_HEADERS, ...(options.headers || {}) },
-  }
-  let serverRetries = 0
-  for (let attempt = 0; attempt <= JIKAN_RETRIES; attempt += 1) {
-    await reserveJikanSlot()
-    const { status, body } = await requestJson(`${JIKAN_BASE}${path}`, request)
-    if (body) {
-      jikanOutage.failures = 0
-      return body
-    }
-    if (status === 429 && attempt < JIKAN_RETRIES) {
-      await sleep(JIKAN_BACKOFF_MS * 2 ** attempt)
-      continue
-    }
-    const outage = status === 0 || status >= 500
-    if (outage && serverRetries < 1) {
-      serverRetries += 1
-      await sleep(1000)
-      continue
-    }
-    if (outage) {
-      jikanOutage.failures += 1
-      if (jikanOutage.failures >= JIKAN_OUTAGE_THRESHOLD) {
-        jikanOutage.downUntil = Date.now() + JIKAN_OUTAGE_COOLDOWN_MS
-      }
-    }
-    return null
-  }
-  return null
 }
 
 /**
@@ -559,14 +444,18 @@ async function upsertCharacterPayloads(payloads) {
     return entity
   }
 
-  const results = await mapWithConcurrency(payloads, CHARACTER_UPSERT_CONCURRENCY, async (payload) => {
-    try {
-      return await upsertOne(payload)
-    } catch (error) {
-      console.error(`Character upsert failed for ${payload?.name}:`, error.message)
-      return null
-    }
-  })
+  const results = await mapWithConcurrency(
+    payloads,
+    CHARACTER_UPSERT_CONCURRENCY,
+    async (payload) => {
+      try {
+        return await upsertOne(payload)
+      } catch (error) {
+        console.error(`Character upsert failed for ${payload?.name}:`, error.message)
+        return null
+      }
+    },
+  )
   return results.filter(Boolean)
 }
 
@@ -589,29 +478,6 @@ async function mapWithConcurrency(items, limit, fn) {
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
   return results
-}
-
-/**
- * Pull Jikan characters for a MAL anime id.
- * @param {object} content
- * @param {{ fetchImpl?: typeof fetch }} [options]
- * @returns {Promise<object[]>}
- */
-export async function ingestJikanCharacters(content, options = {}) {
-  const malId = Number(content?.malId)
-  if (!Number.isFinite(malId) || malId < 1) return []
-  const body = await jikanGet(`/anime/${malId}/characters`, options)
-  const rows = Array.isArray(body?.data) ? body.data : []
-  const payloads = rows
-    .map((row) => mapJikanCharacterRow(row, content._id))
-    .filter(Boolean)
-    .sort(
-      (left, right) =>
-        (right.appearance?.importance || 0) - (left.appearance?.importance || 0) ||
-        appearanceRoleRank(left.appearance?.role) - appearanceRoleRank(right.appearance?.role),
-    )
-    .slice(0, MAX_CHARACTERS_PER_TITLE)
-  return upsertCharacterPayloads(payloads)
 }
 
 /**
@@ -674,13 +540,8 @@ export async function ingestTmdbCharacters(content, options = {}) {
   const apiKey = options.tmdbToken || process.env.TMDB_API_KEY
   if (!Number.isFinite(tmdbId) || tmdbId < 1 || !apiKey) return []
   const path =
-    content.contentType === 'tv'
-      ? `/tv/${tmdbId}/aggregate_credits`
-      : `/movie/${tmdbId}/credits`
-  const body = await fetchJson(
-    `${TMDB_BASE}${path}?api_key=${encodeURIComponent(apiKey)}`,
-    options,
-  )
+    content.contentType === 'tv' ? `/tv/${tmdbId}/aggregate_credits` : `/movie/${tmdbId}/credits`
+  const body = await fetchJson(`${TMDB_BASE}${path}?api_key=${encodeURIComponent(apiKey)}`, options)
   const cast = Array.isArray(body?.cast) ? body.cast : []
   const payloads = mapTmdbCharacterCredits(cast, content._id).slice(0, MAX_CHARACTERS_PER_TITLE)
   // TMDB has no character images; TVmaze has them for many western shows.
@@ -805,15 +666,11 @@ function needsCharacterRefresh(content, docs, malId) {
   if (!catalogSourced && content.contentType === 'tv') {
     if (docs.every((doc) => !characterPortraitPath(doc.imagePath))) return true
   }
-  // AniList-only rows on a MAL title pick up MAL ids once Jikan is reachable.
-  if (catalogMalId && jikanStatus().available && docs.every((doc) => !positiveId(doc.malId))) {
-    return true
-  }
   return false
 }
 
 /**
- * Characters attached to a title, ingesting from Jikan/TMDB when stale or empty.
+ * Characters attached to a title, ingesting from AniList/TMDB when stale or empty.
  * `force` re-fetches even when stored characters look complete.
  * @param {object} content
  * @param {{ fetchImpl?: typeof fetch, force?: boolean }} [options]
@@ -893,14 +750,6 @@ async function loadCharactersForContent(content, options = {}) {
   }
   characterSyncAttempts.set(key, Date.now())
 
-  if (malId) {
-    try {
-      await ingestJikanCharacters(ingestContent, options)
-    } catch (error) {
-      console.error('Jikan character ingest failed:', error.message)
-    }
-  }
-
   if (malId || positiveId(content.anilistId)) {
     try {
       await ingestAnilistCharacters(ingestContent, {
@@ -962,7 +811,8 @@ async function loadCharactersForContent(content, options = {}) {
 }
 
 /**
- * Fill `about` from Jikan when a character detail page is opened.
+ * Fill `about`, native name, aliases, and portrait from AniList when a character
+ * detail page is opened.
  * @param {object} entity
  * @param {{ fetchImpl?: typeof fetch }} [options]
  * @returns {Promise<object>}
@@ -971,33 +821,14 @@ export async function ensureCharacterAbout(entity, options = {}) {
   if (!entity || entity.entityType !== 'character') return entity
   const needsPortrait = !characterPortraitPath(entity.imagePath)
   if (entity.about && entity.nativeName && !needsPortrait) return entity
-  const malId = positiveId(entity.malId)
-  if (!malId && !positiveId(entity.anilistId)) {
+  if (!positiveId(entity.anilistId)) {
     if (needsPortrait && entity.imagePath) {
       entity.imagePath = ''
       await entity.save()
     }
     return entity
   }
-  const body = malId ? await jikanGet(`/characters/${malId}`, options) : null
-  const data = body?.data
-  if (!data) return fillCharacterFromAnilist(entity, needsPortrait, options)
-  if (!entity.about && data.about) entity.about = String(data.about).trim()
-  if (!entity.nativeName && data.name_kanji) entity.nativeName = String(data.name_kanji).trim()
-  const nicknames = uniqueEntityNames(entity.alternativeNames, data.nicknames)
-  if (nicknames.length) entity.alternativeNames = nicknames
-  const jpg =
-    data.images?.jpg?.large_image_url ||
-    data.images?.jpg?.image_url ||
-    data.images?.webp?.image_url
-  if (needsPortrait && jpg && !/questionmark/i.test(String(jpg))) entity.imagePath = jpg
-  const cleanedName = cleanCharacterName(data.name) || entity.name
-  if (isUsableCharacterName(cleanedName) && entity.name !== cleanedName) {
-    entity.name = cleanedName
-    if (!entity.englishName) entity.englishName = cleanedName
-  }
-  await entity.save()
-  return entity
+  return fillCharacterFromAnilist(entity, needsPortrait, options)
 }
 
 /**
@@ -1078,7 +909,8 @@ export async function ensureVoiceActorsForCharacter(character) {
 }
 
 /**
- * Fill biography and portrait from Jikan `/people/{id}` when a VA page is opened.
+ * Fill biography, native name, aliases, and photo from AniList when a voice actor
+ * page is opened.
  * @param {object} entity
  * @param {{ fetchImpl?: typeof fetch }} [options]
  * @returns {Promise<object>}
@@ -1087,36 +919,13 @@ export async function ensureVoiceActorAbout(entity, options = {}) {
   if (!entity || entity.entityType !== 'voice_actor') return entity
   const needsImage = !voiceActorImagePath(entity.imagePath)
   if (entity.about && !needsImage) return entity
-  const malId = positiveId(entity.malId)
-  const body = malId ? await jikanGet(`/people/${malId}`, options) : null
-  const data = body?.data
-  if (!data) {
-    return positiveId(entity.anilistId)
-      ? fillVoiceActorFromAnilist(entity, needsImage, options)
-      : entity
-  }
-  if (!entity.about && data.about) entity.about = String(data.about).trim()
-  const given = String(data.given_name || '').trim()
-  const family = String(data.family_name || '').trim()
-  if (!entity.nativeName && (family || given)) {
-    entity.nativeName = [family, given].filter(Boolean).join(' ')
-  }
-  const names = uniqueEntityNames(entity.alternativeNames, data.alternate_names, data.name)
-  if (names.length) entity.alternativeNames = names
-  const jpg = data.images?.jpg?.large_image_url || data.images?.jpg?.image_url
-  if (needsImage && jpg && !/questionmark/i.test(String(jpg))) entity.imagePath = jpg
-  const display = displayPersonName(data.name) || entity.name
-  if (display && entity.name !== display) {
-    entity.alternativeNames = uniqueEntityNames(entity.alternativeNames, entity.name)
-    entity.name = display
-    entity.englishName = display
-  }
-  await entity.save()
-  return entity
+  return positiveId(entity.anilistId)
+    ? fillVoiceActorFromAnilist(entity, needsImage, options)
+    : entity
 }
 
 /**
- * Whether Jikan `/people/{id}/voices` should be fetched again.
+ * Whether a voice actor's AniList roles should be fetched again.
  * @param {object} entity
  * @returns {boolean}
  */
@@ -1159,7 +968,7 @@ function voicedCharacterKey(mapped) {
 }
 
 /**
- * Upsert a character from a Jikan or AniList voiced-character row so the VA
+ * Upsert a character from an AniList voiced-character row so the VA
  * page can link it.
  * @param {{ malId?: number, anilistId?: number, name: string, nativeName?: string, imagePath?: string, role: string }} mapped
  * @param {object|null} content
@@ -1233,23 +1042,6 @@ async function upsertCharacterFromVoiceRow(mapped, content, now, known) {
 }
 
 /**
- * Voiced-character rows from Jikan `/people/{id}/voices`.
- * @param {object} entity
- * @param {{ fetchImpl?: typeof fetch }} options
- * @returns {Promise<object[] | null>} null when Jikan returned nothing.
- */
-async function jikanVoicedRows(entity, options) {
-  const malId = positiveId(entity.malId)
-  if (!malId) return null
-  const body = await jikanGet(`/people/${malId}/voices`, options)
-  if (!body) return null
-  return (Array.isArray(body?.data) ? body.data : [])
-    .map((row) => mapJikanPersonVoiceRow(row))
-    .filter(Boolean)
-    .map((row) => ({ ...row, language: 'Japanese' }))
-}
-
-/**
  * Voiced-character rows from AniList staff `characterMedia`.
  * @param {object} entity
  * @param {{ fetchImpl?: typeof fetch }} options
@@ -1285,9 +1077,8 @@ async function anilistVoicedRows(entity, options) {
 }
 
 /**
- * Pull every voiced character for a voice actor (not only visited titles):
- * Jikan by MAL id, else AniList by AniList id. AniList rows are linked only for
- * titles already in the catalog.
+ * Pull every voiced character for a voice actor (not only visited titles) from
+ * AniList by AniList id. Rows are linked only for titles already in the catalog.
  * @param {object} entity
  * @param {{ fetchImpl?: typeof fetch }} [options]
  * @returns {Promise<object>}
@@ -1296,9 +1087,8 @@ async function ingestVoiceActorCredits(entity, options = {}) {
   const now = new Date()
   let changed = await attachLocalCharactersToVoiceActor(entity)
 
-  let mappedRows = await jikanVoicedRows(entity, options)
-  const fromAnilist = !mappedRows && positiveId(entity.anilistId)
-  if (fromAnilist) mappedRows = await anilistVoicedRows(entity, options)
+  const fromAnilist = Boolean(positiveId(entity.anilistId))
+  let mappedRows = fromAnilist ? await anilistVoicedRows(entity, options) : null
   if (!mappedRows) {
     if (changed) await entity.save()
     return entity
@@ -1390,25 +1180,6 @@ export async function ensureVoiceActorCredits(entity, options = {}) {
 }
 
 /**
- * Jikan producer for a studio: by stored MAL id, else a name search.
- * @param {object} entity
- * @param {{ fetchImpl?: typeof fetch }} options
- * @returns {Promise<object|null>}
- */
-async function fetchJikanProducer(entity, options) {
-  const malId = Number(entity.malId)
-  if (Number.isFinite(malId) && malId > 0) {
-    const body = await jikanGet(`/producers/${malId}/full`, options)
-    return body?.data || null
-  }
-  const body = await jikanGet(
-    `/producers?q=${encodeURIComponent(entity.name)}&order_by=favorites&sort=desc&limit=10`,
-    options,
-  )
-  return pickJikanProducer(body?.data, entity.name)
-}
-
-/**
  * TMDB company (logo, description) matching the studio name.
  * @param {object} entity
  * @param {{ fetchImpl?: typeof fetch, tmdbToken?: string }} options
@@ -1444,10 +1215,8 @@ async function otherStudioWith(field, value, entity) {
 }
 
 /**
- * Fill a studio's logo, native name, and about from Jikan, falling back to TMDB.
- * Failed lookups are not retried on every page view. When the matching MAL
- * producer already belongs to another studio row, sets `duplicateOfId` and
- * leaves this row unchanged.
+ * Fill a studio's logo and about from TMDB. Failed lookups are not retried on
+ * every page view.
  * @param {object} entity
  * @param {{ fetchImpl?: typeof fetch, tmdbToken?: string }} [options]
  * @returns {Promise<object>}
@@ -1461,38 +1230,6 @@ export async function ensureStudioDetails(entity, options = {}) {
   studioSyncAttempts.set(key, Date.now())
 
   let changed = false
-  const producer = mapJikanProducer(await fetchJikanProducer(entity, options))
-  if (producer) {
-    if (!entity.malId) {
-      const owner = await otherStudioWith('malId', producer.malId, entity)
-      if (owner) {
-        entity.duplicateOfId = owner._id
-        return entity
-      }
-      entity.malId = producer.malId
-      changed = true
-    }
-    if (!studioImagePath(entity.imagePath) && producer.imagePath) {
-      entity.imagePath = producer.imagePath
-      changed = true
-    }
-    if (!entity.about && producer.about) {
-      entity.about = producer.about
-      changed = true
-    }
-    if (!entity.nativeName && producer.nativeName) {
-      entity.nativeName = producer.nativeName
-      changed = true
-    }
-    const names = uniqueEntityNames(entity.alternativeNames, producer.alternativeNames).filter(
-      (name) => name !== entity.name,
-    )
-    if (names.length !== (entity.alternativeNames || []).length) {
-      entity.alternativeNames = names
-      changed = true
-    }
-  }
-
   if (!studioImagePath(entity.imagePath) || !entity.about) {
     const company = await fetchTmdbCompany(entity, options)
     if (company?.id) {

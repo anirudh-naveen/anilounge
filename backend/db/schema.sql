@@ -462,6 +462,60 @@ ALTER TABLE appearances ADD COLUMN IF NOT EXISTS admin_locked BOOLEAN NOT NULL D
 ALTER TABLE voice_credits ADD COLUMN IF NOT EXISTS admin_added BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE studio_credits ADD COLUMN IF NOT EXISTS admin_added BOOLEAN NOT NULL DEFAULT false;
 
+-- What a studio did on a title: 'animation' (made it) or 'production' (produced,
+-- published, distributed); NULL when the sources don't say (TMDB lists companies
+-- without roles). `is_main` marks the lead animation studio. The catalog import fills
+-- both from AniList (isAnimationStudio, isMain) and MAL (its "studios" are animation
+-- studios); services/catalogImport.js.
+ALTER TABLE studio_credits ADD COLUMN IF NOT EXISTS role TEXT
+  CHECK (role IN ('animation', 'production'));
+ALTER TABLE studio_credits ADD COLUMN IF NOT EXISTS is_main BOOLEAN NOT NULL DEFAULT false;
+
+-- Backfill credits imported before roles were stored, from the stored source snapshots
+-- (only credits still without a role). Older AniList snapshots list animation studios
+-- only, main first, without isMain: the first listed counts as main.
+WITH listed AS (
+  SELECT d.content_id, d.source, s.ordinality,
+         lower(s.value->>'name') AS name,
+         nullif(s.value->>'anilistId', '')::int AS anilist_id,
+         nullif(s.value->>'malId', '')::int AS mal_id,
+         coalesce(s.value->>'role', 'animation') AS role,
+         coalesce((s.value->>'isMain')::boolean, s.ordinality = 1) AS is_main
+  FROM content_source_data d,
+       jsonb_array_elements(CASE WHEN jsonb_typeof(d.data->'studios') = 'array'
+                                 THEN d.data->'studios' ELSE '[]'::jsonb END)
+         WITH ORDINALITY AS s(value, ordinality)
+  WHERE d.source IN ('anilist', 'mal')
+), picked AS (
+  -- AniList's listing wins over MAL's for the same title.
+  SELECT DISTINCT ON (sc.work_id, sc.studio_id) sc.work_id, sc.studio_id, l.role, l.is_main
+  FROM studio_credits sc
+  JOIN content st ON st.id = sc.studio_id
+  JOIN listed l ON l.content_id = sc.work_id
+    AND (l.name = lower(st.name) OR l.anilist_id = st.anilist_id OR l.mal_id = st.mal_id)
+  WHERE sc.role IS NULL
+  ORDER BY sc.work_id, sc.studio_id, (l.source = 'anilist') DESC, l.ordinality
+)
+UPDATE studio_credits sc SET role = p.role, is_main = p.is_main
+FROM picked p
+WHERE sc.work_id = p.work_id AND sc.studio_id = p.studio_id AND sc.role IS NULL;
+
+-- On a title whose animation studios are known, its other credits are production.
+UPDATE studio_credits sc SET role = 'production'
+WHERE sc.role IS NULL AND EXISTS (
+  SELECT 1 FROM studio_credits a WHERE a.work_id = sc.work_id AND a.role = 'animation');
+
+-- A series' credits are its seasons' (copied by the series migration): same roles,
+-- main as on its first season that names one.
+UPDATE studio_credits sc SET role = x.role, is_main = x.is_main
+FROM (
+  SELECT DISTINCT ON (sn.series_id, c.studio_id) sn.series_id, c.studio_id, c.role, c.is_main
+  FROM studio_credits c JOIN seasons sn ON sn.content_id = c.work_id
+  WHERE c.role IS NOT NULL
+  ORDER BY sn.series_id, c.studio_id, c.is_main DESC, sn.season_number, sn.part_number
+) x
+WHERE sc.work_id = x.series_id AND sc.studio_id = x.studio_id AND sc.role IS NULL;
+
 CREATE TABLE IF NOT EXISTS admin_link_removals (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   link_kind   TEXT NOT NULL CHECK (link_kind IN ('appearance', 'voice_credit', 'studio_credit')),
@@ -703,6 +757,19 @@ CREATE TABLE IF NOT EXISTS account_connections (
 );
 CREATE INDEX IF NOT EXISTS account_connections_poll_idx
   ON account_connections (provider, last_polled_at NULLS FIRST);
+
+-- Watchlist changes waiting to be sent to the user's connected sites
+-- (services/connectionSync.js). One row per title; a user's rows are sent (and deleted)
+-- once their newest `changed_at` is old enough, or their oldest `first_changed_at` has
+-- waited too long. `except_provider` is the site the change came from, if any.
+CREATE TABLE IF NOT EXISTS connection_pending_changes (
+  user_id           UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  content_id        UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  except_provider   TEXT,
+  first_changed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  changed_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, content_id)
+);
 
 CREATE TABLE IF NOT EXISTS ratings (
   user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,

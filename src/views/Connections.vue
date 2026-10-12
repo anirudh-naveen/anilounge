@@ -2,7 +2,8 @@
   Connections.vue — linked AniList / MyAnimeList / TMDB accounts.
 
   Each site is a row: connect, import its list, sync now, disconnect. Connected sites
-  receive every watchlist change; AniList and MyAnimeList changes come back (two-way).
+  receive watchlist changes 1.5 minutes after the last one; AniList and MyAnimeList
+  changes come back (two-way).
   Approval happens on the site in a new tab. The site sends that tab back here with a
   code (AniList, MAL: `?code&state`, the state starting with the provider) or a TMDB
   request token; this page hands it to the tab that asked over a BroadcastChannel and
@@ -42,8 +43,9 @@
           </svg>
           <p>
             <strong>Updates sync automatically.</strong> Once a site is connected, changes you make
-            on AniLounge update it for you, and changes you make on AniList or MyAnimeList show up
-            here too. TMDB receives your plan-to-watch list and ratings.
+            on AniLounge update it for you a minute and a half after your last edit, and changes you
+            make on AniList or MyAnimeList show up here too. TMDB receives your plan-to-watch list
+            and ratings.
           </p>
         </div>
 

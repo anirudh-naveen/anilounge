@@ -342,7 +342,7 @@ async function pickCharacterId(day) {
 
 /**
  * One main character from a well-rated title, stable for the whole UTC day.
- * Missing bios are filled from Jikan/AniList on first request.
+ * Missing bios are filled from AniList on first request.
  * @param {Date} [now]
  * @returns {Promise<object | null>}
  */

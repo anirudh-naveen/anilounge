@@ -51,8 +51,10 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | --- | --- |
 | [TMDB API](https://developer.themoviedb.org) | Movie and series metadata, posters, episodes; watchlist/ratings import (user-approved session); "Where to watch" services per country, data from [JustWatch](https://www.justwatch.com) (credited on the page; `services/watchProviderService.js`) |
 | [MyAnimeList API](https://myanimelist.net/apiconfig/references/api/v2) | Anime metadata and scores; public anime list import |
-| [Jikan](https://jikan.moe) | Unofficial MyAnimeList API (characters, voice actors, studios) |
-| [AniList GraphQL API](https://docs.anilist.co) | Additional anime metadata and linking; public anime list import; direct streaming links for "Where to watch" |
+| [AniList GraphQL API](https://docs.anilist.co) | Anime metadata (first in line for anime), characters and voice actors, key and per-episode staff, tags, trailers, airing schedules; public anime list import; direct streaming links for "Where to watch" |
+| [Fribb anime-lists](https://github.com/Fribb/anime-lists) | Maps MAL/AniList entries to TMDB, TVDB, IMDb, Kitsu, AniDB, LiveChart, and Anime-Planet ids, and to TMDB/TVDB seasons (`services/fribbService.js`) |
+| [TVmaze API](https://www.tvmaze.com/api) | Character images for western shows (CC BY-SA, credited on the page; `services/tvmazeService.js`) |
+| [Wikidata](https://www.wikidata.org) / [Wikimedia Commons](https://commons.wikimedia.org) | Photos for people TMDB has none for (`services/personPhotos.js`) |
 | [Google Gemini](https://ai.google.dev) (`gemini-2.5-flash`) | The AI chatbot |
 
 ## Search and discovery

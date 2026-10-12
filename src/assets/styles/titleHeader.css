@@ -3,7 +3,7 @@
 
   Included scoped by MovieDetails.vue and TVShowDetails.vue
   (`<style scoped src="...">`): eyebrow, title, native title, a dotted fact row,
-  genre chips, franchise, and actions, spaced as one tidy column.
+  genre chips, studio and franchise pills, and actions, spaced as one tidy column.
 */
 .title-info {
   display: flex;
@@ -100,6 +100,17 @@
   color: var(--text-primary);
   font-size: 0.85rem;
   font-weight: 500;
+}
+
+.title-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.title-pills:empty {
+  display: none;
 }
 
 .title-actions {
