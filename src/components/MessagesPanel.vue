@@ -36,7 +36,7 @@
         <p v-else-if="!pickerFriends.length" class="social-empty">
           <template v-if="friends.length">No friends match.</template>
           <template v-else>
-            Add friends to message them.
+            No friends yet.
             <router-link :to="{ name: 'friends', query: { tab: 'friends' } }"
               >Find people</router-link
             >
@@ -93,7 +93,7 @@
         <!-- Title: Conversations -->
         <h3 v-if="list.requests.length" class="conversation-heading">Conversations</h3>
         <p v-if="!list.conversations.length" class="social-empty">
-          No messages yet. Start one with a friend.
+          No chats yet. Message a friend.
         </p>
         <ul v-else class="conversation-list">
           <li v-for="convo in list.conversations" :key="convo.user.id">
