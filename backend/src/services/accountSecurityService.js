@@ -19,6 +19,8 @@ export const CODE_TTL_MS = {
 }
 export const MAX_CODE_ATTEMPTS = 5
 export const RESEND_COOLDOWN_MS = 60 * 1000
+/** Reset codes per account per day: with 5 guesses each, at most 25 guesses at a 6-digit code. */
+export const MAX_RESET_CODES_PER_DAY = 5
 const BACKUP_CODE_COUNT = 8
 
 /**
@@ -54,6 +56,20 @@ export async function resendWaitSeconds(userId, purpose) {
   if (!rows[0]) return 0
   const elapsed = Date.now() - new Date(rows[0].created_at).getTime()
   return Math.max(0, Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000))
+}
+
+/**
+ * Whether the account has hit its daily password reset code limit.
+ * @param {string} userId
+ * @returns {Promise<boolean>}
+ */
+export async function resetCodeLimitReached(userId) {
+  const { rows } = await query(
+    `SELECT count(*)::int AS n FROM email_codes
+     WHERE user_id = $1 AND purpose = 'reset_password' AND created_at > now() - interval '1 day'`,
+    [userId],
+  )
+  return rows[0].n >= MAX_RESET_CODES_PER_DAY
 }
 
 /**
