@@ -1,12 +1,11 @@
 <!--
   ProfileCustomizePanel.vue — the profile Customize modal (component).
 
-  A live preview of the avatar, name, and emblem sits on top; below it, grouped
-  sections: Look (picture, accent, badge next to the name, avatar frame), About
-  (headline, bio, genres), Visibility, and Tabs. Edits stay in a local draft until
-  Save, which hands the whole draft to the parent to send; picture uploads apply
-  immediately (ProfilePictureEditor). Badge and frame pickers only show for badge
-  holders.
+  A live preview of the avatar and name sits on top; below it, grouped sections:
+  Accent and Frame, About (headline, bio, genres), Visibility, and Tabs. Edits stay in
+  a local draft until Save, which hands the whole draft to the parent to send; picture
+  uploads apply immediately (ProfilePictureEditor). The frame picker only shows for
+  badge holders: everyone else always wears the plain User ring.
 -->
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
@@ -34,10 +33,7 @@
             :size="76"
           />
           <div class="preview-text">
-            <span class="preview-name">
-              {{ username }}
-              <BadgeEmblem v-if="previewEmblem" :badge="previewEmblem" size="md" />
-            </span>
+            <span class="preview-name">{{ username }}</span>
             <span class="preview-headline">{{ draft.headline || 'No headline yet' }}</span>
             <ProfilePictureEditor :preview="false" @changed="(url) => emit('picture', url)" />
           </div>
@@ -45,27 +41,18 @@
 
         <!-- Title: Look -->
         <section class="group">
-          <h3 class="group-title">Look</h3>
+          <h3 class="group-title">Accent and Frame</h3>
 
           <div class="field">
-            <span class="field-label">Accent color</span>
+            <span class="field-label">Accent</span>
             <div class="swatches">
-              <!-- Default: never picked; silver profile and avatar frame. -->
-              <button
-                type="button"
-                class="swatch swatch-default"
-                :class="{ selected: !draft.accent }"
-                title="Silver (default)"
-                aria-label="silver"
-                data-testid="accent-default"
-                @click="draft.accent = null"
-              ></button>
+              <!-- Never picked (null) shows as coral, the default. -->
               <button
                 v-for="(color, name) in ACCENT_PRESETS"
                 :key="name"
                 type="button"
                 class="swatch"
-                :class="{ selected: draft.accent === name }"
+                :class="[`swatch-${name}`, { selected: (draft.accent ?? 'coral') === name }]"
                 :style="{ background: color }"
                 :aria-label="name"
                 @click="draft.accent = name"
@@ -95,36 +82,17 @@
           </div>
 
           <div v-if="emblemBadges.length" class="field">
-            <span class="field-label">Badge next to my name</span>
-            <div class="choices" role="radiogroup" data-testid="emblem-picker">
-              <button
-                v-for="option in emblemOptions"
-                :key="option.value"
-                type="button"
-                role="radio"
-                class="choice"
-                :class="{ selected: emblem === option.value }"
-                :aria-checked="emblem === option.value"
-                @click="pickEmblem(option.value)"
-              >
-                <BadgeEmblem v-if="option.badge" :badge="option.badge" size="md" :tooltip="false" />
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
-
-          <div v-if="emblemBadges.length" class="field">
-            <span class="field-label">Avatar frame</span>
+            <span class="field-label">Frame</span>
             <div class="choices frames" role="radiogroup" data-testid="frame-picker">
               <button
                 v-for="option in frameOptions"
-                :key="option.value ?? 'match'"
+                :key="option.value ?? 'auto'"
                 type="button"
                 role="radio"
                 class="choice frame-choice"
-                :class="{ selected: draft.frame === option.value }"
+                :class="{ auto: option.value === null, selected: draft.frame === option.value }"
                 :aria-checked="draft.frame === option.value"
-                :data-testid="`frame-${option.value ?? 'match'}`"
+                :data-testid="`frame-${option.value ?? 'auto'}`"
                 @click="draft.frame = option.value"
               >
                 <UserAvatar
@@ -272,12 +240,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import BadgeEmblem from '@/components/BadgeEmblem.vue'
 import PreferencesEditor from '@/components/PreferencesEditor.vue'
 import ProfilePictureEditor from '@/components/ProfilePictureEditor.vue'
-import { NO_EMBLEM, type BadgeDef } from '@/utils/badges'
+import { USER_FRAME, type BadgeDef } from '@/utils/badges'
 import { ACCENT_PRESETS, accentColor, isCustomAccent, readableOn } from '@/utils/accent'
 import type { ProfileAccent, ProfileSettings, ProfileTab } from '@/types/profile'
 
@@ -285,16 +252,12 @@ export interface CustomizeResult {
   settings: ProfileSettings
   bio: string
   genres: string[]
-  /** Badge next to the name: '' = automatic, a badge id, 'none', or null if not touched. */
-  emblem: string | null
 }
 
 const props = defineProps<{
   settings: ProfileSettings
   bio: string
   genres: string[]
-  /** Current pick for the badge next to the name ('' = automatic). */
-  emblem: string
   /** Emblem badges the user holds, in registry order. */
   emblemBadges: BadgeDef[]
   username: string
@@ -310,47 +273,34 @@ const emit = defineEmits<{
   picture: [profilePicture: string | null]
 }>()
 
+function holdsBadge(id: string) {
+  return props.emblemBadges.some((badge) => badge.id === id)
+}
+
 const draft = ref<ProfileSettings>({
   ...props.settings,
+  // A frame whose badge they've lost shows (and saves) as the User ring.
+  frame:
+    props.settings.frame && props.settings.frame !== USER_FRAME && !holdsBadge(props.settings.frame)
+      ? USER_FRAME
+      : props.settings.frame,
   tabOrder: [...props.settings.tabOrder],
   hiddenTabs: [...props.settings.hiddenTabs],
 })
 const bio = ref(props.bio)
 const genres = ref([...props.genres])
-const emblem = ref(props.emblem)
-const emblemTouched = ref(false)
-// The badges list may land after the panel opens; follow it until the user picks.
-watch(
-  () => props.emblem,
-  (value) => {
-    if (!emblemTouched.value) emblem.value = value
-  },
-)
-
-const emblemOptions = computed(() => [
-  { value: '', label: `Automatic`, badge: props.emblemBadges[0]?.id ?? null },
-  ...props.emblemBadges.map((badge) => ({ value: badge.id, label: badge.label, badge: badge.id })),
-  { value: NO_EMBLEM, label: 'None', badge: null },
-])
-
-/** The emblem the draft shows next to the name. */
-const previewEmblem = computed(() => {
-  if (emblem.value === NO_EMBLEM) return null
-  return emblem.value || props.emblemBadges[0]?.id || null
-})
-
 const frameOptions = computed(() => [
-  { value: null, label: 'Match badge', badge: previewEmblem.value },
+  { value: null, label: 'Automatic', badge: props.emblemBadges[0]?.id ?? USER_FRAME },
   ...props.emblemBadges.map((badge) => ({ value: badge.id, label: badge.label, badge: badge.id })),
-  { value: NO_EMBLEM, label: 'None', badge: null },
+  { value: USER_FRAME, label: 'User', badge: USER_FRAME },
 ])
 
 /** The frame the draft puts around the avatar. */
+/** The frame the draft puts around the avatar (a lost badge's frame is the User ring). */
 const previewFrame = computed(() => {
   const frame = draft.value.frame
-  if (frame === NO_EMBLEM) return null
-  if (frame && props.emblemBadges.some((badge) => badge.id === frame)) return frame
-  return previewEmblem.value
+  if (!frame) return props.emblemBadges[0]?.id ?? USER_FRAME
+  return holdsBadge(frame) ? frame : USER_FRAME
 })
 
 /** The whole panel follows the accent being picked. */
@@ -384,17 +334,11 @@ const toggleTabVisibility = (tab: ProfileTab) => {
   }
 }
 
-const pickEmblem = (value: string) => {
-  emblem.value = value
-  emblemTouched.value = true
-}
-
 const save = () =>
   emit('save', {
     settings: draft.value,
     bio: bio.value,
     genres: genres.value,
-    emblem: emblemTouched.value ? emblem.value : null,
   })
 </script>
 
@@ -449,8 +393,9 @@ const save = () =>
 .preview {
   display: flex;
   align-items: center;
-  gap: 1.2rem;
-  padding: 1.3rem 1.1rem 1rem;
+  /* Room for the frame, which extends a quarter of the avatar past its circle. */
+  gap: 1.6rem;
+  padding: 2rem 1.4rem 1.3rem 1.6rem;
   border-radius: 12px;
   background: color-mix(in srgb, var(--profile-accent) 10%, var(--bg-primary));
   border: 1px solid color-mix(in srgb, var(--profile-accent) 25%, var(--border-color));
@@ -574,9 +519,9 @@ textarea.form-control {
   outline-color: var(--text-primary);
 }
 
-/* Default: silver, like the avatar frame it leaves. */
-.swatch-default {
-  background: linear-gradient(135deg, #f8fafc, #cbd5e1 45%, #8b97a8 75%, #e2e8f0);
+/* Silver: a metallic sheen rather than a flat gray. */
+.swatch-silver {
+  background: linear-gradient(135deg, #f8fafc, #cbd5e1 45%, #8b97a8 75%, #e2e8f0) !important;
 }
 
 .swatch-wheel {
@@ -660,6 +605,17 @@ textarea.form-control {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
   gap: 0.5rem;
+}
+
+/* Automatic stands apart from the fixed frames in coral. */
+.frame-choice.auto {
+  border-color: color-mix(in srgb, var(--coral-primary) 45%, var(--border-color));
+  color: var(--coral-primary);
+}
+
+.frame-choice.auto.selected {
+  border-color: var(--coral-primary);
+  background: color-mix(in srgb, var(--coral-primary) 14%, transparent);
 }
 
 .frame-choice {

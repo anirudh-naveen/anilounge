@@ -7,15 +7,15 @@ import type { WatchlistStatus } from '@/utils/watchlist'
 import type { PublicUser, Relationship } from '@/types/social'
 
 export type ProfileTab = 'favorites' | 'watchlist' | 'stats' | 'forum' | 'friends'
-export type ProfilePresetAccent = 'coral' | 'teal' | 'violet' | 'gold' | 'rose' | 'sky'
+export type ProfilePresetAccent = 'coral' | 'teal' | 'violet' | 'gold' | 'rose' | 'sky' | 'silver'
 /** A preset name, or a custom `#rrggbb` color from the color wheel. */
 export type ProfileAccent = ProfilePresetAccent | `#${string}`
 
 export interface ProfileSettings {
   isPublic: boolean
-  /** null = never picked: the profile and avatar frame are silver. */
+  /** null = never picked: the profile and avatar frame use the coral default. */
   accent: ProfileAccent | null
-  /** Badge framing the avatar: an emblem badge id, 'none', or null to match the emblem. */
+  /** Avatar frame: an emblem badge id, 'user' (plain ring), or null for automatic. */
   frame: string | null
   headline: string
   defaultTab: ProfileTab

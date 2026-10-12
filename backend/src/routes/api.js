@@ -415,7 +415,6 @@ router.put(
 )
 
 /** Which badge shows as the emblem next to your name (null = your highest, 'none'). */
-router.put('/profile/featured-badge', profileController.updateFeaturedBadge)
 
 /** Title favorites (movies, series, and specials) behind the card heart. */
 router.get('/favorites/content', profileController.getFavoriteContentIds)

@@ -3,7 +3,7 @@
 
   Card-royalty theme. Creator: sparkly gold crown. Admin: sparkly violet shield.
   Developer: emerald diamond with </>. Artist: pink spade with a palette. Influencer:
-  sky club with a megaphone. Supporter: coral heart with a coin glint. Bot (the bot accounts only): cyan robot head. All glow and
+  sky club with a megaphone. Supporter: coral heart with a coin glint. Mascot (id `bot`, the bot accounts only): cyan robot head. All glow and
   catch a light sweep; only creator/admin twinkle. Badges without an emblem (future
   ones) get a plain medal, used in the profile Badges section.
 -->

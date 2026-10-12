@@ -3,15 +3,15 @@
 
   Shows the user's picture, or their initials when there is none or the image
   fails to load (for example a legacy upload lost from server disk). The picture
-  is always a circle. A badge holder gets a frame in the card-royalty theme (the
-  badge they picked for it, else the emblem by their name): a ring around the circle
-  plus a silhouette behind it that extends past the edge, a crown for Creator, shield
-  for Admin, diamond/spade/club/heart for Developer/Artist/Influencer/Supporter, and
-  a jester's cap for Bot (the mascots, so the deck's Joker). Frames are silver until
-  the user picks a profile accent, then take its shades; Creator and Admin also
-  shimmer. The frame and accent come from the badges store by `name`, or from
-  `badge` / `accent` when the caller knows them; the signed-in user's own picture
-  comes from their account, so changes show everywhere without a reload.
+  is always a circle (white behind transparent pictures), with a ring in the user's
+  accent around it (coral until they pick one). That plain ring is the User frame,
+  which everyone has; badge holders can instead wear their badge's frame in the
+  card-royalty theme, a silhouette behind the circle that extends past its edge: a
+  crown for Creator, shield for Admin, diamond/spade/club/heart for Developer/Artist/
+  Influencer/Supporter, and a lounge chair for Mascot (the bot accounts). Creator and
+  Admin also shimmer. The frame and accent come from the badges store by `name`, or
+  from `badge` / `accent` when the caller knows them; the signed-in user's own
+  picture comes from their account, so changes show everywhere without a reload.
 -->
 <template>
   <span
@@ -21,7 +21,7 @@
     :data-testid="ring ? `avatar-ring-${ring}` : undefined"
   >
     <!-- Behind the circle: the badge's silhouette, extending past its edge. -->
-    <svg v-if="frame" class="frame" viewBox="0 0 24 24" aria-hidden="true">
+    <svg v-if="frame?.parts.length" class="frame" viewBox="0 0 24 24" aria-hidden="true">
       <defs>
         <linearGradient :id="gradientId" x1="0" y1="0" x2="1" y2="1">
           <stop
@@ -50,24 +50,14 @@
             stroke-width="0.5"
             stroke-linejoin="round"
           />
-          <!-- The jester's middle flap is darker, for its two-tone. -->
+          <!-- One part (the chair's backrest) is darker, for depth. -->
           <path v-if="frame.darken === index" :d="part" fill="rgba(15, 23, 42, 0.28)" />
         </template>
-        <circle
-          v-for="[cx, cy] in frame.bells ?? []"
-          :key="cx"
-          :cx="cx"
-          :cy="cy"
-          r="1.4"
-          :fill="colors[0]"
-          stroke="rgba(15, 23, 42, 0.4)"
-          stroke-width="0.5"
-        />
       </g>
     </svg>
     <span v-if="frame" class="ring" aria-hidden="true"></span>
 
-    <span class="user-avatar-inner">
+    <span class="user-avatar-inner" :class="{ 'has-image': url && !failed }">
       <img
         v-if="url && !failed"
         :src="url"
@@ -94,6 +84,7 @@ import { getAvatarUrl } from '@/utils/avatars'
 import { frameColors } from '@/utils/accent'
 import { useBadgesStore } from '@/stores/badges'
 import { useAuthStore } from '@/stores/auth'
+import { USER_FRAME } from '@/utils/badges'
 import type { ProfileAccent } from '@/types/profile'
 
 const props = withDefaults(
@@ -102,7 +93,7 @@ const props = withDefaults(
     name?: string
     size?: number
     alt?: string
-    /** The badge to frame with; null for none; leave out to look it up by `name`. */
+    /** The frame (a badge id or 'user'); null for none; leave out to look it up by `name`. */
     badge?: string | null
     /** Their profile accent for the frame color; leave out to look it up by `name`. */
     accent?: ProfileAccent | null
@@ -118,10 +109,9 @@ const around = (cx: number, cy: number, scale: number) =>
  * Frame silhouettes (from BadgeEmblem) in a 24-unit box drawn 1.5x the avatar, so the
  * picture circle is radius 8 and anything past that shows around it.
  */
-const FRAMES: Record<
-  string,
-  { parts: string[]; transform: string; darken?: number; bells?: number[][] }
-> = {
+const FRAMES: Record<string, { parts: string[]; transform: string; darken?: number }> = {
+  // The plain ring everyone has: nothing behind the circle.
+  [USER_FRAME]: { parts: [], transform: '' },
   // Crown raised so its points rise above the circle.
   creator: {
     parts: [
@@ -155,20 +145,16 @@ const FRAMES: Record<
     ],
     transform: around(12, 12.75, 1.3),
   },
-  // Jester's cap flaps (left, middle, right), each curling over to a bell.
+  // A lounge chair (AniLounge's mascots): the picture sits in it, with the darker
+  // backrest behind, armrests at the sides, and the seat base and legs below.
   bot: {
     parts: [
-      'M9.4 17C9.6 10 10.6 5 13 3c1.6-1.3 3.6-1 4.6.4-1.2-.4-2.4 0-3 1.2-1 2-1.2 6.6-.8 12.4z',
-      'M5.2 17C5 12.2 4.3 9.8 2.7 10.1c-1 .2-1.4 1.1-1.4 2.3C0 9 1.5 5 5.5 4.7c3-.2 4.7 3.2 5.3 8.3z',
-      'M18.8 17C19 12.2 19.7 9.8 21.3 10.1c1 .2 1.4 1.1 1.4 2.3C24 9 22.5 5 18.5 4.7c-3-.2-4.7 3.2-5.3 8.3z',
+      'M7 1.5h10a4 4 0 0 1 4 4V15H3V5.5a4 4 0 0 1 4-4z',
+      'M3 9.6a2.3 2.3 0 0 1 2.3 2.3V19H.7v-7.1A2.3 2.3 0 0 1 3 9.6zM21 9.6a2.3 2.3 0 0 1 2.3 2.3V19h-4.6v-7.1A2.3 2.3 0 0 1 21 9.6z',
+      'M2 17.6h20a1 1 0 0 1 1 1v1.6a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-1.6a1 1 0 0 1 1-1zM3.4 21.2h2v2.2h-2zM18.6 21.2h2v2.2h-2z',
     ],
-    transform: around(12, 13.5, 1.1),
+    transform: around(12, 12, 1),
     darken: 0,
-    bells: [
-      [17.6, 3.4],
-      [1.3, 12.4],
-      [22.7, 12.4],
-    ],
   },
 }
 
@@ -192,7 +178,7 @@ const url = computed(() =>
 const initials = computed(() => (props.name || '?').slice(0, 2).toUpperCase())
 const ring = computed(() => {
   const badge =
-    props.badge !== undefined ? props.badge : (badgesStore?.frameFor(props.name) ?? null)
+    props.badge !== undefined ? props.badge : (badgesStore?.frameFor(props.name) ?? USER_FRAME)
   return badge && FRAMES[badge] ? badge : null
 })
 const frame = computed(() => (ring.value ? FRAMES[ring.value] : undefined))
@@ -249,6 +235,10 @@ onMounted(() => {
   overflow: hidden;
   border-radius: 50%;
   background: var(--profile-accent, var(--blend-color));
+}
+
+.user-avatar-inner.has-image {
+  background: #fff;
 }
 
 .user-avatar-img {

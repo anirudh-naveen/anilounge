@@ -1,7 +1,7 @@
 /**
  * accent.ts — profile accent colors: the presets plus custom `#rrggbb` colors from
  * the color wheel, a readable text color to put on top of an accent, and the avatar
- * frame colors an accent gives a badge holder (silver when they never picked one).
+ * frame colors an accent gives (coral, the default, when they never picked one).
  */
 
 import type { ProfileAccent, ProfilePresetAccent } from '@/types/profile'
@@ -13,6 +13,7 @@ export const ACCENT_PRESETS: Record<ProfilePresetAccent, string> = {
   gold: '#e8a317',
   rose: '#d9577a',
   sky: '#3d8bd9',
+  silver: '#8b97a8',
 }
 
 const HEX = /^#[0-9a-f]{6}$/i
@@ -21,13 +22,10 @@ const HEX = /^#[0-9a-f]{6}$/i
 export const isCustomAccent = (accent: unknown): accent is `#${string}` =>
   typeof accent === 'string' && HEX.test(accent)
 
-/** The default accent, until the user picks one: silver, like the default avatar frame. */
-export const DEFAULT_ACCENT = '#8b97a8'
-
-/** The CSS color for a stored accent (none or unknown values give the silver default). */
+/** The CSS color for a stored accent (none or unknown values give the coral default). */
 export const accentColor = (accent?: ProfileAccent | null): string => {
   if (isCustomAccent(accent)) return accent
-  return ACCENT_PRESETS[accent as ProfilePresetAccent] ?? DEFAULT_ACCENT
+  return ACCENT_PRESETS[accent as ProfilePresetAccent] ?? ACCENT_PRESETS.coral
 }
 
 /**
@@ -61,12 +59,12 @@ const mix = (color: string, other: string, amount: number): string => {
 const SILVER_FRAME = ['#f8fafc', '#cbd5e1', '#8b97a8', '#e2e8f0']
 
 /**
- * Gradient stops for a badge holder's avatar frame: silver until they pick an accent,
- * then light-to-dark shades of it.
+ * Gradient stops for an avatar frame: light-to-dark shades of the accent (coral until
+ * they pick one); silver gets its own metallic stops.
  * @param accent - Their stored accent, or null when never picked.
  */
 export const frameColors = (accent?: ProfileAccent | null): string[] => {
-  if (!accent) return SILVER_FRAME
+  if (accent === 'silver') return SILVER_FRAME
   const color = accentColor(accent)
   return [
     mix(color, '#ffffff', 0.6),

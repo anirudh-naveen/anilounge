@@ -1,12 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import {
-  avatarFrame,
-  badgesForUser,
-  earnsInfluencer,
-  featuredEmblem,
-  isValidEmblemChoice,
-} from './badges.js'
+import { avatarFrame, badgesForUser, earnsInfluencer } from './badges.js'
 
 describe('badgesForUser', () => {
   it('combines the role badge with granted badges in registry order', () => {
@@ -30,25 +24,7 @@ describe('badgesForUser', () => {
   it('gives the bot accounts the bot badge and nothing else', () => {
     assert.deepEqual(badgesForUser({ role: 'admin', isBot: true, granted: ['developer'] }), ['bot'])
     assert.deepEqual(badgesForUser({ role: 'user', granted: ['bot'] }), [])
-    assert.equal(featuredEmblem(['bot'], null), 'bot')
-  })
-})
-
-describe('featuredEmblem', () => {
-  const badges = ['admin', 'artist']
-  it('uses the pick, falls back to the highest, and honors none', () => {
-    assert.equal(featuredEmblem(badges, 'artist'), 'artist')
-    assert.equal(featuredEmblem(badges, null), 'admin')
-    assert.equal(featuredEmblem(badges, 'developer'), 'admin')
-    assert.equal(featuredEmblem(badges, 'none'), null)
-    assert.equal(featuredEmblem([], null), null)
-  })
-
-  it('only accepts held emblem badges as a choice', () => {
-    assert.equal(isValidEmblemChoice(badges, 'artist'), true)
-    assert.equal(isValidEmblemChoice(badges, null), true)
-    assert.equal(isValidEmblemChoice(badges, 'none'), true)
-    assert.equal(isValidEmblemChoice(badges, 'developer'), false)
+    assert.equal(avatarFrame(['bot'], null), 'bot')
   })
 })
 
@@ -61,12 +37,13 @@ describe('earnsInfluencer', () => {
 })
 
 describe('avatarFrame', () => {
-  it('uses a held pick, hides on none, and otherwise matches the emblem', () => {
+  it('uses a held pick, the User ring for a lost one, and the highest badge on automatic', () => {
     const held = ['admin', 'artist']
-    assert.equal(avatarFrame(held, 'admin', 'artist'), 'artist')
-    assert.equal(avatarFrame(held, 'admin', 'none'), null)
-    assert.equal(avatarFrame(held, 'admin', null), 'admin')
-    assert.equal(avatarFrame(held, null, null), null)
-    assert.equal(avatarFrame(held, 'admin', 'creator'), 'admin')
+    assert.equal(avatarFrame(held, 'artist'), 'artist')
+    assert.equal(avatarFrame(held, 'user'), 'user')
+    assert.equal(avatarFrame(held, 'none'), 'user')
+    assert.equal(avatarFrame(held, null), 'admin')
+    assert.equal(avatarFrame(held, 'creator'), 'user')
+    assert.equal(avatarFrame([], null), 'user')
   })
 })

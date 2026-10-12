@@ -78,7 +78,6 @@
                 <div class="social-row-body">
                   <router-link :to="profileRoute(request.user.username)" class="social-name">
                     {{ request.user.username }}
-                    <RoleBadge :username="request.user.username" />
                   </router-link>
                   <div class="social-meta">
                     {{ timeAgo(request.at) }} · Expires {{ timeUntil(new Date(request.expiresAt)) }}
@@ -122,7 +121,6 @@
                 <div class="social-row-body">
                   <router-link :to="profileRoute(friend.user.username)" class="social-name">
                     {{ friend.user.username }}
-                    <RoleBadge :username="friend.user.username" />
                   </router-link>
                   <div class="social-meta">Friends since {{ formatDate(friend.since) }}</div>
                 </div>
@@ -154,7 +152,6 @@
                 <div class="social-row-body">
                   <router-link :to="profileRoute(request.user.username)" class="social-name">
                     {{ request.user.username }}
-                    <RoleBadge :username="request.user.username" />
                   </router-link>
                   <div class="social-meta">
                     Sent {{ timeAgo(request.at) }} · Expires
@@ -197,7 +194,6 @@
               <div class="social-row-body">
                 <router-link :to="profileRoute(hit.username)" class="social-name">
                   {{ hit.username }}
-                  <RoleBadge :username="hit.username" />
                 </router-link>
                 <!-- Title: Request Note -->
                 <form
@@ -260,7 +256,6 @@ import { useToast } from 'vue-toastification'
 import FriendButton from '@/components/FriendButton.vue'
 import MessagesPanel from '@/components/MessagesPanel.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import RoleBadge from '@/components/RoleBadge.vue'
 import { friendsAPI } from '@/services/api'
 import { useMessagesStore } from '@/stores/messages'
 import type { FriendsPayload, Relationship, UserSearchHit } from '@/types/social'
