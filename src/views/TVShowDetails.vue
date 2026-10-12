@@ -1,11 +1,14 @@
 <!--
   TVShowDetails.vue — series detail view.
 
-  Loads one series by route id and shows poster, titles, season/episode meta,
-  watchlist actions, overview, an expandable episode row, studios, and related
-  sequels/prequels. Picking a season shows that season's own details: the
-  catalog title for that season when one exists (the route id switches to it),
-  otherwise the show with TMDB's season poster/overview (`?season=N`).
+  Loads one series by route id and shows poster, titles, franchise, season/episode
+  meta, watchlist actions, then overview, seasons and episodes, characters, tags,
+  where to watch and trailer, the forum, and credits. Picking a season swaps the
+  page to that season's details in place (`?season=N` on the series route): the
+  season's own catalog title when one exists, otherwise the show with TMDB's
+  season poster/overview. With no season picked, the first season shows. From a
+  season's own page, picking another season moves to the series route with that
+  season picked. Opening an episode narrows characters and staff to it.
 -->
 <template>
   <div class="tv-details">
@@ -64,6 +67,7 @@
           <p v-if="getNativeTitle(show)" class="original-title">
             Native Title: {{ getNativeTitle(show) }}
           </p>
+          <FranchiseLink :content="show" />
 
           <!-- Title: Meta -->
           <div class="show-meta">
@@ -132,24 +136,39 @@
       <!-- Title: Watchlist -->
       <!-- A series with seasons is tracked season by season, unless it is tracked already. -->
       <WatchlistPanel
-        v-if="!seriesSeasons.length || contentStore.isInWatchlist(show._id)"
+        v-if="
+          show.contentType === 'season' ||
+          !seriesSeasons.length ||
+          contentStore.isInWatchlist(show._id)
+        "
         :content-id="show._id"
         content-type="tv"
         :total-episodes="show.episodeCount || show.malEpisodes || 0"
         :total-seasons="show.contentType === 'season' ? 1 : show.seasonCount || 1"
       />
 
+      <!-- Body -->
+      <!-- Title: Overview -->
+      <div class="show-description">
+        <h2>Overview</h2>
+        <p>{{ show.overview || 'No overview available.' }}</p>
+      </div>
+
       <!-- Title: Seasons -->
+      <!-- Picking a season swaps the page above and below to that season's details. -->
       <section v-if="seriesSeasons.length" class="series-seasons" data-testid="series-seasons">
         <h2>Seasons</h2>
-        <p class="seasons-hint">Track and rate each season on its own page.</p>
+        <p class="seasons-hint">Pick a season to see, track, and rate it.</p>
         <div class="season-cards">
-          <router-link
+          <button
             v-for="season in seriesSeasons"
             :key="season._id"
-            :to="detailPath('/tv-show', season._id, season.title)"
+            type="button"
             class="season-card"
+            :class="{ active: season._id === selectedSeasonInfo?.contentId }"
+            :aria-pressed="season._id === selectedSeasonInfo?.contentId"
             :data-testid="`season-card-${season._id}`"
+            @click="selectSeasonCard(season)"
           >
             <img
               v-if="season.posterPath"
@@ -183,188 +202,52 @@
                 </span>
               </p>
             </div>
-          </router-link>
+          </button>
         </div>
       </section>
 
-      <!-- Body -->
-      <!-- Title: Overview -->
-      <div class="show-description">
-        <h2>Overview</h2>
-        <p>{{ show.overview || 'No overview available.' }}</p>
-      </div>
-
-      <!-- Title: Where to Watch -->
-      <WhereToWatch :content-id="show._id" />
-
-      <TitleExtras :content="show" />
-
-      <!-- Title: Forum -->
-      <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
-
       <!-- Title: Episodes -->
       <EpisodeRow
+        ref="episodeRow"
         :episodes="episodes"
         :loading="episodesLoading"
         :characters="characters"
-        :content-id="show._id"
-        :show="show"
         :selected-season="selectedSeason"
         :season-names="seasonNames"
+        :season-picker="!seriesSeasons.length"
         @select-season="selectSeason"
+        @select-episode="selectedEpisode = $event"
       />
 
-      <!-- Title: Related Loading -->
-      <div v-if="relatedContentLoading" class="related-content-loading">
-        <h3>Loading Related Content...</h3>
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-          <p>Finding sequels, prequels, and related content...</p>
-        </div>
+      <!-- Title: Episode Focus -->
+      <div v-if="episodeFocus" class="episode-focus" data-testid="episode-focus">
+        <span
+          >Showing characters and staff for <strong>{{ episodeFocus }}</strong></span
+        >
+        <button type="button" class="btn-outline" @click="episodeRow?.closeEpisode()">
+          Show all
+        </button>
       </div>
 
-      <!-- Title: Related Content -->
-      <div
-        v-else-if="
-          relatedContent &&
-          (relatedContent.sequels.length > 0 ||
-            relatedContent.prequels.length > 0 ||
-            relatedContent.related.length > 0)
-        "
-        class="related-content"
-      >
-        <h3>Related Content</h3>
-
-        <!-- Title: Franchise -->
-        <div v-if="show.franchise" class="franchise-info">
-          <h4>
-            Part of the
-            <router-link
-              v-if="show.franchiseId"
-              :to="{ name: 'FranchiseDetails', params: { id: show.franchiseId } }"
-              class="franchise-link"
-              data-testid="franchise-link"
-              >{{ show.franchise }}</router-link
-            ><template v-else>{{ show.franchise }}</template>
-            franchise
-          </h4>
-          <p v-if="show.franchiseRating" class="franchise-rating" data-testid="franchise-rating">
-            <i class="fas fa-star"></i> {{ show.franchiseRating.toFixed(1) }} across the franchise
-          </p>
-        </div>
-
-        <!-- Title: Sequels -->
-        <div v-if="relatedContent.sequels.length > 0" class="relationship-section">
-          <h4>Sequels</h4>
-          <div class="content-grid">
-            <div
-              v-for="sequel in relatedContent.sequels"
-              :key="`sequel-${sequel._id}`"
-              class="content-card"
-              @click="viewContentDetails(sequel)"
-            >
-              <FavoriteHeart :content-id="sequel._id" />
-              <img
-                v-if="sequel.posterPath"
-                :src="getPosterUrl(sequel.posterPath)"
-                :alt="getDisplayTitle(sequel)"
-                @error="hideBrokenImage"
-              />
-              <div v-else class="no-poster">
-                <i class="fas fa-film"></i>
-              </div>
-              <div class="content-info">
-                <h5>{{ getDisplayTitle(sequel) }}</h5>
-                <p class="content-type">
-                  {{ getCardContentTypeDisplay(sequel.contentType) }}
-                  <AiringBadge :content="sequel" variant="inline" />
-                </p>
-                <div class="rating">
-                  <i class="fas fa-star"></i>
-                  <span>{{ getDisplayScore(sequel) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Title: Prequels -->
-        <div v-if="relatedContent.prequels.length > 0" class="relationship-section">
-          <h4>Prequels</h4>
-          <div class="content-grid">
-            <div
-              v-for="prequel in relatedContent.prequels"
-              :key="`prequel-${prequel._id}`"
-              class="content-card"
-              @click="viewContentDetails(prequel)"
-            >
-              <FavoriteHeart :content-id="prequel._id" />
-              <img
-                v-if="prequel.posterPath"
-                :src="getPosterUrl(prequel.posterPath)"
-                :alt="getDisplayTitle(prequel)"
-                @error="hideBrokenImage"
-              />
-              <div v-else class="no-poster">
-                <i class="fas fa-film"></i>
-              </div>
-              <div class="content-info">
-                <h5>{{ getDisplayTitle(prequel) }}</h5>
-                <p class="content-type">
-                  {{ getCardContentTypeDisplay(prequel.contentType) }}
-                  <AiringBadge :content="prequel" variant="inline" />
-                </p>
-                <div class="rating">
-                  <i class="fas fa-star"></i>
-                  <span>{{ getDisplayScore(prequel) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Title: Related -->
-        <div v-if="relatedContent.related.length > 0" class="relationship-section">
-          <h4>Related</h4>
-          <div class="content-grid">
-            <div
-              v-for="related in relatedContent.related"
-              :key="`related-${related._id}`"
-              class="content-card"
-              @click="viewContentDetails(related)"
-            >
-              <FavoriteHeart :content-id="related._id" />
-              <img
-                v-if="related.posterPath"
-                :src="getPosterUrl(related.posterPath)"
-                :alt="getDisplayTitle(related)"
-                @error="hideBrokenImage"
-              />
-              <div v-else class="no-poster">
-                <i class="fas fa-film"></i>
-              </div>
-              <div class="content-info">
-                <h5>{{ getDisplayTitle(related) }}</h5>
-                <p class="content-type">
-                  {{ getCardContentTypeDisplay(related.contentType) }}
-                  <AiringBadge :content="related" variant="inline" />
-                </p>
-                <div class="rating">
-                  <i class="fas fa-star"></i>
-                  <span>{{ getDisplayScore(related) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <EntityCastRow :items="characters" :content-id="show._id" :loading="charactersLoading" />
-      <p v-if="characters.some((item) => isTvmazeImage(item.imagePath))" class="image-credit">
+      <!-- Title: Characters -->
+      <EntityCastRow :items="shownCharacters" :content-id="show._id" :loading="charactersLoading" />
+      <p v-if="shownCharacters.some((item) => isTvmazeImage(item.imagePath))" class="image-credit">
         Character images from
         <a href="https://www.tvmaze.com" target="_blank" rel="noopener">TVmaze</a> (CC BY-SA).
       </p>
 
+      <!-- Title: Tags -->
+      <TitleExtras :content="show" :sections="['tags']" />
+
+      <!-- Title: Where to Watch -->
+      <WhereToWatch :content-id="show._id" />
+      <TitleExtras :content="show" :sections="['trailer']" />
+
+      <!-- Title: Forum -->
+      <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
+
+      <!-- Title: Credits -->
+      <TitleExtras :content="staffContent" :sections="['staff']" />
       <StudioLinks :content="show" />
     </div>
 
@@ -378,16 +261,11 @@
 
 <script setup lang="ts">
 import { goBackOr, returnToListing } from '@/utils/navigation'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
-import {
-  contentAPI,
-  getPosterUrl,
-  getCardContentTypeDisplay,
-  getDetailsRouteName,
-} from '@/services/api'
+import { contentAPI, getPosterUrl } from '@/services/api'
 import WatchlistPanel from '@/components/WatchlistPanel.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EpisodeRow from '@/components/EpisodeRow.vue'
@@ -395,21 +273,28 @@ import EntityCastRow from '@/components/EntityCastRow.vue'
 import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
+import FranchiseLink from '@/components/FranchiseLink.vue'
 import { isTvmazeImage } from '@/utils/imageCredits'
 import type {
   CatalogEntity,
   Episode,
   SeasonGuide,
   SeasonSummary,
+  SeriesSeason,
   UnifiedContent,
 } from '@/types/content'
 import { useEntityStore } from '@/stores/entities'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
 import { formatAiringStatus, isCurrentlyAiring, isUpcoming } from '@/utils/airing'
-import { findRouteSeason, formatSeasonLabel, seasonContent } from '@/utils/episodes'
+import { matchCharacterByName } from '@/utils/entities'
+import {
+  findRouteSeason,
+  formatEpisodeIndex,
+  formatSeasonLabel,
+  seasonContent,
+} from '@/utils/episodes'
 import { hideBrokenImage } from '@/utils/posters'
-import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import JoinPrompt from '@/components/JoinPrompt.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
@@ -429,12 +314,6 @@ const entityStore = useEntityStore()
 const show = ref<UnifiedContent | null>(null)
 const loading = ref(true)
 const error = ref('')
-const relatedContent = ref<{
-  sequels: UnifiedContent[]
-  prequels: UnifiedContent[]
-  related: UnifiedContent[]
-} | null>(null)
-const relatedContentLoading = ref(false)
 const episodes = ref<Episode[]>([])
 const episodesLoading = ref(false)
 const characters = ref<CatalogEntity[]>([])
@@ -445,8 +324,10 @@ const seasons = ref<SeasonSummary[]>([])
 /** Title the episodes and seasons belong to (differs from the route when it is one season). */
 const seriesId = ref('')
 const selectedSeason = ref<number | null>(null)
+/** Episode open in the episode row; characters and staff narrow to it. */
+const selectedEpisode = ref<Episode | null>(null)
+const episodeRow = useTemplateRef<InstanceType<typeof EpisodeRow>>('episodeRow')
 let detailsRequestId = 0
-let relatedRequestId = 0
 let episodesRequestId = 0
 let charactersRequestId = 0
 let detailsForId = ''
@@ -466,16 +347,44 @@ const seasonLabel = computed(() =>
     : '',
 )
 
-/** A series' seasons (series pages only). */
-const seriesSeasons = computed(() =>
-  show.value?.contentType === 'tv' ? show.value.seasons || [] : [],
-)
+/** The series' season cards, on the series page and on each season's page. */
+const seriesSeasons = computed(() => {
+  const series = loaded.value[seriesId.value]
+  return series?.contentType === 'tv' ? series.seasons || [] : []
+})
+/** Guide number of the first season, shown until another season is picked. */
+const firstSeason = computed(() => seasons.value[0]?.seasonNumber ?? null)
 /** Season pill names by guide number, for shows stored season by season. */
 const seasonNames = computed(() =>
   seasons.value.some((season) => season.contentId)
     ? Object.fromEntries(seasons.value.map((season) => [season.seasonNumber, season.name]))
     : null,
 )
+/** The open episode's characters, matched from its cast; empty when none match. */
+const episodeCharacters = computed(() => {
+  const found = new Map<string, CatalogEntity>()
+  for (const member of selectedEpisode.value?.cast || []) {
+    const entity = matchCharacterByName(member.character, characters.value)
+    if (entity) found.set(entity._id, entity)
+  }
+  return [...found.values()]
+})
+const shownCharacters = computed(() =>
+  episodeCharacters.value.length ? episodeCharacters.value : characters.value,
+)
+/** The title with the open episode's staff in place of the title's, when it has any. */
+const staffContent = computed(() => {
+  const staff = selectedEpisode.value?.staff
+  if (!show.value || !staff?.length) return show.value!
+  return { ...show.value, staff, episodeStaff: [] }
+})
+/** "S1E3 · Title" for the open episode, when something on the page narrowed to it. */
+const episodeFocus = computed(() => {
+  const episode = selectedEpisode.value
+  if (!episode || (!episodeCharacters.value.length && !episode.staff?.length)) return ''
+  const index = formatEpisodeIndex(episode, seasons.value.length > 1 && !seasonNames.value)
+  return `${index} · ${episode.title}`
+})
 const WATCHLIST_STATUS_LABELS: Record<string, string> = {
   plan_to_watch: 'Planned',
   watching: 'Watching',
@@ -545,11 +454,17 @@ const loadShow = async (showId: string) => {
 
   const fromPill = seasonPillClicked
   seasonPillClicked = false
-  const season = findRouteSeason(seasons.value, showId, route.query.season)
+  const season = findRouteSeason(seasons.value, showId, route.query.season, seriesId.value)
   if (season) {
     selectedSeason.value = season.seasonNumber
     if (!fromPill) contentStore.scrollToTop()
     loadDetails(displayId.value).catch((err) => console.error('Failed to load season:', err))
+    return
+  }
+  // The series route with no season picked shows its first season; nothing new to fetch.
+  if (showId === seriesId.value && seasons.value.length && loaded.value[showId]) {
+    selectedSeason.value = firstSeason.value
+    if (!fromPill) contentStore.scrollToTop()
     return
   }
 
@@ -576,8 +491,8 @@ const loadShow = async (showId: string) => {
 }
 
 /**
- * Season pill click. A season with its own catalog title opens that title;
- * otherwise the show stays and `?season=N` picks the season.
+ * Season pick (card or pill). The page stays and shows that season: on its own
+ * page nothing moves, otherwise the series route gets `?season=N`.
  */
 const selectSeason = (seasonNumber: number) => {
   const season = seasons.value.find((item) => item.seasonNumber === seasonNumber)
@@ -585,16 +500,27 @@ const selectSeason = (seasonNumber: number) => {
     selectedSeason.value = seasonNumber
     return
   }
-  const id = season.contentId || seriesId.value
+  const own = !!season.contentId && season.contentId === route.params.id
+  const id = own ? (route.params.id as string) : seriesId.value
   const query = { ...route.query }
   delete query.season
-  if (!season.contentId) query.season = String(seasonNumber)
+  if (!own) query.season = String(seasonNumber)
   if (id === route.params.id && query.season === route.query.season) {
     selectedSeason.value = seasonNumber
     return
   }
   seasonPillClicked = true
   void router.replace({ name: 'TVShowDetails', params: { id }, query })
+}
+
+/** Season card click: pick that season, or open its page if the guide lacks it. */
+const selectSeasonCard = (card: SeriesSeason) => {
+  const season = seasons.value.find((item) => item.contentId === card._id)
+  if (season) {
+    selectSeason(season.seasonNumber)
+    return
+  }
+  void router.push(detailPath('/tv-show', card._id, card.title))
 }
 
 const goBack = () =>
@@ -646,11 +572,15 @@ const fetchEpisodes = async (contentId: string) => {
     seasons.value = guide.seasons || []
     seriesId.value = guide.seriesId || contentId
     const season =
-      findRouteSeason(seasons.value, contentId, route.query.season) ||
+      findRouteSeason(seasons.value, contentId, route.query.season, seriesId.value) ||
       seasons.value.find((item) => item.seasonNumber === guide.currentSeason)
-    selectedSeason.value = season?.seasonNumber ?? null
-    if (seasons.value.length > 1) {
-      const ids = new Set(seasons.value.map((item) => item.contentId || seriesId.value))
+    selectedSeason.value = season?.seasonNumber ?? firstSeason.value
+    if (seasons.value.length) {
+      // Every season and the series itself, so picks swap instantly and the cards show.
+      const ids = new Set([
+        seriesId.value,
+        ...seasons.value.map((item) => item.contentId || seriesId.value),
+      ])
       for (const id of ids) {
         loadDetails(id).catch((err) => console.error('Failed to load season details:', err))
       }
@@ -685,62 +615,14 @@ const fetchCharacters = async (contentId: string) => {
   }
 }
 
-const fetchRelatedContent = async (contentId: string) => {
-  const requestId = ++relatedRequestId
-  relatedContentLoading.value = true
-  try {
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Related content request timeout')), 2000),
-    )
-
-    const response = await Promise.race([contentAPI.getRelatedContent(contentId), timeoutPromise])
-    if (requestId !== relatedRequestId) return
-
-    relatedContent.value = (
-      response as {
-        data: {
-          data: { sequels: UnifiedContent[]; prequels: UnifiedContent[]; related: UnifiedContent[] }
-        }
-      }
-    ).data.data
-    relatedContent.value?.sequels?.forEach((item) => contentStore.cacheContent(item))
-    relatedContent.value?.prequels?.forEach((item) => contentStore.cacheContent(item))
-    relatedContent.value?.related?.forEach((item) => contentStore.cacheContent(item))
-  } catch (err) {
-    if (requestId !== relatedRequestId) return
-    console.error('Failed to fetch related content:', err)
-    relatedContent.value = { sequels: [], prequels: [], related: [] }
-  } finally {
-    if (requestId === relatedRequestId) {
-      relatedContentLoading.value = false
-    }
-  }
-}
-
-const viewContentDetails = async (content: UnifiedContent) => {
-  contentStore.cacheContent(content, true)
-
-  try {
-    await router.push({
-      name: getDetailsRouteName(content),
-      params: { id: content._id },
-      query: { from: route.fullPath },
-    })
-  } catch (err) {
-    console.error('Navigation error:', err)
-  }
-}
-
-// Characters and related titles follow the title on screen (a season's own title, or its show).
+// Characters follow the title on screen (a season's own title, or its show).
 watch(
   displayId,
   (contentId) => {
     if (!contentId || contentId === detailsForId) return
     detailsForId = contentId
     characters.value = []
-    relatedContent.value = null
     fetchCharacters(contentId)
-    fetchRelatedContent(contentId)
   },
   { immediate: true },
 )
@@ -788,6 +670,23 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   background: var(--bg-primary);
   color: var(--text-primary);
   padding: 2rem;
+}
+
+.episode-focus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--coral-primary);
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+.episode-focus .btn-outline {
+  padding: 0.5rem 1rem;
 }
 
 .image-credit {
@@ -840,8 +739,20 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   transition: border-color 0.2s ease;
 }
 
-.season-card:hover {
+.season-card {
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.season-card:hover,
+.season-card.active {
   border-color: var(--coral-primary);
+}
+
+.season-card.active {
+  box-shadow: 0 0 0 2px var(--coral-primary);
 }
 
 .season-card img,
@@ -1138,163 +1049,6 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   .show-actions {
     flex-direction: column;
   }
-}
-
-/* Related Content Loading Styles */
-.related-content-loading {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: var(--bg-card);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  text-align: center;
-}
-
-.related-content-loading h3 {
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.loading-spinner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.loading-spinner .spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid var(--border-color);
-  border-top: 4px solid var(--highlight-color);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.loading-spinner p {
-  color: var(--text-muted);
-  margin: 0;
-}
-
-/* Related Content Styles */
-.related-content {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: var(--bg-card);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-}
-
-.related-content h3 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.franchise-info {
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: linear-gradient(90deg, var(--coral-light), var(--tan-primary));
-  border-radius: 8px;
-}
-
-.franchise-info h4 {
-  margin: 0;
-  color: white;
-  font-size: 1.1rem;
-}
-
-.franchise-link {
-  color: white;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.franchise-rating {
-  margin: 0.35rem 0 0;
-  color: white;
-  font-size: 0.95rem;
-}
-
-.relationship-section {
-  margin-bottom: 2rem;
-}
-
-.relationship-section h4 {
-  font-size: 1.2rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.content-card {
-  background: var(--bg-hover);
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border: 1px solid var(--border-color);
-}
-
-.content-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-  border-color: var(--coral-primary);
-}
-
-.content-card img {
-  width: 100%;
-  height: 250px;
-  object-fit: cover;
-}
-
-.content-card .no-poster {
-  width: 100%;
-  height: 250px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-card);
-  color: var(--text-muted);
-  font-size: 2rem;
-}
-
-.content-info {
-  padding: 1rem;
-}
-
-.content-info h5 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.content-type {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.8rem;
-  color: var(--coral-deep);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.content-info .rating {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-}
-
-.content-info .rating i {
-  color: #ffd700;
 }
 
 /* Fix text readability issues */
