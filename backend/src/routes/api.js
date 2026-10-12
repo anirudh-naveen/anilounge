@@ -114,7 +114,7 @@ router.post(
   authController.login,
 )
 
-/** Email verification, lockout unlock, and the 2FA login step (public; codes are attempt-limited). */
+/** Email verification, lockout unlock, password reset, and the 2FA login step (public; codes are attempt-limited). */
 router.post(
   '/auth/verify-email',
   [body('email').isEmail(), body('code').isString()],
@@ -129,6 +129,25 @@ router.post(
   '/auth/unlock',
   [body('email').isEmail(), body('code').isString()],
   authController.unlockAccount,
+)
+router.post('/auth/forgot-password', [body('email').isEmail()], authController.forgotPassword)
+router.post(
+  '/auth/reset-password',
+  [
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('code').isString().withMessage('Reset code is required'),
+    body('password')
+      .isLength({ min: 8, max: 128 })
+      .withMessage('Password must be 8-128 characters')
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+      .withMessage(
+        'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+      )
+      .bail()
+      .custom(assertCleanLanguage)
+      .withMessage("Password contains language that isn't allowed on AniLounge."),
+  ],
+  authController.resetPassword,
 )
 router.post(
   '/auth/2fa/verify',

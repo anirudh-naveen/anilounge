@@ -625,11 +625,12 @@ CREATE TABLE IF NOT EXISTS user_avatars (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Emailed one-time codes (sign-up verification, lockout unlock). Only hashes are stored.
+-- Emailed one-time codes (sign-up verification, lockout unlock, password reset).
+-- Only hashes are stored.
 CREATE TABLE IF NOT EXISTS email_codes (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-  purpose      TEXT NOT NULL CHECK (purpose IN ('verify_email', 'unlock_account')),
+  purpose      TEXT NOT NULL,
   code_hash    TEXT NOT NULL,
   expires_at   TIMESTAMPTZ NOT NULL,
   attempts     INTEGER NOT NULL DEFAULT 0,
@@ -638,6 +639,9 @@ CREATE TABLE IF NOT EXISTS email_codes (
 );
 
 CREATE INDEX IF NOT EXISTS email_codes_user_purpose_idx ON email_codes (user_id, purpose, created_at DESC);
+ALTER TABLE email_codes DROP CONSTRAINT IF EXISTS email_codes_purpose_check;
+ALTER TABLE email_codes ADD CONSTRAINT email_codes_purpose_check
+  CHECK (purpose IN ('verify_email', 'unlock_account', 'reset_password'));
 
 -- Single-use 2FA recovery codes (hashed).
 CREATE TABLE IF NOT EXISTS two_factor_backup_codes (

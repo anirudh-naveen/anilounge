@@ -14,10 +14,12 @@ import { rateLimitStore } from './pgRateLimitStore.js'
 
 /** Session-cookie endpoints: the cookie holds an unguessable token, so there is nothing to brute-force. */
 const COOKIE_SESSION_PATHS = new Set(['/refresh', '/revoke'])
+/** Emailed-code recovery endpoints; each code is attempt-limited and sends are throttled per account. */
+const EMAIL_RECOVERY_PATHS = new Set(['/unlock', '/forgot-password', '/reset-password'])
 
 /**
  * Failed auth writes: 5 per IP per 15 minutes. Successful requests are not counted.
- * GETs, session refresh/logout, unlocks, and demo logins are exempt.
+ * GETs, session refresh/logout, unlocks, password resets, and demo logins are exempt.
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -25,12 +27,12 @@ export const authLimiter = rateLimit({
   // Only failures (4xx/5xx) count, so signing up or in successfully never uses the budget.
   skipSuccessfulRequests: true,
   // Profile reads are not credential attempts; the page refreshes its session on every
-  // load; demo logins must always work; the unlock code is attempt-limited itself.
+  // load; demo logins must always work; unlock and reset codes are attempt-limited themselves.
   skip: (req) =>
     isCrawlerExempt(req) ||
     req.method === 'GET' ||
     (req.method === 'POST' && COOKIE_SESSION_PATHS.has(req.path)) ||
-    (req.method === 'POST' && req.path === '/unlock') ||
+    (req.method === 'POST' && EMAIL_RECOVERY_PATHS.has(req.path)) ||
     (req.method === 'POST' && req.path === '/login' && isDemoEmail(req.body?.email)),
   message: {
     success: false,

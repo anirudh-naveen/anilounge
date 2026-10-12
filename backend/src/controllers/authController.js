@@ -1,5 +1,5 @@
 /**
- * User registration, login, profile, password, and avatar HTTP handlers.
+ * User registration, login, password reset, profile, password, and avatar HTTP handlers.
  *
  * Layer: controller. Issues JWTs via auth middleware helpers, requires email
  * verification for new accounts, enforces lockout (with an emailed unlock link)
@@ -40,6 +40,7 @@ import {
 } from '../services/accountSecurityService.js'
 import {
   sendEmailChangedNotice,
+  sendPasswordResetEmail,
   sendUnlockEmail,
   sendVerificationEmail,
 } from '../services/emailService.js'
@@ -443,6 +444,79 @@ export const unlockAccount = async (req, res) => {
   } catch (error) {
     console.error('Unlock account error:', error)
     res.status(500).json({ success: false, message: 'Server error unlocking account.' })
+  }
+}
+
+/**
+ * Email a password reset code. Always answers the same way so it cannot be used to
+ * discover which emails have accounts; codes are limited to one a minute, and the
+ * demo and banned accounts never get one.
+ *
+ * @param {import('express').Request} req - `body.email`.
+ * @param {import('express').Response} res - 200 generic success, or 500.
+ * @returns {Promise<void>}
+ */
+export const forgotPassword = async (req, res) => {
+  try {
+    const user = await User.findOne({ email: normalizeEmail(req.body?.email) })
+    if (
+      user &&
+      !user.isDemo() &&
+      !isBanned(user) &&
+      (await resendWaitSeconds(user._id, 'reset_password')) === 0
+    ) {
+      const code = await issueEmailCode(user._id, 'reset_password')
+      await sendPasswordResetEmail(user, code)
+    }
+    res.json({
+      success: true,
+      message: 'If an account uses that email, a reset code is on its way.',
+    })
+  } catch (error) {
+    console.error('Forgot password error:', error)
+    res.status(500).json({ success: false, message: 'Server error sending reset code.' })
+  }
+}
+
+/**
+ * Set a new password with the emailed reset code. Clears any lockout, marks the
+ * email verified (the code proves the inbox is theirs), and signs out every
+ * session. It does not sign in, so 2FA still applies at the next login.
+ *
+ * @param {import('express').Request} req - `body.email`, `body.code`, `body.password` (validated by the route).
+ * @param {import('express').Response} res - 200 reset, 400 invalid input or code, or 500.
+ * @returns {Promise<void>}
+ */
+export const resetPassword = async (req, res) => {
+  try {
+    if (rejectInvalid(req, res)) return
+
+    const user = await User.findOne({ email: normalizeEmail(req.body.email) })
+    const result =
+      user && !user.isDemo()
+        ? await consumeEmailCode(user._id, 'reset_password', req.body.code)
+        : 'invalid'
+    if (result !== 'ok') {
+      return res.status(400).json({ success: false, code: result, message: emailCodeError(result) })
+    }
+
+    // save() hashes a plaintext password before writing it.
+    user.password = req.body.password
+    user.failedLoginAttempts = 0
+    user.lockUntil = undefined
+    await user.save()
+    if (!user.emailVerified) await markEmailVerified(user._id)
+    await revokeAllSessions(user._id)
+    await liftBruteForceBan(req.ip).catch((error) => console.error('Unban failed:', error))
+    await resetAuthRateLimits(req.ip).catch((error) => console.error('Limit reset failed:', error))
+
+    res.json({
+      success: true,
+      message: 'Your password has been reset. Sign in with your new password.',
+    })
+  } catch (error) {
+    console.error('Reset password error:', error)
+    res.status(500).json({ success: false, message: 'Server error resetting password.' })
   }
 }
 
