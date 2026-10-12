@@ -57,7 +57,7 @@
             <header class="social-panel-header">
               <div>
                 <h2 class="social-panel-title">
-                  Friend requests <span class="social-count">{{ data.incoming.length }}</span>
+                  Friend Requests <span class="social-count">{{ data.incoming.length }}</span>
                 </h2>
                 <p class="social-panel-sub">
                   People who'd like to add you. Requests expire after a week.
@@ -101,7 +101,7 @@
             <header class="social-panel-header">
               <div>
                 <h2 class="social-panel-title">
-                  Your friends
+                  Your Friends
                   <span v-if="data.friends.length" class="friend-total">{{
                     data.friends.length
                   }}</span>
@@ -140,7 +140,7 @@
           <section v-if="data.outgoing.length" class="social-panel" data-testid="outgoing-requests">
             <header class="social-panel-header">
               <div>
-                <h2 class="social-panel-title">Sent requests</h2>
+                <h2 class="social-panel-title">Sent Requests</h2>
                 <p class="social-panel-sub">Waiting for a reply.</p>
               </div>
             </header>
@@ -175,7 +175,7 @@
         <!-- Search -->
         <!-- Title: Find People -->
         <aside class="social-panel friends-search" data-testid="friend-search">
-          <h2 class="social-panel-title">Find people</h2>
+          <h2 class="social-panel-title">Find People</h2>
           <p class="social-panel-sub">Search by username.</p>
           <input
             v-model="searchTerm"

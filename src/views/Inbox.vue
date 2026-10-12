@@ -26,7 +26,7 @@
         class="social-panel clashes-panel"
         data-testid="inbox-import-clashes"
       >
-        <h2 class="social-panel-title">Finish your import</h2>
+        <h2 class="social-panel-title">Finish Your Import</h2>
         <ImportConflicts @resolved="onClashesResolved" @loaded="onClashesLoaded" />
       </section>
 

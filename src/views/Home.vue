@@ -16,7 +16,7 @@
         <template v-if="authStore.isAuthenticated">
           <p class="kicker">Your lounge</p>
           <h1 class="home-title">
-            Welcome back<span v-if="authStore.user?.username"
+            Welcome Back<span v-if="authStore.user?.username"
               >, <span class="gradient-text">{{ authStore.user.username }}</span></span
             >.
           </h1>
@@ -24,7 +24,7 @@
         </template>
         <template v-else>
           <h1 class="home-title">
-            Welcome to the <span class="gradient-text">Animation Lounge.</span>
+            Welcome To the <span class="gradient-text">Animation Lounge.</span>
           </h1>
           <p class="home-subtitle">
             Find new favorites, record all you've watched, and connect with people across the globe.
@@ -87,7 +87,7 @@
               </li>
             </ul>
             <div class="signup-copy">
-              <h3>Track what you watch</h3>
+              <h3>Track What You Watch</h3>
               <p>
                 Create a free account to build your watchlist and see what you and your friends are
                 watching.
@@ -268,7 +268,7 @@
       <div class="panel forum-panel" data-testid="forum-highlights-home">
         <header class="panel-header">
           <div>
-            <h2 class="panel-title">Popular in the Forum</h2>
+            <h2 class="panel-title">Popular In the Forum</h2>
             <p class="panel-sub">{{ forumSubtitle }}</p>
           </div>
           <router-link to="/forum" class="btn btn-secondary btn-small">Visit the Forum</router-link>
@@ -409,7 +409,7 @@ const updatesSubtitle = computed(() => {
 
 const updateGroups = computed(() => {
   const groups: { kind: ReleaseUpdate['kind']; label: string; items: ReleaseUpdate[] }[] = [
-    { kind: 'episode', label: 'New episodes', items: [] },
+    { kind: 'episode', label: 'New Episodes', items: [] },
     { kind: 'premiere', label: 'Upcoming', items: [] },
   ]
   for (const item of updates.value.items) {

@@ -401,7 +401,7 @@
       <!-- Title: Empty State -->
       <div v-else class="empty-state">
         <div class="empty-icon">Watchlist</div>
-        <h3>No items in your watchlist</h3>
+        <h3>No Items In Your Watchlist</h3>
         <p>Start adding movies and series to track your progress!</p>
         <router-link to="/search" class="btn btn-primary">Browse the catalog</router-link>
       </div>

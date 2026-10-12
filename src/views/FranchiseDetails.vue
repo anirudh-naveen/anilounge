@@ -18,7 +18,7 @@
     </div>
 
     <div v-else-if="error" class="error">
-      <h2>Error loading franchise</h2>
+      <h2>Error Loading Franchise</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>
@@ -39,7 +39,7 @@
         <p v-if="franchise.about" class="about-text">{{ franchise.about }}</p>
       </div>
 
-      <h2 class="timeline-heading">Watch order</h2>
+      <h2 class="timeline-heading">Watch Order</h2>
       <p class="timeline-note">Release order, with each title placed after the story it follows.</p>
 
       <ol v-if="franchise.works.length" class="timeline" data-testid="franchise-timeline">

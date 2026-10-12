@@ -350,7 +350,7 @@ describe('Profile', () => {
     const year = new Date().getUTCFullYear()
     const calendar = wrapper.get(`[data-testid="watch-calendar-${year}"]`)
     expect(calendar.findAll('.heatmap-cell.level-4')).toHaveLength(1)
-    expect(wrapper.text()).toContain(`3h watched in ${year}`)
+    expect(wrapper.text()).toContain(`3h Watched In ${year}`)
     expect(wrapper.text()).toContain('Mecha')
   })
 

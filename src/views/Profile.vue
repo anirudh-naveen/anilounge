@@ -20,7 +20,7 @@
 
       <!-- Title: Not Found -->
       <div v-else-if="!profile" class="profile-status" data-testid="profile-missing">
-        <h2>Profile unavailable</h2>
+        <h2>Profile Unavailable</h2>
         <p>This profile is private or does not exist.</p>
         <router-link to="/" class="btn btn-primary">Back to Home</router-link>
       </div>
@@ -469,7 +469,7 @@
             <!-- Title: Watch Time Calendar -->
             <div class="stat-card wide">
               <h3>
-                {{ visibleCalendarYear.totalLabel }} watched in {{ visibleCalendarYear.year }}
+                {{ visibleCalendarYear.totalLabel }} Watched In {{ visibleCalendarYear.year }}
               </h3>
               <p class="stat-note">
                 Episodes count on the day they were logged. Imported titles are spread between their
@@ -524,7 +524,7 @@
 
             <!-- Title: Top Genres -->
             <div class="stat-card">
-              <h3>Most watched genres</h3>
+              <h3>Most Watched Genres</h3>
               <div v-if="genreBars.length" class="bar-list">
                 <div v-for="genre in genreBars" :key="genre.name" class="bar-row">
                   <span class="bar-name">{{ genre.name }}</span>
@@ -539,7 +539,7 @@
 
             <!-- Title: Status Breakdown -->
             <div class="stat-card">
-              <h3>Watchlist breakdown</h3>
+              <h3>Watchlist Breakdown</h3>
               <div class="stack-bar">
                 <div
                   v-for="segment in statusSegments"
@@ -557,7 +557,7 @@
                 </li>
               </ul>
 
-              <h3 class="sub-heading">Ratings given</h3>
+              <h3 class="sub-heading">Ratings Given</h3>
               <div class="rating-chart">
                 <div
                   v-for="(count, index) in profile.stats.ratingDistribution"
@@ -590,7 +590,7 @@
     <div v-if="showCustomize && draft" class="modal-backdrop" @click.self="showCustomize = false">
       <form class="customize-panel" data-testid="customize-panel" @submit.prevent="saveCustomize">
         <header class="panel-header">
-          <h2>Customize profile</h2>
+          <h2>Customize Profile</h2>
           <button type="button" class="icon-btn" aria-label="Close" @click="showCustomize = false">
             <span aria-hidden="true">&times;</span>
           </button>

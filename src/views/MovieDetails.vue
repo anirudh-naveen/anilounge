@@ -22,7 +22,7 @@
 
     <!-- Title: Error State -->
     <div v-else-if="error" class="error">
-      <h2>Error loading movie</h2>
+      <h2>Error Loading Movie</h2>
       <p>{{ error }}</p>
       <button @click="goBack" class="btn-primary">Go Back</button>
     </div>
@@ -44,40 +44,30 @@
           </div>
         </div>
 
-        <div class="movie-info">
+        <div class="movie-info title-info">
           <!-- Title: Titles -->
-          <h1 class="movie-title">{{ getDisplayTitle(movie) }}</h1>
-          <p v-if="getNativeTitle(movie)" class="original-title">
-            Native Title: {{ getNativeTitle(movie) }}
+          <h1 class="movie-title title-heading">{{ getDisplayTitle(movie) }}</h1>
+          <p v-if="getNativeTitle(movie)" class="original-title" lang="ja">
+            {{ getNativeTitle(movie) }}
           </p>
-          <FranchiseLink :content="movie" />
 
-          <!-- Title: Meta -->
-          <div class="movie-meta">
-            <div class="rating">
-              <i class="fas fa-star"></i>
-              <span>{{ getDisplayScore(movie) }}</span>
-              <span v-if="getDisplayVoteCount(movie)" class="vote-count">
-                ({{ getDisplayVoteCount(movie).toLocaleString() }} votes)
+          <!-- Title: Facts -->
+          <ul class="title-facts">
+            <li class="fact-rating">
+              <ForumIcon name="star" filled class="fact-star" />
+              <strong>{{ getDisplayScore(movie) }}</strong>
+              <span v-if="getDisplayVoteCount(movie)" class="fact-muted">
+                {{ formatVotes(getDisplayVoteCount(movie)) }} votes
               </span>
-            </div>
-
-            <div class="release-date">
-              <i class="fas fa-calendar"></i>
-              <span>{{ movie.releaseDate ? formatDate(movie.releaseDate) : 'N/A' }}</span>
-            </div>
-
-            <div v-if="movie.runtime" class="runtime">
-              <i class="fas fa-clock"></i>
-              <span>{{ movie.runtime }} minutes</span>
-            </div>
-
-            <div v-if="isUpcoming(movie)" class="status airing-status">
+            </li>
+            <li v-if="movie.releaseDate">{{ formatDate(movie.releaseDate) }}</li>
+            <li v-if="movie.runtime">{{ movie.runtime }} min</li>
+            <li v-if="isUpcoming(movie)" class="fact-badge">
               <AiringBadge :content="movie" variant="detail" />
-            </div>
-          </div>
+            </li>
+          </ul>
 
-          <div class="genres">
+          <div v-if="movie.genres?.length" class="genres">
             <span
               v-for="genre in movie.genres"
               :key="typeof genre === 'string' ? genre : genre.name || genre.id"
@@ -87,8 +77,10 @@
             </span>
           </div>
 
+          <FranchiseLink :content="movie" />
+
           <!-- Title: Actions -->
-          <div class="movie-actions">
+          <div class="movie-actions title-actions">
             <button @click="shareMovie" class="btn-outline">Share</button>
           </div>
         </div>
@@ -99,10 +91,14 @@
 
       <!-- Body -->
       <!-- Title: Overview -->
-      <div class="movie-description">
-        <h2>Overview</h2>
+      <DetailSection
+        name="overview"
+        title="Overview"
+        :collapsible="false"
+        class="movie-description"
+      >
         <p>{{ movie.overview || 'No overview available.' }}</p>
-      </div>
+      </DetailSection>
 
       <!-- Title: Characters -->
       <EntityCastRow :items="characters" :content-id="movie._id" :loading="charactersLoading" />
@@ -118,13 +114,13 @@
       <ForumHighlights :content-id="movie._id" :name="getDisplayTitle(movie)" reviewable />
 
       <!-- Title: Credits -->
-      <TitleExtras :content="movie" :sections="['staff']" />
       <StudioLinks :content="movie" />
+      <TitleExtras :content="movie" :sections="['staff']" />
     </div>
 
     <JoinPrompt
       list-sync
-      title="Track this movie"
+      title="Track This Movie"
       message="Sign up free to add it to your watchlist, rate it, and see what other fans think."
     />
   </div>
@@ -157,6 +153,8 @@ import { shareLink } from '@/utils/nativeApp'
 import WhereToWatch from '@/components/WhereToWatch.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
 import FranchiseLink from '@/components/FranchiseLink.vue'
+import DetailSection from '@/components/DetailSection.vue'
+import ForumIcon from '@/components/ForumIcon.vue'
 import { useToast } from 'vue-toastification'
 
 const route = useRoute()
@@ -251,6 +249,9 @@ const shareMovie = async () => {
   if (result === 'failed') toast.error("Couldn't share this page.")
 }
 
+const formatVotes = (count: number) =>
+  new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(count)
+
 const formatDate = (date: string | Date) => {
   if (!date) return 'N/A'
   const dateObj = typeof date === 'string' ? new Date(date) : date
@@ -293,6 +294,8 @@ useCanonicalSlug(
   () => movie.value?._id,
 )
 </script>
+
+<style scoped src="@/assets/styles/titleHeader.css"></style>
 
 <style scoped>
 .movie-details {
@@ -389,82 +392,6 @@ useCanonicalSlug(
   color: var(--text-muted);
 }
 
-.no-poster i {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-}
-
-.movie-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.movie-title {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin: 0;
-  line-height: 1.2;
-}
-
-.original-title {
-  font-size: 1.1rem;
-  color: var(--text-muted);
-  font-style: italic;
-  margin: 0;
-}
-
-.movie-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  margin: 1rem 0;
-}
-
-.movie-meta > div {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1rem;
-}
-
-.airing-status {
-  padding: 0;
-}
-
-.movie-meta i {
-  color: var(--highlight-color);
-  width: 16px;
-}
-
-.vote-count {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.genres {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 1rem 0;
-}
-
-.genre-tag {
-  background: var(--blend-color);
-  color: white;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.movie-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 1.5rem;
-}
-
 .btn-primary,
 .btn-secondary,
 .btn-outline {
@@ -514,20 +441,11 @@ useCanonicalSlug(
   border-color: var(--highlight-color);
 }
 
-.movie-description {
-  margin-bottom: 2rem;
-}
-
-.movie-description h2 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
 .movie-description p {
+  margin: 0;
   font-size: 1.1rem;
   line-height: 1.6;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 @media (max-width: 768px) {
@@ -539,46 +457,5 @@ useCanonicalSlug(
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
-
-  .movie-title {
-    font-size: 2rem;
-  }
-
-  .movie-meta {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .movie-actions {
-    flex-direction: column;
-  }
-}
-
-/* Fix text readability issues */
-.movie-description p,
-.movie-description h2,
-.movie-description h3,
-.movie-description h4 {
-  color: var(--text-primary);
-}
-
-.movie-description p {
-  color: var(--text-secondary);
-}
-
-.original-title {
-  color: var(--text-muted) !important;
-}
-
-.vote-count {
-  color: var(--text-muted) !important;
-}
-
-.movie-meta span {
-  color: var(--text-primary) !important;
-}
-
-.genre-tag {
-  color: var(--text-on-accent) !important;
 }
 </style>

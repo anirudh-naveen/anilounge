@@ -12,7 +12,7 @@
     <div class="container">
       <!-- Browse Header -->
       <div class="browse-header">
-        <h1 class="browse-title">Search for</h1>
+        <h1 class="browse-title">Search For</h1>
         <div class="type-toggle" role="tablist" aria-label="Content type">
           <button
             type="button"
@@ -216,7 +216,7 @@
       <!-- Title: Error State -->
       <div v-else-if="contentStore.error && hasSearched" class="error-state">
         <div class="error-icon">⚠️</div>
-        <h3>Search failed</h3>
+        <h3>Search Failed</h3>
         <p>{{ contentStore.error }}</p>
         <button @click="handleSearch" class="btn btn-primary">Try Again</button>
       </div>
@@ -302,7 +302,7 @@
       <!-- Title: Empty State -->
       <div v-else-if="hasSearched && filteredResults.length === 0" class="no-results">
         <div class="no-results-icon">🔍</div>
-        <h3>No results found</h3>
+        <h3>No Results Found</h3>
         <p>Try adjusting your search terms or filters.</p>
         <button @click="clearSearch" class="btn btn-primary">Clear Search</button>
       </div>

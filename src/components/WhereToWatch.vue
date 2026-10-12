@@ -4,12 +4,17 @@
   Each logo opens the title on that service: AniList's direct links first (in the iOS
   app they open the service's own app when installed), then the services that carry it
   in the viewer's country, from TMDB (data by JustWatch, which must be credited).
-  Hovering a logo names the service. Renders nothing when there is nothing to show.
+  Hovering a logo names the service. Shown to viewers in the United States only
+  (US availability); renders nothing elsewhere or when there is nothing to show.
 -->
 <template>
-  <section v-if="logos.length" class="where-to-watch" data-testid="where-to-watch">
-    <h2>Where to watch</h2>
-
+  <DetailSection
+    v-if="logos.length"
+    name="where-to-watch"
+    title="Where To Watch"
+    class="where-to-watch"
+    data-testid="where-to-watch"
+  >
     <ul class="watch-logos">
       <li v-for="logo in logos" :key="logo.key">
         <a
@@ -51,13 +56,14 @@
       >
       <template v-else>JustWatch via TMDB</template>.
     </p>
-  </section>
+  </DetailSection>
 </template>
 
 <script setup lang="ts">
+import DetailSection from '@/components/DetailSection.vue'
 import { computed, ref, watch } from 'vue'
 import { contentAPI } from '@/services/api'
-import { isNativeApp, openInOtherApp, viewerRegion } from '@/utils/nativeApp'
+import { isNativeApp, isViewerInUS, openInOtherApp } from '@/utils/nativeApp'
 
 interface Provider {
   id: number
@@ -137,10 +143,14 @@ const openLink = (event: MouseEvent, url: string) => {
   openInOtherApp(url).catch(() => {})
 }
 
+/** Streaming availability is shown to viewers in the United States only. */
+const inUS = isViewerInUS()
+
 const load = async (contentId: string) => {
   data.value = null
+  if (!inUS) return
   try {
-    const response = await contentAPI.whereToWatch(contentId, viewerRegion())
+    const response = await contentAPI.whereToWatch(contentId, 'US')
     if (contentId === props.contentId) data.value = response.data.data as WhereToWatchData
   } catch {
     // Optional section: leave it hidden.
@@ -151,15 +161,6 @@ watch(() => props.contentId, load, { immediate: true })
 </script>
 
 <style scoped>
-.where-to-watch {
-  margin: 0 0 2rem;
-}
-
-.where-to-watch h2 {
-  margin: 0 0 1rem;
-  color: var(--text-primary);
-}
-
 .watch-logos {
   display: flex;
   flex-wrap: wrap;

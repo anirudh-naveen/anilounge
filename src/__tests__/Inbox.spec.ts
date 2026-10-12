@@ -157,7 +157,7 @@ describe('Inbox', () => {
     list.mockResolvedValue({ data: { data: { items: [], hasMore: false, importClashes: 2 } } })
     const wrapper = await mountInbox()
     const panel = wrapper.get('[data-testid="inbox-import-clashes"]')
-    expect(panel.text()).toContain('Finish your import')
+    expect(panel.text()).toContain('Finish Your Import')
     expect(panel.find('[data-testid="clash-picker"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="inbox-empty"]').text()).toContain('all caught up')
     expect(markRead).not.toHaveBeenCalled()

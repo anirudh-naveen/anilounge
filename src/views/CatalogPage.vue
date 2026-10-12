@@ -42,7 +42,7 @@
       <!-- Title: Error State -->
       <div v-else-if="contentStore.error" class="error-state">
         <div class="error-icon">⚠️</div>
-        <h3>Failed to load {{ copy.noun }}</h3>
+        <h3>Failed To Load {{ copy.noun.charAt(0).toUpperCase() + copy.noun.slice(1) }}</h3>
         <p>{{ contentStore.error }}</p>
         <button @click="reloadCurrent" class="btn btn-primary">Try Again</button>
       </div>
