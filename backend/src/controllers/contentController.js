@@ -28,6 +28,7 @@ import {
   setWatchedEpisode,
   stampListDates,
   syncLegacyUserRating,
+  syncSeriesFromSeasons,
 } from '../services/watchlistWrites.js'
 import {
   catalogTabIsSinglePage,
@@ -123,7 +124,8 @@ const matchContentType = (contentType, withSeasons = false) => {
 
 /**
  * Mark each series row that has season rows (`hasSeasons`): those are tracked season by
- * season, so cards offer no watchlist button for the series itself.
+ * season, so cards offer no watchlist button for the series itself. A series with just
+ * one season also gets its id (`soleSeasonId`): its card stands for that season.
  * @param {object[]} rows - Serialized catalog rows, mutated in place.
  * @returns {Promise<void>}
  */
@@ -132,13 +134,17 @@ const flagSeriesWithSeasons = async (rows) => {
   if (!ids.length) return
   const { rows: found } = await withReplica(() =>
     dbQuery(
-      'SELECT DISTINCT series_id::text AS id FROM seasons WHERE series_id = ANY($1::uuid[])',
+      `SELECT series_id::text AS id, count(*)::int AS n, min(content_id::text) AS season_id
+       FROM seasons WHERE series_id = ANY($1::uuid[]) GROUP BY series_id`,
       [ids],
     ),
   )
-  const withSeasons = new Set(found.map((row) => row.id))
+  const bySeries = new Map(found.map((row) => [row.id, row]))
   for (const row of rows) {
-    if (row.contentType === 'tv') row.hasSeasons = withSeasons.has(String(row._id))
+    if (row.contentType !== 'tv') continue
+    const seasons = bySeries.get(String(row._id))
+    row.hasSeasons = Boolean(seasons)
+    row.soleSeasonId = seasons?.n === 1 ? seasons.season_id : null
   }
 }
 
@@ -416,6 +422,22 @@ function progressError(currentEpisode, currentSeason, content) {
 }
 
 /**
+ * After a season's watchlist row changes, bring the user's row for its series (if any)
+ * in step. Failures are logged; the season write already succeeded.
+ * @param {object} user
+ * @param {object} content - The season or other title just written.
+ * @returns {Promise<void>}
+ */
+const syncSeriesOf = async (user, content) => {
+  if (content.contentType !== 'season') return
+  try {
+    await syncSeriesFromSeasons({ userId: String(user._id), seasonId: String(content._id) })
+  } catch (error) {
+    console.error('Series watchlist sync failed:', error.message)
+  }
+}
+
+/**
  * Add or update a watchlist row in a transaction, syncing user ratings onto the content document.
  * A series with seasons cannot be added (its seasons are tracked instead).
  *
@@ -537,6 +559,7 @@ export const addToWatchlist = async (req, res) => {
     })
     await session.commitTransaction()
     mirrorWatchlistChange(user, content, savedItem)
+    await syncSeriesOf(user, content)
 
     res.json({
       success: true,
@@ -639,6 +662,7 @@ export const removeFromWatchlist = async (req, res) => {
     await clearWatchHistory(userId, contentId)
     await session.commitTransaction()
     mirrorWatchlistChange(user, content, null)
+    await syncSeriesOf(user, content)
 
     res.json({
       success: true,
@@ -753,6 +777,7 @@ export const updateWatchlistItem = async (req, res) => {
     )
     await session.commitTransaction()
     mirrorWatchlistChange(user, content, watchlistItem)
+    await syncSeriesOf(user, content)
 
     res.json({
       success: true,

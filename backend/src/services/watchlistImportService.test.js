@@ -14,6 +14,7 @@ import {
   prepareImport,
   prepareSources,
   rowsAgree,
+  spreadSeriesMatches,
   distinctOptions,
   readMalExportFile,
   toDate,
@@ -349,7 +350,10 @@ describe('prepareSources', () => {
     assert.throws(() => prepareSources([{ source: 'anilist', connected: true }]), ImportError)
     assert.throws(() => prepareSources([{ source: 'tmdb' }]), ImportError)
     assert.doesNotThrow(() => prepareSources([{ source: 'tmdb' }], 'user-1'))
-    assert.throws(() => prepareSources([{ source: 'mal_file', connected: true }], 'user-1'), ImportError)
+    assert.throws(
+      () => prepareSources([{ source: 'mal_file', connected: true }], 'user-1'),
+      ImportError,
+    )
   })
 
   it('rejects an empty request and the same site twice', () => {
@@ -362,5 +366,47 @@ describe('prepareSources', () => {
         ]),
       ImportError,
     )
+  })
+})
+
+describe('spreadSeriesMatches', () => {
+  const show = { id: 'show', kind: 'series', episodeCount: 24 }
+  const seasons = new Map([
+    [
+      'show',
+      [
+        { id: 's1', kind: 'season', episodeCount: 12 },
+        { id: 's2', kind: 'season', episodeCount: 12 },
+      ],
+    ],
+  ])
+  const entry = (status, progress) => ({ source: 'tmdb', status, progress, score: 8 })
+  const spread = (status, progress) =>
+    spreadSeriesMatches([{ entry: entry(status, progress), title: show }], seasons).map(
+      ({ entry: e, title }) => [title.id, e.status, e.progress],
+    )
+
+  it('completes every season of a completed show', () => {
+    assert.deepEqual(spread('completed', 24), [
+      ['s1', 'completed', 12],
+      ['s2', 'completed', 12],
+    ])
+  })
+
+  it('completes the seasons the progress covers and puts the rest on the next', () => {
+    assert.deepEqual(spread('watching', 15), [
+      ['s1', 'completed', 12],
+      ['s2', 'watching', 3],
+    ])
+    assert.deepEqual(spread('dropped', 4), [['s1', 'dropped', 4]])
+  })
+
+  it('plans the first season of a planned show', () => {
+    assert.deepEqual(spread('plan_to_watch', 0), [['s1', 'plan_to_watch', 0]])
+  })
+
+  it('leaves series without seasons and other titles alone', () => {
+    const lone = { entry: entry('watching', 3), title: { id: 'lone', kind: 'series' } }
+    assert.deepEqual(spreadSeriesMatches([lone], seasons), [lone])
   })
 })

@@ -2,9 +2,9 @@
   ContentHoverPreview.vue — catalog hover card (component).
 
   Shows titles, rating, overview, and watchlist add controls when a
-  content card is hovered. The card poster is not repeated here. A series with
+  content card is hovered. The card poster is not repeated here. A series of several
   seasons gets no add button (seasons are tracked one by one), just its status and
-  average rating summed up from its seasons.
+  average rating summed up from its seasons; a one-season series saves to its season.
 -->
 <template>
   <!-- The open form floats on <body> so scrolling rails cannot clip it. -->
@@ -188,10 +188,18 @@ const selectedRating = ref<number | undefined>(undefined)
 const selectedEpisodes = ref<number>(0)
 const selectedNotes = ref('')
 
-const watchlistItem = computed(() => contentStore.getWatchlistItem(props.item._id))
-/** A series with season rows that isn't on the list itself: only its seasons are added. */
+/**
+ * Watchlist row the card edits: the title's own, or for a one-season series its season's
+ * row (only seasons are added to watchlists).
+ */
+const watchlistId = computed(() => contentStore.getSoleSeasonId(props.item) || props.item._id)
+const watchlistItem = computed(() => contentStore.getWatchlistItem(watchlistId.value))
+/**
+ * A series of several seasons: only its seasons are added, and its own row (kept by the
+ * server from them) is summed up here, not edited.
+ */
 const tracksBySeason = computed(
-  () => !watchlistItem.value && contentStore.hasSeasonRows(props.item),
+  () => watchlistId.value === props.item._id && contentStore.hasSeasonRows(props.item),
 )
 /** "Watching · 8.5": the series' status and average rating, summed up from its seasons. */
 const seasonSummary = computed(() => {
@@ -293,7 +301,7 @@ const submitWatchlist = async () => {
   isSaving.value = true
   try {
     if (isOnWatchlist.value) {
-      await contentStore.updateWatchlistItem(props.item._id, {
+      await contentStore.updateWatchlistItem(watchlistId.value, {
         status: selectedStatus.value,
         rating: selectedRating.value,
         currentEpisode: tracksEpisodes(props.item) ? selectedEpisodes.value : undefined,
@@ -302,7 +310,7 @@ const submitWatchlist = async () => {
       toast.success('Watchlist updated!')
     } else {
       await contentStore.addToWatchlist(
-        props.item._id,
+        watchlistId.value,
         selectedStatus.value,
         selectedRating.value,
         tracksEpisodes(props.item) ? selectedEpisodes.value : undefined,

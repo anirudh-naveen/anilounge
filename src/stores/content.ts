@@ -86,6 +86,10 @@ const normalizeSearchText = (text: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
+/** Sort key for a season in its series' guide: season number, then part. */
+const seasonOrder = (season: Pick<UnifiedContent, 'seasonNumber' | 'partNumber'>) =>
+  (season.seasonNumber ?? 0) * 1000 + (season.partNumber ?? 0)
+
 export const useContentStore = defineStore('content', () => {
   const allContent = ref<UnifiedContent[]>([])
   const movies = ref<UnifiedContent[]>([])
@@ -611,16 +615,36 @@ export const useContentStore = defineStore('content', () => {
     return bySeries
   })
 
-  /** Season rows in the loaded catalog, counted by their series id. */
-  const catalogSeasonCounts = computed(() => {
-    const counts = new Map<string, number>()
+  /** Season rows' ids in the loaded catalog, by their series id. */
+  const catalogSeasonsBySeries = computed(() => {
+    const bySeries = new Map<string, string[]>()
     for (const item of allContent.value) {
       if (item.contentType === 'season' && item.seriesId) {
-        counts.set(item.seriesId, (counts.get(item.seriesId) || 0) + 1)
+        bySeries.set(item.seriesId, [...(bySeries.get(item.seriesId) || []), item._id])
       }
     }
-    return counts
+    return bySeries
   })
+
+  /** Each series' first season id (lowest season, then part) in the loaded catalog. */
+  const catalogFirstSeason = computed(() => {
+    const first = new Map<string, UnifiedContent>()
+    for (const item of allContent.value) {
+      if (item.contentType !== 'season' || !item.seriesId) continue
+      const current = first.get(item.seriesId)
+      if (!current || seasonOrder(item) < seasonOrder(current)) first.set(item.seriesId, item)
+    }
+    return new Map([...first].map(([seriesId, season]) => [seriesId, season._id]))
+  })
+
+  /** Whether a watchlist row is its series' first season. */
+  const isFirstSeason = (item: WatchlistItem) => {
+    const content = typeof item.content === 'string' ? null : item.content
+    if (!content?.seriesId) return false
+    const known = catalogFirstSeason.value.get(content.seriesId)
+    if (known) return known === content._id
+    return (content.seasonNumber ?? 1) <= 1 && (content.partNumber ?? 1) <= 1
+  }
 
   /**
    * Whether a series is tracked season by season (it has season rows), so it is never
@@ -631,37 +655,63 @@ export const useContentStore = defineStore('content', () => {
       item.contentType === 'tv' &&
       Boolean(
         item.hasSeasons ||
-          catalogSeasonCounts.value.has(item._id) ||
+          catalogSeasonsBySeries.value.has(item._id) ||
           seasonRowsBySeries.value.has(item._id),
       ),
   )
 
   /**
+   * The only season of a one-season series, which its card stands for (search lists the
+   * series alone, and its watchlist saves go to that season). Null for anything else.
+   */
+  const getSoleSeasonId = computed(
+    () =>
+      (item: Pick<UnifiedContent, '_id' | 'contentType' | 'soleSeasonId'>): string | null => {
+        if (item.contentType !== 'tv') return null
+        const seasons = catalogSeasonsBySeries.value.get(item._id)
+        if (seasons) return seasons.length === 1 ? (seasons[0] ?? null) : null
+        return item.soleSeasonId || null
+      },
+  )
+
+  /**
    * A title's watchlist status: its own row's, or for a series tracked season by
    * season, a summary of its seasons' (so series pages and cards match the watchlist).
-   * The series is Completed only once all its seasons are (when the catalog knows them).
+   * Summed up by `summarizeSeasonStatuses` (Completed only once all its seasons are).
    */
   const getWatchlistStatus = computed(
     () =>
       (contentId: string): WatchlistStatus | undefined =>
         watchlistById.value.get(contentId)?.status ??
         summarizeSeasonStatuses(
-          (seasonRowsBySeries.value.get(contentId) || []).map((item) => item.status),
-          catalogSeasonCounts.value.get(contentId),
+          (seasonRowsBySeries.value.get(contentId) || []).map((item) => ({
+            status: item.status,
+            first: isFirstSeason(item),
+          })),
+          catalogSeasonsBySeries.value.get(contentId)?.length,
         ),
   )
 
   /**
-   * The user's rating of a title: its own row's, or for a series tracked season by
-   * season, the average of the seasons they rated.
+   * The user's rating of a title: for a series tracked season by season, the average of
+   * the seasons they rated (its own row, kept by the server, holds no rating of its own);
+   * otherwise its own row's.
    */
-  const getWatchlistRating = computed(
+  const getWatchlistRating = computed(() => (contentId: string): number | undefined => {
+    const seasons = seasonRowsBySeries.value.get(contentId)
+    if (seasons?.length) return averageSeasonRating(seasons.map((item) => item.rating))
+    return watchlistById.value.get(contentId)?.rating
+  })
+
+  /** A series' season rows on the watchlist, in guide order (empty when none). */
+  const getSeasonRows = computed(
     () =>
-      (contentId: string): number | undefined =>
-        watchlistById.value.get(contentId)?.rating ??
-        averageSeasonRating(
-          (seasonRowsBySeries.value.get(contentId) || []).map((item) => item.rating),
-        ),
+      (seriesId: string): WatchlistItem[] =>
+        [...(seasonRowsBySeries.value.get(seriesId) || [])].sort((a, b) => {
+          const left = typeof a.content === 'string' ? null : a.content
+          const right = typeof b.content === 'string' ? null : b.content
+          return (left ? seasonOrder(left) : 0) - (right ? seasonOrder(right) : 0)
+        }),
   )
 
   const savedScrollPositions = ref<Record<string, number>>({})
@@ -779,7 +829,10 @@ export const useContentStore = defineStore('content', () => {
     getWatchlistItem,
     getWatchlistStatus,
     getWatchlistRating,
+    getSeasonRows,
     hasSeasonRows,
+    getSoleSeasonId,
+    catalogSeasonsBySeries,
 
     findContentById,
     cacheContent,

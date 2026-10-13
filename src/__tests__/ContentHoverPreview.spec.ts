@@ -6,6 +6,7 @@ const addToWatchlist = vi.fn().mockResolvedValue(true)
 const updateWatchlistItem = vi.fn().mockResolvedValue(true)
 const getWatchlistItem = vi.fn().mockReturnValue(undefined)
 const hasSeasonRows = vi.fn().mockReturnValue(false)
+const getSoleSeasonId = vi.fn().mockReturnValue(null)
 const getWatchlistStatus = vi.fn().mockReturnValue(undefined)
 const getWatchlistRating = vi.fn().mockReturnValue(undefined)
 
@@ -19,6 +20,7 @@ vi.mock('@/stores/content', () => ({
     updateWatchlistItem,
     getWatchlistItem,
     hasSeasonRows,
+    getSoleSeasonId,
     getWatchlistStatus,
     getWatchlistRating,
   }),
@@ -63,8 +65,22 @@ describe('ContentHoverPreview watchlist action', () => {
     getWatchlistItem.mockReset()
     getWatchlistItem.mockReturnValue(undefined)
     hasSeasonRows.mockReturnValue(false)
+    getSoleSeasonId.mockReturnValue(null)
+    addToWatchlist.mockClear()
     getWatchlistStatus.mockReturnValue(undefined)
     getWatchlistRating.mockReturnValue(undefined)
+  })
+
+  it("saves a one-season series to its season's watchlist row", async () => {
+    hasSeasonRows.mockReturnValue(true)
+    getSoleSeasonId.mockReturnValue('tv-1-s1')
+    const wrapper = mountPreview()
+
+    await wrapper.get('[data-testid="hover-watchlist-btn"]').trigger('click')
+    await getBody().get('form').trigger('submit')
+    await flushPromises()
+
+    expect(addToWatchlist.mock.calls[0]?.[0]).toBe('tv-1-s1')
   })
 
   it('offers no add button for a series tracked season by season', () => {

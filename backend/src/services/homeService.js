@@ -229,7 +229,9 @@ function toUpdateItems(rows, now, reasonFor) {
 export async function getWatchlistUpdates(userId, { now = new Date(), limit = 10 } = {}) {
   const { rows } = await query(
     `WITH tracked AS (
-       SELECT content_id FROM watchlist WHERE user_id = $1 AND status <> 'dropped'
+       -- A series row kept from its seasons would repeat their releases.
+       SELECT content_id FROM watchlist w WHERE user_id = $1 AND status <> 'dropped'
+         AND NOT EXISTS (SELECT 1 FROM seasons sn WHERE sn.series_id = w.content_id)
      ),
      related AS (
        SELECT fm2.member_id AS id, t.content_id AS via_id
