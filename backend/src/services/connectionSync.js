@@ -57,6 +57,7 @@ import {
   setWatchedEpisode,
   stampListDates,
   syncLegacyUserRating,
+  syncSeriesFromSeasons,
 } from './watchlistWrites.js'
 import { watchUnits } from '../utils/profileStats.js'
 
@@ -568,6 +569,25 @@ async function syncUser(userId, changes) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Watchlists hold seasons, not series that have them: a list entry found on such a
+ * series goes to its season with the same AniList/MAL id, or nowhere when none has it.
+ * @param {object|null} content - The title the entry's id found.
+ * @param {{ anilistId?: number|null, malId?: number|null }} entry
+ * @returns {Promise<object|null>}
+ */
+async function seasonOf(content, entry) {
+  if (content?.contentType !== 'tv') return content
+  const { rows } = await query(
+    `SELECT id::text AS id, (anilist_id = $2 OR mal_id = $3) AS same
+     FROM works WHERE series_id = $1 ORDER BY (anilist_id = $2 OR mal_id = $3) DESC NULLS LAST
+     LIMIT 1`,
+    [String(content._id), entry.anilistId || null, entry.malId || null],
+  )
+  if (!rows.length) return content
+  return rows[0].same ? Content.findById(rows[0].id) : null
+}
+
+/**
  * Apply one site entry to the user's watchlist (last writer wins).
  * @param {string} userId
  * @param {import('./watchlistImportService.js').ImportEntry} entry
@@ -575,7 +595,7 @@ async function syncUser(userId, changes) {
  * @returns {Promise<{ content: object, item: object } | null>} The change, or null.
  */
 async function applyEntry(userId, entry, provider) {
-  const content = await ADAPTERS[provider].findContent(entry)
+  const content = await seasonOf(await ADAPTERS[provider].findContent(entry), entry)
   if (!content) return null
   const contentId = String(content._id)
   const updatedAt = timeOf(entry.updatedAt)
@@ -685,6 +705,11 @@ export async function pullConnection(row) {
     newest = Math.max(newest, timeOf(entry.updatedAt))
   }
   await recordSync(row, { cursor: newest })
+  if (applied) {
+    await syncSeriesFromSeasons({ userId: String(row.user_id) }).catch((error) =>
+      console.error('Series watchlist sync failed:', error.message),
+    )
+  }
   return { applied, checked: fresh.length }
 }
 

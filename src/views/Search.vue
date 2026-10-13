@@ -2,7 +2,7 @@
 <!--
   Search.vue — catalog browse and search view.
 
-  Movies/Series toggle, search field, collapsible filters, and horizontal
+  Movies/Series toggle (Series has a Series/Seasons mode), search field, collapsible filters, and horizontal
   catalog rails (trending, in theatres / airing + this season, upcoming). Search results
   replace the rails. Backed by the content store. Hosts the floating AI
   assistant, which can also fill these results.
@@ -37,6 +37,36 @@
             Series
           </button>
         </div>
+        <!-- Series mode lists whole series; Seasons mode lists each season instead. -->
+        <div
+          v-if="browseType === 'tv'"
+          class="type-toggle type-toggle-sm"
+          role="tablist"
+          aria-label="Series or seasons"
+        >
+          <button
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            data-testid="tv-view-series"
+            :class="{ active: !seasonMode }"
+            :aria-selected="!seasonMode"
+            @click="setSeasonMode(false)"
+          >
+            Series
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            data-testid="tv-view-seasons"
+            :class="{ active: seasonMode }"
+            :aria-selected="seasonMode"
+            @click="setSeasonMode(true)"
+          >
+            Seasons
+          </button>
+        </div>
       </div>
 
       <!-- Search -->
@@ -48,7 +78,13 @@
               type="text"
               class="search-input"
               data-testid="search-query"
-              :placeholder="browseType === 'tv' ? 'Search for series...' : 'Search for movies...'"
+              :placeholder="
+                browseType === 'tv'
+                  ? seasonMode
+                    ? 'Search for seasons...'
+                    : 'Search for series...'
+                  : 'Search for movies...'
+              "
             />
             <button
               v-if="showReset"
@@ -422,6 +458,8 @@ const {
 } = storeToRefs(contentStore)
 
 const browseType = computed(() => normalizeBrowseType(route.query.type))
+/** Series tab in Seasons mode (`?view=seasons`): results list seasons, not series. */
+const seasonMode = computed(() => browseType.value === 'tv' && route.query.view === 'seasons')
 const hasExtraFilters = computed(() => hasActiveSearchFilters(filters.value))
 const browseRails = computed(() =>
   browseType.value === 'tv' ? TV_BROWSE_RAILS : MOVIE_BROWSE_RAILS,
@@ -439,6 +477,22 @@ const filteredResults = computed(() => {
 
   // Characters, voice actors, and studios are never results themselves.
   results = results.filter((item) => !isCatalogEntity(item))
+
+  // Series lists series, Seasons lists seasons; a one-season series shows as the series in both.
+  if (browseType.value === 'tv') {
+    results = results.filter((item) => {
+      if (item.contentType === 'season') {
+        const siblings = item.seriesId
+          ? contentStore.catalogSeasonsBySeries.get(item.seriesId)
+          : null
+        return seasonMode.value && (siblings?.length ?? 2) > 1
+      }
+      if (item.contentType === 'tv' && seasonMode.value) {
+        return !contentStore.hasSeasonRows(item) || Boolean(contentStore.getSoleSeasonId(item))
+      }
+      return true
+    })
+  }
 
   // Apply type filter (Movies includes specials)
   if (active.type !== 'all') {
@@ -578,7 +632,20 @@ const setBrowseType = (type: BrowseContentType) => {
     query.type = 'tv'
   } else {
     delete query.type
+    delete query.view
   }
+  void router.replace({ query })
+}
+
+const setSeasonMode = (on: boolean) => {
+  if (on === seasonMode.value) return
+  const query = { ...route.query }
+  if (on) {
+    query.view = 'seasons'
+  } else {
+    delete query.view
+  }
+  currentPage.value = 1
   void router.replace({ query })
 }
 
@@ -790,6 +857,11 @@ usePageMeta({
   justify-content: center;
   text-align: center;
   transition: all 0.2s ease;
+}
+
+.type-toggle-sm .type-toggle-btn {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.85rem;
 }
 
 .type-toggle-btn:hover {

@@ -3,6 +3,7 @@ import {
   averageSeasonRating,
   getWatchlistStatusLabel,
   summarizeSeasonStatuses,
+  type WatchlistStatus,
   watchedEpisodes,
   WATCHLIST_STATUS_FILTER_OPTIONS,
   WATCHLIST_TYPE_FILTER_OPTIONS,
@@ -65,11 +66,28 @@ describe('watchlist type filters', () => {
 })
 
 describe('series summed up from their seasons', () => {
+  const s1 = (status: WatchlistStatus) => ({ status, first: true })
+  const later = (status: WatchlistStatus) => ({ status, first: false })
+
   it('is completed only once every season is', () => {
-    expect(summarizeSeasonStatuses(['completed', 'completed'], 2)).toBe('completed')
-    expect(summarizeSeasonStatuses(['completed'], 3)).toBe('watching')
-    expect(summarizeSeasonStatuses(['completed', 'on_hold'])).toBe('on_hold')
+    expect(summarizeSeasonStatuses([s1('completed'), later('completed')], 2)).toBe('completed')
+    expect(summarizeSeasonStatuses([s1('completed')], 3)).toBe('watching')
     expect(summarizeSeasonStatuses([], 2)).toBeUndefined()
+  })
+
+  it('is watching while any season is, then dropped, then on hold', () => {
+    expect(summarizeSeasonStatuses([s1('dropped'), later('watching')])).toBe('watching')
+    expect(summarizeSeasonStatuses([s1('completed'), later('dropped')])).toBe('dropped')
+    expect(summarizeSeasonStatuses([s1('completed'), later('on_hold')])).toBe('on_hold')
+  })
+
+  it('is planned for a planned first season, watching for a planned later one', () => {
+    expect(summarizeSeasonStatuses([s1('plan_to_watch')])).toBe('plan_to_watch')
+    expect(summarizeSeasonStatuses([s1('plan_to_watch'), later('plan_to_watch')])).toBe(
+      'plan_to_watch',
+    )
+    expect(summarizeSeasonStatuses([later('plan_to_watch')])).toBe('watching')
+    expect(summarizeSeasonStatuses([s1('completed'), later('plan_to_watch')], 2)).toBe('watching')
   })
 
   it('rates a series as the average of its rated seasons', () => {

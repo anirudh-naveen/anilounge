@@ -25,6 +25,7 @@ vi.mock('@/stores/content', () => ({
   useContentStore: () => ({
     loadWatchlist: vi.fn(),
     getWatchlistItem: (id: string) => watchlist.items.get(id),
+    getWatchlistRating: (id: string) => watchlist.items.get(id)?.rating,
     addToWatchlist: (...args: unknown[]) => watchlist.add(...args),
     updateWatchlistItem: (...args: unknown[]) => watchlist.update(...args),
   }),

@@ -131,3 +131,32 @@ export async function reorderFavorites(userId, ids) {
 }
 
 export default { addFavorite, reorderFavorites, favoriteCategory, FAVORITES_MAX }
+
+/**
+ * Seasons stand for their series in favorites: move favorites saved on a season onto its
+ * series (keeping the season's place in the ranking; dropped when the series is already a
+ * favorite). Backfill for favorites saved before that rule.
+ * @param {{ dryRun?: boolean }} [options] - `dryRun` counts without changing anything.
+ * @returns {Promise<number>} Season favorites moved (or that would move).
+ */
+export async function moveSeasonFavoritesToSeries({ dryRun = false } = {}) {
+  if (dryRun) {
+    const { rows } = await query(
+      `SELECT count(*)::int AS n FROM favorites f JOIN seasons sn ON sn.content_id = f.content_id`,
+    )
+    return rows[0]?.n || 0
+  }
+  return withTransaction(async () => {
+    await query(
+      `INSERT INTO favorites (user_id, content_id, added_at, position)
+       SELECT DISTINCT ON (f.user_id, sn.series_id) f.user_id, sn.series_id, f.added_at, f.position
+       FROM favorites f JOIN seasons sn ON sn.content_id = f.content_id
+       ORDER BY f.user_id, sn.series_id, f.position NULLS LAST, f.added_at
+       ON CONFLICT (user_id, content_id) DO NOTHING`,
+    )
+    const { rowCount } = await query(
+      `DELETE FROM favorites f USING seasons sn WHERE sn.content_id = f.content_id`,
+    )
+    return rowCount
+  })
+}
