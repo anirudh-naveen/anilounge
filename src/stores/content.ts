@@ -693,16 +693,25 @@ export const useContentStore = defineStore('content', () => {
   )
 
   /**
-   * The user's rating of a title: its own row's, or for a series tracked season by
-   * season, the average of the seasons they rated.
+   * The user's rating of a title: for a series tracked season by season, the average of
+   * the seasons they rated (its own row, kept by the server, holds no rating of its own);
+   * otherwise its own row's.
    */
-  const getWatchlistRating = computed(
+  const getWatchlistRating = computed(() => (contentId: string): number | undefined => {
+    const seasons = seasonRowsBySeries.value.get(contentId)
+    if (seasons?.length) return averageSeasonRating(seasons.map((item) => item.rating))
+    return watchlistById.value.get(contentId)?.rating
+  })
+
+  /** A series' season rows on the watchlist, in guide order (empty when none). */
+  const getSeasonRows = computed(
     () =>
-      (contentId: string): number | undefined =>
-        watchlistById.value.get(contentId)?.rating ??
-        averageSeasonRating(
-          (seasonRowsBySeries.value.get(contentId) || []).map((item) => item.rating),
-        ),
+      (seriesId: string): WatchlistItem[] =>
+        [...(seasonRowsBySeries.value.get(seriesId) || [])].sort((a, b) => {
+          const left = typeof a.content === 'string' ? null : a.content
+          const right = typeof b.content === 'string' ? null : b.content
+          return (left ? seasonOrder(left) : 0) - (right ? seasonOrder(right) : 0)
+        }),
   )
 
   const savedScrollPositions = ref<Record<string, number>>({})
@@ -820,6 +829,7 @@ export const useContentStore = defineStore('content', () => {
     getWatchlistItem,
     getWatchlistStatus,
     getWatchlistRating,
+    getSeasonRows,
     hasSeasonRows,
     getSoleSeasonId,
     catalogSeasonsBySeries,

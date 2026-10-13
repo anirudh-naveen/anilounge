@@ -102,7 +102,7 @@ function dayKey(date) {
  * history beyond the row (progress later lowered) is scaled down to fit. Backlog units
  * (`placed: false`) count as covered but land on no day, so watch time logged in
  * backlog mode adds to the totals without filling in the day it was logged. A series row
- * whose seasons are on the list too adds no episodes or minutes (its seasons count them).
+ * whose seasons are on the list too counts for nothing (its seasons count instead).
  *
  * @param {Array<{ status: string, rating?: number|null, currentEpisode?: number, updatedAt?: string|Date, addedAt?: string|Date, content: object }>} watchlist - Rows with `content` populated.
  * @param {Date} [now=new Date()] - Reference point for the trailing 12 months.
@@ -116,17 +116,21 @@ function dayKey(date) {
  * }}
  */
 export function computeProfileStats(watchlist, now = new Date(), history = new Map()) {
-  const rows = (watchlist || []).filter((item) => item?.content && typeof item.content === 'object')
-  // A series row whose seasons are listed too (kept in step with them) adds no watch time
-  // of its own: its seasons already count those episodes.
+  const populated = (watchlist || []).filter(
+    (item) => item?.content && typeof item.content === 'object',
+  )
+  // A series row whose seasons are listed is kept from them (services/watchlistWrites.js
+  // `syncSeriesFromSeasons`): its seasons already count, so it adds nothing of its own.
   const seriesWithSeasons = new Set(
-    rows
+    populated
       .filter((item) => item.content.contentType === 'season' && item.content.seriesId)
       .map((item) => String(item.content.seriesId)),
   )
-  const countedByItsSeasons = (item) =>
-    item.content.contentType === 'tv' &&
-    seriesWithSeasons.has(String(item.content._id ?? item.content.id ?? ''))
+  const rows = populated.filter(
+    (item) =>
+      item.content.contentType !== 'tv' ||
+      !seriesWithSeasons.has(String(item.content._id ?? item.content.id ?? '')),
+  )
 
   const monthly = []
   for (let offset = MONTHS_SHOWN - 1; offset >= 0; offset -= 1) {
@@ -174,9 +178,8 @@ export function computeProfileStats(watchlist, now = new Date(), history = new M
       } else totals.completedMovies += 1
     }
 
-    const counted = !countedByItsSeasons(item)
-    const minutes = counted ? minutesWatched(item) : 0
-    if (counted && content.contentType !== 'movie') totals.episodesWatched += episodesWatched(item)
+    const minutes = minutesWatched(item)
+    if (content.contentType !== 'movie') totals.episodesWatched += episodesWatched(item)
     totals.minutesWatched += minutes
 
     if (minutes) {

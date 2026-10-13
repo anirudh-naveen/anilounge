@@ -143,6 +143,8 @@ describe('computeProfileStats with a series and its seasons', () => {
       ],
       now,
     )
+    assert.equal(totals.titles, 2)
+    assert.equal(totals.completed, 2)
     assert.equal(totals.episodesWatched, 24)
     assert.equal(totals.minutesWatched, 24 * DEFAULT_EPISODE_MINUTES)
   })

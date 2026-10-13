@@ -163,20 +163,24 @@ export async function applyContentRatingChange(content, oldRating, newRating) {
 }
 
 /**
- * Keep series rows on watchlists in step with their seasons' rows, the way the site sums
+ * Each series on a watchlist is summed up from its seasons' rows, the way the site sums
  * a series up (src/utils/watchlist.ts `summarizeSeasonStatuses`):
  * 1. Completed once every one of its seasons is.
  * 2. Watching while any season is being watched.
  * 3. Dropped, then On hold, when any season is.
  * 4. Watching when some seasons are done and others are not.
  * 5. Planned when the first season is planned; a plan for a later season alone is Watching.
- * Series aren't added to watchlists any more (seasons are), so this only moves rows saved
- * before that.
+ * Users add seasons; the row of a series of two or more seasons is kept here (a
+ * one-season series is listed as its season alone): created once any of its seasons is
+ * listed, updated with the summary (status, episodes watched across the seasons, the
+ * furthest season, start and finish dates), and removed when no season is left. Its
+ * rating is not stored (the site shows the seasons' average). Rows are written as
+ * imported (`imported_at`) so friends' feeds don't repeat the season's own update.
  *
  * @param {{ userId?: string|null, seasonId?: string|null, dryRun?: boolean }} [scope] - One
  *   user, and/or the series of one season; every watchlist when omitted (the backfill).
  *   `dryRun` counts the rows without changing them.
- * @returns {Promise<number>} Series rows changed (or that would change).
+ * @returns {Promise<number>} Series rows added, changed, or removed (or that would be).
  */
 export async function syncSeriesFromSeasons({
   userId = null,
@@ -193,15 +197,23 @@ export async function syncSeriesFromSeasons({
               bool_or(w.status = 'plan_to_watch' AND sn.content_id = (
                 SELECT x.content_id FROM seasons x WHERE x.series_id = sn.series_id
                 ORDER BY x.season_number, x.part_number LIMIT 1
-              )) AS first_planned
+              )) AS first_planned,
+              sum(CASE WHEN w.status = 'completed' AND sw.episode_count > 0
+                       THEN GREATEST(sw.episode_count, w.current_episode)
+                       ELSE w.current_episode END)::int AS episodes,
+              max(sn.season_number) FILTER (WHERE w.status <> 'plan_to_watch') AS season,
+              min(w.started_on) AS started_on,
+              max(w.completed_on) AS completed_on,
+              min(w.added_at) AS added_at
        FROM watchlist w
        JOIN seasons sn ON sn.content_id = w.content_id
+       JOIN works sw ON sw.id = w.content_id
        WHERE ($1::uuid IS NULL OR w.user_id = $1)
          AND ($2::uuid IS NULL OR sn.series_id = (SELECT series_id FROM seasons WHERE content_id = $2))
        GROUP BY w.user_id, sn.series_id
      ),
      target AS (
-       SELECT t.user_id, t.series_id,
+       SELECT t.user_id, t.series_id, t.started_on, t.added_at,
               CASE WHEN t.done = t.listed
                      AND t.listed >= (SELECT count(*) FROM seasons x WHERE x.series_id = t.series_id)
                      THEN 'completed'
@@ -210,30 +222,62 @@ export async function syncSeriesFromSeasons({
                    WHEN t.on_hold THEN 'on_hold'
                    WHEN t.done > 0 THEN 'watching'
                    WHEN t.first_planned THEN 'plan_to_watch'
-                   ELSE 'watching' END AS status
-       FROM tracked t
+                   ELSE 'watching' END AS status,
+              LEAST(t.episodes, COALESCE(NULLIF(s.episode_count, 0), t.episodes)) AS episodes,
+              LEAST(COALESCE(t.season, 1), GREATEST(COALESCE(s.season_count, 1), 1)) AS season,
+              t.completed_on
+       FROM tracked t JOIN series s ON s.content_id = t.series_id
+       -- A one-season series is listed as its season alone.
+       WHERE (SELECT count(*) FROM seasons x WHERE x.series_id = t.series_id) > 1
      )`
-  const matches = `t.status IS NOT NULL AND w.user_id = t.user_id AND w.content_id = t.series_id
-       AND w.status <> t.status`
+  // A series whose last listed season was just removed.
+  const orphan = `w.content_id = (SELECT series_id FROM seasons WHERE content_id = $2)
+       AND NOT EXISTS (
+         SELECT 1 FROM watchlist ws JOIN seasons sn ON sn.content_id = ws.content_id
+         WHERE ws.user_id = w.user_id AND sn.series_id = w.content_id
+       )`
   if (dryRun) {
     const { rows } = await query(
-      `${targets} SELECT count(*)::int AS n FROM watchlist w, target t WHERE ${matches}`,
+      `${targets}
+       SELECT count(*)::int AS n FROM target t
+       LEFT JOIN watchlist w ON w.user_id = t.user_id AND w.content_id = t.series_id
+       WHERE w.user_id IS NULL OR w.status <> t.status OR w.current_episode <> t.episodes`,
       [userId, seasonId],
     )
     return rows[0]?.n || 0
   }
   const { rowCount } = await query(
     `${targets}
-     UPDATE watchlist w SET
-       status = t.status,
-       completed_on = CASE WHEN t.status = 'completed' THEN COALESCE(w.completed_on, CURRENT_DATE)
-                           ELSE w.completed_on END,
-       started_on = CASE WHEN t.status = 'plan_to_watch' THEN w.started_on
-                         ELSE COALESCE(w.started_on, CURRENT_DATE) END,
-       updated_at = now()
+     INSERT INTO watchlist (
+       user_id, content_id, status, current_episode, current_season, started_on, completed_on,
+       added_at, updated_at, imported_at
+     )
+     SELECT t.user_id, t.series_id, t.status, t.episodes, t.season,
+            CASE WHEN t.status = 'plan_to_watch' THEN NULL ELSE t.started_on END,
+            CASE WHEN t.status = 'completed' THEN t.completed_on END,
+            t.added_at, now(), now()
      FROM target t
-     WHERE ${matches}`,
+     ON CONFLICT (user_id, content_id) DO UPDATE SET
+       status = EXCLUDED.status,
+       previous_episode = CASE WHEN watchlist.current_episode <> EXCLUDED.current_episode
+                               THEN watchlist.current_episode ELSE watchlist.previous_episode END,
+       current_episode = EXCLUDED.current_episode,
+       current_season = EXCLUDED.current_season,
+       started_on = COALESCE(watchlist.started_on, EXCLUDED.started_on),
+       completed_on = CASE WHEN EXCLUDED.status = 'completed'
+                           THEN COALESCE(watchlist.completed_on, EXCLUDED.completed_on, CURRENT_DATE)
+                           ELSE watchlist.completed_on END,
+       updated_at = now(),
+       imported_at = now()
+     WHERE watchlist.status <> EXCLUDED.status
+        OR watchlist.current_episode <> EXCLUDED.current_episode
+        OR watchlist.current_season <> EXCLUDED.current_season`,
     [userId, seasonId],
   )
-  return rowCount
+  if (!seasonId) return rowCount
+  const { rowCount: removed } = await query(
+    `DELETE FROM watchlist w WHERE ($1::uuid IS NULL OR w.user_id = $1) AND ${orphan}`,
+    [userId, seasonId],
+  )
+  return rowCount + removed
 }

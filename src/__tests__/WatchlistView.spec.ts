@@ -47,6 +47,9 @@ vi.mock('@/stores/content', () => ({
     loadWatchlist,
     updateWatchlistItem,
     scrollToTop: vi.fn(),
+    getSeasonRows: (seriesId: string) =>
+      watchlist.filter((item) => (item.content as { seriesId?: string }).seriesId === seriesId),
+    getWatchlistRating: () => 8.5,
   }),
 }))
 
@@ -124,6 +127,26 @@ describe('Watchlist status sections', () => {
     expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
       'No titles match these filters.',
     )
+  })
+
+  it('shows a series kept from its seasons as a summary, not an editor', async () => {
+    const frieren = watchlist.find((item) => item.content._id === 'tv-1')!
+    const season = {
+      ...frieren,
+      content: { ...frieren.content, _id: 'tv-1-s1', contentType: 'season', seriesId: 'tv-1' },
+    } as unknown as (typeof watchlist)[number]
+    watchlist.push(season)
+    try {
+      const wrapper = await mountPage()
+      const series = wrapper
+        .findAll('.watchlist-item')
+        .find((row) => row.text().includes('Frieren'))
+      await series!.get('.item-header').trigger('click')
+      expect(wrapper.find('[data-testid="watchlist-season-summary"]').exists()).toBe(true)
+      expect(wrapper.text()).toContain('8.5')
+    } finally {
+      watchlist.pop()
+    }
   })
 
   it('offers a favorite heart on every row', async () => {

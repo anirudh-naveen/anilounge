@@ -129,13 +129,9 @@
       </div>
 
       <!-- Title: Watchlist -->
-      <!-- A series with seasons is tracked season by season, unless it is tracked already. -->
+      <!-- A series with seasons is tracked season by season (its own row follows them). -->
       <WatchlistPanel
-        v-if="
-          show.contentType === 'season' ||
-          !seriesSeasons.length ||
-          contentStore.isInWatchlist(show._id)
-        "
+        v-if="show.contentType === 'season' || !seriesSeasons.length"
         :content-id="watchlistTargetId"
         content-type="tv"
         :total-episodes="show.episodeCount || show.malEpisodes || 0"
@@ -361,14 +357,11 @@ const seriesSeasons = computed(() => {
 })
 /**
  * Row the watchlist panel edits: the title on screen, or for a one-season series its
- * season's own row (only seasons are added to watchlists). A series already on the
- * list from before keeps its row.
+ * season's own row (only seasons are added to watchlists).
  */
 const watchlistTargetId = computed(() => {
   const id = show.value?._id || ''
-  const seasonId = singleSeason.value ? seasons.value[0]?.contentId : undefined
-  if (!seasonId || seasonId === id || contentStore.isInWatchlist(id)) return id
-  return seasonId
+  return (singleSeason.value ? seasons.value[0]?.contentId : undefined) || id
 })
 /** Guide number of the first season, shown until another season is picked. */
 const firstSeason = computed(() => seasons.value[0]?.seasonNumber ?? null)

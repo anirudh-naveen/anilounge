@@ -147,10 +147,10 @@
 
                 <div class="item-rating">
                   <span
-                    v-if="item.rating"
+                    v-if="getItemRating(item)"
                     class="rating-value"
-                    :style="getRatingStyle(item.rating)"
-                    >{{ item.rating }}</span
+                    :style="getRatingStyle(getItemRating(item))"
+                    >{{ getItemRating(item) }}</span
                   >
                   <span v-else class="no-rating-text">—</span>
                 </div>
@@ -188,7 +188,44 @@
                   <div class="user-data">
                     <h4>Your Progress</h4>
 
-                    <div class="progress-section">
+                    <!-- A series of several seasons follows them: shown, not edited. -->
+                    <div
+                      v-if="isSeasonSummary(item)"
+                      class="season-summary"
+                      data-testid="watchlist-season-summary"
+                    >
+                      <p class="more-hint">
+                        Its status and rating follow its seasons. Update a season to change it.
+                      </p>
+                      <ul class="season-summary-list">
+                        <li
+                          v-for="season in contentStore.getSeasonRows(getContentId(item))"
+                          :key="getContentId(season)"
+                        >
+                          <button
+                            type="button"
+                            class="season-summary-link"
+                            @click="viewContentDetails(season)"
+                          >
+                            {{ getContentTitle(season) }}
+                          </button>
+                          <span
+                            class="season-summary-status"
+                            :class="getStatusClass(season.status)"
+                          >
+                            {{ getStatusLabel(season.status) }}
+                          </span>
+                          <span
+                            v-if="season.rating"
+                            class="rating-value"
+                            :style="getRatingStyle(season.rating)"
+                            >{{ season.rating }}</span
+                          >
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div v-else class="progress-section">
                       <div class="status-control">
                         <label>Status:</label>
                         <select
@@ -361,12 +398,14 @@
                       <button @click="viewContentDetails(item)" class="btn btn-secondary">
                         View Details
                       </button>
-                      <button @click="saveWatchlistItem(item)" class="save-watch-btn">
-                        Save Watch
-                      </button>
-                      <button @click="removeFromWatchlist(item)" class="btn btn-danger">
-                        Remove from Watchlist
-                      </button>
+                      <template v-if="!isSeasonSummary(item)">
+                        <button @click="saveWatchlistItem(item)" class="save-watch-btn">
+                          Save Watch
+                        </button>
+                        <button @click="removeFromWatchlist(item)" class="btn btn-danger">
+                          Remove from Watchlist
+                        </button>
+                      </template>
                     </div>
                   </div>
 
@@ -567,6 +606,16 @@ const tracksItemEpisodes = (item: WatchlistItem) => {
   if (typeof item === 'string' || typeof item.content === 'string' || !item.content) return false
   return tracksEpisodes(item.content)
 }
+
+/** A series row the server keeps from its seasons' rows (it has seasons listed). */
+const isSeasonSummary = (item: WatchlistItem) =>
+  typeof item.content !== 'string' &&
+  item.content?.contentType === 'tv' &&
+  contentStore.getSeasonRows(item.content._id).length > 0
+
+/** The row's rating; a series kept from its seasons shows their average. */
+const getItemRating = (item: WatchlistItem) =>
+  isSeasonSummary(item) ? contentStore.getWatchlistRating(getContentId(item) || '') : item.rating
 
 const isTvContent = (item: WatchlistItem) => {
   if (typeof item === 'string' || typeof item.content === 'string') return false
@@ -1422,6 +1471,43 @@ onUnmounted(() => {
 .info-value {
   color: var(--text-primary);
   font-weight: 500;
+}
+
+.season-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.season-summary-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.season-summary-link {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.season-summary-link:hover {
+  text-decoration: underline;
+}
+
+.season-summary-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .progress-section {
