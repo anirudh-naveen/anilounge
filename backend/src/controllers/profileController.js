@@ -321,7 +321,8 @@ export const updateProfileSettings = async (req, res) => {
 }
 
 /**
- * IDs of the signed-in user's favorited titles (drives card heart state).
+ * IDs of the signed-in user's favorited titles, plus every season of a favorited series
+ * (drives card heart state).
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res - 200 `{ data: string[] }` or 500.
@@ -329,11 +330,17 @@ export const updateProfileSettings = async (req, res) => {
  */
 export const getFavoriteContentIds = async (req, res) => {
   try {
+    // A season stands for its series, so a favorited series' seasons read as favorites too.
     const { rows } = await query(
       `SELECT f.content_id
        FROM favorites f
        JOIN content c ON c.id = f.content_id
-       WHERE f.user_id = $1 AND c.kind = ANY($2::text[])`,
+       WHERE f.user_id = $1 AND c.kind = ANY($2::text[])
+       UNION
+       SELECT sn.content_id
+       FROM favorites f
+       JOIN seasons sn ON sn.series_id = f.content_id
+       WHERE f.user_id = $1`,
       [req.user._id, WATCHABLE_KINDS],
     )
     res.json({ success: true, data: rows.map((row) => String(row.content_id)) })
@@ -344,27 +351,39 @@ export const getFavoriteContentIds = async (req, res) => {
 }
 
 /**
- * Add (`POST`) or remove (`DELETE`) a movie, series, or special from favorites.
+ * Add (`POST`) or remove (`DELETE`) a movie, series, or special from favorites. A season
+ * stands for its whole series: favoriting one favorites the series.
  *
  * @param {import('express').Request} req - `params.id` title id; method selects the action.
- * @param {import('express').Response} res - 200 `{ data: { contentId, isFavorited } }`, 404 not a title, or 500.
+ * @param {import('express').Response} res - 200 `{ data: { contentId, isFavorited } }` (the
+ *   series' id for a season), 404 not a title, or 500.
  * @returns {Promise<void>}
  */
 export const toggleContentFavorite = async (req, res) => {
   try {
-    const contentId = req.params.id
-    const { rows } = await query('SELECT kind FROM content WHERE id = $1', [contentId])
+    const { rows } = await query(
+      `SELECT c.kind, sn.series_id, sc.kind AS series_kind
+       FROM content c
+       LEFT JOIN seasons sn ON sn.content_id = c.id
+       LEFT JOIN content sc ON sc.id = sn.series_id
+       WHERE c.id = $1`,
+      [req.params.id],
+    )
     if (!rows[0] || !WATCHABLE_KINDS.includes(rows[0].kind)) {
       return res.status(404).json({ success: false, message: 'Content not found' })
     }
+    const season = rows[0].series_id ? String(rows[0].series_id) : null
+    const contentId = season || req.params.id
+    const kind = season ? rows[0].series_kind : rows[0].kind
 
     const isFavorited = req.method !== 'DELETE'
     if (isFavorited) {
-      await addFavorite(req.user._id, contentId, rows[0].kind)
+      await addFavorite(req.user._id, contentId, kind)
     } else {
-      await query('DELETE FROM favorites WHERE user_id = $1 AND content_id = $2', [
+      // Also clears a favorite saved on the season itself before seasons stood for their series.
+      await query('DELETE FROM favorites WHERE user_id = $1 AND content_id = ANY($2::uuid[])', [
         req.user._id,
-        contentId,
+        [...new Set([contentId, req.params.id])],
       ])
     }
 

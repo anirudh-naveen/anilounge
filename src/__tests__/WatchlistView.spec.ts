@@ -107,8 +107,11 @@ describe('Watchlist status sections', () => {
     expect(titles()).toEqual(['Spirited Away'])
     expect(wrapper.get('[data-testid="watchlist-filter-status-watching"]').text()).toContain('0')
 
-    await wrapper.get('[data-testid="watchlist-filter-type-tv"]').trigger('click')
+    await wrapper.get('[data-testid="watchlist-filter-type-series"]').trigger('click')
     expect(titles()).toEqual(['Frieren'])
+
+    await wrapper.get('[data-testid="watchlist-filter-type-season"]').trigger('click')
+    expect(titles()).toEqual([])
 
     await wrapper.get('[data-testid="watchlist-filter-type-all"]').trigger('click')
     await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')

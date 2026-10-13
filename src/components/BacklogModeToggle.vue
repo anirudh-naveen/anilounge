@@ -17,7 +17,7 @@
       @click="setActive(!active)"
     >
       <span class="track" aria-hidden="true"><span class="thumb"></span></span>
-      <span class="label">Backlog mode</span>
+      <span class="label">Backlog Mode</span>
     </button>
     <!-- Title: Hover Note -->
     <span id="backlog-mode-hint" role="tooltip" class="backlog-hint">

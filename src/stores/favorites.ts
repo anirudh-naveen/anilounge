@@ -38,6 +38,8 @@ export const useFavoritesStore = defineStore('favorites', () => {
 
   /**
    * Flip a title's favorite state, updating the UI first and rolling back on failure.
+   * A season stands for its series (the server favorites the series), so the IDs are
+   * refetched afterwards to bring the series and its other seasons in step.
    * @returns The new favorite state.
    */
   const toggle = async (id: string): Promise<boolean> => {
@@ -54,6 +56,7 @@ export const useFavoritesStore = defineStore('favorites', () => {
     try {
       if (next) await profileAPI.favoriteContent(id)
       else await profileAPI.unfavoriteContent(id)
+      await load(true).catch((err) => console.error('Failed to refresh favorites:', err))
       return next
     } catch (err) {
       apply(!next)

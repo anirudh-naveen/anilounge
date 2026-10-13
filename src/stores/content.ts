@@ -9,7 +9,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { contentAPI, entityAPI, watchlistAPI, matchesContentTypeFilter } from '@/services/api'
 import type { WatchlistData, WatchlistItem } from '@/types'
-import { summarizeSeasonStatuses, type WatchlistStatus } from '@/utils/watchlist'
+import {
+  averageSeasonRating,
+  summarizeSeasonStatuses,
+  type WatchlistStatus,
+} from '@/utils/watchlist'
 import { isBacklogSave } from '@/composables/useBacklogMode'
 import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
@@ -278,10 +282,11 @@ export const useContentStore = defineStore('content', () => {
   }
 
   // Pull the full catalog once so search can run locally instead of hitting /search.
+  // Seasons come as their own rows, so search lists them beside their series.
   const ensureFullCatalog = async () => {
     if (catalogSize.value > 0 && allContent.value.length >= catalogSize.value) return
 
-    const response = await contentAPI.getContent({ page: 1, limit: 10000 })
+    const response = await contentAPI.getContent({ page: 1, limit: 10000, seasons: 1 })
     if (response.data.success) {
       allContent.value = response.data.data
       catalogSize.value = response.data.pagination?.totalItems ?? response.data.data.length
@@ -606,9 +611,35 @@ export const useContentStore = defineStore('content', () => {
     return bySeries
   })
 
+  /** Season rows in the loaded catalog, counted by their series id. */
+  const catalogSeasonCounts = computed(() => {
+    const counts = new Map<string, number>()
+    for (const item of allContent.value) {
+      if (item.contentType === 'season' && item.seriesId) {
+        counts.set(item.seriesId, (counts.get(item.seriesId) || 0) + 1)
+      }
+    }
+    return counts
+  })
+
+  /**
+   * Whether a series is tracked season by season (it has season rows), so it is never
+   * added to the watchlist itself.
+   */
+  const hasSeasonRows = computed(
+    () => (item: Pick<UnifiedContent, '_id' | 'contentType' | 'hasSeasons'>) =>
+      item.contentType === 'tv' &&
+      Boolean(
+        item.hasSeasons ||
+          catalogSeasonCounts.value.has(item._id) ||
+          seasonRowsBySeries.value.has(item._id),
+      ),
+  )
+
   /**
    * A title's watchlist status: its own row's, or for a series tracked season by
    * season, a summary of its seasons' (so series pages and cards match the watchlist).
+   * The series is Completed only once all its seasons are (when the catalog knows them).
    */
   const getWatchlistStatus = computed(
     () =>
@@ -616,6 +647,20 @@ export const useContentStore = defineStore('content', () => {
         watchlistById.value.get(contentId)?.status ??
         summarizeSeasonStatuses(
           (seasonRowsBySeries.value.get(contentId) || []).map((item) => item.status),
+          catalogSeasonCounts.value.get(contentId),
+        ),
+  )
+
+  /**
+   * The user's rating of a title: its own row's, or for a series tracked season by
+   * season, the average of the seasons they rated.
+   */
+  const getWatchlistRating = computed(
+    () =>
+      (contentId: string): number | undefined =>
+        watchlistById.value.get(contentId)?.rating ??
+        averageSeasonRating(
+          (seasonRowsBySeries.value.get(contentId) || []).map((item) => item.rating),
         ),
   )
 
@@ -733,6 +778,8 @@ export const useContentStore = defineStore('content', () => {
     isInWatchlist,
     getWatchlistItem,
     getWatchlistStatus,
+    getWatchlistRating,
+    hasSeasonRows,
 
     findContentById,
     cacheContent,
