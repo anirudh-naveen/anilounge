@@ -40,27 +40,29 @@ Deployment --
 
 
 
-## Homepage
+## Home
 
-<img width="1710" height="676" alt="image" src="https://github.com/user-attachments/assets/ee9e5bc0-9f44-421f-92cd-e315e0abd51c" />
-<img width="856" height="745" alt="image" src="https://github.com/user-attachments/assets/282fbfdc-de62-492d-9f24-cc37226f6deb" />
+Your status feed, what friends are watching, and what's trending.
 
+<img src="docs/screenshots/home.png" alt="AniLounge home feed and discover pages on iPhone" width="640" />
 
-## Search
+## Titles
 
-<img width="1710" height="912" alt="image" src="https://github.com/user-attachments/assets/f2952b26-f817-4115-9530-d2a9f51a15d8" />
-<img width="1710" height="774" alt="image" src="https://github.com/user-attachments/assets/807b3808-469d-4246-9869-c6f0b27e12b6" />
+Scores, studios, seasons, episodes, characters, and your progress on every movie and series.
 
+<img src="docs/screenshots/titles.png" alt="A title page with its watchlist panel, episodes, and characters" width="860" />
 
-## Watchlist
+## Watchlist and Profile
 
-<img width="1710" height="911" alt="image" src="https://github.com/user-attachments/assets/1a14425f-0bc1-469f-8789-7738d138fd1f" />
+Track watching, planned, and completed titles, and show off your stats.
 
-## Profile
+<img src="docs/screenshots/watchlist-profile.png" alt="The watchlist and a profile with watch stats" width="640" />
 
-<img width="1710" height="914" alt="image" src="https://github.com/user-attachments/assets/111f97fa-8aba-417e-9a99-1026cb1ae20e" />
+## Forum and iOS Widgets
 
+Episode threads, reviews, and guides, plus home screen widgets for new releases and friends' activity.
 
+<img src="docs/screenshots/forum-widgets.png" alt="The forum and AniLounge home screen widgets" width="860" />
 
 Author: Anirudh Naveen
 

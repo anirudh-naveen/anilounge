@@ -35,3 +35,6 @@ deploy-recruiter-beta.sh
 
 # Private notes (maintainer only; tasks live in GitHub issues)
 TODO.md
+
+# App Store and ad images (generated; kept out of git)
+marketing/
