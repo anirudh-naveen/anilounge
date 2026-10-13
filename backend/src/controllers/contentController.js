@@ -109,13 +109,37 @@ const refreshAiringIfNeeded = async (content) => {
  * `movie` includes `special` so specials appear in the movie catalog.
  *
  * @param {string|undefined} contentType - `all`, `movie`, `tv`, `special`, or omitted.
- * @returns {object} Every type but seasons for `all`; otherwise a `contentType` match.
+ * @param {boolean} [withSeasons] - Keep seasons in the `all` list.
+ * @returns {object} Every type but seasons for `all` (unless `withSeasons`); otherwise a `contentType` match.
  */
-const matchContentType = (contentType) => {
-  // Seasons are listed through their series, never on their own in the catalog.
-  if (!contentType || contentType === 'all') return { contentType: { $nin: ['season'] } }
+const matchContentType = (contentType, withSeasons = false) => {
+  // Seasons are listed through their series, except in the full catalog search loads.
+  if (!contentType || contentType === 'all') {
+    return withSeasons ? {} : { contentType: { $nin: ['season'] } }
+  }
   if (contentType === 'movie') return { contentType: { $in: movieLikeTypes } }
   return { contentType }
+}
+
+/**
+ * Mark each series row that has season rows (`hasSeasons`): those are tracked season by
+ * season, so cards offer no watchlist button for the series itself.
+ * @param {object[]} rows - Serialized catalog rows, mutated in place.
+ * @returns {Promise<void>}
+ */
+const flagSeriesWithSeasons = async (rows) => {
+  const ids = rows.filter((row) => row.contentType === 'tv').map((row) => String(row._id))
+  if (!ids.length) return
+  const { rows: found } = await withReplica(() =>
+    dbQuery(
+      'SELECT DISTINCT series_id::text AS id FROM seasons WHERE series_id = ANY($1::uuid[])',
+      [ids],
+    ),
+  )
+  const withSeasons = new Set(found.map((row) => row.id))
+  for (const row of rows) {
+    if (row.contentType === 'tv') row.hasSeasons = withSeasons.has(String(row._id))
+  }
 }
 
 /**
@@ -124,7 +148,8 @@ const matchContentType = (contentType) => {
  * `tab` filters TV into popular/airing/season/upcoming and movies into popular/theatres/upcoming.
  * Popular Right Now on movie and TV catalogs is a single page.
  *
- * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`, `query.tab`.
+ * @param {import('express').Request} req - Reads `query.page`, `query.limit`, `query.type`, `query.tab`,
+ *   and `query.seasons=1` (the `all` list with seasons as their own rows, for search).
  * @param {import('express').Response} res - 200 `{ success, data, pagination }` or 500.
  * @returns {Promise<void>}
  */
@@ -152,7 +177,9 @@ export const getContent = async (req, res) => {
           : {}
     // Schedule tabs choose their own TV rows (seasons or series, see SCHEDULED_TV).
     const typeQuery =
-      contentType === 'tv' && tab !== 'popular' ? {} : matchContentType(contentType)
+      contentType === 'tv' && tab !== 'popular'
+        ? {}
+        : matchContentType(contentType, req.query.seasons === '1')
     const query = mergeCatalogQuery(typeQuery, tabQuery)
 
     if (tab === 'upcoming' && (contentType === 'tv' || contentType === 'movie')) {
@@ -190,6 +217,7 @@ export const getContent = async (req, res) => {
         { $limit: limit },
       ]),
     )
+    await flagSeriesWithSeasons(content)
 
     res.json({
       success: true,
@@ -389,9 +417,11 @@ function progressError(currentEpisode, currentSeason, content) {
 
 /**
  * Add or update a watchlist row in a transaction, syncing user ratings onto the content document.
+ * A series with seasons cannot be added (its seasons are tracked instead).
  *
  * @param {import('express').Request} req - `req.user._id`; `body` has contentId, status, rating, episode/season, notes.
- * @param {import('express').Response} res - 200 on success; 400 validation/episode bounds; 404 user/content; 500.
+ * @param {import('express').Response} res - 200 on success; 400 validation/episode bounds/series with
+ *   seasons; 404 user/content; 500.
  * @returns {Promise<void>}
  */
 export const addToWatchlist = async (req, res) => {
@@ -438,6 +468,22 @@ export const addToWatchlist = async (req, res) => {
     }
 
     const existingItem = user.watchlist.find((item) => item.content.toString() === contentId)
+
+    // A series with seasons is tracked season by season; rows already on a list stay editable.
+    if (!existingItem && content.contentType === 'tv') {
+      const { rows } = await dbQuery('SELECT 1 FROM seasons WHERE series_id = $1 LIMIT 1', [
+        contentId,
+      ])
+      if (rows.length) {
+        await session.abortTransaction()
+        return res.status(400).json({
+          success: false,
+          message: 'Add one of its seasons to your watchlist instead.',
+          code: 'track_seasons',
+        })
+      }
+    }
+
     const previousRating = getEffectiveUserRating(user, contentId)
     const unitsBefore = existingItem ? watchUnits({ ...existingItem, content }) : 0
 
@@ -481,11 +527,7 @@ export const addToWatchlist = async (req, res) => {
     }
 
     syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
-    await applyContentRatingChange(
-      content,
-      previousRating,
-      getEffectiveUserRating(user, contentId),
-    )
+    await applyContentRatingChange(content, previousRating, getEffectiveUserRating(user, contentId))
 
     await user.save({ session })
     const savedItem = user.watchlist.find((item) => item.content.toString() === contentId)
@@ -700,11 +742,7 @@ export const updateWatchlistItem = async (req, res) => {
     if (backlog) watchlistItem.importedAt = watchlistItem.updatedAt
 
     syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
-    await applyContentRatingChange(
-      content,
-      previousRating,
-      getEffectiveUserRating(user, contentId),
-    )
+    await applyContentRatingChange(content, previousRating, getEffectiveUserRating(user, contentId))
 
     await user.save({ session })
     await logWatchChange(

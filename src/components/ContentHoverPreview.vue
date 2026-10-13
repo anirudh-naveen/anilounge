@@ -2,7 +2,9 @@
   ContentHoverPreview.vue — catalog hover card (component).
 
   Shows titles, rating, overview, and watchlist add controls when a
-  content card is hovered. The card poster is not repeated here.
+  content card is hovered. The card poster is not repeated here. A series with
+  seasons gets no add button (seasons are tracked one by one), just its status and
+  average rating summed up from its seasons.
 -->
 <template>
   <!-- The open form floats on <body> so scrolling rails cannot clip it. -->
@@ -54,9 +56,17 @@
             <span v-for="genre in displayGenres" :key="genre" class="genre-tag">{{ genre }}</span>
           </div>
           <!-- Watchlist -->
+          <!-- A series with seasons is tracked season by season: a summary, no button. -->
+          <p
+            v-if="isAuthenticated && showWatchlist && tracksBySeason"
+            class="hover-season-summary"
+            data-testid="hover-season-summary"
+          >
+            {{ seasonSummary }}
+          </p>
           <!-- Title: Button -->
           <button
-            v-if="isAuthenticated && showWatchlist"
+            v-else-if="isAuthenticated && showWatchlist"
             type="button"
             class="hover-watchlist-btn"
             :class="{ added: isOnWatchlist }"
@@ -179,6 +189,18 @@ const selectedEpisodes = ref<number>(0)
 const selectedNotes = ref('')
 
 const watchlistItem = computed(() => contentStore.getWatchlistItem(props.item._id))
+/** A series with season rows that isn't on the list itself: only its seasons are added. */
+const tracksBySeason = computed(
+  () => !watchlistItem.value && contentStore.hasSeasonRows(props.item),
+)
+/** "Watching · 8.5": the series' status and average rating, summed up from its seasons. */
+const seasonSummary = computed(() => {
+  const status = contentStore.getWatchlistStatus(props.item._id)
+  if (!status) return 'Add its seasons to your watchlist'
+  const rating = contentStore.getWatchlistRating(props.item._id)
+  const label = getWatchlistStatusLabel(status)
+  return rating != null ? `${label} · ${rating.toFixed(1)}` : label
+})
 const isOnWatchlist = computed(() => Boolean(watchlistItem.value) || props.inWatchlist)
 const watchlistStatusLabel = computed(() => getWatchlistStatusLabel(watchlistItem.value?.status))
 const submitLabel = computed(() => {
@@ -461,6 +483,18 @@ onBeforeUnmount(() => {
   border-radius: 3px;
   font-size: 0.7rem;
   font-weight: 500;
+}
+
+.hover-season-summary {
+  margin: auto 0 0;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
 }
 
 .hover-watchlist-btn {

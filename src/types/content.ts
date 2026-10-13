@@ -60,6 +60,8 @@ export interface UnifiedContent {
   why?: string
   /** Season rows: the series, season number, and label ("Season 2", "Stone Wars"). */
   seriesId?: string | null
+  /** Catalog lists: a series with season rows, tracked season by season. */
+  hasSeasons?: boolean
   seasonNumber?: number | null
   partNumber?: number | null
   seasonLabel?: string | null

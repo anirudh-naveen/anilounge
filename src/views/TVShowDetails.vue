@@ -360,14 +360,15 @@ const seriesSeasons = computed(() => {
   return cards.length > 1 && !singleSeason.value ? cards : []
 })
 /**
- * Row the watchlist panel edits: the title on screen, or for a one-season series that
- * is tracked through its season's own row (as imports and season pages save it), that row.
+ * Row the watchlist panel edits: the title on screen, or for a one-season series its
+ * season's own row (only seasons are added to watchlists). A series already on the
+ * list from before keeps its row.
  */
 const watchlistTargetId = computed(() => {
   const id = show.value?._id || ''
   const seasonId = singleSeason.value ? seasons.value[0]?.contentId : undefined
   if (!seasonId || seasonId === id || contentStore.isInWatchlist(id)) return id
-  return contentStore.isInWatchlist(seasonId) ? seasonId : id
+  return seasonId
 })
 /** Guide number of the first season, shown until another season is picked. */
 const firstSeason = computed(() => seasons.value[0]?.seasonNumber ?? null)

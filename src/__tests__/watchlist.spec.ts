@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  averageSeasonRating,
   getWatchlistStatusLabel,
+  summarizeSeasonStatuses,
   watchedEpisodes,
   WATCHLIST_STATUS_FILTER_OPTIONS,
   WATCHLIST_TYPE_FILTER_OPTIONS,
@@ -44,11 +46,35 @@ describe('watchedEpisodes', () => {
 })
 
 describe('watchlist type filters', () => {
-  it('offers All, Movies, and Series chips that sort titles by kind', () => {
-    expect(WATCHLIST_TYPE_FILTER_OPTIONS.map((opt) => opt.value)).toEqual(['all', 'movie', 'tv'])
+  it('offers All, Movies, Series, and Seasons chips that sort titles by kind', () => {
+    expect(WATCHLIST_TYPE_FILTER_OPTIONS.map((opt) => opt.value)).toEqual([
+      'all',
+      'movie',
+      'series',
+      'season',
+    ])
     expect(matchesContentTypeFilter('movie', 'movie')).toBe(true)
     expect(matchesContentTypeFilter('tv', 'movie')).toBe(false)
     expect(matchesContentTypeFilter('season', 'tv')).toBe(true)
+    expect(matchesContentTypeFilter('tv', 'series')).toBe(true)
+    expect(matchesContentTypeFilter('season', 'series')).toBe(false)
+    expect(matchesContentTypeFilter('season', 'season')).toBe(true)
+    expect(matchesContentTypeFilter('tv', 'season')).toBe(false)
     expect(matchesContentTypeFilter('movie', 'all')).toBe(true)
+  })
+})
+
+describe('series summed up from their seasons', () => {
+  it('is completed only once every season is', () => {
+    expect(summarizeSeasonStatuses(['completed', 'completed'], 2)).toBe('completed')
+    expect(summarizeSeasonStatuses(['completed'], 3)).toBe('watching')
+    expect(summarizeSeasonStatuses(['completed', 'on_hold'])).toBe('on_hold')
+    expect(summarizeSeasonStatuses([], 2)).toBeUndefined()
+  })
+
+  it('rates a series as the average of its rated seasons', () => {
+    expect(averageSeasonRating([8, 9, undefined, null])).toBe(8.5)
+    expect(averageSeasonRating([7, 8, 8])).toBe(7.7)
+    expect(averageSeasonRating([undefined])).toBeUndefined()
   })
 })
