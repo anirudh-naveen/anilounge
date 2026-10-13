@@ -503,6 +503,7 @@ import {
   type WatchlistStatus,
   matchesStatusChips,
   matchesTypeChips,
+  readTypeChips,
   type WatchlistTypeChoice,
 } from '@/utils/watchlist'
 import WatchlistFilters from '@/components/WatchlistFilters.vue'
@@ -528,13 +529,42 @@ const isPhone =
     : false
 const searchQuery = ref('')
 const statusFilter = ref<WatchlistStatus[]>([])
-const typeFilter = ref<WatchlistTypeChoice[]>([])
-const sortBy = ref<SortByOption>('rating')
-const sortDirection = ref<SortDirection>('desc')
 /** "Relevance" here is recency: the order titles were last updated. */
 const WATCHLIST_SORT_OPTIONS = DEFAULT_SORT_OPTIONS.map((option) =>
   option.value === 'relevance' ? { ...option, label: 'Updated' } : option,
 )
+
+/** Type chips and sort, remembered per browser. */
+const VIEW_KEY = 'anilounge:watchlist-view'
+const readView = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VIEW_KEY) || '{}') || {}
+    return {
+      types: readTypeChips(saved.types),
+      sortBy: WATCHLIST_SORT_OPTIONS.some((option) => option.value === saved.sortBy)
+        ? (saved.sortBy as SortByOption)
+        : 'rating',
+      sortDirection: (saved.sortDirection === 'asc' ? 'asc' : 'desc') as SortDirection,
+    }
+  } catch {
+    return {
+      types: readTypeChips(undefined),
+      sortBy: 'rating' as SortByOption,
+      sortDirection: 'desc' as SortDirection,
+    }
+  }
+}
+const savedView = readView()
+const typeFilter = ref<WatchlistTypeChoice[]>(savedView.types)
+const sortBy = ref<SortByOption>(savedView.sortBy)
+const sortDirection = ref<SortDirection>(savedView.sortDirection)
+watch([typeFilter, sortBy, sortDirection], ([types, by, direction]) => {
+  try {
+    localStorage.setItem(VIEW_KEY, JSON.stringify({ types, sortBy: by, sortDirection: direction }))
+  } catch {
+    // Storage unavailable: the choice lasts until the page reloads.
+  }
+})
 
 /** Collapsed status sections, remembered per browser. */
 const COLLAPSED_KEY = 'anilounge:watchlist-collapsed'

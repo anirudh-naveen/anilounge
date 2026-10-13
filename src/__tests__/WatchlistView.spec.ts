@@ -118,17 +118,20 @@ describe('Watchlist status sections', () => {
     const wrapper = await mountPage()
     const titles = () => wrapper.findAll('.item-title').map((title) => title.text())
 
-    await wrapper.get('[data-testid="watchlist-filter-type-movie"]').trigger('click')
+    // Movies and Series start picked; unpicking Series leaves the movie.
+    expect(titles()).toEqual(['Frieren', 'Spirited Away'])
+    await wrapper.get('[data-testid="watchlist-filter-type-series"]').trigger('click')
     expect(titles()).toEqual(['Spirited Away'])
     expect(wrapper.get('[data-testid="watchlist-filter-status-watching"]').text()).toContain('0')
 
-    // Chips of a row add up: Movies and Series together, then Series alone.
+    // The last picked chip stays picked.
+    await wrapper.get('[data-testid="watchlist-filter-type-movie"]').trigger('click')
+    expect(titles()).toEqual(['Spirited Away'])
+
     await wrapper.get('[data-testid="watchlist-filter-type-series"]').trigger('click')
     expect(titles()).toEqual(['Frieren', 'Spirited Away'])
-    await wrapper.get('[data-testid="watchlist-filter-type-movie"]').trigger('click')
-    expect(titles()).toEqual(['Frieren'])
+    expect(wrapper.find('[data-testid="watchlist-filter-type-all"]').exists()).toBe(false)
 
-    await wrapper.get('[data-testid="watchlist-filter-type-all"]').trigger('click')
     await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
     expect(titles()).toEqual(['Spirited Away'])
     expect(wrapper.findAll('.section-header').map((header) => header.text())).toEqual([
@@ -142,6 +145,34 @@ describe('Watchlist status sections', () => {
     await wrapper.get('[data-testid="watchlist-filter-status-dropped"]').trigger('click')
     expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
       'No titles match these filters.',
+    )
+  })
+
+  it('remembers the type chips and sort, defaulting to Movies, Series, and rating', async () => {
+    const wrapper = await mountPage()
+    const select = wrapper.get('.watchlist-toolbar .sort-select')
+    expect((select.element as HTMLSelectElement).value).toBe('rating')
+    expect(wrapper.get('[data-testid="watchlist-filter-type-season"]').classes()).not.toContain(
+      'active',
+    )
+
+    await wrapper.get('[data-testid="watchlist-filter-type-season"]').trigger('click')
+    await select.setValue('alphabetical')
+    expect(JSON.parse(localStorage.getItem('anilounge:watchlist-view') || '{}')).toEqual({
+      types: ['movie', 'season'],
+      sortBy: 'alphabetical',
+      sortDirection: 'desc',
+    })
+
+    const reopened = await mountPage()
+    expect(
+      (reopened.get('.watchlist-toolbar .sort-select').element as HTMLSelectElement).value,
+    ).toBe('alphabetical')
+    expect(reopened.get('[data-testid="watchlist-filter-type-season"]').classes()).toContain(
+      'active',
+    )
+    expect(reopened.get('[data-testid="watchlist-filter-type-series"]').classes()).not.toContain(
+      'active',
     )
   })
 
