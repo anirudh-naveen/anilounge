@@ -62,6 +62,8 @@ export interface UnifiedContent {
   seriesId?: string | null
   /** Catalog lists: a series with season rows, tracked season by season. */
   hasSeasons?: boolean
+  /** Catalog lists: a series' only season row, which its card stands for. */
+  soleSeasonId?: string | null
   seasonNumber?: number | null
   partNumber?: number | null
   seasonLabel?: string | null

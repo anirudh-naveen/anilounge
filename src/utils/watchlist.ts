@@ -22,31 +22,40 @@ export const getWatchlistStatusLabel = (status?: string) => {
 }
 
 /** Order a series' season statuses are summed up in: the first one any season has wins. */
-const SERIES_STATUS_ORDER: WatchlistStatus[] = [
-  'watching',
-  'on_hold',
-  'plan_to_watch',
-  'completed',
-  'dropped',
-]
+/** One tracked season, as a series' status is summed up from it. */
+export interface SeasonStatus {
+  status: WatchlistStatus
+  /** The series' first season (a plan for a later one means the earlier ones are underway). */
+  first: boolean
+}
 
 /**
- * One status for a series tracked season by season: Completed only when every season
- * is (Watching while some are done and others are not on the list yet), otherwise the
- * most active status any season has.
- * @param statuses - The tracked seasons' statuses.
+ * One status for a series tracked season by season (the server keeps a series' own
+ * watchlist row in step the same way: services/watchlistWrites.js `syncSeriesFromSeasons`):
+ * 1. Completed once every season is (when the count is unknown, every tracked one).
+ * 2. Watching while any season is being watched.
+ * 3. Dropped, then On hold, when any season is.
+ * 4. Watching when some seasons are done and others are not.
+ * 5. Planned when the first season is planned; a plan for a later season alone is Watching.
+ * @param seasons - The tracked seasons' statuses.
  * @param totalSeasons - How many seasons the series has; when unknown, only tracked ones count.
  * @returns The summary, or undefined when no season is tracked.
  */
 export const summarizeSeasonStatuses = (
-  statuses: WatchlistStatus[],
+  seasons: SeasonStatus[],
   totalSeasons?: number,
 ): WatchlistStatus | undefined => {
-  if (!statuses.length) return undefined
-  if (statuses.every((status) => status === 'completed')) {
-    return totalSeasons && statuses.length < totalSeasons ? 'watching' : 'completed'
+  if (!seasons.length) return undefined
+  const has = (status: WatchlistStatus) => seasons.some((season) => season.status === status)
+  if (seasons.every((season) => season.status === 'completed')) {
+    return totalSeasons && seasons.length < totalSeasons ? 'watching' : 'completed'
   }
-  return SERIES_STATUS_ORDER.find((status) => status !== 'completed' && statuses.includes(status))
+  if (has('watching')) return 'watching'
+  if (has('dropped')) return 'dropped'
+  if (has('on_hold')) return 'on_hold'
+  if (has('completed')) return 'watching'
+  const firstPlanned = seasons.some((season) => season.first && season.status === 'plan_to_watch')
+  return firstPlanned ? 'plan_to_watch' : 'watching'
 }
 
 /**

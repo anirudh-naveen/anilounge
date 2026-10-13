@@ -33,7 +33,13 @@ describe('computeProfileStats', () => {
   const stats = computeProfileStats(
     [
       { status: 'completed', rating: 9, updatedAt: '2026-09-02', content: movie },
-      { status: 'watching', currentEpisode: 5, rating: 7, updatedAt: '2026-03-10', content: series },
+      {
+        status: 'watching',
+        currentEpisode: 5,
+        rating: 7,
+        updatedAt: '2026-03-10',
+        content: series,
+      },
       { status: 'plan_to_watch', updatedAt: '2026-09-01', content: series },
       { status: 'completed', updatedAt: '2024-01-01', content: movie },
       { status: 'completed', content: 'unpopulated-id' },
@@ -122,5 +128,22 @@ describe('computeProfileStats', () => {
         ['Action', 1],
       ],
     )
+  })
+})
+
+describe('computeProfileStats with a series and its seasons', () => {
+  it("counts a series' episodes once, through its seasons", () => {
+    const show = { _id: 'show', contentType: 'tv', episodeCount: 24, genres: [] }
+    const season = (id) => ({ _id: id, contentType: 'season', seriesId: 'show', episodeCount: 12 })
+    const { totals } = computeProfileStats(
+      [
+        { status: 'completed', content: show },
+        { status: 'completed', content: season('s1') },
+        { status: 'completed', content: season('s2') },
+      ],
+      now,
+    )
+    assert.equal(totals.episodesWatched, 24)
+    assert.equal(totals.minutesWatched, 24 * DEFAULT_EPISODE_MINUTES)
   })
 })

@@ -2,6 +2,7 @@
  * Watchlist row mutations shared by the watchlist endpoints and AniList sync:
  * episode moves, list dates, and keeping ratings and title aggregates in step.
  */
+import { query } from '../../config/postgres.js'
 import { kindFromContentType } from '../db/kinds.js'
 import { rollUpSeriesOf } from './seriesStructure.js'
 import { saveUnifiedScores } from '../models/Content.js'
@@ -159,4 +160,80 @@ export async function applyContentRatingChange(content, oldRating, newRating) {
   const kind = kindFromContentType(content.contentType)
   await saveUnifiedScores([{ id: String(content._id), kind, score: content.unifiedScore ?? null }])
   if (kind === 'season') await rollUpSeriesOf(String(content._id))
+}
+
+/**
+ * Keep series rows on watchlists in step with their seasons' rows, the way the site sums
+ * a series up (src/utils/watchlist.ts `summarizeSeasonStatuses`):
+ * 1. Completed once every one of its seasons is.
+ * 2. Watching while any season is being watched.
+ * 3. Dropped, then On hold, when any season is.
+ * 4. Watching when some seasons are done and others are not.
+ * 5. Planned when the first season is planned; a plan for a later season alone is Watching.
+ * Series aren't added to watchlists any more (seasons are), so this only moves rows saved
+ * before that.
+ *
+ * @param {{ userId?: string|null, seasonId?: string|null, dryRun?: boolean }} [scope] - One
+ *   user, and/or the series of one season; every watchlist when omitted (the backfill).
+ *   `dryRun` counts the rows without changing them.
+ * @returns {Promise<number>} Series rows changed (or that would change).
+ */
+export async function syncSeriesFromSeasons({
+  userId = null,
+  seasonId = null,
+  dryRun = false,
+} = {}) {
+  const targets = `WITH tracked AS (
+       SELECT w.user_id, sn.series_id,
+              count(*) AS listed,
+              count(*) FILTER (WHERE w.status = 'completed') AS done,
+              bool_or(w.status = 'watching') AS watching,
+              bool_or(w.status = 'dropped') AS dropped,
+              bool_or(w.status = 'on_hold') AS on_hold,
+              bool_or(w.status = 'plan_to_watch' AND sn.content_id = (
+                SELECT x.content_id FROM seasons x WHERE x.series_id = sn.series_id
+                ORDER BY x.season_number, x.part_number LIMIT 1
+              )) AS first_planned
+       FROM watchlist w
+       JOIN seasons sn ON sn.content_id = w.content_id
+       WHERE ($1::uuid IS NULL OR w.user_id = $1)
+         AND ($2::uuid IS NULL OR sn.series_id = (SELECT series_id FROM seasons WHERE content_id = $2))
+       GROUP BY w.user_id, sn.series_id
+     ),
+     target AS (
+       SELECT t.user_id, t.series_id,
+              CASE WHEN t.done = t.listed
+                     AND t.listed >= (SELECT count(*) FROM seasons x WHERE x.series_id = t.series_id)
+                     THEN 'completed'
+                   WHEN t.watching THEN 'watching'
+                   WHEN t.dropped THEN 'dropped'
+                   WHEN t.on_hold THEN 'on_hold'
+                   WHEN t.done > 0 THEN 'watching'
+                   WHEN t.first_planned THEN 'plan_to_watch'
+                   ELSE 'watching' END AS status
+       FROM tracked t
+     )`
+  const matches = `t.status IS NOT NULL AND w.user_id = t.user_id AND w.content_id = t.series_id
+       AND w.status <> t.status`
+  if (dryRun) {
+    const { rows } = await query(
+      `${targets} SELECT count(*)::int AS n FROM watchlist w, target t WHERE ${matches}`,
+      [userId, seasonId],
+    )
+    return rows[0]?.n || 0
+  }
+  const { rowCount } = await query(
+    `${targets}
+     UPDATE watchlist w SET
+       status = t.status,
+       completed_on = CASE WHEN t.status = 'completed' THEN COALESCE(w.completed_on, CURRENT_DATE)
+                           ELSE w.completed_on END,
+       started_on = CASE WHEN t.status = 'plan_to_watch' THEN w.started_on
+                         ELSE COALESCE(w.started_on, CURRENT_DATE) END,
+       updated_at = now()
+     FROM target t
+     WHERE ${matches}`,
+    [userId, seasonId],
+  )
+  return rowCount
 }

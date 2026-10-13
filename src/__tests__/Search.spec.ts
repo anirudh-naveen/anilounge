@@ -352,6 +352,57 @@ describe('Search browse rails', () => {
   })
 })
 
+describe('Search series and seasons modes', () => {
+  beforeEach(() => {
+    window.scrollTo = vi.fn()
+  })
+
+  const catalog = [
+    { _id: 'aot', title: 'Attack on Titan', contentType: 'tv', genres: [] },
+    {
+      _id: 'aot-1',
+      title: 'Attack on Titan S1',
+      contentType: 'season',
+      seriesId: 'aot',
+      genres: [],
+    },
+    {
+      _id: 'aot-2',
+      title: 'Attack on Titan S2',
+      contentType: 'season',
+      seriesId: 'aot',
+      genres: [],
+    },
+    { _id: 'fr', title: 'Frieren', contentType: 'tv', genres: [] },
+    { _id: 'fr-1', title: 'Frieren Season', contentType: 'season', seriesId: 'fr', genres: [] },
+  ] as unknown as UnifiedContent[]
+
+  const searchTitles = async (path: string) => {
+    const { wrapper, store } = await mountPage(path)
+    store.allContent = catalog
+    vi.spyOn(store, 'searchContent').mockImplementation(async () => {
+      store.searchResults = catalog
+      return { success: true, data: { content: catalog, pagination: store.pagination } }
+    })
+    await wrapper.get('[data-testid="search-query"]').setValue('a')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    return { wrapper, titles: () => wrapper.findAll('.result-title').map((t) => t.text()) }
+  }
+
+  it('lists series, with a one-season series only as the series', async () => {
+    const { titles } = await searchTitles('/search?type=tv')
+    expect(titles()).toEqual(['Attack on Titan', 'Frieren'])
+  })
+
+  it('lists seasons in Seasons mode, keeping a one-season series as the series', async () => {
+    const { wrapper, titles } = await searchTitles('/search?type=tv')
+    await wrapper.get('[data-testid="tv-view-seasons"]').trigger('click')
+    await flushPromises()
+    expect(titles()).toEqual(['Attack on Titan S1', 'Attack on Titan S2', 'Frieren'])
+  })
+})
+
 describe('content store search', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

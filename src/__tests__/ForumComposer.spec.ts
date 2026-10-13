@@ -28,6 +28,7 @@ vi.mock('@/stores/content', () => ({
   useContentStore: () => ({
     loadWatchlist: vi.fn(),
     getWatchlistItem: (id: string) => watchlist.items.get(id),
+    getWatchlistRating: (id: string) => watchlist.items.get(id)?.rating,
     addToWatchlist: (...args: unknown[]) => watchlist.add(...args),
     updateWatchlistItem: (...args: unknown[]) => watchlist.update(...args),
   }),
@@ -146,7 +147,21 @@ describe('ForumComposer', () => {
     await withSeries.get('form').trigger('submit')
     await flushPromises()
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: 'review', score: 8.5 }))
-    expect(watchlist.add).toHaveBeenCalledWith('s1', 'completed', 8.5)
+    // A series goes on the list season by season, so its review adds nothing.
+    expect(watchlist.add).not.toHaveBeenCalled()
+
+    const withSeason = mount(ForumComposer, {
+      props: {
+        presetTags: [{ ...series, contentId: 's1-1', kind: 'season' }],
+        presetKind: 'review',
+      },
+    })
+    await withSeason.get('[data-testid="composer-title"]').setValue('Great')
+    await withSeason.get('[data-testid="composer-body"]').setValue('Loved it')
+    await withSeason.get('[data-testid="composer-score"]').setValue('8.5')
+    await withSeason.get('form').trigger('submit')
+    await flushPromises()
+    expect(watchlist.add).toHaveBeenCalledWith('s1-1', 'completed', 8.5)
   })
 
   it('starts from the watchlist rating and writes changes back', async () => {

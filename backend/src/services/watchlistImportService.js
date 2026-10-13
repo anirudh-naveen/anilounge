@@ -25,6 +25,7 @@ import { anilistRequest, fetchAnilistMediaBatch } from './anilistService.js'
 import { addAnilistTitle } from './anilistImport.js'
 import { writeImportedHistory } from './watchEvents.js'
 import { rollUpSeriesOf } from './seriesStructure.js'
+import { syncSeriesFromSeasons } from './watchlistWrites.js'
 import { calculateUnifiedScore } from '../utils/ratings.js'
 import { HttpError } from '../utils/httpError.js'
 import {
@@ -45,7 +46,6 @@ const MAX_NOTE_LENGTH = 500
 /** Finished jobs stay readable this long, and a new import waits this long after one. */
 const JOB_TTL_MS = 60 * 60 * 1000
 const IMPORT_COOLDOWN_MS = 60 * 1000
-
 
 /**
  * A request the user can fix (bad username, private list, unreadable file).
@@ -466,7 +466,10 @@ async function fetchMalPages(who, headers, explain) {
   while (url) {
     const { status, body } = await fetchJson(url, { headers })
     if (status !== 200 || !body) {
-      throw explain(status) || new ImportError("MyAnimeList didn't answer. Try again in a few minutes.", 502)
+      throw (
+        explain(status) ||
+        new ImportError("MyAnimeList didn't answer. Try again in a few minutes.", 502)
+      )
     }
     for (const item of body.data || []) {
       const entry = mapMalApiEntry(item)
@@ -524,7 +527,8 @@ async function fetchTmdbPages(path, sessionId) {
     const { status, body } = await fetchJson(
       `${TMDB_API}${path}?api_key=${tmdbKey()}&session_id=${encodeURIComponent(sessionId)}&page=${page}`,
     )
-    if (status === 401) throw new ImportError('Your TMDB sign-in expired. Reconnect TMDB.', RECONNECT_STATUS)
+    if (status === 401)
+      throw new ImportError('Your TMDB sign-in expired. Reconnect TMDB.', RECONNECT_STATUS)
     if (status !== 200 || !body)
       throw new ImportError("TMDB didn't answer. Try again in a few minutes.", 502)
     results.push(...(body.results || []))
@@ -578,7 +582,10 @@ export async function fetchConnectedList(userId, provider) {
     case 'mal':
       return fetchMalPages('@me', { Authorization: `Bearer ${token}` }, (status) =>
         status === 401
-          ? new ImportError('Your MyAnimeList sign-in expired. Reconnect MyAnimeList.', RECONNECT_STATUS)
+          ? new ImportError(
+              'Your MyAnimeList sign-in expired. Reconnect MyAnimeList.',
+              RECONNECT_STATUS,
+            )
           : null,
       )
     case 'tmdb':
@@ -623,6 +630,74 @@ async function loadCatalogTitles(entries) {
     tmdbId: row.tmdb_id,
     episodeCount: row.episode_count != null ? Number(row.episode_count) : null,
   }))
+}
+
+/**
+ * Season rows of the given series, in guide order, as catalog titles.
+ * @param {string[]} seriesIds
+ * @returns {Promise<Map<string, CatalogTitle[]>>}
+ */
+async function loadSeasonsOf(seriesIds) {
+  const bySeries = new Map()
+  if (!seriesIds.length) return bySeries
+  const { rows } = await query(
+    `SELECT w.id::text AS id, w.series_id::text AS series_id, w.mal_id, w.anilist_id, w.tmdb_id,
+            w.episode_count
+     FROM works w
+     WHERE w.series_id = ANY($1::uuid[])
+     ORDER BY w.series_id, w.season_number, w.part_number`,
+    [seriesIds],
+  )
+  for (const row of rows) {
+    const seasons = bySeries.get(row.series_id) || []
+    seasons.push({
+      id: row.id,
+      kind: 'season',
+      malId: row.mal_id,
+      anilistId: row.anilist_id,
+      tmdbId: row.tmdb_id,
+      episodeCount: row.episode_count != null ? Number(row.episode_count) : null,
+    })
+    bySeries.set(row.series_id, seasons)
+  }
+  return bySeries
+}
+
+/**
+ * Watchlists hold seasons, not series that have them. An entry matched to such a series
+ * (a TMDB show) goes onto its seasons instead: its watched episodes complete the seasons
+ * they cover in order, and the season they stop in takes the entry's status and the
+ * rest of the progress. A completed show completes every season; a planned one plans
+ * the first.
+ * @param {Array<{ entry: ImportEntry, title: CatalogTitle }>} matched
+ * @param {Map<string, CatalogTitle[]>} seasonsBySeries - From `loadSeasonsOf`.
+ * @returns {Array<{ entry: ImportEntry, title: CatalogTitle }>}
+ */
+export function spreadSeriesMatches(matched, seasonsBySeries) {
+  return matched.flatMap((pair) => {
+    const seasons = pair.title.kind === 'series' ? seasonsBySeries.get(pair.title.id) : null
+    if (!seasons?.length) return [pair]
+    const { entry } = pair
+    if (entry.status === 'completed') {
+      return seasons.map((title) => ({
+        entry: { ...entry, progress: title.episodeCount || 0 },
+        title,
+      }))
+    }
+    const out = []
+    let left = entry.progress || 0
+    for (const title of seasons) {
+      const episodes = title.episodeCount || 0
+      if (entry.status !== 'plan_to_watch' && episodes && left >= episodes) {
+        out.push({ entry: { ...entry, status: 'completed', progress: episodes }, title })
+        left -= episodes
+        continue
+      }
+      out.push({ entry: { ...entry, progress: left }, title })
+      break
+    }
+    return out
+  })
 }
 
 /**
@@ -1116,6 +1191,10 @@ export async function importEntries(userId, entries, options = {}) {
   }
 
   onProgress('saving')
+  const seriesIds = [
+    ...new Set(matched.filter((p) => p.title.kind === 'series').map((p) => p.title.id)),
+  ]
+  matched = spreadSeriesMatches(matched, await loadSeasonsOf(seriesIds))
   const versionsByTitle = new Map()
   for (const { entry, title } of mergeByTitle(matched)) {
     const versions = versionsByTitle.get(title.id) || []
@@ -1146,6 +1225,9 @@ export async function importEntries(userId, entries, options = {}) {
     return [...added, ...filled]
   })
   await refreshScores(ratingIds)
+  await syncSeriesFromSeasons({ userId: String(userId) }).catch((error) =>
+    console.error('Series watchlist sync failed:', error.message),
+  )
 
   return {
     total: entries.length,
@@ -1259,6 +1341,9 @@ export async function resolveImportConflicts(userId, choices) {
     return rated
   })
   await refreshScores(ratingIds)
+  await syncSeriesFromSeasons({ userId: String(userId) }).catch((error) =>
+    console.error('Series watchlist sync failed:', error.message),
+  )
 
   const { rows: left } = await query(
     'SELECT count(*)::int AS count FROM watchlist_import_conflicts WHERE user_id = $1',
@@ -1388,7 +1473,8 @@ async function persistJob(job, { force = false } = {}) {
      ON CONFLICT (user_id) DO UPDATE SET job = EXCLUDED.job, updated_at = now()`,
     [job.userId, JSON.stringify(publicJob(job))],
   ).catch((error) => {
-    if (error.code !== '42P01') console.warn(`Watchlist import: progress not stored: ${error.message}`)
+    if (error.code !== '42P01')
+      console.warn(`Watchlist import: progress not stored: ${error.message}`)
   })
 }
 
@@ -1405,7 +1491,10 @@ async function storedJob(key) {
     )
     if (!rows[0]) return null
     const job = rows[0].job
-    if (job.state === 'running' && Date.now() - new Date(rows[0].updated_at).getTime() > STALE_JOB_MS) {
+    if (
+      job.state === 'running' &&
+      Date.now() - new Date(rows[0].updated_at).getTime() > STALE_JOB_MS
+    ) {
       return {
         ...job,
         state: 'failed',
