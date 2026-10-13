@@ -261,6 +261,7 @@
                 {{ getCardContentTypeDisplay(item.contentType) }}
               </div>
               <AiringBadge :content="item" variant="card" />
+              <WatchlistCardTag :content-id="item._id" />
             </div>
             <div class="result-info">
               <h3 class="result-title">{{ getDisplayTitle(item) }}</h3>
@@ -374,6 +375,7 @@ import type { UnifiedContent } from '@/types/content'
 import { usePageMeta } from '@/composables/usePageMeta'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
+import WatchlistCardTag from '@/components/WatchlistCardTag.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import ContentRail from '@/components/ContentRail.vue'
 import ChatLauncher from '@/components/ChatLauncher.vue'

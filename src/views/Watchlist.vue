@@ -9,39 +9,42 @@
 <template>
   <div class="watchlist-page">
     <div class="container">
-      <!-- Page Header -->
-      <div class="page-header">
-        <h1 class="page-title">Watchlist</h1>
-        <p class="page-subtitle">Track your animated content progress</p>
-      </div>
+      <!-- Header, filters, and toolbar (re-stacked on phones) -->
+      <div class="watchlist-top">
+        <!-- Page Header -->
+        <div class="page-header">
+          <h1 class="page-title">Watchlist</h1>
+          <p class="page-subtitle">Track your animated content progress</p>
+        </div>
 
-      <ImportReminder />
+        <ImportReminder />
 
-      <!-- Title: Status and Type Filters -->
-      <WatchlistFilters
-        v-if="contentStore.watchlist.length"
-        v-model:status="statusFilter"
-        v-model:type="typeFilter"
-        :rows="filterRows"
-        class="watchlist-filters-bar"
-      />
-
-      <!-- Toolbar -->
-      <div class="watchlist-toolbar">
-        <!-- Title: Backlog Mode -->
-        <BacklogModeToggle />
-        <!-- Title: Search -->
-        <ListSearch
-          v-model="searchQuery"
-          placeholder="Search your watchlist"
-          data-testid="watchlist-search"
+        <!-- Title: Status and Type Filters -->
+        <WatchlistFilters
+          v-if="contentStore.watchlist.length"
+          v-model:status="statusFilter"
+          v-model:type="typeFilter"
+          :rows="filterRows"
+          class="watchlist-filters-bar"
         />
-        <!-- Title: Sort -->
-        <SortByControls
-          v-model:sort-by="sortBy"
-          v-model:sort-direction="sortDirection"
-          :options="WATCHLIST_SORT_OPTIONS"
-        />
+
+        <!-- Toolbar -->
+        <div class="watchlist-toolbar">
+          <!-- Title: Backlog Mode -->
+          <BacklogModeToggle class="watchlist-backlog" />
+          <!-- Title: Search -->
+          <ListSearch
+            v-model="searchQuery"
+            placeholder="Search your watchlist"
+            data-testid="watchlist-search"
+          />
+          <!-- Title: Sort -->
+          <SortByControls
+            v-model:sort-by="sortBy"
+            v-model:sort-direction="sortDirection"
+            :options="WATCHLIST_SORT_OPTIONS"
+          />
+        </div>
       </div>
 
       <!-- List -->
@@ -1651,6 +1654,52 @@ onUnmounted(() => {
 .empty-state p {
   color: var(--text-secondary);
   margin-bottom: 2rem;
+}
+
+/* Phones: backlog mode sits under the header, then search, the filter chips, and sort. */
+@media (max-width: 600px) {
+  .watchlist-top {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .watchlist-top > .page-header,
+  .watchlist-top > .watchlist-filters-bar {
+    margin-bottom: 0;
+  }
+
+  .watchlist-toolbar {
+    display: contents;
+  }
+
+  .watchlist-backlog {
+    order: 1;
+    align-self: center;
+    margin-top: -0.35rem;
+  }
+
+  .watchlist-backlog :deep(.backlog-hint) {
+    left: 50%;
+    translate: -50% 0;
+  }
+
+  .watchlist-top > :deep(.import-reminder) {
+    order: 2;
+  }
+
+  .watchlist-toolbar :deep(.list-search) {
+    order: 3;
+  }
+
+  .watchlist-top > .watchlist-filters-bar {
+    order: 4;
+  }
+
+  .watchlist-toolbar :deep(.sort-by-controls) {
+    order: 5;
+  }
 }
 
 @media (max-width: 768px) {

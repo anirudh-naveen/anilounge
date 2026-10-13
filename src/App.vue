@@ -37,13 +37,20 @@
             </router-link>
             <router-link to="/forum" class="nav-link" aria-label="Forum" title="Forum">
               <span class="nav-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M5.5 16.5h.8l2.2 2.2V16.5H16A2.5 2.5 0 0 0 18.5 14V8A2.5 2.5 0 0 0 16 5.5H8A2.5 2.5 0 0 0 5.5 8v8.5Z"
+                    d="M4.5 3.5h10A1.5 1.5 0 0 1 16 5v7a1.5 1.5 0 0 1-1.5 1.5H9L5 17v-3.5h-.5A1.5 1.5 0 0 1 3 12V5a1.5 1.5 0 0 1 1.5-1.5Z"
                   />
-                  <path stroke-linecap="round" d="M9 9.5h6M9 12.5h4" />
+                  <path
+                    d="M16 8h3.5A1.5 1.5 0 0 1 21 9.5v7a1.5 1.5 0 0 1-1.5 1.5H19v3l-4-3H9.5A1.5 1.5 0 0 1 8 16.5v-3"
+                  />
                 </svg>
               </span>
               <span class="nav-text">Forum</span>
@@ -328,6 +335,7 @@ import { computed, onMounted, ref, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useFavoritesStore } from '@/stores/favorites'
+import { useContentStore } from '@/stores/content'
 import { useMessagesStore } from '@/stores/messages'
 import { useInboxStore } from '@/stores/inbox'
 import { useTheme } from '@/composables/useTheme'
@@ -360,6 +368,28 @@ const showDropdown = ref(false)
 const messagesStore = useMessagesStore()
 const inboxStore = useInboxStore()
 
+const contentStore = useContentStore()
+const favoritesStore = useFavoritesStore()
+
+/**
+ * Coming back to the tab or the iOS app after a while refetches the watchlist and
+ * favorites, so changes made on another device show on title pages and cards.
+ */
+const LISTS_STALE_MS = 30_000
+let hiddenAt = 0
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    hiddenAt = Date.now()
+    return
+  }
+  if (!authStore.isAuthenticated || !hiddenAt || Date.now() - hiddenAt < LISTS_STALE_MS) return
+  hiddenAt = 0
+  if (contentStore.watchlistLoaded) void contentStore.loadWatchlist(true)
+  if (favoritesStore.isLoaded) {
+    favoritesStore.load(true).catch((err) => console.error('Failed to refresh favorites:', err))
+  }
+}
+
 /** How often the profile-menu badges recheck unread messages, requests, and the inbox. */
 const UNREAD_POLL_MS = 60_000
 let unreadTimer: ReturnType<typeof setInterval> | undefined
@@ -370,6 +400,7 @@ onMounted(() => {
   authStore.restoreSession()
   // Close dropdown when clicking outside
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   unreadTimer = setInterval(() => {
     if (authStore.isAuthenticated && !document.hidden) {
       messagesStore.refresh()
@@ -395,6 +426,7 @@ watch(
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   clearInterval(unreadTimer)
 })
 
@@ -416,7 +448,7 @@ const handleClickOutside = (event: Event) => {
 const handleLogout = async () => {
   if (confirm('Are you sure you want to logout?')) {
     await authStore.logout()
-    useFavoritesStore().reset()
+    favoritesStore.reset()
     toast.success('Logged out successfully!')
     router.push('/')
     closeDropdown()

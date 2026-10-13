@@ -531,7 +531,7 @@ export const getWatchlist = async (req, res) => {
         path: 'watchlist.content',
         model: 'Content',
         select:
-          'title posterPath contentType releaseDate overview genres unifiedScore voteAverage voteCount malScore malScoredBy userRatingAverage userRatingCount episodeCount malEpisodes seasonCount malStatus broadcastDay broadcastTime nextEpisodeAirDate nextEpisodeNumber nextEpisodeSeason',
+          'title posterPath contentType releaseDate overview genres unifiedScore voteAverage voteCount malScore malScoredBy userRatingAverage userRatingCount episodeCount malEpisodes seasonCount malStatus broadcastDay broadcastTime nextEpisodeAirDate nextEpisodeNumber nextEpisodeSeason seriesId',
       })
       .lean()
 
