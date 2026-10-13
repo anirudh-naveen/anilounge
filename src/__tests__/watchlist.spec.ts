@@ -7,6 +7,8 @@ import {
   watchedEpisodes,
   WATCHLIST_STATUS_FILTER_OPTIONS,
   WATCHLIST_TYPE_FILTER_OPTIONS,
+  readTypeChips,
+  toggleTypeChip,
 } from '@/utils/watchlist'
 import { matchesContentTypeFilter } from '@/services/api'
 
@@ -47,9 +49,8 @@ describe('watchedEpisodes', () => {
 })
 
 describe('watchlist type filters', () => {
-  it('offers All, Movies, Series, and Seasons chips that sort titles by kind', () => {
+  it('offers Movies, Series, and Seasons chips that sort titles by kind', () => {
     expect(WATCHLIST_TYPE_FILTER_OPTIONS.map((opt) => opt.value)).toEqual([
-      'all',
       'movie',
       'series',
       'season',
@@ -62,6 +63,22 @@ describe('watchlist type filters', () => {
     expect(matchesContentTypeFilter('season', 'season')).toBe(true)
     expect(matchesContentTypeFilter('tv', 'season')).toBe(false)
     expect(matchesContentTypeFilter('movie', 'all')).toBe(true)
+  })
+
+  it('keeps Series and Seasons apart and never leaves no chip picked', () => {
+    expect(toggleTypeChip(['movie', 'series'], 'season')).toEqual(['movie', 'season'])
+    expect(toggleTypeChip(['season'], 'series')).toEqual(['series'])
+    expect(toggleTypeChip(['movie', 'series'], 'movie')).toEqual(['series'])
+    expect(toggleTypeChip(['series'], 'series')).toEqual(['series'])
+    expect(toggleTypeChip(['series'], 'movie')).toEqual(['series', 'movie'])
+  })
+
+  it('reads saved type chips, falling back to Movies and Series', () => {
+    expect(readTypeChips(undefined)).toEqual(['movie', 'series'])
+    expect(readTypeChips([])).toEqual(['movie', 'series'])
+    expect(readTypeChips(['all', 'bogus'])).toEqual(['movie', 'series'])
+    expect(readTypeChips(['season', 'movie'])).toEqual(['movie', 'season'])
+    expect(readTypeChips(['series', 'season'])).toEqual(['series'])
   })
 })
 

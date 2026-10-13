@@ -124,18 +124,41 @@ export function shouldShowImportReminder(
   return now.getTime() - created < IMPORT_REMINDER_DAYS * 24 * 60 * 60 * 1000
 }
 
-export type WatchlistTypeFilter = 'all' | 'movie' | 'series' | 'season'
+/** Type chips picked on a watchlist; values match `matchesContentTypeFilter`. */
+export type WatchlistTypeChoice = 'movie' | 'series' | 'season'
 
-/** Type chips on the watchlist and profile pages; values match `matchesContentTypeFilter`. */
-export const WATCHLIST_TYPE_FILTER_OPTIONS: { value: WatchlistTypeFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
+/** Type chips on the watchlist and profile pages (there is no All chip). */
+export const WATCHLIST_TYPE_FILTER_OPTIONS: { value: WatchlistTypeChoice; label: string }[] = [
   { value: 'movie', label: 'Movies' },
   { value: 'series', label: 'Series' },
   { value: 'season', label: 'Seasons' },
 ]
 
-/** Chips picked in one filter row; none picked means All. */
-export type WatchlistTypeChoice = Exclude<WatchlistTypeFilter, 'all'>
+/** Type chips picked until the user changes them: whole titles, not their seasons. */
+export const DEFAULT_WATCHLIST_TYPES: WatchlistTypeChoice[] = ['movie', 'series']
+
+/**
+ * Pick or unpick a type chip. Series and Seasons exclude each other (a season row is part
+ * of a series row), so picking one drops the other; the last picked chip can't be unpicked.
+ * @param picked - The picked type chips.
+ * @param value - The chip clicked.
+ */
+export function toggleTypeChip(picked: WatchlistTypeChoice[], value: WatchlistTypeChoice) {
+  if (picked.includes(value)) {
+    return picked.length > 1 ? picked.filter((v) => v !== value) : picked
+  }
+  const rival = value === 'series' ? 'season' : value === 'season' ? 'series' : null
+  return [...picked.filter((v) => v !== rival), value]
+}
+
+/** Saved type chips, keeping only known values and at most one of Series and Seasons. */
+export function readTypeChips(saved: unknown): WatchlistTypeChoice[] {
+  if (!Array.isArray(saved)) return [...DEFAULT_WATCHLIST_TYPES]
+  const known = WATCHLIST_TYPE_FILTER_OPTIONS.map((option) => option.value)
+  const picked = known.filter((value) => saved.includes(value))
+  const valid = picked.includes('series') ? picked.filter((v) => v !== 'season') : picked
+  return valid.length ? valid : [...DEFAULT_WATCHLIST_TYPES]
+}
 
 /**
  * Pick or unpick a chip in a multi-select filter row. All (or picking every chip) clears

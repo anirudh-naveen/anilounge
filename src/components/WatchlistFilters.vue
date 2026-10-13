@@ -1,9 +1,10 @@
 <!--
   WatchlistFilters.vue — status and type filter chips for a watchlist (component).
 
-  Two rows of pill chips: status (All, Planned, Watching, …) and type (All, Movies,
-  Series, Seasons), split by a thin line. Several chips of a row can be picked together
-  (Movies and Series, Planned and On hold); All clears the row. Each chip shows how many
+  Two rows of pill chips: status (All, Planned, Watching, …) and type (Movies, Series,
+  Seasons), split by a thin line. Several chips of a row can be picked together
+  (Movies and Series, Planned and On hold); All clears the status row. Series and Seasons
+  exclude each other, and at least one type chip stays picked. Each chip shows how many
   rows it alone would leave, given the other row's choice. Used on the Watchlist page and the profile Watchlist tab; the
   active chip color comes from `--filter-accent` (coral by default).
 -->
@@ -30,10 +31,10 @@
         :key="option.value"
         type="button"
         class="filter-chip"
-        :class="{ active: isPicked(type, option.value) }"
-        :aria-pressed="isPicked(type, option.value)"
+        :class="{ active: type.includes(option.value) }"
+        :aria-pressed="type.includes(option.value)"
         :data-testid="`watchlist-filter-type-${option.value}`"
-        @click="type = toggleFilterChip(type, option.value, TYPE_VALUES)"
+        @click="type = toggleTypeChip(type, option.value)"
       >
         {{ option.label }} <span class="chip-count">{{ option.count }}</span>
       </button>
@@ -50,6 +51,7 @@ import {
   matchesStatusChips,
   matchesTypeChips,
   toggleFilterChip,
+  toggleTypeChip,
   type WatchlistStatus,
   type WatchlistTypeChoice,
 } from '@/utils/watchlist'
@@ -59,14 +61,11 @@ const props = defineProps<{
   rows: { status: string; contentType?: string }[]
 }>()
 
-/** Picked chips per row; empty means All. */
+/** Picked chips per row; an empty status row means All. */
 const status = defineModel<WatchlistStatus[]>('status', { required: true })
 const type = defineModel<WatchlistTypeChoice[]>('type', { required: true })
 
 const STATUS_VALUES = WATCHLIST_STATUS_FILTER_OPTIONS.flatMap((option) =>
-  option.value === 'all' ? [] : [option.value],
-)
-const TYPE_VALUES = WATCHLIST_TYPE_FILTER_OPTIONS.flatMap((option) =>
   option.value === 'all' ? [] : [option.value],
 )
 

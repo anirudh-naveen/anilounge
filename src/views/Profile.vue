@@ -645,6 +645,7 @@ import {
   getWatchlistStatusLabel,
   matchesStatusChips,
   matchesTypeChips,
+  DEFAULT_WATCHLIST_TYPES,
   type WatchlistStatus,
   type WatchlistTypeChoice,
 } from '@/utils/watchlist'
@@ -693,7 +694,7 @@ const profile = ref<PublicProfile | null>(null)
 const isLoading = ref(true)
 const activeTab = ref<ProfileTab>('favorites')
 const watchlistFilter = ref<WatchlistStatus[]>([])
-const watchlistTypeFilter = ref<WatchlistTypeChoice[]>([])
+const watchlistTypeFilter = ref<WatchlistTypeChoice[]>([...DEFAULT_WATCHLIST_TYPES])
 const watchlistQuery = ref('')
 const watchlistSortBy = ref<SortByOption>('relevance')
 const watchlistSortDirection = ref<SortDirection>('desc')
