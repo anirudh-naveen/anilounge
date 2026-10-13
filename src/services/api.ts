@@ -675,7 +675,7 @@ export const isCatalogEntity = (item?: { entityType?: string; contentType?: stri
 export const getCardContentTypeDisplay = getContentTypeDisplay
 
 /**
- * Whether an item matches a Movies/TV/All filter; `"movie"` includes specials.
+ * Whether an item matches a Movies/TV/Series/Season/All filter; `"movie"` includes specials.
  * @param itemType - The item's `contentType`.
  * @param filter - Active type filter (`all`, `movie`, `tv`, …).
  * @returns True when the item should appear under that filter.
@@ -684,8 +684,9 @@ export const matchesContentTypeFilter = (itemType: string | undefined, filter?: 
   if (!filter || filter === 'all') return true
   if (ENTITY_KINDS.has(itemType || '')) return false
   if (filter === 'movie') return isMovieLike(itemType)
-  // A season is a series' part: the TV filter keeps it.
+  // A season is a series' part: the TV filter keeps it. `series` is whole series only.
   if (filter === 'tv') return itemType === 'tv' || itemType === 'season'
+  if (filter === 'series') return itemType === 'tv'
   return itemType === filter
 }
 

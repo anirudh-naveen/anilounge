@@ -31,15 +31,35 @@ const SERIES_STATUS_ORDER: WatchlistStatus[] = [
 ]
 
 /**
- * One status for a series tracked season by season: Completed only when every tracked
- * season is, otherwise the most active status any season has.
+ * One status for a series tracked season by season: Completed only when every season
+ * is (Watching while some are done and others are not on the list yet), otherwise the
+ * most active status any season has.
  * @param statuses - The tracked seasons' statuses.
+ * @param totalSeasons - How many seasons the series has; when unknown, only tracked ones count.
  * @returns The summary, or undefined when no season is tracked.
  */
-export const summarizeSeasonStatuses = (statuses: WatchlistStatus[]) => {
+export const summarizeSeasonStatuses = (
+  statuses: WatchlistStatus[],
+  totalSeasons?: number,
+): WatchlistStatus | undefined => {
   if (!statuses.length) return undefined
-  if (statuses.every((status) => status === 'completed')) return 'completed'
+  if (statuses.every((status) => status === 'completed')) {
+    return totalSeasons && statuses.length < totalSeasons ? 'watching' : 'completed'
+  }
   return SERIES_STATUS_ORDER.find((status) => status !== 'completed' && statuses.includes(status))
+}
+
+/**
+ * A series' rating from its seasons: the average of the seasons the user rated, to the tenth.
+ * @param ratings - The tracked seasons' ratings (unrated ones are skipped).
+ * @returns The average, or undefined when no season is rated.
+ */
+export const averageSeasonRating = (ratings: (number | null | undefined)[]) => {
+  const rated = ratings.filter(
+    (rating): rating is number => typeof rating === 'number' && rating > 0,
+  )
+  if (!rated.length) return undefined
+  return Math.round((rated.reduce((sum, rating) => sum + rating, 0) / rated.length) * 10) / 10
 }
 
 /**
@@ -86,11 +106,12 @@ export function shouldShowImportReminder(
   return now.getTime() - created < IMPORT_REMINDER_DAYS * 24 * 60 * 60 * 1000
 }
 
-export type WatchlistTypeFilter = 'all' | 'movie' | 'tv'
+export type WatchlistTypeFilter = 'all' | 'movie' | 'series' | 'season'
 
 /** Type chips on the watchlist and profile pages; values match `matchesContentTypeFilter`. */
 export const WATCHLIST_TYPE_FILTER_OPTIONS: { value: WatchlistTypeFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'movie', label: 'Movies' },
-  { value: 'tv', label: 'Series' },
+  { value: 'series', label: 'Series' },
+  { value: 'season', label: 'Seasons' },
 ]

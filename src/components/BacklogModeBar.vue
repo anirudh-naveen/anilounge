@@ -8,10 +8,8 @@
 <template>
   <div v-if="active && authStore.isAuthenticated" class="backlog-bar" role="status">
     <div class="backlog-content">
-      <span class="backlog-badge">Backlog mode</span>
-      <span class="backlog-text"
-        >Watchlist saves will not count towards the date tracking for now .</span
-      >
+      <span class="backlog-badge">Backlog Mode</span>
+      <span class="backlog-text">Watchlist saves will not count towards the date tracking.</span>
       <button
         type="button"
         class="backlog-off"

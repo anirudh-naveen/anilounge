@@ -5,6 +5,9 @@ import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 const addToWatchlist = vi.fn().mockResolvedValue(true)
 const updateWatchlistItem = vi.fn().mockResolvedValue(true)
 const getWatchlistItem = vi.fn().mockReturnValue(undefined)
+const hasSeasonRows = vi.fn().mockReturnValue(false)
+const getWatchlistStatus = vi.fn().mockReturnValue(undefined)
+const getWatchlistRating = vi.fn().mockReturnValue(undefined)
 
 vi.mock('vue-toastification', () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
@@ -15,6 +18,9 @@ vi.mock('@/stores/content', () => ({
     addToWatchlist,
     updateWatchlistItem,
     getWatchlistItem,
+    hasSeasonRows,
+    getWatchlistStatus,
+    getWatchlistRating,
   }),
 }))
 
@@ -56,6 +62,26 @@ describe('ContentHoverPreview watchlist action', () => {
     updateWatchlistItem.mockClear()
     getWatchlistItem.mockReset()
     getWatchlistItem.mockReturnValue(undefined)
+    hasSeasonRows.mockReturnValue(false)
+    getWatchlistStatus.mockReturnValue(undefined)
+    getWatchlistRating.mockReturnValue(undefined)
+  })
+
+  it('offers no add button for a series tracked season by season', () => {
+    hasSeasonRows.mockReturnValue(true)
+    const wrapper = mountPreview()
+    expect(wrapper.find('[data-testid="hover-watchlist-btn"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="hover-season-summary"]').text()).toBe(
+      'Add its seasons to your watchlist',
+    )
+  })
+
+  it("sums up a series from its seasons' status and average rating", () => {
+    hasSeasonRows.mockReturnValue(true)
+    getWatchlistStatus.mockReturnValue('watching')
+    getWatchlistRating.mockReturnValue(8.5)
+    const wrapper = mountPreview()
+    expect(wrapper.get('[data-testid="hover-season-summary"]').text()).toBe('Watching · 8.5')
   })
 
   it('lets you add a title that is not on the watchlist', async () => {
