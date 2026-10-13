@@ -68,6 +68,7 @@
               {{ getCardContentTypeDisplay(item.contentType) }}
             </div>
             <AiringBadge :content="item" variant="card" />
+            <WatchlistCardTag :content-id="item._id" />
           </div>
           <div class="card-info">
             <h3 class="card-title">{{ getDisplayTitle(item) }}</h3>
@@ -139,6 +140,7 @@ import {
 import { useToast } from 'vue-toastification'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
+import WatchlistCardTag from '@/components/WatchlistCardTag.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import type { UnifiedContent } from '@/types/content'
 import { usePageMeta } from '@/composables/usePageMeta'

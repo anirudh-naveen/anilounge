@@ -9,7 +9,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { contentAPI, entityAPI, watchlistAPI, matchesContentTypeFilter } from '@/services/api'
 import type { WatchlistData, WatchlistItem } from '@/types'
-import type { WatchlistStatus } from '@/utils/watchlist'
+import { summarizeSeasonStatuses, type WatchlistStatus } from '@/utils/watchlist'
 import { isBacklogSave } from '@/composables/useBacklogMode'
 import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
@@ -595,6 +595,30 @@ export const useContentStore = defineStore('content', () => {
 
   const getWatchlistItem = computed(() => (contentId: string) => watchlistById.value.get(contentId))
 
+  /** Watchlist rows for seasons, by their series id. */
+  const seasonRowsBySeries = computed(() => {
+    const bySeries = new Map<string, WatchlistItem[]>()
+    for (const item of watchlist.value) {
+      const seriesId = typeof item.content === 'string' ? null : item.content?.seriesId
+      if (!seriesId) continue
+      bySeries.set(seriesId, [...(bySeries.get(seriesId) || []), item])
+    }
+    return bySeries
+  })
+
+  /**
+   * A title's watchlist status: its own row's, or for a series tracked season by
+   * season, a summary of its seasons' (so series pages and cards match the watchlist).
+   */
+  const getWatchlistStatus = computed(
+    () =>
+      (contentId: string): WatchlistStatus | undefined =>
+        watchlistById.value.get(contentId)?.status ??
+        summarizeSeasonStatuses(
+          (seasonRowsBySeries.value.get(contentId) || []).map((item) => item.status),
+        ),
+  )
+
   const savedScrollPositions = ref<Record<string, number>>({})
 
   /**
@@ -704,9 +728,11 @@ export const useContentStore = defineStore('content', () => {
     updateWatchlistItem,
     removeFromWatchlist,
     loadWatchlist,
+    watchlistLoaded,
 
     isInWatchlist,
     getWatchlistItem,
+    getWatchlistStatus,
 
     findContentById,
     cacheContent,

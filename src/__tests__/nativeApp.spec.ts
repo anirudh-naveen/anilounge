@@ -18,6 +18,8 @@ const widgetBridge = vi.hoisted(() => ({
     return Promise.resolve()
   }),
   reload: vi.fn(() => Promise.resolve()),
+  setTheme: vi.fn(() => Promise.resolve()),
+  setAppIcon: vi.fn(() => Promise.resolve({ changed: true })),
 }))
 vi.mock('@capacitor/core', () => ({
   Capacitor: { isNativePlatform: () => true },
@@ -218,6 +220,14 @@ describe('nativeApp (inside the iOS app)', () => {
     expect(revokeToken).toHaveBeenCalledWith('widget-secret')
     expect(widgetBridge.clearToken).toHaveBeenCalled()
     expect(widgetState.token).toBeNull()
+  })
+
+  it('tells the widgets and app icon about the theme', async () => {
+    const { setAppIconTheme, setWidgetTheme } = await import('@/utils/nativeApp')
+    setWidgetTheme('dusk')
+    setAppIconTheme('dusk')
+    expect(widgetBridge.setTheme).toHaveBeenCalledWith({ theme: 'dusk' })
+    expect(widgetBridge.setAppIcon).toHaveBeenCalledWith({ theme: 'dusk' })
   })
 
   it('hides donation links', async () => {

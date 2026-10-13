@@ -136,7 +136,7 @@
           !seriesSeasons.length ||
           contentStore.isInWatchlist(show._id)
         "
-        :content-id="show._id"
+        :content-id="watchlistTargetId"
         content-type="tv"
         :total-episodes="show.episodeCount || show.malEpisodes || 0"
         :total-seasons="show.contentType === 'season' ? 1 : show.seasonCount || 1"
@@ -244,9 +244,6 @@
       <WhereToWatch :content-id="show._id" />
       <TitleExtras :content="show" :sections="['trailer']" />
 
-      <!-- Title: Forum -->
-      <ForumHighlights :content-id="show._id" :name="getDisplayTitle(show)" reviewable />
-
       <!-- Title: Credits -->
       <StudioLinks :content="show" />
       <TitleExtras :content="show" :sections="['staff']" />
@@ -271,7 +268,6 @@ import WatchlistPanel from '@/components/WatchlistPanel.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import EpisodeRow from '@/components/EpisodeRow.vue'
 import EntityCastRow from '@/components/EntityCastRow.vue'
-import ForumHighlights from '@/components/ForumHighlights.vue'
 import StudioLinks from '@/components/StudioLinks.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
 import FranchiseLink from '@/components/FranchiseLink.vue'
@@ -362,6 +358,16 @@ const seriesSeasons = computed(() => {
   const series = loaded.value[seriesId.value]
   const cards = series?.contentType === 'tv' ? series.seasons || [] : []
   return cards.length > 1 && !singleSeason.value ? cards : []
+})
+/**
+ * Row the watchlist panel edits: the title on screen, or for a one-season series that
+ * is tracked through its season's own row (as imports and season pages save it), that row.
+ */
+const watchlistTargetId = computed(() => {
+  const id = show.value?._id || ''
+  const seasonId = singleSeason.value ? seasons.value[0]?.contentId : undefined
+  if (!seasonId || seasonId === id || contentStore.isInWatchlist(id)) return id
+  return contentStore.isInWatchlist(seasonId) ? seasonId : id
 })
 /** Guide number of the first season, shown until another season is picked. */
 const firstSeason = computed(() => seasons.value[0]?.seasonNumber ?? null)
