@@ -6,11 +6,32 @@
 -->
 <template>
   <div id="app" class="min-h-screen">
+    <!-- App layout: compact top bar (pages fill it through AppBar) and a bottom tab bar -->
+    <header v-if="isAppLayout && !bare" class="app-header" data-testid="app-header">
+      <div class="app-header-row">
+        <button
+          v-if="!appTab"
+          type="button"
+          class="app-back"
+          aria-label="Back"
+          data-testid="app-back"
+          @click="appGoBack"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m14.5 5-7 7 7 7" />
+          </svg>
+        </button>
+        <span v-if="appTitle" class="app-header-title">{{ appTitle }}</span>
+        <div id="app-bar" class="app-bar-slot"></div>
+      </div>
+    </header>
+    <AppTabBar v-if="isAppLayout && !bare && authStore.isAuthenticated" />
+
     <!-- Banner -->
-    <BetaBanner v-if="!bare" />
+    <BetaBanner v-if="!bare && !isAppLayout" />
 
     <!-- Navigation -->
-    <header v-if="!bare" class="header">
+    <header v-if="!bare && !isAppLayout" class="header">
       <div class="container">
         <div class="nav-content">
           <!-- Title: Logo -->
@@ -270,13 +291,16 @@
 
     <!-- Page -->
     <!-- Title: Router Outlet -->
-    <main class="main-content">
+    <main
+      class="main-content"
+      :class="{ 'app-main': isAppLayout, 'with-tab-bar': isAppLayout && authStore.isAuthenticated }"
+    >
       <router-view :key="viewKey" />
     </main>
 
     <!-- Footer -->
     <!-- Title: Copyright -->
-    <footer v-if="!bare" class="footer">
+    <footer v-if="!bare && !isAppLayout" class="footer">
       <div class="container">
         <!-- TMDB's API terms require this notice and their logo on the site. -->
         <p class="footer-attribution">
@@ -339,12 +363,15 @@ import { useContentStore } from '@/stores/content'
 import { useMessagesStore } from '@/stores/messages'
 import { useInboxStore } from '@/stores/inbox'
 import { useTheme } from '@/composables/useTheme'
-import { useToast } from 'vue-toastification'
+import { useSignOut } from '@/composables/useSignOut'
 import BetaBanner from '@/components/BetaBanner.vue'
 import BacklogModeBar from '@/components/BacklogModeBar.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { DONATE_URL } from '@/utils/donations'
-import { isNativeApp } from '@/utils/nativeApp'
+import AppTabBar from '@/components/AppTabBar.vue'
+import { isAppLayout, isNativeApp } from '@/utils/nativeApp'
+import { appTabFor } from '@/utils/appTabs'
+import { goBackOr } from '@/utils/navigation'
 
 const router = useRouter()
 const route = useRoute()
@@ -362,7 +389,16 @@ const viewKey = computed(() =>
   route.params.id ? `${String(route.name)}:${String(route.params.id)}` : route.path,
 )
 const authStore = useAuthStore()
-const toast = useToast()
+
+/** App layout: the open tab's root page, or null on pages that get a back button. */
+const appTab = computed(() => appTabFor(route))
+/** App layout: the top bar's title on pages that set `meta.appTitle`. */
+const appTitle = computed(() => (appTab.value ? '' : String(route.meta.appTitle ?? '')))
+const appGoBack = () =>
+  goBackOr(router, () => {
+    const from = route.query.from
+    router.push(typeof from === 'string' && from.startsWith('/') ? from : '/')
+  })
 
 const showDropdown = ref(false)
 const messagesStore = useMessagesStore()
@@ -445,14 +481,9 @@ const handleClickOutside = (event: Event) => {
   }
 }
 
+const signOut = useSignOut()
 const handleLogout = async () => {
-  if (confirm('Are you sure you want to logout?')) {
-    await authStore.logout()
-    favoritesStore.reset()
-    toast.success('Logged out successfully!')
-    router.push('/')
-    closeDropdown()
-  }
+  if (await signOut()) closeDropdown()
 }
 </script>
 
@@ -850,6 +881,83 @@ const handleLogout = async () => {
 .main-content {
   min-height: calc(100vh - 100px);
   padding: 2rem 0;
+}
+
+/* App layout */
+.app-header {
+  position: sticky;
+  top: var(--safe-top);
+  z-index: 100;
+  background: color-mix(in srgb, var(--navbar-primary) 92%, transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+}
+
+.app-header-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 54px;
+  padding: 8px calc(14px + var(--safe-right)) 8px calc(14px + var(--safe-left));
+}
+
+.app-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  margin-left: -6px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--coral-light);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-back:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.app-back svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Centered, like an iOS navigation title. */
+.app-header-title {
+  position: absolute;
+  left: 50%;
+  max-width: 55%;
+  transform: translateX(-50%);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #f7f8fa;
+  font-size: 1.02rem;
+  font-weight: 650;
+  pointer-events: none;
+}
+
+.app-bar-slot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.main-content.app-main {
+  min-height: calc(100vh - 54px - var(--safe-top));
+  padding: 0.85rem 0 1.5rem;
+}
+
+/* Room for the floating tab bar. */
+.main-content.app-main.with-tab-bar {
+  padding-bottom: calc(96px + var(--safe-bottom));
 }
 
 .footer {

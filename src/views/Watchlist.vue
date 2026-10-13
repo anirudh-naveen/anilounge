@@ -7,12 +7,105 @@
   row, and each row has a favorite heart.
 -->
 <template>
-  <div class="watchlist-page">
+  <div class="watchlist-page" :class="{ 'is-app': isAppLayout }">
+    <!-- App layout: search and the filter sheet live in the top bar -->
+    <AppBar>
+      <button
+        v-if="!appSearchOpen"
+        type="button"
+        class="view-summary"
+        data-testid="watchlist-view-summary"
+        @click="filterSheetOpen = true"
+      >
+        {{ viewSummary }}
+      </button>
+      <span v-if="!appSearchOpen" class="app-bar-spacer"></span>
+      <button
+        v-if="!appSearchOpen"
+        type="button"
+        role="switch"
+        class="app-bar-button"
+        :class="{ active: backlogActive }"
+        :aria-checked="backlogActive"
+        aria-label="Backlog Mode"
+        data-testid="backlog-mode-toggle"
+        @click="setBacklogActive(!backlogActive)"
+      >
+        <!-- Clock turning back: logging past watches. -->
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.9"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" />
+          <path d="M3.5 4.5v4h4" />
+          <path d="M12 8v4.25l2.75 1.75" />
+        </svg>
+      </button>
+      <AppSearchToggle
+        v-model="searchQuery"
+        v-model:expanded="appSearchOpen"
+        placeholder="Search your watchlist"
+        data-testid="watchlist-search"
+      />
+      <button
+        v-if="!appSearchOpen"
+        type="button"
+        class="app-bar-button"
+        :class="{ active: activeFilterCount > 0 }"
+        aria-label="Filter and sort"
+        data-testid="watchlist-filters-toggle"
+        @click="filterSheetOpen = true"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+          <path stroke-linecap="round" d="M4 7h16M7 12h10M10 17h4" />
+        </svg>
+        <span v-if="activeFilterCount" class="app-bar-badge">{{ activeFilterCount }}</span>
+      </button>
+    </AppBar>
+    <AppSheet
+      v-if="isAppLayout"
+      v-model:open="filterSheetOpen"
+      title="Filter & Sort"
+      reset-label="Reset"
+      :can-reset="activeFilterCount > 0"
+      @reset="resetView"
+    >
+      <AppSheetSection title="Status & type">
+        <WatchlistFilters
+          v-model:status="statusFilter"
+          v-model:type="typeFilter"
+          :rows="filterRows"
+          class="sheet-chips"
+        />
+      </AppSheetSection>
+      <AppSheetSection title="Sort">
+        <SortByControls
+          v-model:sort-by="sortBy"
+          v-model:sort-direction="sortDirection"
+          :options="WATCHLIST_SORT_OPTIONS"
+          class="sheet-sort"
+        />
+      </AppSheetSection>
+      <AppSheetSection title="Filters" plain>
+        <CatalogFilterPanel
+          v-model="panelFilters"
+          :year-options="yearFilterOptions"
+          rating-label="Community rating"
+          class="sheet-filter-panel"
+          @clear="panelFilters = defaultCatalogFilters()"
+        />
+      </AppSheetSection>
+    </AppSheet>
+
     <div class="container">
       <!-- Header, filters, and toolbar (re-stacked on phones) -->
       <div class="watchlist-top">
         <!-- Page Header -->
-        <div class="page-header">
+        <div v-if="!isAppLayout" class="page-header">
           <h1 class="page-title">Watchlist</h1>
           <p class="page-subtitle">Track your animated content progress</p>
         </div>
@@ -21,7 +114,7 @@
 
         <!-- Title: Status and Type Filters -->
         <WatchlistFilters
-          v-if="contentStore.watchlist.length"
+          v-if="contentStore.watchlist.length && !isAppLayout"
           v-model:status="statusFilter"
           v-model:type="typeFilter"
           :rows="filterRows"
@@ -29,7 +122,7 @@
         />
 
         <!-- Toolbar -->
-        <div class="watchlist-toolbar">
+        <div v-if="!isAppLayout" class="watchlist-toolbar">
           <!-- Title: Backlog Mode -->
           <BacklogModeToggle class="watchlist-backlog" />
           <!-- Title: Search -->
@@ -64,7 +157,7 @@
 
         <!-- Title: Filter Panel (same fields as Search) -->
         <CatalogFilterPanel
-          v-if="filtersOpen"
+          v-if="filtersOpen && !isAppLayout"
           id="watchlist-filters"
           v-model="panelFilters"
           :year-options="yearFilterOptions"
@@ -523,6 +616,7 @@ import {
 import { getDisplayTitle } from '@/utils/titles'
 import { buildYearFilterOptions, getSearchCategoryDate } from '@/utils/searchFilters'
 import {
+  DEFAULT_WATCHLIST_TYPES,
   getWatchlistStatusLabel,
   WATCHLIST_STATUS_OPTIONS,
   WATCHLIST_STATUS_ORDER,
@@ -547,6 +641,12 @@ import ListSearch from '@/components/ListSearch.vue'
 import BacklogModeToggle from '@/components/BacklogModeToggle.vue'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
 import { usePageTitle } from '@/composables/usePageMeta'
+import AppBar from '@/components/AppBar.vue'
+import AppSearchToggle from '@/components/AppSearchToggle.vue'
+import AppSheet from '@/components/AppSheet.vue'
+import AppSheetSection from '@/components/AppSheetSection.vue'
+import { isAppLayout } from '@/utils/nativeApp'
+import { useBacklogMode } from '@/composables/useBacklogMode'
 
 usePageTitle('Watchlist')
 
@@ -599,6 +699,30 @@ const sortDirection = ref<SortDirection>(savedView.sortDirection)
 const panelFilters = ref<CatalogFilters>(savedView.filters)
 const hasPanelFilters = computed(() => hasActiveCatalogFilters(panelFilters.value))
 const filtersOpen = ref(hasPanelFilters.value)
+
+/** App layout: the top bar's search field and the Filter & Sort sheet. */
+const appSearchOpen = ref(false)
+const { active: backlogActive, setActive: setBacklogActive } = useBacklogMode()
+const filterSheetOpen = ref(false)
+/** Status, type, and panel filters that differ from the defaults (the filter button's badge). */
+const activeFilterCount = computed(
+  () =>
+    statusFilter.value.length +
+    (typeFilter.value.join() === DEFAULT_WATCHLIST_TYPES.join() ? 0 : 1) +
+    (hasPanelFilters.value ? 1 : 0),
+)
+/** The bar's summary of the view, e.g. "Watching · Rating ↓". */
+const viewSummary = computed(() => {
+  const statuses = statusFilter.value.map(getWatchlistStatusLabel)
+  const scope = statuses.length > 1 ? `${statuses.length} statuses` : statuses[0] || 'All'
+  const sort = WATCHLIST_SORT_OPTIONS.find((option) => option.value === sortBy.value)?.label
+  return `${scope} · ${sort ?? ''} ${sortDirection.value === 'asc' ? '↑' : '↓'}`
+})
+const resetView = () => {
+  statusFilter.value = []
+  typeFilter.value = [...DEFAULT_WATCHLIST_TYPES]
+  panelFilters.value = defaultCatalogFilters()
+}
 watch([typeFilter, sortBy, sortDirection, panelFilters], ([types, by, direction, filters]) => {
   try {
     localStorage.setItem(
@@ -1174,6 +1298,56 @@ onUnmounted(() => {
 
 .watchlist-filters-bar {
   margin-bottom: 1rem;
+}
+
+/* App layout: no page padding under the top bar. */
+.watchlist-page.is-app {
+  padding: 0;
+  min-height: 0;
+}
+
+.view-summary {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  height: 34px;
+  padding: 0 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8edf5;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Inside the sheet the chip rows wrap rather than scroll. */
+.sheet-chips :deep(.filter-row) {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.sheet-sort {
+  width: 100%;
+}
+
+.sheet-sort :deep(.sort-label) {
+  display: none;
+}
+
+.sheet-filter-panel {
+  margin: 0;
+}
+
+.sheet-filter-panel :deep(.filters-header) {
+  display: none;
+}
+
+.sheet-filter-panel :deep(.filters-bar) {
+  border-radius: 14px;
+  box-shadow: none;
 }
 
 .watchlist-toolbar {

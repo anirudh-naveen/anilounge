@@ -8,15 +8,157 @@
   Profile-picture crop happens in a modal overlay.
 -->
 <template>
-  <div class="settings-page">
+  <div class="settings-page" :class="{ 'is-app': isAppLayout }">
     <div class="container">
       <!-- Page Header -->
-      <div class="page-header">
+      <div v-if="!isAppLayout" class="page-header">
         <h1>Settings</h1>
         <p>Customize your experience</p>
       </div>
 
       <div class="settings-content">
+        <!-- App layout: who's signed in, and the pages the site's user menu links to -->
+        <template v-if="isAppLayout">
+          <router-link to="/profile" class="account-card" data-testid="settings-account">
+            <UserAvatar
+              :src="authStore.user?.profilePicture"
+              :name="authStore.user?.username"
+              :size="56"
+            />
+            <span class="account-text">
+              <strong>{{ authStore.user?.username }}</strong>
+              <span>{{ authStore.user?.email }}</span>
+            </span>
+            <svg
+              class="row-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+            </svg>
+          </router-link>
+          <div class="settings-section">
+            <div class="settings-card nav-card">
+              <router-link to="/friends" class="nav-row">
+                <span class="nav-row-icon teal" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="9" cy="8.5" r="3" />
+                    <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+                    <path d="M15.5 5.75a3 3 0 0 1 0 5.5M17 14a5.5 5.5 0 0 1 3.5 5" />
+                  </svg>
+                </span>
+                <span class="nav-row-label">Friends &amp; Messages</span>
+                <span v-if="messagesStore?.total" class="nav-row-count">{{
+                  messagesStore?.total
+                }}</span>
+                <svg
+                  class="row-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+                </svg>
+              </router-link>
+              <router-link to="/inbox" class="nav-row">
+                <span class="nav-row-icon coral" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z" />
+                    <path d="M10 20a2.2 2.2 0 0 0 4 0" />
+                  </svg>
+                </span>
+                <span class="nav-row-label">Inbox</span>
+                <span v-if="inboxStore?.counts.total" class="nav-row-count">{{
+                  inboxStore?.counts.total
+                }}</span>
+                <svg
+                  class="row-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+                </svg>
+              </router-link>
+              <router-link to="/connections" class="nav-row">
+                <span class="nav-row-icon blue" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
+                    <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+                  </svg>
+                </span>
+                <span class="nav-row-label">Connections</span>
+                <svg
+                  class="row-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+                </svg>
+              </router-link>
+              <router-link v-if="authStore.canEditContent" to="/admin" class="nav-row">
+                <span class="nav-row-icon purple" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M12 3.5 5 6.25v5.25c0 4.25 3 7.5 7 9 4-1.5 7-4.75 7-9V6.25L12 3.5Z" />
+                    <path d="m9.25 12 2 2 3.5-3.75" />
+                  </svg>
+                </span>
+                <span class="nav-row-label">{{
+                  authStore.isAdmin ? 'Admin' : 'Edit content'
+                }}</span>
+                <svg
+                  class="row-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+                </svg>
+              </router-link>
+            </div>
+          </div>
+        </template>
+
         <!-- Account -->
         <div class="settings-section">
           <h2>Account Settings</h2>
@@ -65,10 +207,9 @@
                   class="form-input"
                   placeholder="Enter new email"
                 />
-                <input
+                <PasswordInput
                   v-if="emailChanged"
                   v-model="emailPassword"
-                  type="password"
                   class="form-input"
                   placeholder="Current password"
                   autocomplete="current-password"
@@ -303,21 +444,18 @@
               </div>
               <div v-if="!authStore.isDemoUser" class="setting-control">
                 <div class="password-form">
-                  <input
+                  <PasswordInput
                     v-model="currentPassword"
-                    type="password"
                     class="form-input"
                     placeholder="Current password"
                   />
-                  <input
+                  <PasswordInput
                     v-model="newPassword"
-                    type="password"
                     class="form-input"
                     placeholder="New password"
                   />
-                  <input
+                  <PasswordInput
                     v-model="confirmPassword"
-                    type="password"
                     class="form-input"
                     placeholder="Confirm new password"
                   />
@@ -419,10 +557,9 @@
                   twoFactorMode === 'disable' ? disableTwoFactor() : regenerateCodes()
                 "
               >
-                <input
+                <PasswordInput
                   v-if="twoFactorMode === 'disable'"
                   v-model="twoFactorPassword"
-                  type="password"
                   class="form-input"
                   placeholder="Current password"
                   autocomplete="current-password"
@@ -524,9 +661,8 @@
               </div>
               <form v-else class="setting-control delete-form" @submit.prevent="deleteAccount">
                 <p class="delete-warning">This cannot be undone. Enter your password to confirm.</p>
-                <input
+                <PasswordInput
                   v-model="deletePassword"
-                  type="password"
                   class="form-input"
                   placeholder="Current password"
                   autocomplete="current-password"
@@ -557,12 +693,98 @@
             </div>
           </div>
         </div>
+
+        <!-- App layout: what the site footer holds, and signing out -->
+        <template v-if="isAppLayout">
+          <div class="settings-section">
+            <h2>About</h2>
+            <div class="settings-card nav-card">
+              <router-link to="/support" class="nav-row">
+                <span class="nav-row-label">Help</span>
+                <svg
+                  class="row-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+                </svg>
+              </router-link>
+              <router-link to="/feedback" class="nav-row">
+                <span class="nav-row-label">Send Feedback</span>
+                <svg
+                  class="row-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+                </svg>
+              </router-link>
+              <router-link to="/privacy" class="nav-row">
+                <span class="nav-row-label">Privacy</span>
+                <svg
+                  class="row-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+                </svg>
+              </router-link>
+              <a
+                v-if="DONATE_URL"
+                :href="DONATE_URL"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="nav-row"
+              >
+                <span class="nav-row-label">Support AniLounge</span>
+                <svg
+                  class="row-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 6 6 6-6 6" />
+                </svg>
+              </a>
+            </div>
+            <!-- TMDB's API terms require this notice and their logo. -->
+            <p class="about-attribution">
+              <img src="/tmdb-logo.svg" alt="TMDB" width="92" height="12" />
+              This product uses the TMDB, AniList and MyAnimeList APIs but is not endorsed or
+              certified by TMDB, AniList or MyAnimeList. &copy; 2026 AniLounge
+            </p>
+          </div>
+          <div class="settings-section">
+            <div class="settings-card nav-card">
+              <button
+                type="button"
+                class="nav-row sign-out-row"
+                data-testid="settings-sign-out"
+                @click="signOut"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue'
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -581,7 +803,11 @@ import { useToast } from 'vue-toastification'
 import { useTheme, type ThemePreference } from '@/composables/useTheme'
 import SettingsSaveBar from '@/components/SettingsSaveBar.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import { enablePush, isNativeApp, pushPermission } from '@/utils/nativeApp'
+import { enablePush, isAppLayout, isNativeApp, pushPermission } from '@/utils/nativeApp'
+import { DONATE_URL } from '@/utils/donations'
+import { useSignOut } from '@/composables/useSignOut'
+import { useInboxStore } from '@/stores/inbox'
+import { useMessagesStore } from '@/stores/messages'
 import { profileRoute } from '@/utils/social'
 import type { BlockedUser } from '@/types/social'
 import { usePageTitle } from '@/composables/usePageMeta'
@@ -594,6 +820,10 @@ defineOptions({
 })
 
 const authStore = useAuthStore()
+// Unread counts for the app layout's Friends and Inbox links.
+const inboxStore = isAppLayout ? useInboxStore() : null
+const messagesStore = isAppLayout ? useMessagesStore() : null
+const signOut = useSignOut()
 const toast = useToast()
 const router = useRouter()
 const route = useRoute()
@@ -1404,5 +1634,274 @@ onMounted(() => {
 
 .btn-danger:hover:not(:disabled) {
   background: #c0392b;
+}
+
+/* App layout: an iOS-style grouped list. Section names sit small above inset cards,
+   rows are separated by hairlines, and on/off settings are switches. */
+.settings-page.is-app {
+  min-height: 0;
+  padding: 0;
+}
+
+.is-app .settings-content {
+  gap: 1.35rem;
+}
+
+.is-app .settings-section h2 {
+  margin: 0 0 0.4rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.is-app .settings-card {
+  padding: 0 1rem;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.is-app .setting-item {
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+  padding: 0.85rem 0;
+  border-bottom: 0.5px solid var(--border-color);
+}
+
+.is-app .setting-item:last-child {
+  border-bottom: none;
+}
+
+.is-app .setting-info h3 {
+  margin-bottom: 0.15rem;
+  font-size: 1rem;
+  font-weight: 550;
+}
+
+.is-app .setting-info p,
+.is-app .setting-hint {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+/* A setting with only a switch: title and switch on one row. */
+.is-app .setting-item:has(> .setting-control > .email-toggle:only-child) {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.is-app .setting-control {
+  gap: 0.6rem;
+}
+
+.is-app .form-input {
+  padding: 0.65rem 0.8rem;
+  border-width: 1px;
+  border-radius: 10px;
+  font-size: 16px;
+  background: var(--bg-primary);
+}
+
+.is-app .btn {
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.is-app .email-toggle span {
+  display: none;
+}
+
+.is-app .email-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--bg-muted-hover);
+  transition: background 0.2s ease;
+}
+
+.is-app .email-toggle input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.is-app .email-toggle input:checked {
+  background: var(--teal-primary);
+}
+
+.is-app .email-toggle input:checked::after {
+  transform: translateX(20px);
+}
+
+.is-app .email-toggle input:disabled {
+  opacity: 0.5;
+}
+
+.is-app .theme-options {
+  display: flex;
+  width: 100%;
+  border-radius: 9px;
+}
+
+.is-app .theme-option {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.4rem 0.2rem;
+  border-radius: 7px;
+  font-size: 0.78rem;
+}
+
+.is-app .blocked-row {
+  padding: 0.65rem 0;
+}
+
+/* Account card and navigation rows */
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.account-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.account-text strong {
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.account-text span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.is-app .nav-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 1rem;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-row:active {
+  background: var(--bg-hover);
+}
+
+/* Hairline between rows, inset past the icon like iOS. */
+.nav-row + .nav-row {
+  box-shadow: inset 0 0.5px 0 var(--border-color);
+}
+
+.nav-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 29px;
+  height: 29px;
+  border-radius: 7px;
+  color: #fff;
+}
+
+.nav-row-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.nav-row-icon.teal {
+  background: var(--teal-primary);
+}
+
+.nav-row-icon.coral {
+  background: var(--coral-primary);
+}
+
+.nav-row-icon.blue {
+  background: var(--tv-badge);
+}
+
+.nav-row-icon.purple {
+  background: var(--purple-accent);
+}
+
+.nav-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-row-count {
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  background: var(--coral-primary);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.row-chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.sign-out-row {
+  justify-content: center;
+  color: #e5484d;
+  font-weight: 600;
+}
+
+.about-attribution {
+  margin: 0.6rem 1rem 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.about-attribution img {
+  display: block;
+  margin-bottom: 0.35rem;
 }
 </style>

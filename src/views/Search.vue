@@ -8,10 +8,107 @@
   assistant, which can also fill these results.
 -->
 <template>
-  <div class="search-page">
+  <div class="search-page" :class="{ 'is-app': isAppLayout }">
+    <!-- App layout: type, search, and the filter sheet live in the top bar -->
+    <AppBar>
+      <div v-if="!appSearchOpen" class="app-bar-segments" role="tablist" aria-label="Content type">
+        <button
+          type="button"
+          role="tab"
+          :class="{ active: browseType === 'movie' }"
+          :aria-selected="browseType === 'movie'"
+          data-testid="browse-type-movie"
+          @click="setBrowseType('movie')"
+        >
+          Movies
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :class="{ active: browseType === 'tv' }"
+          :aria-selected="browseType === 'tv'"
+          data-testid="browse-type-tv"
+          @click="setBrowseType('tv')"
+        >
+          Series
+        </button>
+      </div>
+      <span v-if="!appSearchOpen" class="app-bar-spacer"></span>
+      <AppSearchToggle
+        v-model="searchQuery"
+        v-model:expanded="appSearchOpen"
+        :placeholder="searchPlaceholder"
+        data-testid="search-query"
+        @submit="handleSearch"
+        @cancel="clearSearch"
+      />
+      <button
+        type="button"
+        class="app-bar-button"
+        :class="{ active: hasExtraFilters || seasonMode }"
+        aria-label="Filter and sort"
+        data-testid="search-filters-toggle"
+        @click="filterSheetOpen = true"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+          <path stroke-linecap="round" d="M4 7h16M7 12h10M10 17h4" />
+        </svg>
+      </button>
+    </AppBar>
+    <AppSheet
+      v-if="isAppLayout"
+      v-model:open="filterSheetOpen"
+      title="Filter & Sort"
+      reset-label="Reset"
+      :can-reset="hasExtraFilters"
+      :done-label="canSearch ? 'Search' : 'Done'"
+      @reset="clearFilters"
+      @close="applySheet"
+    >
+      <AppSheetSection v-if="browseType === 'tv'" title="Show">
+        <div class="type-toggle sheet-toggle" role="tablist" aria-label="Series or seasons">
+          <button
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            :class="{ active: !seasonMode }"
+            :aria-selected="!seasonMode"
+            @click="setSeasonMode(false)"
+          >
+            Series
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            :class="{ active: seasonMode }"
+            :aria-selected="seasonMode"
+            @click="setSeasonMode(true)"
+          >
+            Seasons
+          </button>
+        </div>
+      </AppSheetSection>
+      <AppSheetSection title="Sort">
+        <SortByControls
+          v-model:sort-by="filters.sortBy"
+          v-model:sort-direction="filters.sortDirection"
+          class="sheet-sort"
+        />
+      </AppSheetSection>
+      <AppSheetSection title="Filters" plain>
+        <CatalogFilterPanel
+          v-model="filters"
+          :year-options="yearFilterOptions"
+          class="sheet-filter-panel"
+          @clear="clearFilters"
+        />
+      </AppSheetSection>
+    </AppSheet>
+
     <div class="container">
       <!-- Browse Header -->
-      <div class="browse-header">
+      <div v-if="!isAppLayout" class="browse-header">
         <h1 class="browse-title">Search For</h1>
         <div class="type-toggle" role="tablist" aria-label="Content type">
           <button
@@ -70,7 +167,7 @@
       </div>
 
       <!-- Search -->
-      <div class="search-form-container">
+      <div v-if="!isAppLayout" class="search-form-container">
         <form @submit.prevent="handleSearch" class="search-form">
           <div class="search-input-group">
             <input
@@ -78,13 +175,7 @@
               type="text"
               class="search-input"
               data-testid="search-query"
-              :placeholder="
-                browseType === 'tv'
-                  ? seasonMode
-                    ? 'Search for seasons...'
-                    : 'Search for series...'
-                  : 'Search for movies...'
-              "
+              :placeholder="searchPlaceholder"
             />
             <button
               v-if="showReset"
@@ -125,7 +216,7 @@
 
       <!-- Filters -->
       <CatalogFilterPanel
-        v-if="filtersOpen"
+        v-if="filtersOpen && !isAppLayout"
         id="search-filters"
         v-model="filters"
         :year-options="yearFilterOptions"
@@ -296,6 +387,11 @@ import {
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
 import { usePageMeta } from '@/composables/usePageMeta'
+import AppBar from '@/components/AppBar.vue'
+import AppSearchToggle from '@/components/AppSearchToggle.vue'
+import AppSheet from '@/components/AppSheet.vue'
+import AppSheetSection from '@/components/AppSheetSection.vue'
+import { isAppLayout } from '@/utils/nativeApp'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import WatchlistCardTag from '@/components/WatchlistCardTag.vue'
@@ -328,6 +424,9 @@ const hasSearched = ref(
   contentStore.searchResults.length > 0 || Boolean(contentStore.lastSearchQuery),
 )
 const filtersOpen = ref(false)
+/** App layout: the top bar's search field (open while it holds a search) and the filter sheet. */
+const appSearchOpen = ref(Boolean(searchQuery.value))
+const filterSheetOpen = ref(false)
 const itemsPerPage = 20
 
 const {
@@ -419,6 +518,14 @@ const showReset = computed(
     (Object.keys(filters.value) as (keyof SearchFilters)[]).every(
       (key) => filters.value[key] === appliedFilters.value[key],
     ),
+)
+
+const searchPlaceholder = computed(() =>
+  browseType.value === 'tv'
+    ? seasonMode.value
+      ? 'Search for seasons...'
+      : 'Search for series...'
+    : 'Search for movies...',
 )
 
 const yearFilterOptions = computed(() => buildYearFilterOptions(contentStore.allContent))
@@ -553,6 +660,12 @@ const clearFilters = () => {
   currentPage.value = 1
 }
 
+/** Closing the filter sheet searches with its filters (or returns to browsing when cleared). */
+const applySheet = () => {
+  if (canSearch.value) void handleSearch()
+  else if (hasSearched.value) clearSearch()
+}
+
 const clearSearch = () => {
   searchQuery.value = ''
   hasSearched.value = false
@@ -613,6 +726,73 @@ usePageMeta({
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 20px;
+}
+
+/* App layout */
+.search-page.is-app {
+  min-height: 0;
+  padding: 0;
+}
+
+.search-page.is-app .container {
+  padding: 0 16px;
+}
+
+.search-page.is-app .results-header {
+  margin-bottom: 0.85rem;
+  text-align: left;
+}
+
+.search-page.is-app .results-header h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.search-page.is-app .results-header p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.search-page.is-app .results-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-page.is-app .result-overview,
+.search-page.is-app .result-genres,
+.search-page.is-app .result-native-title {
+  display: none;
+}
+
+.sheet-toggle {
+  display: flex;
+  width: 100%;
+}
+
+.sheet-toggle .type-toggle-btn {
+  flex: 1;
+}
+
+.sheet-sort {
+  width: 100%;
+}
+
+.sheet-sort :deep(.sort-label) {
+  display: none;
+}
+
+.sheet-filter-panel {
+  margin: 0;
+}
+
+.sheet-filter-panel :deep(.filters-header) {
+  display: none;
+}
+
+.sheet-filter-panel :deep(.filters-bar) {
+  border-radius: 14px;
+  box-shadow: none;
 }
 
 .browse-header {
