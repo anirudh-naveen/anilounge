@@ -10,8 +10,22 @@ export const WATCHLIST_STATUS_OPTIONS: { value: WatchlistStatus; label: string }
   { value: 'dropped', label: 'Dropped' },
 ]
 
+/** Order of the watchlist page's status sections and filter chips. */
+export const WATCHLIST_STATUS_ORDER: WatchlistStatus[] = [
+  'watching',
+  'completed',
+  'on_hold',
+  'plan_to_watch',
+  'dropped',
+]
+
 export const WATCHLIST_STATUS_FILTER_OPTIONS: { value: 'all' | WatchlistStatus; label: string }[] =
-  [{ value: 'all', label: 'All' }, ...WATCHLIST_STATUS_OPTIONS]
+  [
+    { value: 'all', label: 'All' },
+    ...WATCHLIST_STATUS_ORDER.map(
+      (status) => WATCHLIST_STATUS_OPTIONS.find((option) => option.value === status)!,
+    ),
+  ]
 
 /**
  * Human-readable watchlist status for buttons and filters.
@@ -92,15 +106,6 @@ export const watchedEpisodes = (
   currentEpisode: number | undefined,
   totalEpisodes: number | undefined,
 ) => (status === 'completed' && totalEpisodes ? totalEpisodes : currentEpisode || 0)
-
-/** Order of the watchlist page's status sections: active titles first. */
-export const WATCHLIST_STATUS_ORDER: WatchlistStatus[] = [
-  'watching',
-  'on_hold',
-  'plan_to_watch',
-  'completed',
-  'dropped',
-]
 
 /** How long after sign-up new accounts are reminded that they can import a list. */
 export const IMPORT_REMINDER_DAYS = 30

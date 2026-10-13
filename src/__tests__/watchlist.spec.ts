@@ -28,13 +28,13 @@ describe('watchlist status labels', () => {
     expect(getWatchlistStatusLabel('dropped')).toBe('Dropped')
   })
 
-  it('includes All plus every saved status in the filter dropdown', () => {
+  it('includes All plus every saved status in the filter chips, in section order', () => {
     expect(WATCHLIST_STATUS_FILTER_OPTIONS.map((opt) => opt.value)).toEqual([
       'all',
-      'plan_to_watch',
       'watching',
       'completed',
       'on_hold',
+      'plan_to_watch',
       'dropped',
     ])
   })
