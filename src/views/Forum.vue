@@ -11,10 +11,34 @@
   as that type. All filters live in the query string.
 -->
 <template>
-  <div class="social-page">
+  <div class="social-page" :class="{ 'is-app': isAppLayout }">
+    <!-- App layout: search and New post live in the top bar -->
+    <AppBar>
+      <span v-if="!appSearchOpen" class="app-bar-spacer"></span>
+      <AppSearchToggle
+        v-model="searchTerm"
+        v-model:expanded="appSearchOpen"
+        placeholder="Search the forum"
+        maxlength="100"
+        data-testid="forum-search"
+      />
+      <button
+        v-if="!appSearchOpen && !composing"
+        type="button"
+        class="app-bar-button"
+        aria-label="New post"
+        data-testid="new-post"
+        @click="openComposer"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+    </AppBar>
+
     <div class="social-container">
       <!-- Header -->
-      <header class="social-intro forum-intro">
+      <header v-if="!isAppLayout" class="social-intro forum-intro">
         <div>
           <p class="social-kicker">Community</p>
           <h1 class="social-title">{{ heading }}</h1>
@@ -80,7 +104,7 @@
       </section>
 
       <!-- Title: Search -->
-      <div class="forum-search">
+      <div v-if="!isAppLayout" class="forum-search">
         <input
           v-model="searchTerm"
           type="search"
@@ -179,6 +203,9 @@
 </template>
 
 <script setup lang="ts">
+import AppBar from '@/components/AppBar.vue'
+import AppSearchToggle from '@/components/AppSearchToggle.vue'
+import { isAppLayout } from '@/utils/nativeApp'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useToast } from 'vue-toastification'
@@ -294,6 +321,8 @@ usePageMeta(() => {
 
 /** Search box text; pushed to `?q=` after a pause so typing doesn't refetch per key. */
 const searchTerm = ref(query.value)
+/** App layout: the top bar's search field, open while it holds a search. */
+const appSearchOpen = ref(Boolean(searchTerm.value))
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(searchTerm, (value) => {
   clearTimeout(searchTimer)
@@ -391,6 +420,23 @@ watch(
 </script>
 
 <style scoped>
+/* App layout: no page padding under the top bar. */
+.social-page.is-app {
+  min-height: 0;
+  padding: 0;
+}
+
+/* One row of type tabs that scrolls sideways. */
+.is-app .kind-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.is-app .kind-tab {
+  flex-shrink: 0;
+}
+
 .forum-intro {
   display: flex;
   align-items: flex-end;

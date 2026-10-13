@@ -10,6 +10,25 @@ import { pushAPI, widgetAPI } from '@/services/api'
 
 export const isNativeApp = Capacitor.isNativePlatform()
 
+/**
+ * Whether to show the app layout (bottom tab bar, compact top bars, sheets) instead of
+ * the site chrome. On in the iOS app; in development, `?app-layout=1` previews it in a
+ * browser for the rest of the tab and `?app-layout=0` turns it back off.
+ */
+export const isAppLayout = isNativeApp || (import.meta.env.DEV && previewAppLayout())
+
+function previewAppLayout(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const flag = new URLSearchParams(window.location.search).get('app-layout')
+    if (flag === '1') sessionStorage.setItem('anilounge:app-layout', '1')
+    if (flag === '0') sessionStorage.removeItem('anilounge:app-layout')
+    return sessionStorage.getItem('anilounge:app-layout') === '1'
+  } catch {
+    return false
+  }
+}
+
 /** After this long in the background, check for a newer deploy on return. */
 const STALE_AFTER_MS = 10 * 60 * 1000
 
