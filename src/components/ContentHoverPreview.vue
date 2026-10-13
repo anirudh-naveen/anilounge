@@ -189,21 +189,17 @@ const selectedEpisodes = ref<number>(0)
 const selectedNotes = ref('')
 
 /**
- * Watchlist row the card edits: the title's own, or for a one-season series not on the
- * list itself, its season's row (only seasons are added to watchlists).
+ * Watchlist row the card edits: the title's own, or for a one-season series its season's
+ * row (only seasons are added to watchlists).
  */
-const watchlistId = computed(() => {
-  const soleSeasonId = contentStore.getSoleSeasonId(props.item)
-  if (!soleSeasonId || contentStore.getWatchlistItem(props.item._id)) return props.item._id
-  return soleSeasonId
-})
+const watchlistId = computed(() => contentStore.getSoleSeasonId(props.item) || props.item._id)
 const watchlistItem = computed(() => contentStore.getWatchlistItem(watchlistId.value))
-/** A series of several seasons that isn't on the list itself: only its seasons are added. */
+/**
+ * A series of several seasons: only its seasons are added, and its own row (kept by the
+ * server from them) is summed up here, not edited.
+ */
 const tracksBySeason = computed(
-  () =>
-    !watchlistItem.value &&
-    watchlistId.value === props.item._id &&
-    contentStore.hasSeasonRows(props.item),
+  () => watchlistId.value === props.item._id && contentStore.hasSeasonRows(props.item),
 )
 /** "Watching · 8.5": the series' status and average rating, summed up from its seasons. */
 const seasonSummary = computed(() => {
