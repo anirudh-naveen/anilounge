@@ -529,7 +529,7 @@ const isPhone =
 const searchQuery = ref('')
 const statusFilter = ref<WatchlistStatus[]>([])
 const typeFilter = ref<WatchlistTypeChoice[]>([])
-const sortBy = ref<SortByOption>('relevance')
+const sortBy = ref<SortByOption>('rating')
 const sortDirection = ref<SortDirection>('desc')
 /** "Relevance" here is recency: the order titles were last updated. */
 const WATCHLIST_SORT_OPTIONS = DEFAULT_SORT_OPTIONS.map((option) =>
@@ -749,11 +749,8 @@ const getProgressPercent = (item: WatchlistItem) => {
   return item.status === 'completed' ? 100 : 0
 }
 
-const getWatchlistRatingValue = (item: WatchlistItem) => {
-  if (item.rating) return item.rating
-  if (typeof item.content === 'string' || !item.content) return 0
-  return getWeightedAverage(item.content) || 0
-}
+/** The rating shown in the Score column (unrated rows sort as 0). */
+const getWatchlistRatingValue = (item: WatchlistItem) => getItemRating(item) ?? 0
 
 const getWatchlistPopularity = (item: WatchlistItem) => {
   if (typeof item.content === 'string' || !item.content) return 0
