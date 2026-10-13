@@ -279,10 +279,15 @@
                   'over-limit': index >= FAVORITES_MAX,
                 }"
                 :draggable="reordering === group.key"
+                :data-slot-index="index"
                 data-testid="favorite-slot"
                 @dragstart="onDragStart(index, $event)"
                 @dragover="onDragOver(index, $event)"
                 @dragend="dragIndex = null"
+                @touchstart="onTouchStart(index, $event)"
+                @touchmove="onTouchMove"
+                @touchend="onTouchEnd"
+                @touchcancel="onTouchEnd"
               >
                 <span class="slot-rank-badge" data-testid="favorite-rank">#{{ index + 1 }}</span>
                 <div
@@ -656,7 +661,7 @@ import { useBadgesStore } from '@/stores/badges'
 import { badgeInfo } from '@/utils/badges'
 import { accentColor, readableOn } from '@/utils/accent'
 import FriendButton from '@/components/FriendButton.vue'
-import { shareLink } from '@/utils/nativeApp'
+import { haptic, shareLink } from '@/utils/nativeApp'
 import ProfileForum from '@/components/ProfileForum.vue'
 import { apiErrorMessage } from '@/utils/social'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
@@ -881,6 +886,57 @@ const onDragOver = (index: number, event: DragEvent) => {
   if (index === dragIndex.value) return
   moveFavorite(dragIndex.value, index - dragIndex.value)
   dragIndex.value = index
+}
+
+// Touch screens have no drag-and-drop events: a short press picks a card up (a quick
+// swipe still scrolls), then it takes the slot under the finger.
+const TOUCH_HOLD_MS = 200
+const TOUCH_SLOP_PX = 10
+let touchTimer: ReturnType<typeof setTimeout> | null = null
+let touchStartPoint: { x: number; y: number } | null = null
+
+const clearTouchTimer = () => {
+  if (touchTimer) clearTimeout(touchTimer)
+  touchTimer = null
+}
+
+const onTouchStart = (index: number, event: TouchEvent) => {
+  const touch = event.touches[0]
+  if (!reordering.value || !touch || event.touches.length > 1) return
+  if ((event.target as Element | null)?.closest('button')) return
+  touchStartPoint = { x: touch.clientX, y: touch.clientY }
+  clearTouchTimer()
+  touchTimer = setTimeout(() => {
+    dragIndex.value = index
+    haptic()
+  }, TOUCH_HOLD_MS)
+}
+
+const onTouchMove = (event: TouchEvent) => {
+  const touch = event.touches[0]
+  if (!touch) return
+  if (dragIndex.value === null) {
+    // Moving before the hold: the finger is scrolling, not dragging.
+    const start = touchStartPoint
+    if (start && Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > TOUCH_SLOP_PX) {
+      clearTouchTimer()
+    }
+    return
+  }
+  event.preventDefault()
+  const slot = document
+    .elementFromPoint(touch.clientX, touch.clientY)
+    ?.closest<HTMLElement>('[data-slot-index]')
+  const index = Number(slot?.dataset.slotIndex)
+  if (!slot || Number.isNaN(index) || index === dragIndex.value) return
+  moveFavorite(dragIndex.value, index - dragIndex.value)
+  dragIndex.value = index
+}
+
+const onTouchEnd = () => {
+  clearTouchTimer()
+  touchStartPoint = null
+  dragIndex.value = null
 }
 
 const saveOrder = async (key: FavoriteKey) => {
@@ -1709,6 +1765,10 @@ const handleImageError = showPosterPlaceholder
 
 .favorite-grid.reordering .favorite-slot {
   cursor: grab;
+  /* A held card is picked up, not selected or offered as an image to save. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .favorite-grid.reordering .favorite-title-card,
