@@ -86,6 +86,11 @@ const normalizeSearchText = (text: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
+/** Aired or airing (not upcoming, not dated in the future). */
+const isReleased = (season: Pick<UnifiedContent, 'malStatus' | 'releaseDate'>) =>
+  season.malStatus !== 'not_yet_aired' &&
+  !(season.releaseDate && new Date(season.releaseDate).getTime() > Date.now())
+
 /** Sort key for a season in its series' guide: season number, then part. */
 const seasonOrder = (season: Pick<UnifiedContent, 'seasonNumber' | 'partNumber'>) =>
   (season.seasonNumber ?? 0) * 1000 + (season.partNumber ?? 0)
@@ -626,6 +631,17 @@ export const useContentStore = defineStore('content', () => {
     return bySeries
   })
 
+  /** Released seasons in the loaded catalog, counted by their series id. */
+  const catalogReleasedSeasons = computed(() => {
+    const counts = new Map<string, number>()
+    for (const item of allContent.value) {
+      if (item.contentType === 'season' && item.seriesId && isReleased(item)) {
+        counts.set(item.seriesId, (counts.get(item.seriesId) || 0) + 1)
+      }
+    }
+    return counts
+  })
+
   /** Each series' first season id (lowest season, then part) in the loaded catalog. */
   const catalogFirstSeason = computed(() => {
     const first = new Map<string, UnifiedContent>()
@@ -687,8 +703,9 @@ export const useContentStore = defineStore('content', () => {
           (seasonRowsBySeries.value.get(contentId) || []).map((item) => ({
             status: item.status,
             first: isFirstSeason(item),
+            released: typeof item.content === 'string' || isReleased(item.content),
           })),
-          catalogSeasonsBySeries.value.get(contentId)?.length,
+          catalogReleasedSeasons.value.get(contentId),
         ),
   )
 

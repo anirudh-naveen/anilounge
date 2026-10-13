@@ -69,10 +69,18 @@ describe('series summed up from their seasons', () => {
   const s1 = (status: WatchlistStatus) => ({ status, first: true })
   const later = (status: WatchlistStatus) => ({ status, first: false })
 
-  it('is completed only once every season is', () => {
+  const upcoming = (status: WatchlistStatus) => ({ status, first: false, released: false })
+
+  it('is completed once every released season is', () => {
     expect(summarizeSeasonStatuses([s1('completed'), later('completed')], 2)).toBe('completed')
-    expect(summarizeSeasonStatuses([s1('completed')], 3)).toBe('watching')
+    expect(summarizeSeasonStatuses([s1('completed'), upcoming('plan_to_watch')], 1)).toBe(
+      'completed',
+    )
     expect(summarizeSeasonStatuses([], 2)).toBeUndefined()
+  })
+
+  it('is on hold when listed seasons are done but a released one is not listed', () => {
+    expect(summarizeSeasonStatuses([s1('completed')], 3)).toBe('on_hold')
   })
 
   it('is watching while any season is, then dropped, then on hold', () => {
@@ -81,13 +89,15 @@ describe('series summed up from their seasons', () => {
     expect(summarizeSeasonStatuses([s1('completed'), later('on_hold')])).toBe('on_hold')
   })
 
-  it('is planned for a planned first season, watching for a planned later one', () => {
+  it('is planned until something is done, then on hold unless a season is being watched', () => {
     expect(summarizeSeasonStatuses([s1('plan_to_watch')])).toBe('plan_to_watch')
     expect(summarizeSeasonStatuses([s1('plan_to_watch'), later('plan_to_watch')])).toBe(
       'plan_to_watch',
     )
-    expect(summarizeSeasonStatuses([later('plan_to_watch')])).toBe('watching')
-    expect(summarizeSeasonStatuses([s1('completed'), later('plan_to_watch')], 2)).toBe('watching')
+    expect(summarizeSeasonStatuses([upcoming('plan_to_watch')])).toBe('plan_to_watch')
+    expect(summarizeSeasonStatuses([later('plan_to_watch')])).toBe('on_hold')
+    expect(summarizeSeasonStatuses([s1('completed'), later('plan_to_watch')], 2)).toBe('on_hold')
+    expect(summarizeSeasonStatuses([s1('completed'), later('watching')], 2)).toBe('watching')
   })
 
   it('rates a series as the average of its rated seasons', () => {

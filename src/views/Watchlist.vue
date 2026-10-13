@@ -160,7 +160,12 @@
                 </div>
 
                 <div class="item-actions">
-                  <FavoriteHeart :content-id="getContentId(item)" variant="inline" />
+                  <!-- Seasons are favorited through their series. -->
+                  <FavoriteHeart
+                    v-if="!isSeason(item)"
+                    :content-id="getContentId(item)"
+                    variant="inline"
+                  />
                   <button
                     class="expand-btn"
                     type="button"
@@ -188,224 +193,218 @@
                   <div class="user-data">
                     <h4>Your Progress</h4>
 
-                    <!-- A series of several seasons follows them: shown, not edited. -->
-                    <div
-                      v-if="isSeasonSummary(item)"
-                      class="season-summary"
-                      data-testid="watchlist-season-summary"
-                    >
-                      <p class="more-hint">
-                        Its status and rating follow its seasons. Update a season to change it.
-                      </p>
-                      <ul class="season-summary-list">
-                        <li
-                          v-for="season in contentStore.getSeasonRows(getContentId(item))"
-                          :key="getContentId(season)"
-                        >
-                          <button
-                            type="button"
-                            class="season-summary-link"
-                            @click="viewContentDetails(season)"
-                          >
-                            {{ getContentTitle(season) }}
-                          </button>
-                          <span
-                            class="season-summary-status"
-                            :class="getStatusClass(season.status)"
-                          >
-                            {{ getStatusLabel(season.status) }}
-                          </span>
-                          <span
-                            v-if="season.rating"
-                            class="rating-value"
-                            :style="getRatingStyle(season.rating)"
-                            >{{ season.rating }}</span
-                          >
-                        </li>
-                      </ul>
-                    </div>
-
-                    <div v-else class="progress-section">
-                      <div class="status-control">
-                        <label>Status:</label>
-                        <select
-                          :value="getLocalFormData(item).status"
-                          @change="
-                            updateLocalFormData(
-                              item,
-                              'status',
-                              ($event.target as HTMLSelectElement).value,
-                            )
-                          "
-                          class="status-select"
-                        >
-                          <option
-                            v-for="option in WATCHLIST_STATUS_OPTIONS"
-                            :key="option.value"
-                            :value="option.value"
-                          >
-                            {{ option.label }}
-                          </option>
-                        </select>
-                      </div>
-
-                      <div
-                        v-if="isTvContent(item) && getTotalSeasons(item) > 1"
-                        class="season-control"
-                      >
-                        <label>Current Season:</label>
-                        <select
-                          :value="getLocalFormData(item).currentSeason || 1"
-                          @change="
-                            updateLocalFormData(
-                              item,
-                              'currentSeason',
-                              parseInt(($event.target as HTMLSelectElement).value) || 1,
-                            )
-                          "
-                          class="season-select"
-                        >
-                          <option
-                            v-for="season in getTotalSeasons(item)"
-                            :key="season"
-                            :value="season"
-                          >
-                            Season {{ season }}
-                          </option>
-                        </select>
-                      </div>
-
-                      <div v-if="tracksItemEpisodes(item)" class="episode-control">
-                        <label>Episodes Watched:</label>
-                        <input
-                          :value="getLocalFormData(item).currentEpisode"
-                          @change="
-                            updateLocalFormData(
-                              item,
-                              'currentEpisode',
-                              parseInt(($event.target as HTMLInputElement).value) || 0,
-                            )
-                          "
-                          type="number"
-                          min="0"
-                          :max="getTotalEpisodes(item) || undefined"
-                          :disabled="
-                            getLocalFormData(item).status === 'completed' &&
-                            getTotalEpisodes(item) > 0
-                          "
-                          class="episode-input"
-                        />
-                      </div>
-
-                      <div class="rating-control">
-                        <label>Your Rating (1-10):</label>
-                        <input
-                          :value="getLocalFormData(item).rating || ''"
-                          @change="
-                            updateLocalFormData(
-                              item,
-                              'rating',
-                              toUserRating(($event.target as HTMLInputElement).value),
-                            )
-                          "
-                          type="number"
-                          min="1"
-                          max="10"
-                          step="0.1"
-                          class="rating-input"
-                          placeholder="No rating"
-                        />
-                      </div>
-
-                      <details class="more-details">
-                        <summary>More details</summary>
-                        <p class="more-hint">
-                          Start and finish dates fill in automatically when you save progress.
-                        </p>
-                        <div class="dates-control">
-                          <label>
-                            Started
-                            <input
-                              :value="getLocalFormData(item).startedOn"
-                              @change="
-                                updateLocalFormData(
-                                  item,
-                                  'startedOn',
-                                  ($event.target as HTMLInputElement).value,
-                                )
-                              "
-                              type="date"
-                              class="date-input"
-                            />
-                          </label>
-                          <label>
-                            Finished
-                            <input
-                              :value="getLocalFormData(item).completedOn"
-                              @change="
-                                updateLocalFormData(
-                                  item,
-                                  'completedOn',
-                                  ($event.target as HTMLInputElement).value,
-                                )
-                              "
-                              type="date"
-                              class="date-input"
-                            />
-                          </label>
-                          <label>
-                            Rewatches
-                            <input
-                              :value="getLocalFormData(item).rewatchCount"
-                              @change="
-                                updateLocalFormData(
-                                  item,
-                                  'rewatchCount',
-                                  Math.max(
-                                    0,
-                                    parseInt(($event.target as HTMLInputElement).value) || 0,
-                                  ),
-                                )
-                              "
-                              type="number"
-                              min="0"
-                              max="999"
-                              class="rewatch-input"
-                            />
-                          </label>
-                        </div>
-
-                        <div class="notes-control">
-                          <label>Notes:</label>
-                          <textarea
-                            :value="getLocalFormData(item).notes"
+                    <template v-for="target in [editTarget(item)]" :key="getContentId(target)">
+                      <div class="progress-section">
+                        <div class="status-control">
+                          <label>Status:</label>
+                          <select
+                            :value="getLocalFormData(target).status"
                             @change="
                               updateLocalFormData(
-                                item,
-                                'notes',
-                                ($event.target as HTMLTextAreaElement).value,
+                                target,
+                                'status',
+                                ($event.target as HTMLSelectElement).value,
                               )
                             "
-                            class="notes-textarea"
-                            placeholder="Add your thoughts..."
-                            rows="3"
-                          ></textarea>
+                            class="status-select"
+                          >
+                            <option
+                              v-for="option in WATCHLIST_STATUS_OPTIONS"
+                              :key="option.value"
+                              :value="option.value"
+                            >
+                              {{ option.label }}
+                            </option>
+                          </select>
                         </div>
-                      </details>
-                    </div>
+
+                        <!-- A series of several seasons: pick the season to update. -->
+                        <div v-if="seasonCards(item).length" class="season-control">
+                          <label>Season:</label>
+                          <select
+                            :value="getContentId(target)"
+                            data-testid="watchlist-season-select"
+                            @change="selectSeason(item, ($event.target as HTMLSelectElement).value)"
+                            class="season-select"
+                          >
+                            <option
+                              v-for="season in seasonCards(item)"
+                              :key="season._id"
+                              :value="season._id"
+                            >
+                              {{ season.label
+                              }}{{
+                                contentStore.isInWatchlist(season._id)
+                                  ? ` · ${getStatusLabel(contentStore.getWatchlistItem(season._id)?.status || '')}`
+                                  : ''
+                              }}
+                            </option>
+                          </select>
+                          <p class="more-hint">
+                            Saving updates this season; the series follows its seasons.
+                          </p>
+                        </div>
+
+                        <div
+                          v-else-if="isTvContent(item) && getTotalSeasons(item) > 1"
+                          class="season-control"
+                        >
+                          <label>Current Season:</label>
+                          <select
+                            :value="getLocalFormData(target).currentSeason || 1"
+                            @change="
+                              updateLocalFormData(
+                                target,
+                                'currentSeason',
+                                parseInt(($event.target as HTMLSelectElement).value) || 1,
+                              )
+                            "
+                            class="season-select"
+                          >
+                            <option
+                              v-for="season in getTotalSeasons(item)"
+                              :key="season"
+                              :value="season"
+                            >
+                              Season {{ season }}
+                            </option>
+                          </select>
+                        </div>
+
+                        <div v-if="tracksItemEpisodes(target)" class="episode-control">
+                          <label>Episodes Watched:</label>
+                          <input
+                            :value="getLocalFormData(target).currentEpisode"
+                            @change="
+                              updateLocalFormData(
+                                target,
+                                'currentEpisode',
+                                parseInt(($event.target as HTMLInputElement).value) || 0,
+                              )
+                            "
+                            type="number"
+                            min="0"
+                            :max="getTotalEpisodes(target) || undefined"
+                            :disabled="
+                              getLocalFormData(target).status === 'completed' &&
+                              getTotalEpisodes(target) > 0
+                            "
+                            class="episode-input"
+                          />
+                        </div>
+
+                        <div class="rating-control">
+                          <label>Your Rating (1-10):</label>
+                          <input
+                            :value="getLocalFormData(target).rating || ''"
+                            @change="
+                              updateLocalFormData(
+                                target,
+                                'rating',
+                                toUserRating(($event.target as HTMLInputElement).value),
+                              )
+                            "
+                            type="number"
+                            min="1"
+                            max="10"
+                            step="0.1"
+                            class="rating-input"
+                            placeholder="No rating"
+                          />
+                        </div>
+
+                        <details class="more-details">
+                          <summary>More details</summary>
+                          <p class="more-hint">
+                            Start and finish dates fill in automatically when you save progress.
+                          </p>
+                          <div class="dates-control">
+                            <label>
+                              Started
+                              <input
+                                :value="getLocalFormData(target).startedOn"
+                                @change="
+                                  updateLocalFormData(
+                                    target,
+                                    'startedOn',
+                                    ($event.target as HTMLInputElement).value,
+                                  )
+                                "
+                                type="date"
+                                class="date-input"
+                              />
+                            </label>
+                            <label>
+                              Finished
+                              <input
+                                :value="getLocalFormData(target).completedOn"
+                                @change="
+                                  updateLocalFormData(
+                                    target,
+                                    'completedOn',
+                                    ($event.target as HTMLInputElement).value,
+                                  )
+                                "
+                                type="date"
+                                class="date-input"
+                              />
+                            </label>
+                            <label>
+                              Rewatches
+                              <input
+                                :value="getLocalFormData(target).rewatchCount"
+                                @change="
+                                  updateLocalFormData(
+                                    target,
+                                    'rewatchCount',
+                                    Math.max(
+                                      0,
+                                      parseInt(($event.target as HTMLInputElement).value) || 0,
+                                    ),
+                                  )
+                                "
+                                type="number"
+                                min="0"
+                                max="999"
+                                class="rewatch-input"
+                              />
+                            </label>
+                          </div>
+
+                          <div class="notes-control">
+                            <label>Notes:</label>
+                            <textarea
+                              :value="getLocalFormData(target).notes"
+                              @change="
+                                updateLocalFormData(
+                                  target,
+                                  'notes',
+                                  ($event.target as HTMLTextAreaElement).value,
+                                )
+                              "
+                              class="notes-textarea"
+                              placeholder="Add your thoughts..."
+                              rows="3"
+                            ></textarea>
+                          </div>
+                        </details>
+                      </div>
+                    </template>
 
                     <div class="action-buttons">
                       <button @click="viewContentDetails(item)" class="btn btn-secondary">
                         View Details
                       </button>
-                      <template v-if="!isSeasonSummary(item)">
-                        <button @click="saveWatchlistItem(item)" class="save-watch-btn">
-                          Save Watch
-                        </button>
-                        <button @click="removeFromWatchlist(item)" class="btn btn-danger">
-                          Remove from Watchlist
-                        </button>
-                      </template>
+                      <button @click="saveWatchlistItem(editTarget(item))" class="save-watch-btn">
+                        Save Watch
+                      </button>
+                      <button
+                        v-if="contentStore.isInWatchlist(getContentId(editTarget(item)))"
+                        @click="removeFromWatchlist(editTarget(item))"
+                        class="btn btn-danger"
+                      >
+                        {{ seasonCards(item).length ? 'Remove Season' : 'Remove from Watchlist' }}
+                      </button>
                     </div>
                   </div>
 
@@ -475,16 +474,17 @@ import { useRouter } from 'vue-router'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import {
+  contentAPI,
   getPosterUrl,
   getCardContentTypeDisplay,
   getDetailsRouteName,
-  matchesContentTypeFilter,
   tracksEpisodes,
 } from '@/services/api'
 import { getRatingColor } from '@/utils/ratingColors'
 import { getTotalVoteCount, getWeightedAverage, toUserRating } from '@/utils/ratings'
 import { useToast } from 'vue-toastification'
 import type { WatchlistItem } from '@/types'
+import type { SeriesSeason, UnifiedContent } from '@/types/content'
 import SortByControls from '@/components/SortByControls.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import {
@@ -501,7 +501,9 @@ import {
   WATCHLIST_STATUS_ORDER,
   watchedEpisodes,
   type WatchlistStatus,
-  type WatchlistTypeFilter,
+  matchesStatusChips,
+  matchesTypeChips,
+  type WatchlistTypeChoice,
 } from '@/utils/watchlist'
 import WatchlistFilters from '@/components/WatchlistFilters.vue'
 import ImportReminder from '@/components/ImportReminder.vue'
@@ -525,8 +527,8 @@ const isPhone =
     ? window.matchMedia('(max-width: 768px)').matches
     : false
 const searchQuery = ref('')
-const statusFilter = ref<'all' | WatchlistStatus>('all')
-const typeFilter = ref<WatchlistTypeFilter>('all')
+const statusFilter = ref<WatchlistStatus[]>([])
+const typeFilter = ref<WatchlistTypeChoice[]>([])
 const sortBy = ref<SortByOption>('relevance')
 const sortDirection = ref<SortDirection>('desc')
 /** "Relevance" here is recency: the order titles were last updated. */
@@ -605,6 +607,67 @@ const getContentType = (item: WatchlistItem) => {
 const tracksItemEpisodes = (item: WatchlistItem) => {
   if (typeof item === 'string' || typeof item.content === 'string' || !item.content) return false
   return tracksEpisodes(item.content)
+}
+
+const isSeason = (item: WatchlistItem) =>
+  typeof item.content !== 'string' && item.content?.contentType === 'season'
+
+/** Season cards of opened series rows, by series id (loaded from the series' page data). */
+const seasonCardsBySeries = ref(new Map<string, SeriesSeason[]>())
+/** The season picked in an opened series row's editor, by series id. */
+const selectedSeasons = ref(new Map<string, string>())
+
+const loadSeasonCards = async (item: WatchlistItem) => {
+  if (typeof item.content === 'string' || item.content?.contentType !== 'tv') return
+  const seriesId = item.content._id
+  if (seasonCardsBySeries.value.has(seriesId)) return
+  try {
+    const response = await contentAPI.getContentById(seriesId)
+    const seasons = (response.data?.data?.seasons || []) as SeriesSeason[]
+    seasonCardsBySeries.value = new Map(seasonCardsBySeries.value).set(seriesId, seasons)
+  } catch (error) {
+    console.error('Error loading seasons:', error)
+  }
+}
+
+/** A series row's seasons, when it has two or more (its editor then updates one of them). */
+const seasonCards = (item: WatchlistItem): SeriesSeason[] => {
+  if (typeof item.content === 'string' || item.content?.contentType !== 'tv') return []
+  const cards = seasonCardsBySeries.value.get(item.content._id) || []
+  return cards.length > 1 ? cards : []
+}
+
+const selectSeason = (item: WatchlistItem, seasonId: string) => {
+  selectedSeasons.value = new Map(selectedSeasons.value).set(getContentId(item) || '', seasonId)
+}
+
+/**
+ * The row a series row's editor updates: the picked season (by default the first one not
+ * completed, else the last), as its watchlist row or, when it isn't listed yet, a new
+ * Planned one. Any other row edits itself.
+ */
+const editTarget = (item: WatchlistItem): WatchlistItem => {
+  const cards = seasonCards(item)
+  if (!cards.length) return item
+  const seriesId = getContentId(item) || ''
+  const pick =
+    cards.find((card) => card._id === selectedSeasons.value.get(seriesId)) ||
+    cards.find((card) => contentStore.getWatchlistItem(card._id)?.status !== 'completed') ||
+    cards[cards.length - 1]!
+  const row = contentStore.getWatchlistItem(pick._id)
+  if (row) return row
+  return {
+    content: {
+      _id: pick._id,
+      title: pick.title,
+      contentType: 'season',
+      seriesId,
+      episodeCount: pick.episodeCount ?? undefined,
+      genres: [],
+    } as unknown as UnifiedContent,
+    status: 'plan_to_watch',
+    currentEpisode: 0,
+  } as WatchlistItem
 }
 
 /** A series row the server keeps from its seasons' rows (it has seasons listed). */
@@ -730,8 +793,8 @@ const filterRows = computed(() =>
 
 /** Whether a row passes the status and type chips. */
 const matchesFilters = (item: WatchlistItem) =>
-  (statusFilter.value === 'all' || item.status === statusFilter.value) &&
-  matchesContentTypeFilter(getItemContentType(item), typeFilter.value)
+  matchesStatusChips(item.status, statusFilter.value) &&
+  matchesTypeChips(getItemContentType(item), typeFilter.value)
 
 /** Non-empty status sections in display order, filtered by the chips and search, sorted by the toolbar. */
 const sections = computed(() => {
@@ -760,6 +823,7 @@ const toggleExpanded = (item: WatchlistItem) => {
   } else {
     expandedItems.value.add(contentId)
     initializeFormData(item)
+    void loadSeasonCards(item)
   }
 }
 
@@ -882,17 +946,29 @@ const updateLocalFormData = (
   localFormData.value.set(itemId, currentData)
 }
 
-// Save all changes for an item
+// Save all changes for an item (a season not listed yet is added)
 const saveWatchlistItem = async (item: WatchlistItem) => {
   const itemId = getContentId(item)
-  const formData = localFormData.value.get(itemId)
-
-  if (!formData) {
-    toast.error('No changes to save')
-    return
-  }
+  const formData = localFormData.value.get(itemId) ?? getLocalFormData(item)
 
   try {
+    if (!contentStore.isInWatchlist(itemId)) {
+      await contentStore.addToWatchlist(
+        itemId,
+        formData.status as WatchlistStatus,
+        formData.rating,
+        formData.currentEpisode,
+        undefined,
+        formData.notes || undefined,
+        {
+          startedOn: formData.startedOn || null,
+          completedOn: formData.completedOn || null,
+          rewatchCount: formData.rewatchCount || 0,
+        },
+      )
+      toast.success('Watchlist item saved successfully')
+      return
+    }
     await contentStore.updateWatchlistItem(itemId, {
       status: formData.status as WatchlistStatus,
       currentEpisode: formData.currentEpisode,
@@ -1471,43 +1547,6 @@ onUnmounted(() => {
 .info-value {
   color: var(--text-primary);
   font-weight: 500;
-}
-
-.season-summary-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.season-summary-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.season-summary-link {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-primary);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.season-summary-link:hover {
-  text-decoration: underline;
-}
-
-.season-summary-status {
-  font-size: 0.8rem;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 .progress-section {
