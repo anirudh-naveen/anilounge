@@ -10,8 +10,9 @@
   `presetTags` and `presetKind`. Emits `saved` with the stored post, or `cancel`.
 
   A review's score follows the watchlist: it starts from your watchlist rating for
-  the reviewed title (its first movie/series/special tag), and saving writes the
-  score back there, adding the title as Completed when it isn't on your list.
+  the reviewed title (its first movie/series/special tag; a series' seasons' average),
+  and saving writes the score back there, adding the title as Completed when it isn't
+  on your list (except a series, which is listed season by season).
 -->
 <template>
   <form class="composer" data-testid="forum-composer" @submit.prevent="submit">
@@ -206,9 +207,12 @@ const watchlistItem = computed(() =>
   subject.value ? contentStore.getWatchlistItem(subject.value.contentId) || null : null,
 )
 
-/** The user's watchlist rating for the subject, when they have one. */
+/**
+ * The user's watchlist rating for the subject, when they have one. A series not on the
+ * list itself is rated through its seasons: the average of the ones rated.
+ */
 const watchlistRating = computed(() => {
-  const rating = watchlistItem.value?.rating
+  const rating = subject.value ? contentStore.getWatchlistRating(subject.value.contentId) : null
   return typeof rating === 'number' && rating >= 1 ? rating : null
 })
 
@@ -234,6 +238,8 @@ const syncWatchlistRating = async () => {
   if (!target || !authStore.isAuthenticated) return
   try {
     if (!watchlistItem.value) {
+      // Series go on watchlists season by season, so a series review leaves the list alone.
+      if (target.kind === 'series') return
       await contentStore.addToWatchlist(target.contentId, 'completed', score.value)
     } else if (watchlistRating.value !== score.value) {
       await contentStore.updateWatchlistItem(target.contentId, { rating: score.value })
