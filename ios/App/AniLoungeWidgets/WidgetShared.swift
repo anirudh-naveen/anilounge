@@ -6,6 +6,8 @@ enum WidgetShared {
     static let appGroup = "group.net.anilounge.app"
     /// The widget token the signed-in app stores for the widgets (see services/widgetService.js).
     static let tokenKey = "widgetToken"
+    /// The site theme the app last saved (WidgetTheme.swift reads it).
+    static let themeKey = "widgetTheme"
     static var feedURL: URL {
         #if DEBUG
         // Debug builds can read a local feed instead (set "widgetFeedURL" in the group's defaults).

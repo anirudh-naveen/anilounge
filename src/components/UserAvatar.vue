@@ -149,9 +149,9 @@ const FRAMES: Record<string, { parts: string[]; transform: string; darken?: numb
   // backrest behind, armrests at the sides, and the seat base and legs below.
   bot: {
     parts: [
-      'M7 1.5h10a4 4 0 0 1 4 4V15H3V5.5a4 4 0 0 1 4-4z',
-      'M3 9.6a2.3 2.3 0 0 1 2.3 2.3V19H.7v-7.1A2.3 2.3 0 0 1 3 9.6zM21 9.6a2.3 2.3 0 0 1 2.3 2.3V19h-4.6v-7.1A2.3 2.3 0 0 1 21 9.6z',
-      'M2 17.6h20a1 1 0 0 1 1 1v1.6a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-1.6a1 1 0 0 1 1-1zM3.4 21.2h2v2.2h-2zM18.6 21.2h2v2.2h-2z',
+      'M7.5 2.4h9a3.6 3.6 0 0 1 3.6 3.6V15H3.9V6a3.6 3.6 0 0 1 3.6-3.6z',
+      'M3.2 10.4a1.7 1.7 0 0 1 1.7 1.7v6.3H1.5v-6.3a1.7 1.7 0 0 1 1.7-1.7zM20.8 10.4a1.7 1.7 0 0 1 1.7 1.7v6.3h-3.4v-6.3a1.7 1.7 0 0 1 1.7-1.7z',
+      'M2.6 17.8h18.8a.8.8 0 0 1 .8.8v1a.8.8 0 0 1-.8.8H2.6a.8.8 0 0 1-.8-.8v-1a.8.8 0 0 1 .8-.8zM4 20.4h1.5v1.8H4zM18.5 20.4h1.5v1.8h-1.5z',
     ],
     transform: around(12, 12, 1),
     darken: 0,

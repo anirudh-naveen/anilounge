@@ -4,6 +4,7 @@ import {
   describeActivity,
   widgetActivity,
   widgetRelease,
+  widgetPoster,
   widgetTokenFrom,
 } from './widgetService.js'
 
@@ -54,9 +55,23 @@ describe('widgetRelease', () => {
       episode: null,
       at: null,
       path: '/movie/look-back/c2',
+      poster: null,
     })
     const show = { ...content, contentType: 'tv', title: 'Frieren' }
     assert.equal(widgetRelease({ kind: 'episode', at: null, content: show }).episode, 3)
+  })
+})
+
+describe('widgetPoster', () => {
+  it('builds small TMDB posters and keeps absolute image URLs', () => {
+    assert.equal(widgetPoster('/abc.jpg'), 'https://image.tmdb.org/t/p/w154/abc.jpg')
+    assert.equal(
+      widgetPoster('http://cdn.myanimelist.net/images/anime/1.jpg'),
+      'https://cdn.myanimelist.net/images/anime/1.jpg',
+    )
+    assert.equal(widgetPoster('//img.example/x.jpg'), 'https://img.example/x.jpg')
+    assert.equal(widgetPoster('https://s4.anilist.co/x.jpg'), 'https://s4.anilist.co/x.jpg')
+    assert.equal(widgetPoster(''), null)
   })
 })
 

@@ -94,7 +94,7 @@
             <div class="setting-item">
               <div class="setting-info">
                 <h3>Theme</h3>
-                <p>Pick one to preview it; Save keeps it</p>
+                <p>Select a theme to preview the color</p>
               </div>
               <div class="setting-control">
                 <div class="theme-options" role="radiogroup" aria-label="Theme">
@@ -1367,6 +1367,24 @@ onMounted(() => {
   .setting-item {
     grid-template-columns: 1fr;
     gap: 1rem;
+  }
+}
+
+/* Phones: all the themes on one row, sharing the width. */
+@media (max-width: 600px) {
+  .theme-options {
+    display: flex;
+    flex-wrap: nowrap;
+  }
+
+  .theme-option {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.45rem 0.2rem;
+    font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

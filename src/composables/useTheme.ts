@@ -5,10 +5,12 @@
  * choice runs light → dawn → penumbra → dusk → dark (the default), is saved in
  * localStorage as a display preference, and is applied as `data-theme` on <html>.
  * Settings can preview a theme before saving it. index.html applies the saved
- * theme before first paint so pages do not flash.
+ * theme before first paint so pages do not flash. In the iOS app the widgets follow the
+ * saved theme, and the app icon switches to match when a new one is picked.
  */
 
 import { computed, ref, watch } from 'vue'
+import { setAppIconTheme, setWidgetTheme } from '@/utils/nativeApp'
 
 export const THEMES = ['light', 'dawn', 'penumbra', 'dusk', 'dark'] as const
 export type ThemePreference = (typeof THEMES)[number]
@@ -49,12 +51,17 @@ const applyTheme = (theme: ThemePreference) => {
 
 watch(shown, applyTheme, { immediate: true })
 
+// In the iOS app, the home screen widgets follow the saved theme (not previews).
+watch(preference, setWidgetTheme, { immediate: true })
+
 /**
  * Theme state and actions.
  * @returns `preference` (saved choice), `shown` (what is on screen), `setPreference`, and `preview`.
  */
 export function useTheme() {
   const setPreference = (value: ThemePreference) => {
+    // The app icon follows a theme someone picks (iOS announces each icon change).
+    if (value !== preference.value) setAppIconTheme(value)
     preference.value = value
     previewed.value = null
     try {
