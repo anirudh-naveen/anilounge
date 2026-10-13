@@ -1,8 +1,8 @@
 <!--
   WatchlistFilters.vue — status and type filter chips for a watchlist (component).
 
-  Two rows of pill chips: status (All, Planned, Watching, …) and type (All Types,
-  Movies, Series). Each chip shows how many rows it would leave, given the other
+  Two rows of pill chips: status (All, Planned, Watching, …) and type (All, Movies,
+  Series), split by a thin line. Each chip shows how many rows it would leave, given the other
   row's choice. Used on the Watchlist page and the profile Watchlist tab; the
   active chip color comes from `--filter-accent` (coral by default).
 -->
@@ -22,6 +22,7 @@
         {{ option.label }} <span class="chip-count">{{ option.count }}</span>
       </button>
     </div>
+    <hr class="filter-divider" />
     <div class="filter-row" role="group" aria-label="Filter by type">
       <button
         v-for="option in typeChips"
@@ -90,8 +91,16 @@ const typeChips = computed(() => {
   gap: 0.5rem;
 }
 
+.filter-divider {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--border-color);
+}
+
 .filter-chip {
   display: inline-flex;
+  flex-shrink: 0;
+  white-space: nowrap;
   align-items: center;
   gap: 0.4rem;
   padding: 0.4rem 0.85rem;
@@ -122,5 +131,20 @@ const typeChips = computed(() => {
 .chip-count {
   opacity: 0.75;
   font-weight: 500;
+}
+
+/* Phones: each row is one line that scrolls sideways instead of wrapping. */
+@media (max-width: 600px) {
+  .filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: -2px;
+    padding: 2px;
+    scrollbar-width: none;
+  }
+
+  .filter-row::-webkit-scrollbar {
+    display: none;
+  }
 }
 </style>

@@ -288,10 +288,10 @@ describe('TVShowDetails series', () => {
       'episode-row',
       'data-testid="entity-cast-row"',
       'where-to-watch-stub',
-      'forum-highlights-stub',
     ].map((marker) => html.indexOf(marker))
     expect(order.every((index) => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
+    expect(html).not.toContain('forum-highlights-stub')
     expect(wrapper.text()).not.toContain('Related Content')
   })
 

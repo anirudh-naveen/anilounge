@@ -347,6 +347,8 @@ interface WidgetBridgePlugin {
   setToken(options: { token: string }): Promise<void>
   clearToken(): Promise<void>
   reload(): Promise<void>
+  setTheme(options: { theme: string }): Promise<void>
+  setAppIcon(options: { theme: string }): Promise<{ changed: boolean }>
 }
 
 const WidgetBridge = registerPlugin<WidgetBridgePlugin>('WidgetBridge')
@@ -370,6 +372,19 @@ export async function disconnectWidgets(): Promise<void> {
   } catch {
     // An older app build without the widget plugin: nothing to sign out.
   }
+}
+
+/** Tell the widgets which site theme is saved (they redraw only when it changed). */
+export function setWidgetTheme(theme: string): void {
+  if (isNativeApp) WidgetBridge.setTheme({ theme }).catch(() => {})
+}
+
+/**
+ * Switch the home screen icon to match a theme someone just picked. iOS shows a brief
+ * "icon changed" notice, so this only runs on an actual change in Settings.
+ */
+export function setAppIconTheme(theme: string): void {
+  if (isNativeApp) WidgetBridge.setAppIcon({ theme }).catch(() => {})
 }
 
 /** Ask the widgets to refresh (after a watchlist change). */

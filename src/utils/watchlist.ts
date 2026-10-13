@@ -21,6 +21,27 @@ export const getWatchlistStatusLabel = (status?: string) => {
   return option ? option.label : 'In Watchlist'
 }
 
+/** Order a series' season statuses are summed up in: the first one any season has wins. */
+const SERIES_STATUS_ORDER: WatchlistStatus[] = [
+  'watching',
+  'on_hold',
+  'plan_to_watch',
+  'completed',
+  'dropped',
+]
+
+/**
+ * One status for a series tracked season by season: Completed only when every tracked
+ * season is, otherwise the most active status any season has.
+ * @param statuses - The tracked seasons' statuses.
+ * @returns The summary, or undefined when no season is tracked.
+ */
+export const summarizeSeasonStatuses = (statuses: WatchlistStatus[]) => {
+  if (!statuses.length) return undefined
+  if (statuses.every((status) => status === 'completed')) return 'completed'
+  return SERIES_STATUS_ORDER.find((status) => status !== 'completed' && statuses.includes(status))
+}
+
 /**
  * Episodes watched as shown and edited: completed titles sit on their last episode when
  * the total is known (the server saves the same), whatever an older row stored.
@@ -69,7 +90,7 @@ export type WatchlistTypeFilter = 'all' | 'movie' | 'tv'
 
 /** Type chips on the watchlist and profile pages; values match `matchesContentTypeFilter`. */
 export const WATCHLIST_TYPE_FILTER_OPTIONS: { value: WatchlistTypeFilter; label: string }[] = [
-  { value: 'all', label: 'All Types' },
+  { value: 'all', label: 'All' },
   { value: 'movie', label: 'Movies' },
   { value: 'tv', label: 'Series' },
 ]

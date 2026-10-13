@@ -117,9 +117,24 @@ const pathOf = (content) =>
   })
 
 /**
+ * A small poster for a widget row (TMDB `w154`, or the stored absolute URL), as the
+ * site builds image URLs (`getImageUrl` in src/services/api.ts).
+ * @param {unknown} path - Poster path or URL.
+ * @returns {string | null}
+ */
+export function widgetPoster(path) {
+  if (typeof path !== 'string' || !path) return null
+  if (path.startsWith('//')) return `https:${path}`
+  if (/^http:\/\/[^/]*myanimelist\.net/i.test(path))
+    return `https://${path.slice('http://'.length)}`
+  if (/^https?:\/\//.test(path)) return path
+  return `https://image.tmdb.org/t/p/w154${path.startsWith('/') ? '' : '/'}${path}`
+}
+
+/**
  * One activity entry as the widget shows it.
  * @param {object} entry - From `getActivityFeed`.
- * @returns {{ id: string, who: string, isSelf: boolean, did: string, title: string, at: string, path: string }}
+ * @returns {{ id: string, who: string, isSelf: boolean, did: string, title: string, at: string, path: string, poster: string | null }}
  */
 export function widgetActivity(entry) {
   return {
@@ -130,13 +145,14 @@ export function widgetActivity(entry) {
     title: entry.content.title,
     at: entry.at,
     path: pathOf(entry.content),
+    poster: widgetPoster(entry.content.posterPath),
   }
 }
 
 /**
  * One release update as the widget shows it.
  * @param {object} item - From `getReleaseUpdates`.
- * @returns {{ id: string, title: string, kind: 'episode' | 'premiere', episode: number | null, at: string | null, path: string }}
+ * @returns {{ id: string, title: string, kind: 'episode' | 'premiere', episode: number | null, at: string | null, path: string, poster: string | null }}
  */
 export function widgetRelease(item) {
   return {
@@ -146,6 +162,7 @@ export function widgetRelease(item) {
     episode: item.kind === 'episode' ? item.content.nextEpisodeNumber || null : null,
     at: item.at,
     path: pathOf(item.content),
+    poster: widgetPoster(item.content.posterPath),
   }
 }
 
