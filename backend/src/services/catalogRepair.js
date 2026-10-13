@@ -12,6 +12,10 @@ import Content from '../models/Content.js'
 import { personNameKey, studioNameKey } from '../utils/entities.js'
 import { moveWatchHistory } from './watchEvents.js'
 import { recordMove } from './contentMoves.js'
+import { rollUpSeries } from './seriesStructure.js'
+import { syncSeriesFromSeasons } from './watchlistWrites.js'
+import { loadFribbIndex } from './fribbService.js'
+import { fribbEntryFor } from '../utils/fribb.js'
 
 const WATCHABLE = `('movie', 'series', 'season', 'special')`
 
@@ -197,6 +201,140 @@ export async function mergeDuplicateWork(fromId, toId) {
     await mergeWorkInto(fromId, toId)
     await carryExternalIds(toId, rows[0])
   })
+}
+
+/**
+ * A series split off part-way through a show ("KONOSUBA 3" holding seasons 3 and 4 while
+ * "KONOSUBA" holds 1 and 2) goes back into the show: its seasons move under `toId`
+ * (keeping their numbers), its name becomes an alias, its user and link rows move like
+ * any merged title, and its TMDB id goes to the show when the show has none. Then the show's totals and every watchlist's series row are
+ * worked out again from the seasons.
+ * @param {string} fromId - The split-off series.
+ * @param {string} toId - The series it belongs to.
+ * @returns {Promise<{ seasons: number }>} Seasons moved.
+ * @throws {Error} When either id is not a series, or they are the same.
+ */
+export async function mergeSeriesInto(fromId, toId) {
+  if (!fromId || !toId || String(fromId) === String(toId)) {
+    throw new Error('Pick two different series')
+  }
+  const { rows } = await query(
+    `SELECT id::text AS id FROM content WHERE id = ANY($1::uuid[]) AND kind = 'series'`,
+    [[String(fromId), String(toId)]],
+  )
+  if (rows.length !== 2) throw new Error('Both ids must be series')
+  const seasons = await withTransaction(async () => {
+    const { rows: ids } = await query(
+      'SELECT mal_id, tmdb_id, anilist_id FROM content WHERE id = $1',
+      [fromId],
+    )
+    const { rows: moved } = await query(
+      'UPDATE seasons SET series_id = $2 WHERE series_id = $1 RETURNING content_id::text AS id',
+      [fromId, toId],
+    )
+    await query(
+      `INSERT INTO content_akas (content_id, name)
+       SELECT $2::uuid, name FROM content WHERE id = $1
+       UNION
+       SELECT $2::uuid, name FROM content_akas WHERE content_id = $1
+       ON CONFLICT DO NOTHING`,
+      [fromId, toId],
+    )
+    await mergeWorkInto(fromId, toId)
+    // The show's TMDB id, when the split-off series was the one holding it.
+    await carryExternalIds(toId, ids[0])
+    return moved
+  })
+  await rollUpSeries(String(toId))
+  if (seasons[0]) await syncSeriesFromSeasons({ seasonId: seasons[0].id })
+  return { seasons: seasons.length }
+}
+
+/**
+ * Series one show was split across: series whose seasons Fribb puts on the same TMDB
+ * show. The one starting earliest (then the one carrying that TMDB id) keeps the show;
+ * each other one should be merged into it (`mergeSeriesInto`). Fribb is sometimes
+ * wrong (a remake on its original's show), so each pair is checked before merging.
+ * @returns {Promise<Array<{ from: object, into: object, tmdbTvId: number }>>}
+ */
+export async function findFribbSplits() {
+  const index = await loadFribbIndex()
+  if (!index) return []
+  const { rows } = await query(
+    `SELECT sn.series_id::text AS series_id, s.name, s.tmdb_id, c.mal_id, c.anilist_id,
+            sn.season_number
+     FROM seasons sn
+     JOIN content c ON c.id = sn.content_id
+     JOIN content s ON s.id = sn.series_id`,
+  )
+  const byShow = new Map()
+  for (const row of rows) {
+    const tmdbTvId = fribbEntryFor(index, {
+      malId: row.mal_id,
+      anilistId: row.anilist_id,
+    })?.tmdbTvId
+    if (!tmdbTvId) continue
+    const series = byShow.get(tmdbTvId) || new Map()
+    const known = series.get(row.series_id)
+    series.set(row.series_id, {
+      id: row.series_id,
+      name: row.name,
+      tmdbId: row.tmdb_id,
+      firstSeason: Math.min(known?.firstSeason ?? Infinity, Number(row.season_number)),
+    })
+    byShow.set(tmdbTvId, series)
+  }
+  const splits = []
+  for (const [tmdbTvId, series] of byShow) {
+    if (series.size < 2) continue
+    const all = [...series.values()]
+    const into = all.sort(
+      (a, b) =>
+        a.firstSeason - b.firstSeason ||
+        Number(Number(b.tmdbId) === tmdbTvId) - Number(Number(a.tmdbId) === tmdbTvId),
+    )[0]
+    for (const from of all) if (from.id !== into.id) splits.push({ from, into, tmdbTvId })
+  }
+  return splits
+}
+
+/**
+ * Series that start part-way through a show (no season 1), each with the series of
+ * the same franchise that could hold it: one whose seasons run from 1 to before it.
+ * Best match first: the one ending right before it, then one whose name starts its name.
+ * @returns {Promise<Array<{ split: object, parents: object[] }>>}
+ */
+export async function findSplitSeries() {
+  const { rows } = await query(
+    `WITH runs AS (
+       SELECT series_id, min(season_number) AS first, max(season_number) AS last
+       FROM seasons GROUP BY series_id
+     )
+     SELECT s.id::text AS split_id, s.name AS split_name, r.first,
+            p.id::text AS parent_id, p.name AS parent_name, pr.last AS parent_last
+     FROM runs r
+     JOIN content s ON s.id = r.series_id
+     LEFT JOIN franchise_members fs ON fs.member_id = s.id
+     LEFT JOIN franchise_members fp
+       ON fp.franchise_id = fs.franchise_id AND fp.member_id <> s.id
+     LEFT JOIN runs pr ON pr.series_id = fp.member_id AND pr.first = 1 AND pr.last < r.first
+     LEFT JOIN content p ON p.id = pr.series_id AND p.kind = 'series'
+     WHERE r.first > 1
+     ORDER BY s.name, (r.first - pr.last) NULLS LAST,
+              (lower(s.name) LIKE lower(p.name) || '%') DESC NULLS LAST, p.name`,
+  )
+  const bySplit = new Map()
+  for (const row of rows) {
+    const entry = bySplit.get(row.split_id) || {
+      split: { id: row.split_id, name: row.split_name, firstSeason: row.first },
+      parents: [],
+    }
+    if (row.parent_id) {
+      entry.parents.push({ id: row.parent_id, name: row.parent_name, lastSeason: row.parent_last })
+    }
+    bySplit.set(row.split_id, entry)
+  }
+  return [...bySplit.values()]
 }
 
 /**

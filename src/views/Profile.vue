@@ -279,10 +279,15 @@
                   'over-limit': index >= FAVORITES_MAX,
                 }"
                 :draggable="reordering === group.key"
+                :data-slot-index="index"
                 data-testid="favorite-slot"
                 @dragstart="onDragStart(index, $event)"
                 @dragover="onDragOver(index, $event)"
                 @dragend="dragIndex = null"
+                @touchstart="onTouchStart(index, $event)"
+                @touchmove="onTouchMove"
+                @touchend="onTouchEnd"
+                @touchcancel="onTouchEnd"
               >
                 <span class="slot-rank-badge" data-testid="favorite-rank">#{{ index + 1 }}</span>
                 <div
@@ -632,12 +637,17 @@ import {
   getContentTypeDisplay,
   getDetailsRouteName,
   getPosterUrl,
-  matchesContentTypeFilter,
   profileAPI,
 } from '@/services/api'
 import { getRatingColor, getRatingTextStyle } from '@/utils/ratingColors'
 import { getDisplayTitle } from '@/utils/titles'
-import { getWatchlistStatusLabel, type WatchlistTypeFilter } from '@/utils/watchlist'
+import {
+  getWatchlistStatusLabel,
+  matchesStatusChips,
+  matchesTypeChips,
+  type WatchlistStatus,
+  type WatchlistTypeChoice,
+} from '@/utils/watchlist'
 import WatchlistFilters from '@/components/WatchlistFilters.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import ListSearch from '@/components/ListSearch.vue'
@@ -651,7 +661,7 @@ import { useBadgesStore } from '@/stores/badges'
 import { badgeInfo } from '@/utils/badges'
 import { accentColor, readableOn } from '@/utils/accent'
 import FriendButton from '@/components/FriendButton.vue'
-import { shareLink } from '@/utils/nativeApp'
+import { haptic, shareLink } from '@/utils/nativeApp'
 import ProfileForum from '@/components/ProfileForum.vue'
 import { apiErrorMessage } from '@/utils/social'
 import type { CatalogEntity, UnifiedContent } from '@/types/content'
@@ -682,8 +692,8 @@ const favoritesStore = useFavoritesStore()
 const profile = ref<PublicProfile | null>(null)
 const isLoading = ref(true)
 const activeTab = ref<ProfileTab>('favorites')
-const watchlistFilter = ref<'all' | PublicWatchlistEntry['status']>('all')
-const watchlistTypeFilter = ref<WatchlistTypeFilter>('all')
+const watchlistFilter = ref<WatchlistStatus[]>([])
+const watchlistTypeFilter = ref<WatchlistTypeChoice[]>([])
 const watchlistQuery = ref('')
 const watchlistSortBy = ref<SortByOption>('relevance')
 const watchlistSortDirection = ref<SortDirection>('desc')
@@ -878,6 +888,57 @@ const onDragOver = (index: number, event: DragEvent) => {
   dragIndex.value = index
 }
 
+// Touch screens have no drag-and-drop events: a short press picks a card up (a quick
+// swipe still scrolls), then it takes the slot under the finger.
+const TOUCH_HOLD_MS = 200
+const TOUCH_SLOP_PX = 10
+let touchTimer: ReturnType<typeof setTimeout> | null = null
+let touchStartPoint: { x: number; y: number } | null = null
+
+const clearTouchTimer = () => {
+  if (touchTimer) clearTimeout(touchTimer)
+  touchTimer = null
+}
+
+const onTouchStart = (index: number, event: TouchEvent) => {
+  const touch = event.touches[0]
+  if (!reordering.value || !touch || event.touches.length > 1) return
+  if ((event.target as Element | null)?.closest('button')) return
+  touchStartPoint = { x: touch.clientX, y: touch.clientY }
+  clearTouchTimer()
+  touchTimer = setTimeout(() => {
+    dragIndex.value = index
+    haptic()
+  }, TOUCH_HOLD_MS)
+}
+
+const onTouchMove = (event: TouchEvent) => {
+  const touch = event.touches[0]
+  if (!touch) return
+  if (dragIndex.value === null) {
+    // Moving before the hold: the finger is scrolling, not dragging.
+    const start = touchStartPoint
+    if (start && Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > TOUCH_SLOP_PX) {
+      clearTouchTimer()
+    }
+    return
+  }
+  event.preventDefault()
+  const slot = document
+    .elementFromPoint(touch.clientX, touch.clientY)
+    ?.closest<HTMLElement>('[data-slot-index]')
+  const index = Number(slot?.dataset.slotIndex)
+  if (!slot || Number.isNaN(index) || index === dragIndex.value) return
+  moveFavorite(dragIndex.value, index - dragIndex.value)
+  dragIndex.value = index
+}
+
+const onTouchEnd = () => {
+  clearTouchTimer()
+  touchStartPoint = null
+  dragIndex.value = null
+}
+
 const saveOrder = async (key: FavoriteKey) => {
   const favorites = profile.value?.favorites
   if (!favorites) return
@@ -917,8 +978,8 @@ const watchlistFilterRows = computed(() =>
 const filteredWatchlist = computed(() => {
   const query = watchlistQuery.value.trim().toLowerCase()
   const rows = (profile.value?.watchlist || []).filter((row) => {
-    if (watchlistFilter.value !== 'all' && row.status !== watchlistFilter.value) return false
-    if (!matchesContentTypeFilter(row.content.contentType, watchlistTypeFilter.value)) return false
+    if (!matchesStatusChips(row.status, watchlistFilter.value)) return false
+    if (!matchesTypeChips(row.content.contentType, watchlistTypeFilter.value)) return false
     if (!query) return true
     const { title, englishTitle, originalTitle } = row.content
     return [getDisplayTitle(row.content), title, englishTitle, originalTitle].some((name) =>
@@ -1704,6 +1765,10 @@ const handleImageError = showPosterPlaceholder
 
 .favorite-grid.reordering .favorite-slot {
   cursor: grab;
+  /* A held card is picked up, not selected or offered as an image to save. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .favorite-grid.reordering .favorite-title-card,

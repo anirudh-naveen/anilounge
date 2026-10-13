@@ -51,19 +51,40 @@ export function mapFribbEntry(entry) {
 }
 
 /**
- * Index the list by MAL and AniList id.
+ * Index the list by MAL and AniList id, and group entries by the TMDB show they're on.
  * @param {object[]} list
- * @returns {{ byMal: Map<number, object>, byAnilist: Map<number, object> }}
+ * @returns {{ byMal: Map<number, object>, byAnilist: Map<number, object>, byTmdbTv: Map<number, object[]> }}
  */
 export function indexFribb(list) {
   const byMal = new Map()
   const byAnilist = new Map()
+  const byTmdbTv = new Map()
   for (const raw of Array.isArray(list) ? list : []) {
     const entry = mapFribbEntry(raw)
     if (entry.malId && !byMal.has(entry.malId)) byMal.set(entry.malId, entry)
     if (entry.anilistId && !byAnilist.has(entry.anilistId)) byAnilist.set(entry.anilistId, entry)
+    if (entry.tmdbTvId)
+      byTmdbTv.set(entry.tmdbTvId, [...(byTmdbTv.get(entry.tmdbTvId) || []), entry])
   }
-  return { byMal, byAnilist }
+  return { byMal, byAnilist, byTmdbTv }
+}
+
+/**
+ * MAL and AniList ids of the other entries Fribb puts on the same TMDB show as `entry`
+ * (the show's other seasons).
+ * @param {{ byTmdbTv?: Map<number, object[]> } | null} index
+ * @param {object | null} entry - From `fribbEntryFor`
+ * @returns {{ malIds: number[], anilistIds: number[] }}
+ */
+export function fribbSiblingIds(index, entry) {
+  const siblings = (entry?.tmdbTvId && index?.byTmdbTv?.get(entry.tmdbTvId)) || []
+  const others = siblings.filter(
+    (other) => other.malId !== entry.malId || other.anilistId !== entry.anilistId,
+  )
+  return {
+    malIds: others.map((other) => other.malId).filter(Boolean),
+    anilistIds: others.map((other) => other.anilistId).filter(Boolean),
+  }
 }
 
 /**

@@ -12,7 +12,7 @@ import { runCatalogMaintenance } from './catalogMaintenance.js'
 import { importSeries } from './catalogImport.js'
 import { loadFribbIndex } from './fribbService.js'
 import { attachTvEntry, hasSeriesStructure } from './seriesStructure.js'
-import { fribbEntryFor } from '../utils/fribb.js'
+import { fribbEntryFor, fribbSiblingIds } from '../utils/fribb.js'
 import {
   ANILIST_ORIGIN_COUNTRIES,
   convertAnilistToContent,
@@ -453,9 +453,7 @@ class DatabasePopulator {
    */
   isLikelySameContent(newContent, existingContent) {
     if (externalIdsConflict(newContent, existingContent)) {
-      console.log(
-        `External ID mismatch: ${newContent.title} vs ${existingContent.title}`,
-      )
+      console.log(`External ID mismatch: ${newContent.title} vs ${existingContent.title}`)
       return false
     }
 
@@ -640,25 +638,13 @@ class DatabasePopulator {
   }
 
   /**
-   * Put a title this sync just added into the series structure: an anime TV entry
-   * becomes a season of its show (seriesStructure.js `attachTvEntry`), and every new
-   * show is imported with its seasons and episodes. Before the series migration this
-   * does nothing. Failures are logged, never thrown.
+   * Put a title this sync just added into the series structure (`placeNewTvEntry`).
    * @param {object} content - The saved document
-   * @param {{ importDetails?: boolean }} [options] - `false` skips the import (seasons,
-   *   episodes), which the six-hourly refresh or `db:reload` then fills.
+   * @param {{ importDetails?: boolean }} [options]
    * @returns {Promise<void>}
    */
-  async placeNewSeries(content, { importDetails = true } = {}) {
-    if (content.contentType !== 'tv') return
-    try {
-      if (!(await hasSeriesStructure())) return
-      const entry = fribbEntryFor(await loadFribbIndex(), content)
-      const seriesId = (await attachTvEntry(String(content._id), { entry })) || String(content._id)
-      if (importDetails) await importSeries(seriesId)
-    } catch (error) {
-      console.error(`Placing ${content.title} in its series failed:`, error.message)
-    }
+  async placeNewSeries(content, options) {
+    await placeNewTvEntry(content, options)
   }
 
   /**
@@ -749,7 +735,8 @@ class DatabasePopulator {
     existingContent.popularity = tmdbData.popularity
 
     // MAL lists the animation studio; TMDB companies are publishers/distributors for anime.
-    const hasMalStudios = Boolean(existingContent.malId) && (existingContent.studios || []).length > 0
+    const hasMalStudios =
+      Boolean(existingContent.malId) && (existingContent.studios || []).length > 0
     if (!hasMalStudios) {
       existingContent.studios = [
         ...new Set([...(existingContent.studios || []), ...(tmdbData.studios || [])]),
@@ -979,8 +966,15 @@ class DatabasePopulator {
     console.log(`   Errors: ${this.stats.errors}`)
     console.log(`   Skipped: ${this.stats.skipped}`)
 
-    const { totalContent, tmdbOnlyContent, malOnlyContent, mergedContent, movies, tvShows, specials } =
-      await catalogStats()
+    const {
+      totalContent,
+      tmdbOnlyContent,
+      malOnlyContent,
+      mergedContent,
+      movies,
+      tvShows,
+      specials,
+    } = await catalogStats()
 
     console.log('\nDatabase Statistics:')
     console.log(`   Total content: ${totalContent}`)
@@ -992,6 +986,31 @@ class DatabasePopulator {
     console.log(`   Movies: ${movies}`)
     console.log(`   TV Shows: ${tvShows}`)
     console.log(`   Specials: ${specials}`)
+  }
+}
+
+/**
+ * Put a TV title just added from any source into the series structure: an anime TV
+ * entry becomes a season of its show (seriesStructure.js `attachTvEntry`), and every new
+ * show is imported with its seasons and episodes. Before the series migration this
+ * does nothing. Failures are logged, never thrown.
+ * @param {object} content - The saved document
+ * @param {{ importDetails?: boolean }} [options] - `false` skips the import (seasons,
+ *   episodes), which the six-hourly refresh or `db:reload` then fills.
+ * @returns {Promise<void>}
+ */
+export async function placeNewTvEntry(content, { importDetails = true } = {}) {
+  if (content?.contentType !== 'tv') return
+  try {
+    if (!(await hasSeriesStructure())) return
+    const index = await loadFribbIndex()
+    const entry = fribbEntryFor(index, content)
+    const siblings = fribbSiblingIds(index, entry)
+    const seriesId =
+      (await attachTvEntry(String(content._id), { entry, siblings })) || String(content._id)
+    if (importDetails) await importSeries(seriesId)
+  } catch (error) {
+    console.error(`Placing ${content.title} in its series failed:`, error.message)
   }
 }
 
@@ -1033,7 +1052,12 @@ export async function ingestMalRankingByTypes(rankingType, limit = 50, allowedTy
     contentData.userRatingSum = 0
     if (contentData.malScore) contentData.unifiedScore = contentData.malScore
 
-    await Content.create(contentData)
+    const created = await Content.create(contentData)
+    if (created.contentType === 'tv') {
+      // Its sequel/prequel links first, so a new season finds its show.
+      await relationshipService.populateRelationshipsFromMAL(created).catch(() => {})
+      await placeNewTvEntry(created, { importDetails: false })
+    }
     inserted++
   }
 

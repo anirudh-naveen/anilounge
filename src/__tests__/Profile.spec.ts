@@ -315,6 +315,40 @@ describe('Profile', () => {
     expect(titles('favorites-movies')).toEqual(['Spirited Away'])
   })
 
+  it('reorders by holding and dragging a card on a touch screen', async () => {
+    const profile = buildProfile({ isOwner: true })
+    profile.favorites!.content = [
+      { _id: 's1', title: 'Gurren Lagann', overview: '', contentType: 'tv', genres: [] },
+      { _id: 's2', title: 'Frieren', overview: '', contentType: 'tv', genres: [] },
+    ]
+    getPublicProfile.mockResolvedValue({ data: { data: profile } })
+    reorderFavorites.mockResolvedValue({ data: { data: ['s2', 's1'] } })
+    const { wrapper } = await mountAt('/profile')
+    await wrapper.get('[data-testid="favorites-reorder-series"]').trigger('click')
+
+    const slots = wrapper
+      .get('[data-testid="favorites-series"]')
+      .findAll('[data-testid="favorite-slot"]')
+    const touch = (x: number) => ({ touches: [{ clientX: x, clientY: 0 }] })
+    const elementFromPoint = vi.fn().mockReturnValue(slots[1]!.element)
+    Object.defineProperty(document, 'elementFromPoint', {
+      value: elementFromPoint,
+      configurable: true,
+    })
+    vi.useFakeTimers()
+    try {
+      await slots[0]!.trigger('touchstart', touch(0))
+      vi.advanceTimersByTime(250)
+      await slots[0]!.trigger('touchmove', touch(5))
+      await slots[0]!.trigger('touchend')
+    } finally {
+      vi.useRealTimers()
+    }
+    await wrapper.get('[data-testid="favorites-save-order"]').trigger('click')
+    await flushPromises()
+    expect(reorderFavorites).toHaveBeenCalledWith(['s2', 's1'])
+  })
+
   it('lets the owner reorder a category and saves it', async () => {
     const profile = buildProfile({ isOwner: true })
     profile.favorites!.characters = [

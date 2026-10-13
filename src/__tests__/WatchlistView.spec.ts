@@ -5,6 +5,10 @@ import Watchlist from '@/views/Watchlist.vue'
 
 const loadWatchlist = vi.fn().mockResolvedValue(undefined)
 const updateWatchlistItem = vi.fn().mockResolvedValue(true)
+const addToWatchlist = vi.fn().mockResolvedValue(true)
+const { getContentById } = vi.hoisted(() => ({
+  getContentById: vi.fn().mockResolvedValue({ data: { data: {} } }),
+}))
 
 const watchlist = [
   {
@@ -50,8 +54,16 @@ vi.mock('@/stores/content', () => ({
     getSeasonRows: (seriesId: string) =>
       watchlist.filter((item) => (item.content as { seriesId?: string }).seriesId === seriesId),
     getWatchlistRating: () => 8.5,
+    getWatchlistItem: (id: string) => watchlist.find((item) => item.content._id === id),
+    isInWatchlist: (id: string) => watchlist.some((item) => item.content._id === id),
+    addToWatchlist,
   }),
 }))
+
+vi.mock('@/services/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api')>()
+  return { ...actual, contentAPI: { ...actual.contentAPI, getContentById } }
+})
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
@@ -110,11 +122,11 @@ describe('Watchlist status sections', () => {
     expect(titles()).toEqual(['Spirited Away'])
     expect(wrapper.get('[data-testid="watchlist-filter-status-watching"]').text()).toContain('0')
 
+    // Chips of a row add up: Movies and Series together, then Series alone.
     await wrapper.get('[data-testid="watchlist-filter-type-series"]').trigger('click')
+    expect(titles()).toEqual(['Frieren', 'Spirited Away'])
+    await wrapper.get('[data-testid="watchlist-filter-type-movie"]').trigger('click')
     expect(titles()).toEqual(['Frieren'])
-
-    await wrapper.get('[data-testid="watchlist-filter-type-season"]').trigger('click')
-    expect(titles()).toEqual([])
 
     await wrapper.get('[data-testid="watchlist-filter-type-all"]').trigger('click')
     await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
@@ -123,27 +135,53 @@ describe('Watchlist status sections', () => {
       'Completed1',
     ])
 
+    await wrapper.get('[data-testid="watchlist-filter-status-watching"]').trigger('click')
+    expect(titles()).toEqual(['Frieren', 'Spirited Away'])
+
+    await wrapper.get('[data-testid="watchlist-filter-status-all"]').trigger('click')
     await wrapper.get('[data-testid="watchlist-filter-status-dropped"]').trigger('click')
     expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
       'No titles match these filters.',
     )
   })
 
-  it('shows a series kept from its seasons as a summary, not an editor', async () => {
+  it('edits a series through its seasons, and gives seasons no heart', async () => {
+    getContentById.mockResolvedValueOnce({
+      data: {
+        data: {
+          seasons: [
+            { _id: 'tv-1-s1', title: 'Frieren', label: 'Season 1', episodeCount: 28 },
+            { _id: 'tv-1-s2', title: 'Frieren Season 2', label: 'Season 2', episodeCount: 10 },
+          ],
+        },
+      },
+    })
     const frieren = watchlist.find((item) => item.content._id === 'tv-1')!
     const season = {
       ...frieren,
+      status: 'completed',
       content: { ...frieren.content, _id: 'tv-1-s1', contentType: 'season', seriesId: 'tv-1' },
     } as unknown as (typeof watchlist)[number]
     watchlist.push(season)
     try {
       const wrapper = await mountPage()
+      const hearts = wrapper.findAllComponents({ name: 'FavoriteHeart' })
+      expect(hearts.map((heart) => heart.props('contentId'))).not.toContain('tv-1-s1')
+
       const series = wrapper
         .findAll('.watchlist-item')
-        .find((row) => row.text().includes('Frieren'))
-      await series!.get('.item-header').trigger('click')
-      expect(wrapper.find('[data-testid="watchlist-season-summary"]').exists()).toBe(true)
-      expect(wrapper.text()).toContain('8.5')
+        .find((row) => row.find('.item-type').text() === 'Series')!
+      expect(series.text()).toContain('8.5')
+      await series.get('.item-header').trigger('click')
+      await flushPromises()
+
+      // The first season not completed is picked; it isn't listed yet, so saving adds it.
+      const select = wrapper.get<HTMLSelectElement>('[data-testid="watchlist-season-select"]')
+      expect(select.element.value).toBe('tv-1-s2')
+      await wrapper.get('.save-watch-btn').trigger('click')
+      await flushPromises()
+      expect(addToWatchlist.mock.calls[0]?.[0]).toBe('tv-1-s2')
+      expect(updateWatchlistItem).not.toHaveBeenCalledWith('tv-1', expect.anything())
     } finally {
       watchlist.pop()
     }
