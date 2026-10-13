@@ -165,11 +165,14 @@ export async function applyContentRatingChange(content, oldRating, newRating) {
 /**
  * Each series on a watchlist is summed up from its seasons' rows, the way the site sums
  * a series up (src/utils/watchlist.ts `summarizeSeasonStatuses`):
- * 1. Completed once every one of its seasons is.
- * 2. Watching while any season is being watched.
+ * Seasons not released yet (upcoming) are left out while any released season is listed.
+ * 1. Completed once every released season is.
+ * 2. Watching only while a season is being watched.
  * 3. Dropped, then On hold, when any season is.
- * 4. Watching when some seasons are done and others are not.
- * 5. Planned when the first season is planned; a plan for a later season alone is Watching.
+ * 4. Planned when nothing is done yet and the first season (or only unreleased ones) is
+ *    planned.
+ * 5. On hold otherwise: some seasons done with others planned or not listed, or only a
+ *    later season planned.
  * Users add seasons; the row of a series of two or more seasons is kept here (a
  * one-season series is listed as its season alone): created once any of its seasons is
  * listed, updated with the summary (status, episodes watched across the seasons, the
@@ -187,13 +190,16 @@ export async function syncSeriesFromSeasons({
   seasonId = null,
   dryRun = false,
 } = {}) {
+  // Released: aired or airing. Unreleased seasons don't count while any released one is listed.
+  const released = (alias) =>
+    `NOT (${alias}.airing_status IS NOT DISTINCT FROM 'upcoming' OR ${alias}.release_date > now())`
   const targets = `WITH tracked AS (
        SELECT w.user_id, sn.series_id,
-              count(*) AS listed,
-              count(*) FILTER (WHERE w.status = 'completed') AS done,
-              bool_or(w.status = 'watching') AS watching,
-              bool_or(w.status = 'dropped') AS dropped,
-              bool_or(w.status = 'on_hold') AS on_hold,
+              count(*) FILTER (WHERE ${released('sw')}) AS listed,
+              count(*) FILTER (WHERE ${released('sw')} AND w.status = 'completed') AS done,
+              bool_or(${released('sw')} AND w.status = 'watching') AS watching,
+              bool_or(${released('sw')} AND w.status = 'dropped') AS dropped,
+              bool_or(${released('sw')} AND w.status = 'on_hold') AS on_hold,
               bool_or(w.status = 'plan_to_watch' AND sn.content_id = (
                 SELECT x.content_id FROM seasons x WHERE x.series_id = sn.series_id
                 ORDER BY x.season_number, x.part_number LIMIT 1
@@ -214,15 +220,16 @@ export async function syncSeriesFromSeasons({
      ),
      target AS (
        SELECT t.user_id, t.series_id, t.started_on, t.added_at,
-              CASE WHEN t.done = t.listed
-                     AND t.listed >= (SELECT count(*) FROM seasons x WHERE x.series_id = t.series_id)
-                     THEN 'completed'
+              CASE WHEN t.listed = 0 THEN 'plan_to_watch'
+                   WHEN t.done = t.listed AND t.listed >= (
+                     SELECT count(*) FROM seasons x JOIN works xw ON xw.id = x.content_id
+                     WHERE x.series_id = t.series_id AND ${released('xw')}
+                   ) THEN 'completed'
                    WHEN t.watching THEN 'watching'
                    WHEN t.dropped THEN 'dropped'
                    WHEN t.on_hold THEN 'on_hold'
-                   WHEN t.done > 0 THEN 'watching'
-                   WHEN t.first_planned THEN 'plan_to_watch'
-                   ELSE 'watching' END AS status,
+                   WHEN t.done = 0 AND t.first_planned THEN 'plan_to_watch'
+                   ELSE 'on_hold' END AS status,
               LEAST(t.episodes, COALESCE(NULLIF(s.episode_count, 0), t.episodes)) AS episodes,
               LEAST(COALESCE(t.season, 1), GREATEST(COALESCE(s.season_count, 1), 1)) AS season,
               t.completed_on

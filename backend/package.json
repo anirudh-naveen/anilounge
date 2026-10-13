@@ -44,6 +44,7 @@
     "db:reload": "node src/scripts/reloadCatalog.js",
     "db:fix-season-counts": "node src/scripts/fixSeasonCounts.js",
     "db:sync-series-watchlists": "node src/scripts/syncSeriesWatchlists.js",
+    "db:merge-split-series": "node src/scripts/mergeSplitSeries.js",
     "populate-unified": "node src/scripts/populateUnified.js",
     "calculate-user-ratings": "node src/scripts/calculateInitialUserRatings.js",
     "indexnow:submit-all": "node src/scripts/indexNowSubmitAll.js",

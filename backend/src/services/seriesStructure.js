@@ -260,14 +260,15 @@ export async function removePremigrationSeasons() {
 /**
  * Place a new anime TV entry (a `series` row with a MAL or AniList id) the catalog sync
  * just added: as a season of its show's series (the TMDB show Fribb's list puts it on,
- * else the series of a season it is a sequel or prequel of), or as season 1 of a new
- * series. Its season number follows TVDB's (Fribb), else comes after the show's last.
+ * else the series of another season Fribb puts on that show, else the series of a
+ * season it is a sequel or prequel of), or as season 1 of a new series. Its season number follows TVDB's (Fribb), else comes after the show's last.
  * Does nothing before the series migration, or for a row that isn't such an entry.
  * @param {string} contentId
- * @param {{ entry?: object | null }} [options] - The row's Fribb entry, when known
+ * @param {{ entry?: object | null, siblings?: { malIds: number[], anilistIds: number[] } | null }} [options]
+ *   - The row's Fribb entry, and the ids of the entries on the same TMDB show, when known
  * @returns {Promise<string | null>} The series it is now a season of.
  */
-export async function attachTvEntry(contentId, { entry = null } = {}) {
+export async function attachTvEntry(contentId, { entry = null, siblings = null } = {}) {
   if (!(await hasSeriesStructure())) return null
   return withTransaction(async () => {
     const { rows } = await query(
@@ -283,6 +284,16 @@ export async function attachTvEntry(contentId, { entry = null } = {}) {
       const { rows: found } = await query(
         `SELECT id::text AS id FROM content WHERE kind = 'series' AND tmdb_id = $1 AND id <> $2`,
         [entry.tmdbTvId, contentId],
+      )
+      seriesId = found[0]?.id || null
+    }
+    if (!seriesId && (siblings?.malIds?.length || siblings?.anilistIds?.length)) {
+      // The series of another season Fribb puts on the same TMDB show.
+      const { rows: found } = await query(
+        `SELECT sn.series_id::text AS id FROM seasons sn JOIN content c ON c.id = sn.content_id
+         WHERE (c.mal_id = ANY($1::int[]) OR c.anilist_id = ANY($2::int[])) AND c.id <> $3
+         GROUP BY sn.series_id ORDER BY count(*) DESC LIMIT 1`,
+        [siblings.malIds || [], siblings.anilistIds || [], contentId],
       )
       seriesId = found[0]?.id || null
     }

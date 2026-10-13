@@ -139,8 +139,14 @@ const handleImageError = (event: Event) => {
   padding-bottom: 0.5rem;
 }
 
+/* A button (inline-flex row site-wide): stack the picture, name, and role. */
 .cast-card {
   flex: 0 0 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  line-height: 1.3;
   text-align: center;
   background: transparent;
   border: 0;
