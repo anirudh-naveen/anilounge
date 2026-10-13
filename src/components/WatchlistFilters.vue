@@ -2,8 +2,9 @@
   WatchlistFilters.vue — status and type filter chips for a watchlist (component).
 
   Two rows of pill chips: status (All, Planned, Watching, …) and type (All, Movies,
-  Series, Seasons), split by a thin line. Each chip shows how many rows it would leave, given the other
-  row's choice. Used on the Watchlist page and the profile Watchlist tab; the
+  Series, Seasons), split by a thin line. Several chips of a row can be picked together
+  (Movies and Series, Planned and On hold); All clears the row. Each chip shows how many
+  rows it alone would leave, given the other row's choice. Used on the Watchlist page and the profile Watchlist tab; the
   active chip color comes from `--filter-accent` (coral by default).
 -->
 <template>
@@ -14,10 +15,10 @@
         :key="option.value"
         type="button"
         class="filter-chip"
-        :class="{ active: status === option.value }"
-        :aria-pressed="status === option.value"
+        :class="{ active: isPicked(status, option.value) }"
+        :aria-pressed="isPicked(status, option.value)"
         :data-testid="`watchlist-filter-status-${option.value}`"
-        @click="status = option.value"
+        @click="status = toggleFilterChip(status, option.value, STATUS_VALUES)"
       >
         {{ option.label }} <span class="chip-count">{{ option.count }}</span>
       </button>
@@ -29,10 +30,10 @@
         :key="option.value"
         type="button"
         class="filter-chip"
-        :class="{ active: type === option.value }"
-        :aria-pressed="type === option.value"
+        :class="{ active: isPicked(type, option.value) }"
+        :aria-pressed="isPicked(type, option.value)"
         :data-testid="`watchlist-filter-type-${option.value}`"
-        @click="type = option.value"
+        @click="type = toggleFilterChip(type, option.value, TYPE_VALUES)"
       >
         {{ option.label }} <span class="chip-count">{{ option.count }}</span>
       </button>
@@ -46,8 +47,11 @@ import { matchesContentTypeFilter } from '@/services/api'
 import {
   WATCHLIST_STATUS_FILTER_OPTIONS,
   WATCHLIST_TYPE_FILTER_OPTIONS,
+  matchesStatusChips,
+  matchesTypeChips,
+  toggleFilterChip,
   type WatchlistStatus,
-  type WatchlistTypeFilter,
+  type WatchlistTypeChoice,
 } from '@/utils/watchlist'
 
 const props = defineProps<{
@@ -55,11 +59,22 @@ const props = defineProps<{
   rows: { status: string; contentType?: string }[]
 }>()
 
-const status = defineModel<'all' | WatchlistStatus>('status', { required: true })
-const type = defineModel<WatchlistTypeFilter>('type', { required: true })
+/** Picked chips per row; empty means All. */
+const status = defineModel<WatchlistStatus[]>('status', { required: true })
+const type = defineModel<WatchlistTypeChoice[]>('type', { required: true })
+
+const STATUS_VALUES = WATCHLIST_STATUS_FILTER_OPTIONS.flatMap((option) =>
+  option.value === 'all' ? [] : [option.value],
+)
+const TYPE_VALUES = WATCHLIST_TYPE_FILTER_OPTIONS.flatMap((option) =>
+  option.value === 'all' ? [] : [option.value],
+)
+
+const isPicked = (picked: string[], value: string) =>
+  value === 'all' ? !picked.length : picked.includes(value)
 
 const statusChips = computed(() => {
-  const rows = props.rows.filter((row) => matchesContentTypeFilter(row.contentType, type.value))
+  const rows = props.rows.filter((row) => matchesTypeChips(row.contentType, type.value))
   return WATCHLIST_STATUS_FILTER_OPTIONS.map((option) => ({
     ...option,
     count:
@@ -70,7 +85,7 @@ const statusChips = computed(() => {
 })
 
 const typeChips = computed(() => {
-  const rows = props.rows.filter((row) => status.value === 'all' || row.status === status.value)
+  const rows = props.rows.filter((row) => matchesStatusChips(row.status, status.value))
   return WATCHLIST_TYPE_FILTER_OPTIONS.map((option) => ({
     ...option,
     count: rows.filter((row) => matchesContentTypeFilter(row.contentType, option.value)).length,

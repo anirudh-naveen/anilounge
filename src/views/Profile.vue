@@ -632,12 +632,17 @@ import {
   getContentTypeDisplay,
   getDetailsRouteName,
   getPosterUrl,
-  matchesContentTypeFilter,
   profileAPI,
 } from '@/services/api'
 import { getRatingColor, getRatingTextStyle } from '@/utils/ratingColors'
 import { getDisplayTitle } from '@/utils/titles'
-import { getWatchlistStatusLabel, type WatchlistTypeFilter } from '@/utils/watchlist'
+import {
+  getWatchlistStatusLabel,
+  matchesStatusChips,
+  matchesTypeChips,
+  type WatchlistStatus,
+  type WatchlistTypeChoice,
+} from '@/utils/watchlist'
 import WatchlistFilters from '@/components/WatchlistFilters.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import ListSearch from '@/components/ListSearch.vue'
@@ -682,8 +687,8 @@ const favoritesStore = useFavoritesStore()
 const profile = ref<PublicProfile | null>(null)
 const isLoading = ref(true)
 const activeTab = ref<ProfileTab>('favorites')
-const watchlistFilter = ref<'all' | PublicWatchlistEntry['status']>('all')
-const watchlistTypeFilter = ref<WatchlistTypeFilter>('all')
+const watchlistFilter = ref<WatchlistStatus[]>([])
+const watchlistTypeFilter = ref<WatchlistTypeChoice[]>([])
 const watchlistQuery = ref('')
 const watchlistSortBy = ref<SortByOption>('relevance')
 const watchlistSortDirection = ref<SortDirection>('desc')
@@ -917,8 +922,8 @@ const watchlistFilterRows = computed(() =>
 const filteredWatchlist = computed(() => {
   const query = watchlistQuery.value.trim().toLowerCase()
   const rows = (profile.value?.watchlist || []).filter((row) => {
-    if (watchlistFilter.value !== 'all' && row.status !== watchlistFilter.value) return false
-    if (!matchesContentTypeFilter(row.content.contentType, watchlistTypeFilter.value)) return false
+    if (!matchesStatusChips(row.status, watchlistFilter.value)) return false
+    if (!matchesTypeChips(row.content.contentType, watchlistTypeFilter.value)) return false
     if (!query) return true
     const { title, englishTitle, originalTitle } = row.content
     return [getDisplayTitle(row.content), title, englishTitle, originalTitle].some((name) =>

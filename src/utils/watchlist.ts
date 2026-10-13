@@ -1,3 +1,5 @@
+import { matchesContentTypeFilter } from '@/services/api'
+
 export type WatchlistStatus = 'plan_to_watch' | 'watching' | 'completed' | 'on_hold' | 'dropped'
 
 export const WATCHLIST_STATUS_OPTIONS: { value: WatchlistStatus; label: string }[] = [
@@ -27,35 +29,42 @@ export interface SeasonStatus {
   status: WatchlistStatus
   /** The series' first season (a plan for a later one means the earlier ones are underway). */
   first: boolean
+  /** Aired or airing; unreleased seasons don't count while a released one is listed. */
+  released?: boolean
 }
 
 /**
  * One status for a series tracked season by season (the server keeps a series' own
- * watchlist row in step the same way: services/watchlistWrites.js `syncSeriesFromSeasons`):
- * 1. Completed once every season is (when the count is unknown, every tracked one).
- * 2. Watching while any season is being watched.
+ * watchlist row in step the same way: services/watchlistWrites.js `syncSeriesFromSeasons`).
+ * Unreleased seasons are left out while any released season is listed.
+ * 1. Completed once every released season is (when the count is unknown, every tracked one).
+ * 2. Watching only while a season is being watched.
  * 3. Dropped, then On hold, when any season is.
- * 4. Watching when some seasons are done and others are not.
- * 5. Planned when the first season is planned; a plan for a later season alone is Watching.
+ * 4. Planned when nothing is done yet and the first season (or only unreleased ones) is
+ *    planned.
+ * 5. On hold otherwise: some seasons done with others planned or not listed, or only a
+ *    later season planned.
  * @param seasons - The tracked seasons' statuses.
- * @param totalSeasons - How many seasons the series has; when unknown, only tracked ones count.
+ * @param releasedSeasons - How many released seasons the series has, when known.
  * @returns The summary, or undefined when no season is tracked.
  */
 export const summarizeSeasonStatuses = (
   seasons: SeasonStatus[],
-  totalSeasons?: number,
+  releasedSeasons?: number,
 ): WatchlistStatus | undefined => {
   if (!seasons.length) return undefined
-  const has = (status: WatchlistStatus) => seasons.some((season) => season.status === status)
-  if (seasons.every((season) => season.status === 'completed')) {
-    return totalSeasons && seasons.length < totalSeasons ? 'watching' : 'completed'
+  const listed = seasons.filter((season) => season.released !== false)
+  if (!listed.length) return 'plan_to_watch'
+  const has = (status: WatchlistStatus) => listed.some((season) => season.status === status)
+  const done = listed.filter((season) => season.status === 'completed').length
+  if (done === listed.length && !(releasedSeasons && listed.length < releasedSeasons)) {
+    return 'completed'
   }
   if (has('watching')) return 'watching'
   if (has('dropped')) return 'dropped'
   if (has('on_hold')) return 'on_hold'
-  if (has('completed')) return 'watching'
-  const firstPlanned = seasons.some((season) => season.first && season.status === 'plan_to_watch')
-  return firstPlanned ? 'plan_to_watch' : 'watching'
+  const firstPlanned = listed.some((season) => season.first && season.status === 'plan_to_watch')
+  return done === 0 && firstPlanned ? 'plan_to_watch' : 'on_hold'
 }
 
 /**
@@ -124,3 +133,27 @@ export const WATCHLIST_TYPE_FILTER_OPTIONS: { value: WatchlistTypeFilter; label:
   { value: 'series', label: 'Series' },
   { value: 'season', label: 'Seasons' },
 ]
+
+/** Chips picked in one filter row; none picked means All. */
+export type WatchlistTypeChoice = Exclude<WatchlistTypeFilter, 'all'>
+
+/**
+ * Pick or unpick a chip in a multi-select filter row. All (or picking every chip) clears
+ * the row back to All.
+ * @param picked - The row's picked chips.
+ * @param value - The chip clicked.
+ * @param options - Every chip value in the row except All.
+ */
+export function toggleFilterChip<T extends string>(picked: T[], value: T | 'all', options: T[]) {
+  if (value === 'all') return []
+  const next = picked.includes(value) ? picked.filter((v) => v !== value) : [...picked, value]
+  return options.every((option) => next.includes(option)) ? [] : next
+}
+
+/** Whether a row's status is one of the picked statuses (none picked: any). */
+export const matchesStatusChips = (status: string, picked: WatchlistStatus[]) =>
+  !picked.length || picked.includes(status as WatchlistStatus)
+
+/** Whether a row's type is one of the picked types (none picked: any). */
+export const matchesTypeChips = (contentType: string | undefined, picked: WatchlistTypeChoice[]) =>
+  !picked.length || picked.some((type) => matchesContentTypeFilter(contentType, type))

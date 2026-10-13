@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { fribbEntryFor, fribbTmdbPlacement, indexFribb, mapFribbEntry } from './fribb.js'
+import {
+  fribbEntryFor,
+  fribbSiblingIds,
+  fribbTmdbPlacement,
+  indexFribb,
+  mapFribbEntry,
+} from './fribb.js'
 
 const blueBoxS2 = {
   type: 'TV',
@@ -70,5 +76,26 @@ describe('fribbTmdbPlacement', () => {
     const entry = mapFribbEntry(blueBoxS2)
     assert.equal(fribbTmdbPlacement(entry, 207347, [{ seasonNumber: 1, episodeCount: 37 }]), null)
     assert.equal(fribbTmdbPlacement(entry, 1, [{ seasonNumber: 2, episodeCount: 12 }]), null)
+  })
+})
+
+describe('fribbSiblingIds', () => {
+  const index = indexFribb([
+    { mal_id: 1, anilist_id: 11, themoviedb_id: { tv: 100 } },
+    { mal_id: 2, anilist_id: 12, themoviedb_id: { tv: 100 } },
+    { mal_id: 3, anilist_id: 13, themoviedb_id: { tv: 200 } },
+  ])
+
+  it('lists the other entries on the same TMDB show', () => {
+    const entry = fribbEntryFor(index, { malId: 1 })
+    assert.deepEqual(fribbSiblingIds(index, entry), { malIds: [2], anilistIds: [12] })
+  })
+
+  it('finds none for a show of its own or no entry', () => {
+    assert.deepEqual(fribbSiblingIds(index, fribbEntryFor(index, { malId: 3 })), {
+      malIds: [],
+      anilistIds: [],
+    })
+    assert.deepEqual(fribbSiblingIds(index, null), { malIds: [], anilistIds: [] })
   })
 })
