@@ -44,13 +44,23 @@ Deployment --
 
 Your status feed, what friends are watching, and what's trending.
 
-<img src="docs/screenshots/home.png" alt="AniLounge home feed and discover pages on iPhone" width="640" />
+<img src="docs/screenshots/web-home.png" alt="The AniLounge home page on the website" width="860" />
+
+<img src="docs/screenshots/home.png" alt="The home feed and discover pages in the iPhone app" width="640" />
 
 ## Titles
 
 Scores, studios, seasons, episodes, characters, and your progress on every movie and series.
 
+<img src="docs/screenshots/web-title.png" alt="A title page on the website" width="860" />
+
 <img src="docs/screenshots/titles.png" alt="A title page with its watchlist panel, episodes, and characters" width="860" />
+
+## Search
+
+Browse trending movies and series, or filter by genre, year, season, and rating.
+
+<img src="docs/screenshots/web-search.png" alt="The search page on the website" width="860" />
 
 ## Watchlist and Profile
 
@@ -61,6 +71,8 @@ Track watching, planned, and completed titles, and show off your stats.
 ## Forum and iOS Widgets
 
 Episode threads, reviews, and guides, plus home screen widgets for new releases and friends' activity.
+
+<img src="docs/screenshots/web-forum.png" alt="The forum on the website" width="860" />
 
 <img src="docs/screenshots/forum-widgets.png" alt="The forum and AniLounge home screen widgets" width="860" />
 
