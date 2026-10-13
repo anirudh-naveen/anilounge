@@ -121,7 +121,7 @@
       <details class="more-details full" :open="backlogMode || undefined">
         <summary>More details</summary>
         <p v-if="backlogMode" class="panel-note">
-          Backlog mode is on: this counts toward your total watch time, not today. Set the dates you
+          Backlog Mode is on: this counts toward your total watch time, not today. Set the dates you
           watched it to place it on your calendar.
         </p>
         <p v-else class="panel-note">

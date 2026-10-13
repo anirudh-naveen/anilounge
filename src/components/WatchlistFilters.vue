@@ -2,7 +2,7 @@
   WatchlistFilters.vue — status and type filter chips for a watchlist (component).
 
   Two rows of pill chips: status (All, Planned, Watching, …) and type (All, Movies,
-  Series), split by a thin line. Each chip shows how many rows it would leave, given the other
+  Series, Seasons), split by a thin line. Each chip shows how many rows it would leave, given the other
   row's choice. Used on the Watchlist page and the profile Watchlist tab; the
   active chip color comes from `--filter-accent` (coral by default).
 -->

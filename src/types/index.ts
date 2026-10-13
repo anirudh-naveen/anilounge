@@ -191,4 +191,6 @@ export interface ContentParams {
   limit?: number
   type?: string
   tab?: string
+  /** `1`: the `all` list includes seasons as their own rows (search's full catalog). */
+  seasons?: 1
 }

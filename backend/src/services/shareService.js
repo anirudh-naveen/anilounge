@@ -103,19 +103,27 @@ export async function lookupSharedTitle(userId, shared) {
 
 /**
  * Add a title to the user's watchlist as Plan to Watch (left alone if already there),
- * mirroring it to their connected AniList/MyAnimeList lists.
+ * mirroring it to their connected AniList/MyAnimeList lists. A series with seasons is
+ * tracked season by season, so it adds its first season (unless the series is already listed).
  * @param {string} userId
- * @param {unknown} contentId
+ * @param {unknown} sharedId
  * @returns {Promise<{ added: boolean, status: string }>}
  * @throws {HttpError} 404 unknown title.
  */
-export async function addSharedTitle(userId, contentId) {
-  if (!isUuid(contentId)) throw new HttpError(404, 'Title not found.')
+export async function addSharedTitle(userId, sharedId) {
+  if (!isUuid(sharedId)) throw new HttpError(404, 'Title not found.')
   const { rows: found } = await query(
-    'SELECT 1 FROM content WHERE id = $1 AND kind = ANY($2::text[])',
-    [contentId, TITLE_KINDS],
+    `SELECT (
+       SELECT sn.content_id FROM seasons sn
+       WHERE sn.series_id = c.id
+         AND NOT EXISTS (SELECT 1 FROM watchlist w WHERE w.user_id = $3 AND w.content_id = c.id)
+       ORDER BY sn.season_number, sn.part_number LIMIT 1
+     ) AS first_season
+     FROM content c WHERE c.id = $1 AND c.kind = ANY($2::text[])`,
+    [sharedId, TITLE_KINDS, userId],
   )
   if (!found[0]) throw new HttpError(404, 'Title not found.')
+  const contentId = found[0].first_season ? String(found[0].first_season) : sharedId
   const { rowCount } = await query(
     `INSERT INTO watchlist (user_id, content_id, status) VALUES ($1, $2, 'plan_to_watch')
      ON CONFLICT (user_id, content_id) DO NOTHING`,
