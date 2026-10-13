@@ -38,13 +38,40 @@
             placeholder="Search your watchlist"
             data-testid="watchlist-search"
           />
-          <!-- Title: Sort -->
-          <SortByControls
-            v-model:sort-by="sortBy"
-            v-model:sort-direction="sortDirection"
-            :options="WATCHLIST_SORT_OPTIONS"
-          />
+          <!-- Title: Sort and Filters -->
+          <div class="watchlist-sort-row">
+            <SortByControls
+              v-model:sort-by="sortBy"
+              v-model:sort-direction="sortDirection"
+              :options="WATCHLIST_SORT_OPTIONS"
+            />
+            <button
+              type="button"
+              class="filters-toggle-btn"
+              data-testid="watchlist-filters-toggle"
+              :class="{ active: filtersOpen, filled: hasPanelFilters }"
+              :aria-expanded="filtersOpen"
+              aria-controls="watchlist-filters"
+              @click="filtersOpen = !filtersOpen"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" d="M4 7h16M7 12h10M10 17h4" />
+              </svg>
+              <span>Filters</span>
+            </button>
+          </div>
         </div>
+
+        <!-- Title: Filter Panel (same fields as Search) -->
+        <CatalogFilterPanel
+          v-if="filtersOpen"
+          id="watchlist-filters"
+          v-model="panelFilters"
+          :year-options="yearFilterOptions"
+          rating-label="Community rating"
+          class="watchlist-filter-panel"
+          @clear="panelFilters = defaultCatalogFilters()"
+        />
       </div>
 
       <!-- List -->
@@ -494,7 +521,7 @@ import {
   type SortDirection,
 } from '@/utils/sorting'
 import { getDisplayTitle } from '@/utils/titles'
-import { getSearchCategoryDate } from '@/utils/searchFilters'
+import { buildYearFilterOptions, getSearchCategoryDate } from '@/utils/searchFilters'
 import {
   getWatchlistStatusLabel,
   WATCHLIST_STATUS_OPTIONS,
@@ -507,6 +534,14 @@ import {
   type WatchlistTypeChoice,
 } from '@/utils/watchlist'
 import WatchlistFilters from '@/components/WatchlistFilters.vue'
+import CatalogFilterPanel from '@/components/CatalogFilterPanel.vue'
+import {
+  defaultCatalogFilters,
+  hasActiveCatalogFilters,
+  matchesCatalogFilters,
+  readCatalogFilters,
+  type CatalogFilters,
+} from '@/utils/catalogFilters'
 import ImportReminder from '@/components/ImportReminder.vue'
 import ListSearch from '@/components/ListSearch.vue'
 import BacklogModeToggle from '@/components/BacklogModeToggle.vue'
@@ -534,13 +569,14 @@ const WATCHLIST_SORT_OPTIONS = DEFAULT_SORT_OPTIONS.map((option) =>
   option.value === 'relevance' ? { ...option, label: 'Updated' } : option,
 )
 
-/** Type chips and sort, remembered per browser. */
+/** Type chips, sort, and the filter panel, remembered per browser. */
 const VIEW_KEY = 'anilounge:watchlist-view'
 const readView = () => {
   try {
     const saved = JSON.parse(localStorage.getItem(VIEW_KEY) || '{}') || {}
     return {
       types: readTypeChips(saved.types),
+      filters: readCatalogFilters(saved.filters),
       sortBy: WATCHLIST_SORT_OPTIONS.some((option) => option.value === saved.sortBy)
         ? (saved.sortBy as SortByOption)
         : 'rating',
@@ -549,6 +585,7 @@ const readView = () => {
   } catch {
     return {
       types: readTypeChips(undefined),
+      filters: defaultCatalogFilters(),
       sortBy: 'rating' as SortByOption,
       sortDirection: 'desc' as SortDirection,
     }
@@ -558,9 +595,16 @@ const savedView = readView()
 const typeFilter = ref<WatchlistTypeChoice[]>(savedView.types)
 const sortBy = ref<SortByOption>(savedView.sortBy)
 const sortDirection = ref<SortDirection>(savedView.sortDirection)
-watch([typeFilter, sortBy, sortDirection], ([types, by, direction]) => {
+/** The Search-style filter panel; opens on its own when saved filters are set. */
+const panelFilters = ref<CatalogFilters>(savedView.filters)
+const hasPanelFilters = computed(() => hasActiveCatalogFilters(panelFilters.value))
+const filtersOpen = ref(hasPanelFilters.value)
+watch([typeFilter, sortBy, sortDirection, panelFilters], ([types, by, direction, filters]) => {
   try {
-    localStorage.setItem(VIEW_KEY, JSON.stringify({ types, sortBy: by, sortDirection: direction }))
+    localStorage.setItem(
+      VIEW_KEY,
+      JSON.stringify({ types, sortBy: by, sortDirection: direction, filters }),
+    )
   } catch {
     // Storage unavailable: the choice lasts until the page reloads.
   }
@@ -818,10 +862,23 @@ const filterRows = computed(() =>
   })),
 )
 
-/** Whether a row passes the status and type chips. */
+/** Whether a row passes the status and type chips and the filter panel. */
 const matchesFilters = (item: WatchlistItem) =>
   matchesStatusChips(item.status, statusFilter.value) &&
-  matchesTypeChips(getItemContentType(item), typeFilter.value)
+  matchesTypeChips(getItemContentType(item), typeFilter.value) &&
+  (!hasPanelFilters.value ||
+    (typeof item.content === 'object' &&
+      !!item.content &&
+      matchesCatalogFilters(item.content, panelFilters.value)))
+
+/** Year dropdown choices spanning the titles on the list. */
+const yearFilterOptions = computed(() =>
+  buildYearFilterOptions(
+    contentStore.watchlist.flatMap((item) =>
+      typeof item.content === 'object' && item.content ? [item.content] : [],
+    ),
+  ),
+)
 
 /** Non-empty status sections in display order, filtered by the chips and search, sorted by the toolbar. */
 const sections = computed(() => {
@@ -1208,8 +1265,63 @@ onUnmounted(() => {
   gap: 0.35rem;
 }
 
+.watchlist-sort-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
 .watchlist-toolbar :deep(.sort-by-controls) {
   min-width: 240px;
+}
+
+/* Same pill as the sort control beside it. */
+.filters-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 40px;
+  padding: 0 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-card);
+  box-shadow: 0 1px 2px rgba(21, 34, 56, 0.06);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.filters-toggle-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.filters-toggle-btn:hover,
+.filters-toggle-btn.active {
+  color: var(--text-primary);
+  border-color: var(--coral-primary);
+  background: var(--bg-hover);
+}
+
+.filters-toggle-btn.filled {
+  color: var(--coral-deep);
+  border-color: var(--coral-primary);
+}
+
+.filters-toggle-btn:focus-visible {
+  outline: 2px solid var(--coral-primary);
+  outline-offset: 2px;
+}
+
+.watchlist-filter-panel {
+  margin-bottom: 1.25rem;
 }
 
 .watchlist-toolbar :deep(.list-search) {
@@ -1849,8 +1961,13 @@ onUnmounted(() => {
     order: 4;
   }
 
-  .watchlist-toolbar :deep(.sort-by-controls) {
+  .watchlist-sort-row {
     order: 5;
+  }
+
+  .watchlist-top > .watchlist-filter-panel {
+    order: 6;
+    margin-bottom: 0;
   }
 }
 
@@ -1864,10 +1981,13 @@ onUnmounted(() => {
     justify-content: stretch;
   }
 
-  .watchlist-toolbar :deep(.sort-by-controls) {
-    width: 100%;
-    min-width: 0;
+  .watchlist-sort-row {
     flex: 1 1 100%;
+  }
+
+  .watchlist-toolbar :deep(.sort-by-controls) {
+    min-width: 0;
+    flex: 1 1 auto;
   }
 
   .watchlist-toolbar :deep(.list-search) {

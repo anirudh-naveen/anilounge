@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Watchlist from '@/views/Watchlist.vue'
+import { defaultCatalogFilters } from '@/utils/catalogFilters'
 
 const loadWatchlist = vi.fn().mockResolvedValue(undefined)
 const updateWatchlistItem = vi.fn().mockResolvedValue(true)
@@ -32,7 +33,7 @@ const watchlist = [
       contentType: 'tv',
       episodeCount: 28,
       seasonCount: 2,
-      genres: [],
+      genres: ['Fantasy'],
     },
     status: 'watching',
     currentEpisode: 4,
@@ -148,6 +149,30 @@ describe('Watchlist status sections', () => {
     )
   })
 
+  it('filters by the Search filter fields, and remembers them', async () => {
+    const wrapper = await mountPage()
+    const titles = () => wrapper.findAll('.item-title').map((title) => title.text())
+    expect(wrapper.find('[data-testid="filter-genre"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="watchlist-filters-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="filter-genre"]').setValue('Fantasy')
+    expect(titles()).toEqual(['Frieren'])
+    expect(wrapper.get('[data-testid="watchlist-filters-toggle"]').classes()).toContain('filled')
+
+    // Reopening the page keeps the filter, with the panel open to show it.
+    const reopened = await mountPage()
+    expect(reopened.findAll('.item-title').map((title) => title.text())).toEqual(['Frieren'])
+    expect((reopened.get('[data-testid="filter-genre"]').element as HTMLSelectElement).value).toBe(
+      'Fantasy',
+    )
+
+    await reopened.get('.clear-filters-btn').trigger('click')
+    expect(reopened.findAll('.item-title').map((title) => title.text())).toEqual([
+      'Frieren',
+      'Spirited Away',
+    ])
+  })
+
   it('remembers the type chips and sort, defaulting to Movies, Series, and rating', async () => {
     const wrapper = await mountPage()
     const select = wrapper.get('.watchlist-toolbar .sort-select')
@@ -162,6 +187,7 @@ describe('Watchlist status sections', () => {
       types: ['movie', 'season'],
       sortBy: 'alphabetical',
       sortDirection: 'desc',
+      filters: defaultCatalogFilters(),
     })
 
     const reopened = await mountPage()
