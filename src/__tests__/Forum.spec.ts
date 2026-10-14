@@ -80,6 +80,22 @@ describe('Forum', () => {
     const card = wrapper.get('[data-testid="post-card-p1"]')
     expect(card.text()).toContain('Episode 5 thoughts')
     expect(card.text()).toContain('Frieren · S1E5')
+    expect(card.find('[data-testid="post-thumb"]').exists()).toBe(false)
+  })
+
+  it('shows the main tag picture as a thumbnail on each post', async () => {
+    const tag = buildPost().tags[0]!
+    list.mockResolvedValue(
+      pagePayload({
+        items: [buildPost({ tags: [{ ...tag, imagePath: 'https://img.test/frieren.jpg' }] })],
+      }),
+    )
+    const { wrapper } = await mountAt('/forum')
+    const card = wrapper.get('[data-testid="post-card-p1"]')
+    expect(card.get('[data-testid="post-thumb"]').attributes('src')).toBe(
+      'https://img.test/frieren.jpg',
+    )
+    expect(card.find('[data-testid="post-cover"]').exists()).toBe(false)
   })
 
   it('passes tag, episode, kind, and sort from the query', async () => {
