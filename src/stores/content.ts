@@ -17,20 +17,17 @@ import {
 import { isBacklogSave } from '@/composables/useBacklogMode'
 import type { UnifiedContent } from '@/types/content'
 import type { SortByOption, SortDirection } from '@/utils/sorting'
+import {
+  defaultCatalogFilters,
+  hasActiveCatalogFilters,
+  type CatalogFilters,
+} from '@/utils/catalogFilters'
 import { getSearchableTitles } from '@/utils/titles'
 import type { MovieCatalogTab, TvCatalogTab } from '@/utils/catalogTabs'
-import { haptic, refreshWidgets } from '@/utils/nativeApp'
+import { haptic, noteGoodMoment, refreshWidgets } from '@/utils/nativeApp'
 
-export type SearchFilters = {
+export type SearchFilters = CatalogFilters & {
   type: string
-  ratingMin: number
-  ratingMax: number
-  year: string
-  season: string
-  status: string
-  genre: string
-  language: string
-  country: string
   sortBy: SortByOption
   sortDirection: SortDirection
 }
@@ -41,14 +38,7 @@ export type SearchFilters = {
  */
 export const defaultSearchFilters = (): SearchFilters => ({
   type: 'all',
-  ratingMin: 1,
-  ratingMax: 10,
-  year: 'all',
-  season: 'all',
-  status: 'all',
-  genre: 'all',
-  language: 'all',
-  country: 'all',
+  ...defaultCatalogFilters(),
   sortBy: 'relevance',
   sortDirection: 'desc',
 })
@@ -62,14 +52,7 @@ export const defaultSearchFilters = (): SearchFilters => ({
 export const hasActiveSearchFilters = (filters: SearchFilters): boolean => {
   const defaults = defaultSearchFilters()
   return (
-    filters.ratingMin !== defaults.ratingMin ||
-    filters.ratingMax !== defaults.ratingMax ||
-    filters.year !== defaults.year ||
-    filters.season !== defaults.season ||
-    filters.status !== defaults.status ||
-    filters.genre !== defaults.genre ||
-    filters.language !== defaults.language ||
-    filters.country !== defaults.country ||
+    hasActiveCatalogFilters(filters) ||
     filters.sortBy !== defaults.sortBy ||
     filters.sortDirection !== defaults.sortDirection
   )
@@ -498,6 +481,7 @@ export const useContentStore = defineStore('content', () => {
       if (response.data.success) {
         haptic()
         refreshWidgets()
+        noteGoodMoment()
         await loadWatchlist(true)
       }
 
@@ -543,6 +527,7 @@ export const useContentStore = defineStore('content', () => {
           } as WatchlistItem
         }
         refreshWidgets()
+        noteGoodMoment()
       }
 
       return true

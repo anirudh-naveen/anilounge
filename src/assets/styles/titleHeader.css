@@ -4,6 +4,7 @@
   Included scoped by MovieDetails.vue and TVShowDetails.vue
   (`<style scoped src="...">`): eyebrow, title, native title, a dotted fact row,
   genre chips, studio and franchise pills, and actions, spaced as one tidy column.
+  On phones the poster shrinks to a thumbnail with the title and facts beside it.
 */
 .title-info {
   display: flex;
@@ -121,8 +122,131 @@
   margin-top: 0.5rem;
 }
 
+/* Favorite, Share, and Add to Calendar: one size, icon then label. `:is()` outranks
+   FavoriteHeart's own button padding and font. */
+.title-actions > button:is(.favorite-heart, .btn-outline) {
+  height: 44px;
+  padding: 0 1.25rem;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Action icons (share, calendar). */
+.action-icon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 768px) {
   .title-heading {
     font-size: 2rem;
+  }
+}
+
+/*
+  Phones: a small poster floated left, with the eyebrow, title, and facts beside it;
+  genres, pills, and actions run full width underneath. `div.` outranks each page's own
+  header rules, which load after this file.
+*/
+@media (max-width: 600px) {
+  div.title-header {
+    display: block;
+    margin-bottom: 1.5rem;
+  }
+
+  div.title-header::after {
+    content: '';
+    display: block;
+    clear: both;
+  }
+
+  div.title-poster {
+    float: left;
+    width: 112px;
+    margin: 0 1rem 0.5rem 0;
+  }
+
+  div.title-poster img {
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  }
+
+  div.title-poster .no-poster {
+    height: 160px;
+    font-size: 0.75rem;
+  }
+
+  div.title-info {
+    display: block;
+  }
+
+  .title-info > * + * {
+    margin-top: 0.45rem;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    gap: 0.35rem;
+  }
+
+  .title-heading {
+    font-size: 1.4rem;
+    line-height: 1.2;
+  }
+
+  .original-title {
+    margin-top: 0.2rem;
+    font-size: 0.85rem;
+  }
+
+  .title-facts {
+    font-size: 0.85rem;
+  }
+
+  .title-facts > li + li::before {
+    margin: 0 0.45rem;
+  }
+
+  .fact-muted {
+    font-size: 0.78rem;
+  }
+
+  /* Below the poster, full width. */
+  .title-info > .genres,
+  .title-info > .title-pills,
+  .title-info > .title-actions {
+    clear: both;
+  }
+
+  .title-info > .genres {
+    padding-top: 0.6rem;
+  }
+
+  .genre-tag {
+    padding: 0.2rem 0.65rem;
+    font-size: 0.78rem;
+  }
+
+  /* All the actions on one row, sharing the width. */
+  .title-actions {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .title-actions > button:is(.favorite-heart, .btn-outline) {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 0.5rem;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  /* "Add to Calendar" reads "Calendar" to fit. */
+  .label-long {
+    display: none;
   }
 }

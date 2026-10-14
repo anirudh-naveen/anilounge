@@ -7,12 +7,19 @@ import {
   watchedEpisodes,
   WATCHLIST_STATUS_FILTER_OPTIONS,
   WATCHLIST_TYPE_FILTER_OPTIONS,
+  readTypeChips,
+  toggleTypeChip,
 } from '@/utils/watchlist'
 import { matchesContentTypeFilter } from '@/services/api'
+import type { UnifiedContent } from '@/types/content'
+import {
+  defaultCatalogFilters,
+  matchesCatalogFilters,
+  readCatalogFilters,
+} from '@/utils/catalogFilters'
 
 describe('watchlist status labels', () => {
   it('maps stored statuses to the labels used on the watchlist page', () => {
-    expect(getWatchlistStatusLabel('all')).toBe('All')
     expect(getWatchlistStatusLabel('plan_to_watch')).toBe('Planned')
     expect(getWatchlistStatusLabel('watching')).toBe('Watching')
     expect(getWatchlistStatusLabel('completed')).toBe('Completed')
@@ -20,13 +27,12 @@ describe('watchlist status labels', () => {
     expect(getWatchlistStatusLabel('dropped')).toBe('Dropped')
   })
 
-  it('includes All plus every saved status in the filter dropdown', () => {
+  it('has a chip for every saved status, in section order, and no All chip', () => {
     expect(WATCHLIST_STATUS_FILTER_OPTIONS.map((opt) => opt.value)).toEqual([
-      'all',
-      'plan_to_watch',
       'watching',
       'completed',
       'on_hold',
+      'plan_to_watch',
       'dropped',
     ])
   })
@@ -47,9 +53,8 @@ describe('watchedEpisodes', () => {
 })
 
 describe('watchlist type filters', () => {
-  it('offers All, Movies, Series, and Seasons chips that sort titles by kind', () => {
+  it('offers Movies, Series, and Seasons chips that sort titles by kind', () => {
     expect(WATCHLIST_TYPE_FILTER_OPTIONS.map((opt) => opt.value)).toEqual([
-      'all',
       'movie',
       'series',
       'season',
@@ -62,6 +67,22 @@ describe('watchlist type filters', () => {
     expect(matchesContentTypeFilter('season', 'season')).toBe(true)
     expect(matchesContentTypeFilter('tv', 'season')).toBe(false)
     expect(matchesContentTypeFilter('movie', 'all')).toBe(true)
+  })
+
+  it('keeps Series and Seasons apart and never leaves no chip picked', () => {
+    expect(toggleTypeChip(['movie', 'series'], 'season')).toEqual(['movie', 'season'])
+    expect(toggleTypeChip(['season'], 'series')).toEqual(['series'])
+    expect(toggleTypeChip(['movie', 'series'], 'movie')).toEqual(['series'])
+    expect(toggleTypeChip(['series'], 'series')).toEqual(['series'])
+    expect(toggleTypeChip(['series'], 'movie')).toEqual(['series', 'movie'])
+  })
+
+  it('reads saved type chips, falling back to Movies and Series', () => {
+    expect(readTypeChips(undefined)).toEqual(['movie', 'series'])
+    expect(readTypeChips([])).toEqual(['movie', 'series'])
+    expect(readTypeChips(['all', 'bogus'])).toEqual(['movie', 'series'])
+    expect(readTypeChips(['season', 'movie'])).toEqual(['movie', 'season'])
+    expect(readTypeChips(['series', 'season'])).toEqual(['series'])
   })
 })
 
@@ -104,5 +125,37 @@ describe('series summed up from their seasons', () => {
     expect(averageSeasonRating([8, 9, undefined, null])).toBe(8.5)
     expect(averageSeasonRating([7, 8, 8])).toBe(7.7)
     expect(averageSeasonRating([undefined])).toBeUndefined()
+  })
+})
+
+describe('catalog filters', () => {
+  it('reads saved filters, dropping bad fields and keeping the rating range in order', () => {
+    expect(readCatalogFilters(undefined)).toEqual(defaultCatalogFilters())
+    expect(
+      readCatalogFilters({ genre: 'Drama', year: 2024, ratingMin: 8, ratingMax: 3, country: 'JP' }),
+    ).toEqual({
+      ...defaultCatalogFilters(),
+      genre: 'Drama',
+      ratingMin: 8,
+      ratingMax: 8,
+      country: 'JP',
+    })
+    expect(readCatalogFilters({ ratingMin: Number.NaN }).ratingMin).toBe(1)
+  })
+
+  it('matches titles by genre and community rating', () => {
+    const title = {
+      _id: 'x',
+      title: 'X',
+      contentType: 'movie',
+      genres: [{ name: 'Drama' }],
+    } as unknown as UnifiedContent
+    expect(matchesCatalogFilters(title, defaultCatalogFilters())).toBe(true)
+    expect(matchesCatalogFilters(title, { ...defaultCatalogFilters(), genre: 'Drama' })).toBe(true)
+    expect(matchesCatalogFilters(title, { ...defaultCatalogFilters(), genre: 'Comedy' })).toBe(
+      false,
+    )
+    // Unrated titles drop out once the rating range is narrowed.
+    expect(matchesCatalogFilters(title, { ...defaultCatalogFilters(), ratingMin: 5 })).toBe(false)
   })
 })

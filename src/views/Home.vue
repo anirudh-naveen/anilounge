@@ -10,10 +10,54 @@
   donation card (`SupportCard`) when a donation page is configured.
 -->
 <template>
-  <div class="home-page">
+  <div class="home-page" :class="{ 'is-app': isAppLayout }">
+    <!-- App layout: Friends and Inbox in the top bar -->
+    <AppBar>
+      <span class="app-bar-spacer"></span>
+      <router-link
+        to="/friends"
+        class="app-bar-button"
+        aria-label="Friends and messages"
+        data-testid="home-friends"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="9" cy="8.5" r="3" />
+          <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+          <path d="M15.5 5.75a3 3 0 0 1 0 5.5M17 14a5.5 5.5 0 0 1 3.5 5" />
+        </svg>
+        <span v-if="messagesStore?.total" class="app-bar-badge">{{
+          messagesStore?.total > 99 ? '99+' : messagesStore?.total
+        }}</span>
+      </router-link>
+      <router-link to="/inbox" class="app-bar-button" aria-label="Inbox" data-testid="home-inbox">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z" />
+          <path d="M10 20a2.2 2.2 0 0 0 4 0" />
+        </svg>
+        <span v-if="inboxStore?.counts.total" class="app-bar-badge">{{
+          inboxStore?.counts.total > 99 ? '99+' : inboxStore?.counts.total
+        }}</span>
+      </router-link>
+    </AppBar>
+
     <section class="home-intro fade-in">
       <div class="container">
-        <template v-if="authStore.isAuthenticated">
+        <ImportReminder v-if="isAppLayout" class="home-import-reminder" />
+        <template v-else-if="authStore.isAuthenticated">
           <p class="kicker">Your lounge</p>
           <h1 class="home-title">
             Welcome Back<span v-if="authStore.user?.username"
@@ -294,7 +338,9 @@
             <h2 class="panel-title">Popular In the Forum</h2>
             <p class="panel-sub">{{ forumSubtitle }}</p>
           </div>
-          <router-link to="/forum" class="btn btn-secondary btn-small">Visit the Forum</router-link>
+          <router-link to="/forum" class="btn btn-secondary btn-small">{{
+            isAppLayout ? 'See all' : 'Visit the Forum'
+          }}</router-link>
         </header>
         <div v-if="forumLoading" class="panel-loading"><div class="spinner"></div></div>
         <div v-else-if="forum.items.length" class="forum-grid">
@@ -329,6 +375,10 @@
 </template>
 
 <script setup lang="ts">
+import AppBar from '@/components/AppBar.vue'
+import { isAppLayout } from '@/utils/nativeApp'
+import { useInboxStore } from '@/stores/inbox'
+import { useMessagesStore } from '@/stores/messages'
 import { showPosterPlaceholder } from '@/utils/posters'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -393,6 +443,9 @@ const TRENDING_RAILS = [
 const TRENDING_LIMIT = 16
 
 const authStore = useAuthStore()
+// Unread counts for the app layout's Friends and Inbox links.
+const inboxStore = isAppLayout ? useInboxStore() : null
+const messagesStore = isAppLayout ? useMessagesStore() : null
 const router = useRouter()
 
 const now = ref(new Date())
@@ -1276,5 +1329,266 @@ usePageMeta(() => ({
 
 .home-import-reminder {
   margin: 1rem 0 0;
+}
+
+/* App layout: one compact column — releases as a poster row up top, then the feed,
+   the character of the day, and the forum as a swipeable row. */
+.home-page.is-app {
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+.is-app .container {
+  padding: 0 16px;
+}
+
+.is-app .home-intro {
+  padding: 0;
+  animation: none;
+}
+
+.is-app .home-import-reminder {
+  margin: 0 0 0.85rem;
+}
+
+.is-app .home-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.is-app .home-sidebar {
+  order: -1;
+  position: static;
+  width: 100%;
+}
+
+.is-app .home-main {
+  gap: 0.85rem;
+}
+
+.is-app .panel {
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.is-app .panel-header {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.is-app .panel-title {
+  font-size: 1.1rem;
+}
+
+.is-app .panel-sub {
+  display: none;
+}
+
+.is-app .panel-loading {
+  padding: 1.25rem 0;
+}
+
+.is-app .panel-empty {
+  padding: 1rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.is-app .feed-tab {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+/* Releases: one sideways row of posters per group. */
+.is-app .updates-panel {
+  padding-right: 0;
+}
+
+.is-app .update-group + .update-group {
+  margin-top: 0.85rem;
+}
+
+.is-app .group-title {
+  margin-bottom: 0.45rem;
+  font-size: 0.68rem;
+}
+
+.is-app .update-list {
+  flex-direction: row;
+  gap: 0.65rem;
+  overflow-x: auto;
+  padding-right: 1rem;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.is-app .update-list::-webkit-scrollbar,
+.is-app .forum-grid::-webkit-scrollbar,
+.is-app .character-titles::-webkit-scrollbar {
+  display: none;
+}
+
+.is-app .update-item {
+  flex: 0 0 96px;
+  scroll-snap-align: start;
+}
+
+.is-app .update-link {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+}
+
+.is-app .update-poster {
+  width: 96px;
+  height: 140px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.is-app .update-title {
+  font-size: 0.78rem;
+}
+
+.is-app .update-when {
+  font-size: 0.72rem;
+}
+
+.is-app .update-via {
+  display: none;
+}
+
+/* Status feed */
+.is-app .activity-item {
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+}
+
+.is-app .activity-poster {
+  width: 42px;
+  height: 60px;
+}
+
+.is-app .activity-text {
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.is-app .activity-meta {
+  gap: 0.45rem;
+  font-size: 0.72rem;
+}
+
+/* Character of the day: portrait beside the text. */
+.is-app .character-bar {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.is-app .character-portrait {
+  width: 84px;
+  border-radius: 12px;
+}
+
+.is-app .kicker {
+  font-size: 0.65rem;
+  margin-bottom: 0.25rem;
+}
+
+.is-app .character-name {
+  font-size: 1.2rem;
+}
+
+.is-app .character-native {
+  font-size: 0.8rem;
+}
+
+.is-app .character-blurb {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.is-app .character-titles {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin-top: 0.6rem;
+  scrollbar-width: none;
+}
+
+.is-app .character-titles > * {
+  flex-shrink: 0;
+}
+
+.is-app .title-chip,
+.is-app .franchise-chip {
+  font-size: 0.72rem;
+}
+
+/* Forum: swipe through the popular posts. */
+.is-app .forum-section,
+.is-app .support-section {
+  margin-top: 0.85rem;
+}
+
+.is-app .forum-panel {
+  padding-right: 0;
+}
+
+.is-app .forum-panel .panel-header {
+  padding-right: 1rem;
+}
+
+.is-app .forum-panel .btn-small {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.is-app .forum-grid {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-right: 1rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.is-app .forum-grid > * {
+  flex: 0 0 72%;
+  scroll-snap-align: start;
+}
+
+/* Smaller highlight cards: shorter cover, tighter text. */
+.is-app .forum-grid :deep(.post-card) {
+  gap: 0.45rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 14px;
+}
+
+.is-app .forum-grid :deep(.post-card-cover) {
+  height: 92px;
+  margin: -0.8rem -0.85rem 0.1rem;
+}
+
+.is-app .forum-grid :deep(.post-card-title) {
+  font-size: 0.95rem;
+}
+
+.is-app .forum-grid :deep(.post-card-excerpt) {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.is-app .forum-grid :deep(.post-card-foot) {
+  font-size: 0.78rem;
 }
 </style>

@@ -49,10 +49,9 @@
           <!-- Title: Password -->
           <div class="form-group">
             <label for="password" class="form-label">Password</label>
-            <input
+            <PasswordInput
               id="password"
               v-model="form.password"
-              type="password"
               class="input"
               placeholder="Create a password"
               required
@@ -63,10 +62,9 @@
           <!-- Title: Confirm Password -->
           <div class="form-group">
             <label for="confirmPassword" class="form-label">Confirm Password</label>
-            <input
+            <PasswordInput
               id="confirmPassword"
               v-model="form.confirmPassword"
-              type="password"
               class="input"
               placeholder="Confirm your password"
               required
@@ -106,6 +104,7 @@
 </template>
 
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue'
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'

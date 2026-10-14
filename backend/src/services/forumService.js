@@ -746,9 +746,13 @@ export async function listPosts(viewer, filters = {}) {
   // Posts by people the viewer blocked. The cached total ignores this (it is shared by
   // every viewer), so it can run a little high.
   if (viewer) clauses.push(`NOT ${blockedByViewerSql('$1', 'p.user_id')}`)
-  if (POST_KINDS.includes(filters.kind)) {
-    params.push(filters.kind)
-    clauses.push(`p.kind = $${params.length}`)
+  // `kind` is one kind or several, comma-separated; none or all of them lists every kind.
+  const kinds = String(filters.kind || '')
+    .split(',')
+    .filter((kind) => POST_KINDS.includes(kind))
+  if (kinds.length && kinds.length < POST_KINDS.length) {
+    params.push(kinds)
+    clauses.push(`p.kind = ANY($${params.length}::text[])`)
   }
   if (typeof filters.author === 'string' && filters.author) {
     params.push(filters.author)

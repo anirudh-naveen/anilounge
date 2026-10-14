@@ -72,10 +72,9 @@
         </div>
         <div class="form-group">
           <label for="reset-password" class="form-label">New password</label>
-          <input
+          <PasswordInput
             id="reset-password"
             v-model="password"
-            type="password"
             class="input"
             autocomplete="new-password"
             placeholder="Create a new password"
@@ -84,10 +83,9 @@
         </div>
         <div class="form-group">
           <label for="reset-confirm" class="form-label">Confirm new password</label>
-          <input
+          <PasswordInput
             id="reset-confirm"
             v-model="confirmPassword"
-            type="password"
             class="input"
             autocomplete="new-password"
             placeholder="Confirm your new password"
@@ -116,6 +114,7 @@
 </template>
 
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue'
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { authAPI } from '@/services/api'

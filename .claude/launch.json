@@ -70,6 +70,39 @@
         "start"
       ],
       "port": 5001
+    },
+    {
+      "name": "frontend-app",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "VITE_API_URL=http://localhost:5002",
+        "npm",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5176",
+        "--host"
+      ],
+      "port": 5176
+    },
+    {
+      "name": "backend-prodcopy-5002",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "PORT=5002",
+        "DATABASE_URL=postgresql://postgres:dev@localhost:5433/anilounge",
+        "CONTENT_SYNC_ENABLED=false",
+        "CONNECTIONS_SYNC_ENABLED=false",
+        "RELEASE_THREADS_ENABLED=false",
+        "NODE_ENV=development",
+        "npm",
+        "--prefix",
+        "backend",
+        "run",
+        "start"
+      ],
+      "port": 5002
     }
   ]
 }

@@ -7,7 +7,7 @@
 <template>
   <div class="sort-by-controls">
     <!-- Title: Label -->
-    <label class="sort-label" :for="selectId">Sort by</label>
+    <label class="sort-label" :for="selectId">Sort By</label>
     <div class="sort-pill">
       <!-- Title: Field -->
       <div class="sort-field">

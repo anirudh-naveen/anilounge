@@ -712,7 +712,13 @@ export async function setUserRole(actor, targetId, role) {
     throw new HttpError(400, 'Unban this account before making it an admin.')
   }
 
-  await query('UPDATE users SET role = $2 WHERE id = $1', [target.id, role])
+  // Becoming an admin (a badge) puts the frame back on automatic, the highest badge.
+  const promoted = role === 'admin' && target.role !== 'admin'
+  await query(
+    `UPDATE users SET role = $2${promoted ? ", profile_settings = profile_settings - 'frame'" : ''}
+     WHERE id = $1`,
+    [target.id, role],
+  )
   await logAction(
     'moderation',
     actor,
@@ -830,7 +836,13 @@ export async function setCosmeticRoles(actor, targetId, roles) {
 
   const next = GRANTABLE_BADGES.filter((role) => roles.includes(role))
   const before = target.cosmetic_roles || []
-  await query('UPDATE users SET cosmetic_roles = $2 WHERE id = $1', [target.id, next])
+  const gained = next.some((role) => !before.includes(role))
+  // A new badge puts the frame back on automatic, so it shows the highest badge.
+  await query(
+    `UPDATE users SET cosmetic_roles = $2${gained ? ", profile_settings = profile_settings - 'frame'" : ''}
+     WHERE id = $1`,
+    [target.id, next],
+  )
 
   const added = next.filter((role) => !before.includes(role)).map((role) => BADGE_LABELS[role])
   const removed = before.filter((role) => !next.includes(role)).map((role) => BADGE_LABELS[role])

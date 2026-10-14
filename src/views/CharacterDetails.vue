@@ -600,4 +600,26 @@ a.franchise-chip:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* Phones: a small image with the name and details beside it. */
+@media (max-width: 600px) {
+  .character-header {
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+    margin-bottom: 1.5rem;
+  }
+
+  .character-poster img,
+  .no-poster {
+    width: 104px;
+    height: 140px;
+    border-radius: 10px;
+  }
+
+  .character-title {
+    font-size: 1.4rem;
+    line-height: 1.2;
+  }
+}
 </style>
