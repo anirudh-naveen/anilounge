@@ -273,6 +273,7 @@
             v-for="(post, index) in page.items"
             :key="post.id"
             :post="post"
+            show-thumb
             @update:post="(next) => page && (page.items[index] = next)"
           />
         </div>

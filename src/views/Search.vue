@@ -199,7 +199,7 @@
             <button
               v-if="showReset"
               type="button"
-              class="search-btn"
+              class="search-btn search-btn-reset"
               data-testid="search-submit"
               @click="clearSearch"
             >
@@ -528,17 +528,19 @@ const canSearch = computed(
 )
 
 /**
- * After a search, while the query and filters still match what was searched, the
- * Search button turns into Reset (back to the browse highlights).
+ * After a search, while the query and filters still match what was searched (or the
+ * query has been emptied with nothing left to search), the Search button turns into
+ * Reset (back to the browse highlights).
  */
 const showReset = computed(
   () =>
     hasSearched.value &&
     !contentStore.isLoading &&
-    searchQuery.value === contentStore.lastSearchQuery &&
-    (Object.keys(filters.value) as (keyof SearchFilters)[]).every(
-      (key) => filters.value[key] === appliedFilters.value[key],
-    ),
+    (!canSearch.value ||
+      (searchQuery.value === contentStore.lastSearchQuery &&
+        (Object.keys(filters.value) as (keyof SearchFilters)[]).every(
+          (key) => filters.value[key] === appliedFilters.value[key],
+        ))),
 )
 
 const searchPlaceholder = computed(() =>
@@ -971,6 +973,11 @@ usePageMeta({
 .search-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+.search-btn-reset {
+  background: var(--error-color);
+  box-shadow: 0 8px 18px rgba(244, 67, 54, 0.22);
 }
 
 .search-btn:disabled {

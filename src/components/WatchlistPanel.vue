@@ -452,6 +452,36 @@ const remove = async () => {
   font-weight: 400;
 }
 
+/* One height for every single-line field: Safari sizes selects and date inputs its own way. */
+.field-input:not(textarea) {
+  box-sizing: border-box;
+  height: 2.875rem;
+  line-height: 1.25;
+}
+
+/* Draw the select arrow ourselves so the native control stops ignoring padding. */
+select.field-input {
+  appearance: none;
+  padding-right: 2.25rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    right 1.1rem center,
+    right 0.8rem center;
+  background-size: 0.3rem 0.3rem;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+input[type='date'].field-input::-webkit-datetime-edit {
+  padding: 0;
+}
+
+input[type='date'].field-input::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 .field-input:focus {
   outline: none;
   border-color: var(--highlight-color);
@@ -572,6 +602,14 @@ textarea.field-input {
     padding: 0.5rem 0.6rem;
     /* 16px keeps iOS from zooming into the field. */
     font-size: 16px;
+  }
+
+  .field-input:not(textarea) {
+    height: 2.5rem;
+  }
+
+  select.field-input {
+    padding-right: 2rem;
   }
 
   .btn {
