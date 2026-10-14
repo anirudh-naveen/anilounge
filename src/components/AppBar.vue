@@ -92,6 +92,9 @@ import { isAppLayout } from '@/utils/nativeApp'
 /* Segmented control (Movies / Series), iOS style on the dark bar. */
 .app-bar-segments {
   display: inline-flex;
+  box-sizing: border-box;
+  /* Match .app-bar-button so the Search bar is as tall as the other tabs' bars. */
+  height: 38px;
   padding: 3px;
   gap: 2px;
   border-radius: 999px;
@@ -100,7 +103,7 @@ import { isAppLayout } from '@/utils/nativeApp'
 }
 
 .app-bar-segments button {
-  padding: 0.38rem 0.9rem;
+  padding: 0 0.9rem;
   border: none;
   border-radius: 999px;
   background: transparent;
