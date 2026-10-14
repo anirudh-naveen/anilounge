@@ -7,6 +7,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { Router } from 'vue-router'
 import { pushAPI, widgetAPI } from '@/services/api'
+import { noteWatchlistSave, recordAppOpen } from '@/utils/appReview'
 
 export const isNativeApp = Capacitor.isNativePlatform()
 
@@ -368,6 +369,7 @@ interface WidgetBridgePlugin {
   reload(): Promise<void>
   setTheme(options: { theme: string }): Promise<void>
   setAppIcon(options: { theme: string }): Promise<{ changed: boolean }>
+  requestReview(): Promise<void>
 }
 
 const WidgetBridge = registerPlugin<WidgetBridgePlugin>('WidgetBridge')
@@ -406,6 +408,23 @@ export function setAppIconTheme(theme: string): void {
   if (isNativeApp) WidgetBridge.setAppIcon({ theme }).catch(() => {})
 }
 
+/** How long after a save the rating prompt waits, so the save itself lands first. */
+const REVIEW_DELAY_MS = 1500
+
+/**
+ * A watchlist save went through: for long-time app users, now and then ask for an App
+ * Store rating (utils/appReview.ts). Does nothing in browsers.
+ */
+export function noteGoodMoment(): void {
+  if (!isNativeApp) return
+  void noteWatchlistSave(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        setTimeout(() => WidgetBridge.requestReview().then(resolve, reject), REVIEW_DELAY_MS)
+      }),
+  )
+}
+
 /** Ask the widgets to refresh (after a watchlist change). */
 export function refreshWidgets(): void {
   if (isNativeApp) WidgetBridge.reload().catch(() => {})
@@ -442,12 +461,16 @@ export async function startNativeApp(router: Router): Promise<void> {
     .then((launch) => openAppLink(launch?.url))
     .catch(() => {})
 
+  // Count the days the app is used (for when to ask for a rating).
+  recordAppOpen()
+
   let backgroundedAt = 0
   App.addListener('appStateChange', ({ isActive }) => {
     if (!isActive) {
       backgroundedAt = Date.now()
       return
     }
+    recordAppOpen()
     if (backgroundedAt && Date.now() - backgroundedAt > STALE_AFTER_MS) reloadIfRedeployed()
   })
 }

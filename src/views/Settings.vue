@@ -56,11 +56,11 @@
                     <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
                     <path d="M15.5 5.75a3 3 0 0 1 0 5.5M17 14a5.5 5.5 0 0 1 3.5 5" />
                   </svg>
+                  <span v-if="messagesStore?.total" class="nav-row-badge">{{
+                    messagesStore?.total > 99 ? '99+' : messagesStore?.total
+                  }}</span>
                 </span>
-                <span class="nav-row-label">Friends &amp; Messages</span>
-                <span v-if="messagesStore?.total" class="nav-row-count">{{
-                  messagesStore?.total
-                }}</span>
+                <span class="nav-row-label">Friends</span>
                 <svg
                   class="row-chevron"
                   viewBox="0 0 24 24"
@@ -85,11 +85,11 @@
                     <path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z" />
                     <path d="M10 20a2.2 2.2 0 0 0 4 0" />
                   </svg>
+                  <span v-if="inboxStore?.counts.total" class="nav-row-badge">{{
+                    inboxStore?.counts.total > 99 ? '99+' : inboxStore?.counts.total
+                  }}</span>
                 </span>
                 <span class="nav-row-label">Inbox</span>
-                <span v-if="inboxStore?.counts.total" class="nav-row-count">{{
-                  inboxStore?.counts.total
-                }}</span>
                 <svg
                   class="row-chevron"
                   viewBox="0 0 24 24"
@@ -1871,13 +1871,28 @@ onMounted(() => {
   min-width: 0;
 }
 
-.nav-row-count {
-  padding: 0.05rem 0.5rem;
+/* Unread count on the icon's corner, like an iOS app badge. */
+.nav-row-icon {
+  position: relative;
+}
+
+.nav-row-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: 999px;
-  background: var(--coral-primary);
+  background: #e5484d;
   color: #fff;
-  font-size: 0.75rem;
+  font-size: 0.66rem;
   font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--bg-card);
 }
 
 .row-chevron {

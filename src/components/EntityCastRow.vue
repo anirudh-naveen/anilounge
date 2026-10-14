@@ -197,4 +197,29 @@ const handleImageError = (event: Event) => {
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+/* Phones: smaller portraits, so more of the cast fits on screen. */
+@media (max-width: 600px) {
+  .cast-list {
+    gap: 0.6rem;
+  }
+
+  .cast-card {
+    flex-basis: 84px;
+  }
+
+  .cast-card img,
+  .cast-card .no-profile {
+    width: 84px;
+    height: 108px;
+  }
+
+  .cast-name {
+    font-size: 0.74rem;
+  }
+
+  .cast-role {
+    font-size: 0.68rem;
+  }
+}
 </style>

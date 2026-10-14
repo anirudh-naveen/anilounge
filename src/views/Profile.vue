@@ -11,7 +11,7 @@
 -->
 <template>
   <div class="profile-page" :class="{ 'is-app': isAppLayout }" :style="accentStyle">
-    <!-- App layout: share and Settings in the top bar -->
+    <!-- App layout: share, Customize, and Settings in the top bar -->
     <AppBar>
       <span class="app-bar-spacer"></span>
       <button
@@ -33,6 +33,35 @@
           <path d="M12 3.5v11M8 7.5l4-4 4 4" />
           <path
             d="M7 10.5H6A1.5 1.5 0 0 0 4.5 12v7A1.5 1.5 0 0 0 6 20.5h12a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5h-1"
+          />
+        </svg>
+      </button>
+      <button
+        v-if="profile?.isOwner"
+        type="button"
+        class="app-bar-button"
+        aria-label="Customize profile"
+        data-testid="customize-profile"
+        @click="openCustomize"
+      >
+        <!-- Paint palette with a brush -->
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M10.5 5.5A7.5 7.5 0 1 0 10.5 20.5c1 0 1.6-.65 1.6-1.45 0-.4-.15-.75-.4-1.05-.25-.3-.4-.65-.4-1.05 0-.8.65-1.45 1.45-1.45H14.5"
+          />
+          <circle cx="6.6" cy="12.6" r=".9" fill="currentColor" stroke="none" />
+          <circle cx="9" cy="9.2" r=".9" fill="currentColor" stroke="none" />
+          <circle cx="7.4" cy="16.4" r=".9" fill="currentColor" stroke="none" />
+          <path d="M20.5 3.5 15.2 8.8" />
+          <path
+            d="M15.2 8.8c-1.1-.4-2.4.5-2.4 1.9 0 1-.5 1.6-1.3 1.9 1.9.9 4.6.2 4.6-2.2 0-.6-.3-1.3-.9-1.6Z"
           />
         </svg>
       </button>
@@ -202,7 +231,7 @@
                 {{ profile.blocked ? 'Unblock' : 'Block' }}
               </button>
               <button
-                v-if="profile.isOwner"
+                v-if="profile.isOwner && !isAppLayout"
                 type="button"
                 class="btn btn-primary"
                 data-testid="customize-profile"

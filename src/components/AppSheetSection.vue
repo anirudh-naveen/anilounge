@@ -1,11 +1,14 @@
 <!--
   AppSheetSection.vue — one labelled group inside an AppSheet (component).
 
-  A small uppercase heading over an inset card, like an iOS grouped list.
+  A small uppercase heading over an inset card, like an iOS grouped list. `note` adds a
+  coral word after the heading (e.g. "· All" while every chip is on).
 -->
 <template>
   <section class="sheet-section">
-    <h3 class="sheet-section-title">{{ title }}</h3>
+    <h3 class="sheet-section-title">
+      {{ title }}<span v-if="note" class="sheet-section-note"> · {{ note }}</span>
+    </h3>
     <div class="sheet-section-card" :class="{ plain }">
       <slot />
     </div>
@@ -13,7 +16,13 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ title: string; /** No card behind the content. */ plain?: boolean }>()
+defineProps<{
+  title: string
+  /** Coral note after the title. */
+  note?: string
+  /** No card behind the content. */
+  plain?: boolean
+}>()
 </script>
 
 <style scoped>
@@ -28,6 +37,10 @@ defineProps<{ title: string; /** No card behind the content. */ plain?: boolean 
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.sheet-section-note {
+  color: var(--coral-primary);
 }
 
 .sheet-section-card {

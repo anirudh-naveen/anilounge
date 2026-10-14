@@ -11,12 +11,8 @@
 -->
 <template>
   <div class="home-page" :class="{ 'is-app': isAppLayout }">
-    <!-- App layout: greeting, Friends, and Inbox in the top bar -->
+    <!-- App layout: Friends and Inbox in the top bar -->
     <AppBar>
-      <div class="app-bar-greeting">
-        <small>Your lounge</small>
-        <strong>Hi{{ authStore.user?.username ? `, ${authStore.user.username}` : '' }}</strong>
-      </div>
       <span class="app-bar-spacer"></span>
       <router-link
         to="/friends"
@@ -1565,7 +1561,34 @@ usePageMeta(() => ({
 }
 
 .is-app .forum-grid > * {
-  flex: 0 0 82%;
+  flex: 0 0 72%;
   scroll-snap-align: start;
+}
+
+/* Smaller highlight cards: shorter cover, tighter text. */
+.is-app .forum-grid :deep(.post-card) {
+  gap: 0.45rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 14px;
+}
+
+.is-app .forum-grid :deep(.post-card-cover) {
+  height: 92px;
+  margin: -0.8rem -0.85rem 0.1rem;
+}
+
+.is-app .forum-grid :deep(.post-card-title) {
+  font-size: 0.95rem;
+}
+
+.is-app .forum-grid :deep(.post-card-excerpt) {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.is-app .forum-grid :deep(.post-card-foot) {
+  font-size: 0.78rem;
 }
 </style>

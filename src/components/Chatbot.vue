@@ -7,7 +7,7 @@
   visitors get a log in / sign up prompt instead of the composer.
 -->
 <template>
-  <div class="chatbot-container" data-testid="chatbot">
+  <div class="chatbot-container" :class="{ 'is-app': isAppLayout }" data-testid="chatbot">
     <!-- Title: Header -->
     <div class="chatbot-header">
       <div class="chatbot-identity">
@@ -136,6 +136,7 @@
 </template>
 
 <script setup lang="ts">
+import { isAppLayout } from '@/utils/nativeApp'
 import { showPosterPlaceholder } from '@/utils/posters'
 import { ref, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -593,5 +594,19 @@ onMounted(() => {
 .chatbot-input button:disabled {
   background: var(--text-secondary);
   cursor: not-allowed;
+}
+
+/* App layout: nearly full screen, clear of the status bar and home indicator. */
+.chatbot-container.is-app {
+  top: calc(var(--safe-top) + 10px);
+  bottom: calc(var(--safe-bottom) + 10px);
+  left: 8px;
+  right: 8px;
+  width: auto;
+  height: auto;
+  max-height: none;
+  transform: none;
+  border-radius: 20px;
+  z-index: 1100;
 }
 </style>

@@ -1,9 +1,10 @@
 <!--
   AppTabBar.vue — the app layout's bottom tab bar (component).
 
-  A floating, frosted bar over the page with the five sections: Home, Forum, Watchlist,
-  Search, and Profile (the viewer's avatar). Tapping the open tab again scrolls its page
-  to the top, as iOS tab bars do. Only shown in the app layout (utils/nativeApp.ts).
+  A floating, frosted bar over the page with the five sections: Home, Forum, Profile (the
+  viewer's avatar, with the unread count) in the middle, Watchlist, and Search. Tapping the
+  open tab again scrolls its page to the top, as iOS tab bars do. Only shown in the app
+  layout (utils/nativeApp.ts).
 -->
 <template>
   <nav class="tab-bar" aria-label="Sections">
@@ -25,7 +26,9 @@
             :size="26"
             class="tab-avatar"
           />
-          <span v-if="unread" class="tab-dot" data-testid="tab-unread-dot"></span>
+          <span v-if="unread" class="tab-badge" data-testid="tab-unread-badge">{{
+            unread > 99 ? '99+' : unread
+          }}</span>
         </template>
         <svg
           v-else
@@ -61,7 +64,8 @@ const inboxStore = useInboxStore()
 const messagesStore = useMessagesStore()
 
 const activeTab = computed(() => appTabFor(route))
-const unread = computed(() => Boolean(messagesStore.total || inboxStore.counts.total))
+/** Unread messages, friend requests, and inbox items, on the Profile tab. */
+const unread = computed(() => messagesStore.total + inboxStore.counts.total)
 
 const onTap = (name: AppTabName) => {
   haptic()
@@ -141,14 +145,22 @@ const onTap = (name: AppTabName) => {
   box-shadow: 0 0 0 2px var(--coral-light);
 }
 
-.tab-dot {
+.tab-badge {
   position: absolute;
-  top: -1px;
-  right: -3px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--coral-primary);
+  top: -5px;
+  right: -10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
   box-shadow: 0 0 0 2px var(--navbar-primary);
 }
 

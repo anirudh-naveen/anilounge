@@ -455,4 +455,30 @@ useCanonicalSlug(
     grid-template-columns: 1fr;
   }
 }
+
+/* Phones: a small image with the name and details beside it. */
+@media (max-width: 600px) {
+  .studio-header {
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+    margin-bottom: 1.5rem;
+  }
+
+  .studio-logo img,
+  .no-logo {
+    width: 104px;
+    height: 104px;
+    border-radius: 10px;
+  }
+
+  .studio-logo img {
+    padding: 0.6rem;
+  }
+
+  .studio-title {
+    font-size: 1.4rem;
+    line-height: 1.2;
+  }
+}
 </style>

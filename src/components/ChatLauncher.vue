@@ -3,12 +3,13 @@
 
   Floating Lounge Guide button rendered only by the Search view. Opens the
   catalog chatbot (a sign-in prompt when signed out) and loads its
-  recommendation cards into the search results.
+  recommendation cards into the search results. With `hide-trigger` the page opens it
+  through `v-model:open` instead (the app layout's top bar button).
 -->
 <template>
   <div class="chat-launcher">
     <button
-      v-if="!open"
+      v-if="!open && !hideTrigger"
       type="button"
       class="chat-trigger"
       data-testid="chat-launcher"
@@ -28,12 +29,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import Chatbot from '@/components/Chatbot.vue'
 import { defaultSearchFilters, useContentStore } from '@/stores/content'
 import type { UnifiedContent } from '@/types/content'
 
-const open = ref(false)
+defineProps<{ /** The page has its own button that opens the chat. */ hideTrigger?: boolean }>()
+
+const open = defineModel<boolean>('open', { default: false })
 const contentStore = useContentStore()
 
 const onSearchResults = (results: UnifiedContent[]) => {

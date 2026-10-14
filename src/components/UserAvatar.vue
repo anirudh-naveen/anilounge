@@ -11,7 +11,8 @@
   Influencer/Supporter, and a lounge chair for Mascot (the bot accounts). Creator and
   Admin also shimmer. The frame and accent come from the badges store by `name`, or
   from `badge` / `accent` when the caller knows them; the signed-in user's own
-  picture comes from their account, so changes show everywhere without a reload.
+  picture comes from their account, so changes show everywhere without a reload. With no
+  picture, the initials sit on their accent color.
 -->
 <template>
   <span
@@ -81,7 +82,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { getActivePinia } from 'pinia'
 import { getAvatarUrl } from '@/utils/avatars'
-import { frameColors } from '@/utils/accent'
+import { accentColor, frameColors, readableOn } from '@/utils/accent'
 import { useBadgesStore } from '@/stores/badges'
 import { useAuthStore } from '@/stores/auth'
 import { USER_FRAME } from '@/utils/badges'
@@ -199,6 +200,13 @@ const frameStyle = computed(() => {
     '--ring-width': `${ringWidth.value}px`,
     '--ring-gradient': `linear-gradient(135deg, ${light}, ${mid}, ${dark}, ${sheen}, ${light})`,
     '--ring-glow': `color-mix(in srgb, ${mid} 55%, transparent)`,
+    // The initials circle (no picture) takes their accent too, once it's known.
+    ...(accent.value
+      ? {
+          '--avatar-accent': accentColor(accent.value),
+          '--avatar-on-accent': readableOn(accent.value),
+        }
+      : {}),
   }
 })
 
@@ -234,7 +242,7 @@ onMounted(() => {
   height: 100%;
   overflow: hidden;
   border-radius: 50%;
-  background: var(--profile-accent, var(--blend-color));
+  background: var(--avatar-accent, var(--profile-accent, var(--blend-color)));
 }
 
 .user-avatar-inner.has-image {
@@ -248,7 +256,7 @@ onMounted(() => {
 }
 
 .user-avatar-initials {
-  color: #fff;
+  color: var(--avatar-on-accent, #fff);
   font-weight: 700;
   line-height: 1;
 }

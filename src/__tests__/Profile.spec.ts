@@ -572,12 +572,13 @@ describe('Profile', () => {
 
     await wrapper.get('[data-testid="customize-profile"]').trigger('click')
     const picker = wrapper.get('[data-testid="frame-picker"]')
+    // Only unlocked frames; with no frame saved, the highest badge shows as picked.
     expect(picker.findAll('.frame-label').map((label) => label.text())).toEqual([
-      'Automatic',
       'Admin',
       'Artist',
       'User',
     ])
+    expect(wrapper.get('[data-testid="frame-admin"]').classes()).toContain('selected')
     await wrapper.get('[data-testid="frame-artist"]').trigger('click')
     await wrapper.get('[data-testid="customize-panel"]').trigger('submit')
     await flushPromises()

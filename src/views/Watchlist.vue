@@ -74,7 +74,7 @@
       :can-reset="activeFilterCount > 0"
       @reset="resetView"
     >
-      <AppSheetSection title="Status & type">
+      <AppSheetSection title="Type & status">
         <WatchlistFilters
           v-model:status="statusFilter"
           v-model:type="typeFilter"
@@ -707,7 +707,7 @@ const filterSheetOpen = ref(false)
 /** Status, type, and panel filters that differ from the defaults (the filter button's badge). */
 const activeFilterCount = computed(
   () =>
-    statusFilter.value.length +
+    (statusFilter.value.length ? 1 : 0) +
     (typeFilter.value.join() === DEFAULT_WATCHLIST_TYPES.join() ? 0 : 1) +
     (hasPanelFilters.value ? 1 : 0),
 )

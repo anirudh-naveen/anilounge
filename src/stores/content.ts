@@ -24,7 +24,7 @@ import {
 } from '@/utils/catalogFilters'
 import { getSearchableTitles } from '@/utils/titles'
 import type { MovieCatalogTab, TvCatalogTab } from '@/utils/catalogTabs'
-import { haptic, refreshWidgets } from '@/utils/nativeApp'
+import { haptic, noteGoodMoment, refreshWidgets } from '@/utils/nativeApp'
 
 export type SearchFilters = CatalogFilters & {
   type: string
@@ -481,6 +481,7 @@ export const useContentStore = defineStore('content', () => {
       if (response.data.success) {
         haptic()
         refreshWidgets()
+        noteGoodMoment()
         await loadWatchlist(true)
       }
 
@@ -526,6 +527,7 @@ export const useContentStore = defineStore('content', () => {
           } as WatchlistItem
         }
         refreshWidgets()
+        noteGoodMoment()
       }
 
       return true

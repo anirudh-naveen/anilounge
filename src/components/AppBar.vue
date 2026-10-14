@@ -116,30 +116,4 @@ import { isAppLayout } from '@/utils/nativeApp'
   color: #fff;
   box-shadow: 0 4px 10px rgba(224, 122, 95, 0.3);
 }
-
-.app-bar-greeting {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-  color: #f7f8fa;
-}
-
-.app-bar-greeting small {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--coral-light);
-}
-
-.app-bar-greeting strong {
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 </style>
