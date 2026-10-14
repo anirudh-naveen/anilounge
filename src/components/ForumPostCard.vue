@@ -7,7 +7,8 @@
   or button opens the post. `compact` drops the preview for tight
   spots such as title-page highlights. `showImage` (Home) adds a cover picture: the
   author's top tag's, else the highest tag in the hierarchy that has one
-  (title, then character; franchises never supply it).
+  (title, then character; franchises never supply it). `showThumb` (Forum) shows the
+  same picture as a small poster to the right of the title instead.
 -->
 <template>
   <article
@@ -17,7 +18,7 @@
     @click="openFromCard"
   >
     <router-link
-      v-if="cover && !coverFailed"
+      v-if="showImage && cover && !coverFailed"
       :to="postRoute(post.id)"
       class="post-card-cover"
       tabindex="-1"
@@ -31,27 +32,46 @@
         @error="coverFailed = true"
       />
     </router-link>
-    <header class="post-card-head">
-      <span class="post-badge post-kind" :class="post.kind">
-        {{ POST_KIND_LABELS[post.kind] }}
-      </span>
-      <span
-        v-if="post.score !== null"
-        class="post-badge post-score"
-        :style="getRatingBadgeColors(post.score)"
-        title="The author's watchlist rating"
-        data-testid="post-score"
-        >{{ scoreLabel(post.score) }}</span
-      >
-      <span v-if="post.forYou" class="post-badge post-for-you" title="From your watchlist"
-        >For you</span
-      >
-      <span v-if="post.spoiler" class="post-badge post-spoiler-flag">Spoilers</span>
-    </header>
+    <div class="post-card-top">
+      <div class="post-card-heading">
+        <header class="post-card-head">
+          <span class="post-badge post-kind" :class="post.kind">
+            {{ POST_KIND_LABELS[post.kind] }}
+          </span>
+          <span
+            v-if="post.score !== null"
+            class="post-badge post-score"
+            :style="getRatingBadgeColors(post.score)"
+            title="The author's watchlist rating"
+            data-testid="post-score"
+            >{{ scoreLabel(post.score) }}</span
+          >
+          <span v-if="post.forYou" class="post-badge post-for-you" title="From your watchlist"
+            >For you</span
+          >
+          <span v-if="post.spoiler" class="post-badge post-spoiler-flag">Spoilers</span>
+        </header>
 
-    <router-link :to="postRoute(post.id)" class="post-card-title">{{ post.title }}</router-link>
+        <router-link :to="postRoute(post.id)" class="post-card-title">{{ post.title }}</router-link>
 
-    <ForumTags :tags="post.tags" compact />
+        <ForumTags :tags="post.tags" compact />
+      </div>
+      <router-link
+        v-if="showThumb && cover && !coverFailed"
+        :to="postRoute(post.id)"
+        class="post-card-thumb"
+        tabindex="-1"
+        aria-hidden="true"
+      >
+        <img
+          :src="getPosterUrl(cover.imagePath || '')"
+          :alt="cover.name"
+          loading="lazy"
+          data-testid="post-thumb"
+          @error="coverFailed = true"
+        />
+      </router-link>
+    </div>
 
     <!-- Title: Preview -->
     <template v-if="!compact && post.excerpt">
@@ -123,6 +143,7 @@ const props = defineProps<{
   post: ForumPost
   compact?: boolean
   showImage?: boolean
+  showThumb?: boolean
 }>()
 const emit = defineEmits<{ 'update:post': [post: ForumPost] }>()
 
@@ -141,7 +162,9 @@ const openFromCard = (event: MouseEvent) => {
 const coverFailed = ref(false)
 
 /** The top tag's picture, else the highest tag with one (see `coverTag`). */
-const cover = computed(() => (props.showImage ? coverTag(props.post.tags) : null))
+const cover = computed(() =>
+  props.showImage || props.showThumb ? coverTag(props.post.tags) : null,
+)
 
 const toggleLike = async () => {
   if (!authStore.isAuthenticated) {
@@ -194,6 +217,38 @@ const toggleLike = async () => {
 
 .post-card.compact {
   padding: 0.9rem 1rem;
+}
+
+/* Badges, title, and tags, with the optional poster thumbnail on the right. */
+.post-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.post-card-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.post-card-thumb {
+  flex-shrink: 0;
+  width: 48px;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.post-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 /* Badges: one size, so kind, score, and flags read as a set. */
@@ -391,6 +446,14 @@ const toggleLike = async () => {
     gap: 0.5rem;
     padding: 0.85rem 0.9rem;
     border-radius: 14px;
+  }
+
+  .post-card-heading {
+    gap: 0.5rem;
+  }
+
+  .post-card-thumb {
+    width: 42px;
   }
 
   .post-card-cover {

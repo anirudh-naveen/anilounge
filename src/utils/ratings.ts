@@ -109,3 +109,13 @@ export function toUserRating(value: unknown): number | undefined {
   if (!Number.isFinite(number) || number <= 0) return undefined
   return Math.min(10, Math.max(1, Math.round(number * 10) / 10))
 }
+
+/**
+ * Typed rating text kept to 0-10 with at most one decimal ("8.", "8.5"). Characters
+ * past the tenth are dropped, and an edit that goes over 10 keeps `previous`.
+ */
+export function limitRatingInput(raw: string, previous = ''): string {
+  const [whole = '', ...rest] = raw.replace(/[^\d.]/g, '').split('.')
+  const text = rest.length ? `${whole}.${rest.join('').slice(0, 1)}` : whole
+  return Number(text) > 10 ? previous : text
+}

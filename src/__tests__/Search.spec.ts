@@ -152,6 +152,10 @@ describe('Search empty query gating', () => {
     await wrapper.get('[data-testid="search-query"]').setValue('naruto shippuden')
     expect(submit().text()).toBe('Search')
 
+    await wrapper.get('[data-testid="search-query"]').setValue('')
+    expect(submit().text()).toBe('Reset')
+    expect(submit().classes()).toContain('search-btn-reset')
+
     await wrapper.get('[data-testid="search-query"]').setValue('naruto')
     await submit().trigger('click')
     await flushPromises()
