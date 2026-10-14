@@ -10,10 +10,14 @@ const RELOAD_KEY = 'anilounge-stale-build-reload'
 /** Skip reloading again this soon after the last one, so a real outage cannot loop. */
 const RELOAD_COOLDOWN_MS = 10_000
 
-/** True for the errors browsers throw when a dynamic import() cannot be fetched. */
+/**
+ * True for the errors browsers throw when a dynamic import() cannot be fetched, including
+ * Safari's MIME error when a gone chunk comes back as the HTML page. Safari remembers a
+ * failed import until the page reloads, so a missed one leaves that page dead.
+ */
 export const isChunkLoadError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error ?? '')
-  return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(
+  return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS|is not a valid JavaScript MIME type/i.test(
     message,
   )
 }
