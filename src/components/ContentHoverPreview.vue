@@ -95,12 +95,13 @@
           <label class="form-field">
             <span>Rating (1-10)</span>
             <input
-              v-model.number="selectedRating"
-              type="number"
-              min="1"
-              max="10"
+              :value="selectedRating"
+              type="text"
+              inputmode="decimal"
               class="form-control"
               placeholder="Optional"
+              data-testid="hover-watchlist-rating"
+              @input="onRatingInput"
             />
           </label>
           <label v-if="tracksEpisodes(item)" class="form-field">
@@ -140,7 +141,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { formatGenres, getContentTypeDisplay, isMovieLike, tracksEpisodes } from '@/services/api'
 import { getRatingTextStyle } from '@/utils/ratingColors'
-import { getWeightedAverage } from '@/utils/ratings'
+import { getWeightedAverage, limitRatingInput, toUserRating } from '@/utils/ratings'
 import { useContentStore } from '@/stores/content'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
@@ -184,7 +185,7 @@ const openLeft = ref(false)
 const showForm = ref(false)
 const isSaving = ref(false)
 const selectedStatus = ref<WatchlistStatus>('plan_to_watch')
-const selectedRating = ref<number | undefined>(undefined)
+const selectedRating = ref('')
 const selectedEpisodes = ref<number>(0)
 const selectedNotes = ref('')
 
@@ -245,7 +246,7 @@ watch(episodesLocked, (locked) => {
 
 const resetForm = () => {
   selectedStatus.value = 'plan_to_watch'
-  selectedRating.value = undefined
+  selectedRating.value = ''
   selectedEpisodes.value = 0
   selectedNotes.value = ''
 }
@@ -258,7 +259,7 @@ const populateForm = () => {
   }
 
   selectedStatus.value = item.status
-  selectedRating.value = item.rating
+  selectedRating.value = item.rating != null ? String(item.rating) : ''
   selectedEpisodes.value = watchedEpisodes(item.status, item.currentEpisode, maxEpisodes.value)
   selectedNotes.value = item.notes ?? ''
 }
@@ -292,6 +293,13 @@ const openForm = () => {
   nextTick(positionForm)
 }
 
+/** Keeps the typed rating to 0-10 with at most one decimal. */
+const onRatingInput = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  selectedRating.value = limitRatingInput(input.value, selectedRating.value)
+  input.value = selectedRating.value
+}
+
 const submitWatchlist = async () => {
   if (!authStore.isAuthenticated) {
     toast.error('Please log in to add items to your watchlist')
@@ -303,7 +311,7 @@ const submitWatchlist = async () => {
     if (isOnWatchlist.value) {
       await contentStore.updateWatchlistItem(watchlistId.value, {
         status: selectedStatus.value,
-        rating: selectedRating.value,
+        rating: toUserRating(selectedRating.value),
         currentEpisode: tracksEpisodes(props.item) ? selectedEpisodes.value : undefined,
         notes: selectedNotes.value || undefined,
       })
@@ -312,7 +320,7 @@ const submitWatchlist = async () => {
       await contentStore.addToWatchlist(
         watchlistId.value,
         selectedStatus.value,
-        selectedRating.value,
+        toUserRating(selectedRating.value),
         tracksEpisodes(props.item) ? selectedEpisodes.value : undefined,
         undefined,
         selectedNotes.value || undefined,

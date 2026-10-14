@@ -143,6 +143,23 @@ describe('ContentHoverPreview watchlist action', () => {
     expect(addToWatchlist).not.toHaveBeenCalled()
   })
 
+  it('limits the rating to tenths and saves it as a number', async () => {
+    const wrapper = mountPreview()
+    await wrapper.get('[data-testid="hover-watchlist-btn"]').trigger('click')
+    const body = getBody()
+    const rating = body.get('[data-testid="hover-watchlist-rating"]')
+
+    await rating.setValue('8.56')
+    expect((rating.element as HTMLInputElement).value).toBe('8.5')
+    await rating.setValue('85')
+    expect((rating.element as HTMLInputElement).value).toBe('8.5')
+
+    await body.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(addToWatchlist).toHaveBeenCalledWith('tv-1', 'plan_to_watch', 8.5, 0, undefined, undefined)
+  })
+
   it('floats the open form on the page so a scrolling rail cannot clip it', async () => {
     const wrapper = mountPreview()
     const card = wrapper.element.parentElement as HTMLElement
