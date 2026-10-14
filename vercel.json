@@ -54,7 +54,7 @@
       "destination": "https://anilounge-production.up.railway.app/uploads/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/).*)",
       "destination": "/"
     }
   ]
