@@ -2,12 +2,23 @@
   AppSheetSection.vue — one labelled group inside an AppSheet (component).
 
   A small uppercase heading over an inset card, like an iOS grouped list. `note` adds a
-  coral word after the heading (e.g. "· All" while every chip is on).
+  coral word after the heading (e.g. "· All" while every chip is on). With `noteToggle` the
+  note is a button: coral while `noteOn`, gray otherwise, emitting `toggle-note` on click.
 -->
 <template>
   <section class="sheet-section">
     <h3 class="sheet-section-title">
-      {{ title }}<span v-if="note" class="sheet-section-note"> · {{ note }}</span>
+      {{ title
+      }}<button
+        v-if="note && noteToggle"
+        type="button"
+        class="sheet-section-note note-toggle"
+        :class="{ off: !noteOn }"
+        :aria-pressed="noteOn"
+        @click="emit('toggle-note')"
+      >
+        · {{ note }}</button
+      ><span v-else-if="note" class="sheet-section-note"> · {{ note }}</span>
     </h3>
     <div class="sheet-section-card" :class="{ plain }">
       <slot />
@@ -22,7 +33,13 @@ defineProps<{
   note?: string
   /** No card behind the content. */
   plain?: boolean
+  /** Make the note a toggle button. */
+  noteToggle?: boolean
+  /** Whether the toggle note is on (coral) or off (gray). */
+  noteOn?: boolean
 }>()
+
+const emit = defineEmits<{ 'toggle-note': [] }>()
 </script>
 
 <style scoped>
@@ -41,6 +58,20 @@ defineProps<{
 
 .sheet-section-note {
   color: var(--coral-primary);
+}
+
+.note-toggle {
+  padding: 0 0 0 0.25rem;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.note-toggle.off {
+  color: var(--text-muted);
 }
 
 .sheet-section-card {

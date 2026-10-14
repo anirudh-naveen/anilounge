@@ -40,13 +40,13 @@
           :to="{ path: '/login', query: { redirect: route.fullPath } }"
           class="btn btn-secondary"
           data-testid="chat-login"
-          >Log in</router-link
+          >Log In</router-link
         >
         <router-link
           :to="{ path: '/register', query: { redirect: route.fullPath } }"
           class="btn btn-primary"
           data-testid="chat-signup"
-          >Sign up</router-link
+          >Sign Up</router-link
         >
       </div>
     </div>

@@ -284,6 +284,19 @@ body {
   padding: var(--safe-top) var(--safe-right) 0 var(--safe-left);
 }
 
+/* A modal is open: the page behind it doesn't scroll. */
+body.modal-open {
+  overflow: hidden;
+}
+
+/* Form controls don't inherit the page font by default; keep them in the body font. */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
+
 /* Solid bar behind the status bar so scrolled content doesn't show through it. */
 body::before {
   content: '';
