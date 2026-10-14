@@ -431,8 +431,20 @@ export function refreshWidgets(): void {
 }
 
 /** Set up the native shell. Call once after the app mounts. */
+/**
+ * Stop iOS zooming in when a text field under 16px is focused. The app shell turns off
+ * pinch zoom (Capacitor's `zoomEnabled`), so that zoom could never be pinched back out.
+ */
+function lockViewportZoom() {
+  const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
+  if (viewport && !viewport.content.includes('maximum-scale')) {
+    viewport.content += ', maximum-scale=1'
+  }
+}
+
 export async function startNativeApp(router: Router): Promise<void> {
   if (!isNativeApp) return
+  lockViewportZoom()
   const [{ App }, { Browser }, { SplashScreen }, { StatusBar, Style }] = await Promise.all([
     import('@capacitor/app'),
     import('@capacitor/browser'),
