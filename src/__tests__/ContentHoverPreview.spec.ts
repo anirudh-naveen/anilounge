@@ -157,7 +157,14 @@ describe('ContentHoverPreview watchlist action', () => {
     await body.get('form').trigger('submit')
     await flushPromises()
 
-    expect(addToWatchlist).toHaveBeenCalledWith('tv-1', 'plan_to_watch', 8.5, 0, undefined, undefined)
+    expect(addToWatchlist).toHaveBeenCalledWith(
+      'tv-1',
+      'plan_to_watch',
+      8.5,
+      0,
+      undefined,
+      undefined,
+    )
   })
 
   it('floats the open form on the page so a scrolling rail cannot clip it', async () => {
