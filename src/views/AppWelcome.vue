@@ -41,7 +41,7 @@
           class="btn btn-secondary"
           data-testid="welcome-login"
         >
-          Log in
+          Log In
         </router-link>
       </div>
 

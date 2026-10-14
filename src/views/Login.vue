@@ -89,7 +89,7 @@
 
           <button type="submit" class="btn btn-primary btn-large" :disabled="authStore.isLoading">
             <span v-if="authStore.isLoading" class="spinner"></span>
-            {{ authStore.isLoading ? 'Logging in...' : 'Log in' }}
+            {{ authStore.isLoading ? 'Logging in...' : 'Log In' }}
           </button>
 
           <!-- Title: Error -->
@@ -128,7 +128,7 @@ import { useToast } from 'vue-toastification'
 import { safeRedirect } from '@/utils/social'
 import { usePageTitle } from '@/composables/usePageMeta'
 
-usePageTitle('Log in')
+usePageTitle('Log In')
 
 // Component name for Vue devtools
 defineOptions({

@@ -3,8 +3,9 @@
 
   Two labelled rows of pill chips: type (Movies, Series, Seasons) over status (Watching,
   Completed, …), split by a thin line. Every chip toggles on its own and several can be
-  picked together; at least one chip per row stays picked. All statuses start picked,
-  which the Status label shows as All. Series and Seasons exclude each other. Each chip
+  picked together; at least one type chip stays picked. All statuses start picked, shown
+  by a coral All toggle after the Status label; clicking it unpicks every status (All goes
+  gray), and clicking it again picks them all. Series and Seasons exclude each other. Each chip
   shows how many rows it alone would leave, given the other row's choice. Used on the
   Watchlist page and the profile Watchlist tab; the active chip color comes from
   `--filter-accent` (coral by default).
@@ -29,9 +30,16 @@
     <hr class="filter-divider" />
     <div class="filter-row" role="group" aria-label="Filter by status">
       <span class="row-label">
-        Status<span v-if="!status.length" class="row-all" data-testid="watchlist-status-all">
-          · All</span
+        Status<button
+          type="button"
+          class="row-all"
+          :class="{ active: isAllPicked(status) }"
+          :aria-pressed="isAllPicked(status)"
+          data-testid="watchlist-status-all"
+          @click="status = toggleAllChips(status)"
         >
+          · All
+        </button>
       </span>
       <button
         v-for="option in statusChips"
@@ -52,6 +60,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { matchesContentTypeFilter } from '@/services/api'
+import { isAllPicked, isChipPicked, toggleAllChips, type ChipPicks } from '@/utils/filterChips'
 import {
   WATCHLIST_STATUS_FILTER_OPTIONS,
   WATCHLIST_TYPE_FILTER_OPTIONS,
@@ -68,12 +77,11 @@ const props = defineProps<{
   rows: { status: string; contentType?: string }[]
 }>()
 
-/** Picked chips per row; an empty status row means All. */
-const status = defineModel<WatchlistStatus[]>('status', { required: true })
+/** Picked chips per row; an empty status row means All, `null` none. */
+const status = defineModel<ChipPicks<WatchlistStatus>>('status', { required: true })
 const type = defineModel<WatchlistTypeChoice[]>('type', { required: true })
 
-/** Empty means every status is picked (All). */
-const isPicked = (value: WatchlistStatus) => !status.value.length || status.value.includes(value)
+const isPicked = (value: WatchlistStatus) => isChipPicked(status.value, value)
 
 const statusChips = computed(() => {
   const rows = props.rows.filter((row) => matchesTypeChips(row.contentType, type.value))
@@ -110,7 +118,8 @@ const typeChips = computed(() => {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  min-width: 3.4rem;
+  /* Wide enough for "Status · All", so both rows of chips start in one column. */
+  min-width: 5.4rem;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -120,6 +129,17 @@ const typeChips = computed(() => {
 
 .row-all {
   margin-left: 0.25rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.row-all.active {
   color: var(--filter-accent, var(--coral-primary));
 }
 
