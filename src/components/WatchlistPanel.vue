@@ -538,4 +538,45 @@ textarea.field-input {
   border: 1px solid var(--border-color);
   padding: 0.7rem 0.9rem;
 }
+
+/* Phones: a slimmer panel with smaller fields. */
+@media (max-width: 600px) {
+  .watchlist-panel {
+    margin: 1rem 0 1.75rem;
+    padding: 0.9rem;
+    border-radius: 12px;
+  }
+
+  .panel-head {
+    margin-bottom: 0.7rem;
+  }
+
+  .panel-head h2 {
+    font-size: 1rem;
+  }
+
+  .status-pill {
+    font-size: 0.72rem;
+  }
+
+  .editor {
+    gap: 0.7rem;
+  }
+
+  .field {
+    gap: 0.3rem;
+    font-size: 0.82rem;
+  }
+
+  .field-input {
+    padding: 0.5rem 0.6rem;
+    /* 16px keeps iOS from zooming into the field. */
+    font-size: 16px;
+  }
+
+  .btn {
+    padding: 0.55rem 1rem;
+    font-size: 0.9rem;
+  }
+}
 </style>

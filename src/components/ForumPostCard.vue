@@ -3,13 +3,19 @@
 
   Kind (review with its score, or discussion), title, author, tags, a preview
   (covered when marked as a spoiler), and like/comment counts. Liking needs
-  sign-in; your own posts can't be liked. `compact` drops the preview for tight
+  sign-in; your own posts can't be liked. A tap anywhere on the card that isn't a link
+  or button opens the post. `compact` drops the preview for tight
   spots such as title-page highlights. `showImage` (Home) adds a cover picture: the
   author's top tag's, else the highest tag in the hierarchy that has one
   (title, then character; franchises never supply it).
 -->
 <template>
-  <article class="post-card" :class="{ compact }" :data-testid="`post-card-${post.id}`">
+  <article
+    class="post-card"
+    :class="{ compact }"
+    :data-testid="`post-card-${post.id}`"
+    @click="openFromCard"
+  >
     <router-link
       v-if="cover && !coverFailed"
       :to="postRoute(post.id)"
@@ -113,7 +119,11 @@ import { getRatingBadgeColors } from '@/utils/ratingColors'
 import { timeAgo } from '@/utils/homeFeed'
 import { apiErrorMessage, profileRoute } from '@/utils/social'
 
-const props = defineProps<{ post: ForumPost; compact?: boolean; showImage?: boolean }>()
+const props = defineProps<{
+  post: ForumPost
+  compact?: boolean
+  showImage?: boolean
+}>()
 const emit = defineEmits<{ 'update:post': [post: ForumPost] }>()
 
 const authStore = useAuthStore()
@@ -121,6 +131,13 @@ const router = useRouter()
 const toast = useToast()
 const busy = ref(false)
 const revealed = ref(false)
+
+/** Open the post from a tap anywhere on the card except its own links and buttons. */
+const openFromCard = (event: MouseEvent) => {
+  if ((event.target as Element).closest('a, button, input, textarea, select')) return
+  if (window.getSelection()?.toString()) return // selecting text, not opening
+  router.push(postRoute(props.post.id))
+}
 const coverFailed = ref(false)
 
 /** The top tag's picture, else the highest tag with one (see `coverTag`). */
@@ -150,6 +167,7 @@ const toggleLike = async () => {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  cursor: pointer;
   padding: 1rem 1.1rem;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -365,5 +383,41 @@ const toggleLike = async () => {
 .post-like .forum-icon,
 .post-comments .forum-icon {
   font-size: 1rem;
+}
+
+/* Phones: smaller type and tighter spacing, so a card reads at a glance. */
+@media (max-width: 600px) {
+  .post-card {
+    gap: 0.5rem;
+    padding: 0.85rem 0.9rem;
+    border-radius: 14px;
+  }
+
+  .post-card-cover {
+    height: 104px;
+    margin: -0.85rem -0.9rem 0.1rem;
+  }
+
+  .post-card-title {
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .post-card-excerpt {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
+  .post-card-foot {
+    gap: 0.4rem;
+    padding-top: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .post-time {
+    font-size: 0.72rem;
+  }
 }
 </style>

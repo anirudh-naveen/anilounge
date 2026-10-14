@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Watchlist from '@/views/Watchlist.vue'
+import { defaultCatalogFilters } from '@/utils/catalogFilters'
 
 const loadWatchlist = vi.fn().mockResolvedValue(undefined)
 const updateWatchlistItem = vi.fn().mockResolvedValue(true)
@@ -32,7 +33,7 @@ const watchlist = [
       contentType: 'tv',
       episodeCount: 28,
       seasonCount: 2,
-      genres: [],
+      genres: ['Fantasy'],
     },
     status: 'watching',
     currentEpisode: 4,
@@ -118,30 +119,96 @@ describe('Watchlist status sections', () => {
     const wrapper = await mountPage()
     const titles = () => wrapper.findAll('.item-title').map((title) => title.text())
 
-    await wrapper.get('[data-testid="watchlist-filter-type-movie"]').trigger('click')
+    // Movies and Series start picked; unpicking Series leaves the movie.
+    expect(titles()).toEqual(['Frieren', 'Spirited Away'])
+    await wrapper.get('[data-testid="watchlist-filter-type-series"]').trigger('click')
     expect(titles()).toEqual(['Spirited Away'])
     expect(wrapper.get('[data-testid="watchlist-filter-status-watching"]').text()).toContain('0')
 
-    // Chips of a row add up: Movies and Series together, then Series alone.
+    // The last picked chip stays picked.
+    await wrapper.get('[data-testid="watchlist-filter-type-movie"]').trigger('click')
+    expect(titles()).toEqual(['Spirited Away'])
+
     await wrapper.get('[data-testid="watchlist-filter-type-series"]').trigger('click')
     expect(titles()).toEqual(['Frieren', 'Spirited Away'])
-    await wrapper.get('[data-testid="watchlist-filter-type-movie"]').trigger('click')
-    expect(titles()).toEqual(['Frieren'])
+    expect(wrapper.find('[data-testid="watchlist-filter-type-all"]').exists()).toBe(false)
 
-    await wrapper.get('[data-testid="watchlist-filter-type-all"]').trigger('click')
+    // Every status starts picked, shown as All; unpicking one hides its titles.
+    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="watchlist-filter-status-all"]').exists()).toBe(false)
     await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
-    expect(titles()).toEqual(['Spirited Away'])
-    expect(wrapper.findAll('.section-header').map((header) => header.text())).toEqual([
-      'Completed1',
-    ])
+    expect(titles()).toEqual(['Frieren'])
+    expect(wrapper.findAll('.section-header').map((header) => header.text())).toEqual(['Watching1'])
+    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(false)
 
-    await wrapper.get('[data-testid="watchlist-filter-status-watching"]').trigger('click')
+    // Picking it again makes every status picked: All.
+    await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
     expect(titles()).toEqual(['Frieren', 'Spirited Away'])
+    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(true)
 
-    await wrapper.get('[data-testid="watchlist-filter-status-all"]').trigger('click')
+    // Down to Dropped alone; the last picked chip stays picked.
+    for (const status of ['watching', 'completed', 'on_hold', 'plan_to_watch']) {
+      await wrapper.get(`[data-testid="watchlist-filter-status-${status}"]`).trigger('click')
+    }
     await wrapper.get('[data-testid="watchlist-filter-status-dropped"]').trigger('click')
+    expect(wrapper.get('[data-testid="watchlist-filter-status-dropped"]').classes()).toContain(
+      'active',
+    )
     expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
       'No titles match these filters.',
+    )
+  })
+
+  it('filters by the Search filter fields, and remembers them', async () => {
+    const wrapper = await mountPage()
+    const titles = () => wrapper.findAll('.item-title').map((title) => title.text())
+    expect(wrapper.find('[data-testid="filter-genre"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="watchlist-filters-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="filter-genre"]').setValue('Fantasy')
+    expect(titles()).toEqual(['Frieren'])
+    expect(wrapper.get('[data-testid="watchlist-filters-toggle"]').classes()).toContain('filled')
+
+    // Reopening the page keeps the filter, with the panel open to show it.
+    const reopened = await mountPage()
+    expect(reopened.findAll('.item-title').map((title) => title.text())).toEqual(['Frieren'])
+    expect((reopened.get('[data-testid="filter-genre"]').element as HTMLSelectElement).value).toBe(
+      'Fantasy',
+    )
+
+    await reopened.get('.clear-filters-btn').trigger('click')
+    expect(reopened.findAll('.item-title').map((title) => title.text())).toEqual([
+      'Frieren',
+      'Spirited Away',
+    ])
+  })
+
+  it('remembers the type chips and sort, defaulting to Movies, Series, and rating', async () => {
+    const wrapper = await mountPage()
+    const select = wrapper.get('.watchlist-toolbar .sort-select')
+    expect((select.element as HTMLSelectElement).value).toBe('rating')
+    expect(wrapper.get('[data-testid="watchlist-filter-type-season"]').classes()).not.toContain(
+      'active',
+    )
+
+    await wrapper.get('[data-testid="watchlist-filter-type-season"]').trigger('click')
+    await select.setValue('alphabetical')
+    expect(JSON.parse(localStorage.getItem('anilounge:watchlist-view') || '{}')).toEqual({
+      types: ['movie', 'season'],
+      sortBy: 'alphabetical',
+      sortDirection: 'desc',
+      filters: defaultCatalogFilters(),
+    })
+
+    const reopened = await mountPage()
+    expect(
+      (reopened.get('.watchlist-toolbar .sort-select').element as HTMLSelectElement).value,
+    ).toBe('alphabetical')
+    expect(reopened.get('[data-testid="watchlist-filter-type-season"]').classes()).toContain(
+      'active',
+    )
+    expect(reopened.get('[data-testid="watchlist-filter-type-series"]').classes()).not.toContain(
+      'active',
     )
   })
 

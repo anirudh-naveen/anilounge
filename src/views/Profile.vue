@@ -10,7 +10,84 @@
   which hides private profiles and hidden tabs from visitors.
 -->
 <template>
-  <div class="profile-page" :style="accentStyle">
+  <div class="profile-page" :class="{ 'is-app': isAppLayout }" :style="accentStyle">
+    <!-- App layout: share, Customize, and Settings in the top bar -->
+    <AppBar>
+      <span class="app-bar-spacer"></span>
+      <button
+        v-if="profile"
+        type="button"
+        class="app-bar-button"
+        aria-label="Share profile"
+        data-testid="share-profile"
+        @click="shareProfile"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 3.5v11M8 7.5l4-4 4 4" />
+          <path
+            d="M7 10.5H6A1.5 1.5 0 0 0 4.5 12v7A1.5 1.5 0 0 0 6 20.5h12a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5h-1"
+          />
+        </svg>
+      </button>
+      <button
+        v-if="profile?.isOwner"
+        type="button"
+        class="app-bar-button"
+        aria-label="Customize profile"
+        data-testid="customize-profile"
+        @click="openCustomize"
+      >
+        <!-- Paint palette with a brush -->
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M10.5 5.5A7.5 7.5 0 1 0 10.5 20.5c1 0 1.6-.65 1.6-1.45 0-.4-.15-.75-.4-1.05-.25-.3-.4-.65-.4-1.05 0-.8.65-1.45 1.45-1.45H14.5"
+          />
+          <circle cx="6.6" cy="12.6" r=".9" fill="currentColor" stroke="none" />
+          <circle cx="9" cy="9.2" r=".9" fill="currentColor" stroke="none" />
+          <circle cx="7.4" cy="16.4" r=".9" fill="currentColor" stroke="none" />
+          <path d="M20.5 3.5 15.2 8.8" />
+          <path
+            d="M15.2 8.8c-1.1-.4-2.4.5-2.4 1.9 0 1-.5 1.6-1.3 1.9 1.9.9 4.6.2 4.6-2.2 0-.6-.3-1.3-.9-1.6Z"
+          />
+        </svg>
+      </button>
+      <router-link
+        v-if="profile?.isOwner || route.name === 'profile'"
+        to="/settings"
+        class="app-bar-button"
+        aria-label="Settings"
+        data-testid="profile-settings"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+          />
+        </svg>
+      </router-link>
+    </AppBar>
+
     <div class="container">
       <!-- Status -->
       <!-- Title: Loading -->
@@ -37,7 +114,7 @@
                 :src="profile.user.profilePicture"
                 :name="profile.user.username"
                 :accent="profile.settings.accent"
-                :size="112"
+                :size="isAppLayout ? 92 : 112"
                 class="profile-picture"
               />
 
@@ -118,6 +195,7 @@
             <!-- Title: Actions -->
             <div class="hero-actions">
               <button
+                v-if="!isAppLayout"
                 type="button"
                 class="btn btn-secondary share-btn"
                 data-testid="share-profile"
@@ -153,7 +231,7 @@
                 {{ profile.blocked ? 'Unblock' : 'Block' }}
               </button>
               <button
-                v-if="profile.isOwner"
+                v-if="profile.isOwner && !isAppLayout"
                 type="button"
                 class="btn btn-primary"
                 data-testid="customize-profile"
@@ -626,6 +704,8 @@
 </template>
 
 <script setup lang="ts">
+import AppBar from '@/components/AppBar.vue'
+import { isAppLayout } from '@/utils/nativeApp'
 import { showPosterPlaceholder } from '@/utils/posters'
 import { computed, defineOptions, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -645,6 +725,7 @@ import {
   getWatchlistStatusLabel,
   matchesStatusChips,
   matchesTypeChips,
+  DEFAULT_WATCHLIST_TYPES,
   type WatchlistStatus,
   type WatchlistTypeChoice,
 } from '@/utils/watchlist'
@@ -693,7 +774,7 @@ const profile = ref<PublicProfile | null>(null)
 const isLoading = ref(true)
 const activeTab = ref<ProfileTab>('favorites')
 const watchlistFilter = ref<WatchlistStatus[]>([])
-const watchlistTypeFilter = ref<WatchlistTypeChoice[]>([])
+const watchlistTypeFilter = ref<WatchlistTypeChoice[]>([...DEFAULT_WATCHLIST_TYPES])
 const watchlistQuery = ref('')
 const watchlistSortBy = ref<SortByOption>('relevance')
 const watchlistSortDirection = ref<SortDirection>('desc')
@@ -2274,6 +2355,40 @@ const handleImageError = showPosterPlaceholder
   width: 10px;
   height: 10px;
   border-radius: 50%;
+}
+
+/* App layout: a tighter hero under the top bar. */
+.profile-page.is-app {
+  min-height: 0;
+  padding: 0;
+}
+
+.is-app .profile-hero {
+  border-radius: 20px;
+  margin-bottom: 1rem;
+}
+
+.is-app .hero-banner {
+  height: 84px;
+}
+
+.is-app .avatar {
+  margin-top: -46px;
+}
+
+.is-app .hero-actions .btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.is-app .profile-tabs {
+  margin-bottom: 1rem;
+  scrollbar-width: none;
+}
+
+.is-app .profile-tab {
+  padding: 0.6rem 0.85rem;
+  font-size: 0.88rem;
 }
 
 @media (max-width: 768px) {

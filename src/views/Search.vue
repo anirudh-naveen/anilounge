@@ -8,10 +8,117 @@
   assistant, which can also fill these results.
 -->
 <template>
-  <div class="search-page">
+  <div class="search-page" :class="{ 'is-app': isAppLayout }">
+    <!-- App layout: type, search, and the filter sheet live in the top bar -->
+    <AppBar>
+      <div v-if="!appSearchOpen" class="app-bar-segments" role="tablist" aria-label="Content type">
+        <button
+          type="button"
+          role="tab"
+          :class="{ active: browseType === 'movie' }"
+          :aria-selected="browseType === 'movie'"
+          data-testid="browse-type-movie"
+          @click="setBrowseType('movie')"
+        >
+          Movies
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :class="{ active: browseType === 'tv' }"
+          :aria-selected="browseType === 'tv'"
+          data-testid="browse-type-tv"
+          @click="setBrowseType('tv')"
+        >
+          Series
+        </button>
+      </div>
+      <span v-if="!appSearchOpen" class="app-bar-spacer"></span>
+      <button
+        v-if="!appSearchOpen"
+        type="button"
+        class="app-bar-button chat-button"
+        aria-label="Open Lounge Guide, the AI assistant"
+        data-testid="chat-launcher"
+        @click="chatOpen = true"
+      >
+        <img src="/anilounge-logo.png" alt="" width="38" height="38" />
+      </button>
+      <AppSearchToggle
+        v-model="searchQuery"
+        v-model:expanded="appSearchOpen"
+        :placeholder="searchPlaceholder"
+        data-testid="search-query"
+        @submit="handleSearch"
+        @cancel="clearSearch"
+      />
+      <button
+        type="button"
+        class="app-bar-button"
+        :class="{ active: hasExtraFilters || seasonMode }"
+        aria-label="Filter and sort"
+        data-testid="search-filters-toggle"
+        @click="filterSheetOpen = true"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+          <path stroke-linecap="round" d="M4 7h16M7 12h10M10 17h4" />
+        </svg>
+      </button>
+    </AppBar>
+    <AppSheet
+      v-if="isAppLayout"
+      v-model:open="filterSheetOpen"
+      title="Filter & Sort"
+      reset-label="Reset"
+      :can-reset="hasExtraFilters"
+      :done-label="canSearch ? 'Search' : 'Done'"
+      @reset="clearFilters"
+      @close="applySheet"
+    >
+      <AppSheetSection v-if="browseType === 'tv'" title="Show">
+        <div class="type-toggle sheet-toggle" role="tablist" aria-label="Series or seasons">
+          <button
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            :class="{ active: !seasonMode }"
+            :aria-selected="!seasonMode"
+            @click="setSeasonMode(false)"
+          >
+            Series
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            :class="{ active: seasonMode }"
+            :aria-selected="seasonMode"
+            @click="setSeasonMode(true)"
+          >
+            Seasons
+          </button>
+        </div>
+      </AppSheetSection>
+      <AppSheetSection title="Sort">
+        <SortByControls
+          v-model:sort-by="filters.sortBy"
+          v-model:sort-direction="filters.sortDirection"
+          class="sheet-sort"
+        />
+      </AppSheetSection>
+      <AppSheetSection title="Filters" plain>
+        <CatalogFilterPanel
+          v-model="filters"
+          :year-options="yearFilterOptions"
+          class="sheet-filter-panel"
+          @clear="clearFilters"
+        />
+      </AppSheetSection>
+    </AppSheet>
+
     <div class="container">
       <!-- Browse Header -->
-      <div class="browse-header">
+      <div v-if="!isAppLayout" class="browse-header">
         <h1 class="browse-title">Search For</h1>
         <div class="type-toggle" role="tablist" aria-label="Content type">
           <button
@@ -70,7 +177,7 @@
       </div>
 
       <!-- Search -->
-      <div class="search-form-container">
+      <div v-if="!isAppLayout" class="search-form-container">
         <form @submit.prevent="handleSearch" class="search-form">
           <div class="search-input-group">
             <input
@@ -78,13 +185,7 @@
               type="text"
               class="search-input"
               data-testid="search-query"
-              :placeholder="
-                browseType === 'tv'
-                  ? seasonMode
-                    ? 'Search for seasons...'
-                    : 'Search for series...'
-                  : 'Search for movies...'
-              "
+              :placeholder="searchPlaceholder"
             />
             <button
               v-if="showReset"
@@ -124,133 +225,20 @@
       </div>
 
       <!-- Filters -->
-      <div v-if="filtersOpen" id="search-filters" class="filters-container">
-        <div class="filters-header">
-          <h3>Filters</h3>
-          <button @click="clearFilters" class="clear-filters-btn">
-            <i class="fas fa-times"></i>
-            Clear All
-          </button>
+      <CatalogFilterPanel
+        v-if="filtersOpen && !isAppLayout"
+        id="search-filters"
+        v-model="filters"
+        :year-options="yearFilterOptions"
+        @clear="clearFilters"
+      >
+        <div class="sort-filter">
+          <SortByControls
+            v-model:sort-by="filters.sortBy"
+            v-model:sort-direction="filters.sortDirection"
+          />
         </div>
-        <div class="filters-bar">
-          <div class="filter-group">
-            <label>Genre</label>
-            <select v-model="filters.genre" data-testid="filter-genre">
-              <option value="all">All Genres</option>
-              <option value="Action">Action</option>
-              <option value="Adventure">Adventure</option>
-              <option value="Comedy">Comedy</option>
-              <option value="Drama">Drama</option>
-              <option value="Fantasy">Fantasy</option>
-              <option value="Mystery">Mystery</option>
-              <option value="Sci-Fi">Sci-Fi</option>
-              <option value="Supernatural">Supernatural</option>
-              <option value="Historical">Historical</option>
-              <option value="Military">Military</option>
-              <option value="Psychological">Psychological</option>
-              <option value="Mecha">Mecha</option>
-              <option value="Samurai">Samurai</option>
-              <option value="Vampire">Vampire</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label>Language</label>
-            <select v-model="filters.language">
-              <option value="all">All Languages</option>
-              <option value="Japanese">Japanese</option>
-              <option value="English">English</option>
-              <option value="Korean">Korean</option>
-              <option value="Chinese">Chinese</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label>Country</label>
-            <select v-model="filters.country" data-testid="filter-country">
-              <option value="all">All Countries</option>
-              <option
-                v-for="country in ORIGIN_COUNTRY_OPTIONS"
-                :key="country.value"
-                :value="country.value"
-              >
-                {{ country.label }}
-              </option>
-            </select>
-          </div>
-          <div class="filter-row-time">
-            <div class="filter-group">
-              <label>Year</label>
-              <select v-model="filters.year" data-testid="filter-year">
-                <option
-                  v-for="option in yearFilterOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label>Season</label>
-              <select v-model="filters.season" data-testid="filter-season">
-                <option
-                  v-for="option in SEASON_FILTER_OPTIONS"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label>Status</label>
-              <select v-model="filters.status" data-testid="filter-status">
-                <option
-                  v-for="option in STATUS_FILTER_OPTIONS"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-          </div>
-          <div class="filter-group sort-filter">
-            <SortByControls
-              v-model:sort-by="filters.sortBy"
-              v-model:sort-direction="filters.sortDirection"
-            />
-          </div>
-          <div class="filter-group rating-filter">
-            <label>Rating: {{ filters.ratingMin }} – {{ filters.ratingMax }}</label>
-            <div class="rating-slider">
-              <div class="rating-slider-track">
-                <div class="rating-slider-range" :style="ratingFillStyle"></div>
-              </div>
-              <input
-                v-model.number="filters.ratingMin"
-                type="range"
-                min="1"
-                max="10"
-                step="1"
-                aria-label="Minimum rating"
-                @input="clampRatingMin"
-              />
-              <input
-                v-model.number="filters.ratingMax"
-                type="range"
-                min="1"
-                max="10"
-                step="1"
-                aria-label="Maximum rating"
-                @input="clampRatingMax"
-              />
-            </div>
-            <div class="rating-slider-scale">
-              <span v-for="n in 10" :key="n">{{ n }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      </CatalogFilterPanel>
 
       <!-- Results -->
       <!-- Title: Loading State -->
@@ -382,8 +370,8 @@
       </div>
     </div>
 
-    <!-- AI Assistant -->
-    <ChatLauncher />
+    <!-- AI Assistant (in the app layout, opened from the top bar) -->
+    <ChatLauncher v-model:open="chatOpen" :hide-trigger="isAppLayout" />
   </div>
 </template>
 
@@ -409,6 +397,11 @@ import {
 import { useToast } from 'vue-toastification'
 import type { UnifiedContent } from '@/types/content'
 import { usePageMeta } from '@/composables/usePageMeta'
+import AppBar from '@/components/AppBar.vue'
+import AppSearchToggle from '@/components/AppSearchToggle.vue'
+import AppSheet from '@/components/AppSheet.vue'
+import AppSheetSection from '@/components/AppSheetSection.vue'
+import { isAppLayout } from '@/utils/nativeApp'
 import PaginationNav from '@/components/PaginationNav.vue'
 import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import WatchlistCardTag from '@/components/WatchlistCardTag.vue'
@@ -416,20 +409,12 @@ import AiringBadge from '@/components/AiringBadge.vue'
 import ContentRail from '@/components/ContentRail.vue'
 import ChatLauncher from '@/components/ChatLauncher.vue'
 import SortByControls from '@/components/SortByControls.vue'
+import CatalogFilterPanel from '@/components/CatalogFilterPanel.vue'
 import { applySort } from '@/utils/sorting'
-import { getTotalVoteCount, getWeightedAverage, ratingMatchesFilter } from '@/utils/ratings'
+import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
-import {
-  ORIGIN_COUNTRY_OPTIONS,
-  SEASON_FILTER_OPTIONS,
-  STATUS_FILTER_OPTIONS,
-  buildYearFilterOptions,
-  getSearchCategoryDate,
-  matchesCountryFilter,
-  matchesSeasonFilter,
-  matchesStatusFilter,
-  matchesYearFilter,
-} from '@/utils/searchFilters'
+import { buildYearFilterOptions, getSearchCategoryDate } from '@/utils/searchFilters'
+import { matchesCatalogFilters } from '@/utils/catalogFilters'
 import {
   MOVIE_BROWSE_RAILS,
   TV_BROWSE_RAILS,
@@ -449,6 +434,11 @@ const hasSearched = ref(
   contentStore.searchResults.length > 0 || Boolean(contentStore.lastSearchQuery),
 )
 const filtersOpen = ref(false)
+/** App layout: the top bar's search field (open while it holds a search) and the filter sheet. */
+const appSearchOpen = ref(Boolean(searchQuery.value))
+const filterSheetOpen = ref(false)
+/** The Lounge Guide chat (opened from the top bar in the app layout). */
+const chatOpen = ref(false)
 const itemsPerPage = 20
 
 const {
@@ -499,65 +489,8 @@ const filteredResults = computed(() => {
     results = results.filter((item) => matchesContentTypeFilter(item.contentType, active.type))
   }
 
-  // Apply rating range (1–10). Full span includes unrated titles.
-  if (!(active.ratingMin === 1 && active.ratingMax === 10)) {
-    results = results.filter((item) =>
-      ratingMatchesFilter(item, active.ratingMin, active.ratingMax),
-    )
-  }
-
-  // Apply year filter
-  if (active.year !== 'all') {
-    results = results.filter((item) => matchesYearFilter(item, active.year))
-  }
-
-  // Apply season filter (movies and series)
-  if (active.season !== 'all') {
-    results = results.filter((item) => matchesSeasonFilter(item, active.season))
-  }
-
-  // Apply status filter (completed / airing / upcoming)
-  if (active.status !== 'all') {
-    results = results.filter((item) => matchesStatusFilter(item, active.status))
-  }
-
-  // Apply genre filter
-  if (active.genre !== 'all') {
-    results = results.filter((item) => {
-      if (!item.genres || !Array.isArray(item.genres)) return false
-      return item.genres.some((genre) => {
-        const genreName = typeof genre === 'string' ? genre : genre.name
-        return genreName === active.genre
-      })
-    })
-  }
-
-  // Apply language filter (this is a simplified implementation)
-  if (active.language !== 'all') {
-    results = results.filter((item) => {
-      // For now, we'll assume Japanese content based on MAL data
-      // This could be enhanced with actual language data from TMDB
-      if (active.language === 'Japanese') {
-        return (
-          item.malId != null ||
-          item.studios?.some(
-            (studio) =>
-              studio.toLowerCase().includes('japan') ||
-              studio.toLowerCase().includes('toei') ||
-              studio.toLowerCase().includes('madhouse') ||
-              studio.toLowerCase().includes('studio ghibli'),
-          )
-        )
-      }
-      // For other languages, we'll need to implement proper language detection
-      return true
-    })
-  }
-
-  // Apply country of origin
-  if (active.country !== 'all') {
-    results = results.filter((item) => matchesCountryFilter(item, active.country))
-  }
+  // Genre, language, country, year, season, status, and rating range.
+  results = results.filter((item) => matchesCatalogFilters(item, active))
 
   return applySort(
     results,
@@ -597,6 +530,14 @@ const showReset = computed(
     (Object.keys(filters.value) as (keyof SearchFilters)[]).every(
       (key) => filters.value[key] === appliedFilters.value[key],
     ),
+)
+
+const searchPlaceholder = computed(() =>
+  browseType.value === 'tv'
+    ? seasonMode.value
+      ? 'Search for seasons...'
+      : 'Search for series...'
+    : 'Search for movies...',
 )
 
 const yearFilterOptions = computed(() => buildYearFilterOptions(contentStore.allContent))
@@ -679,28 +620,6 @@ const truncateText = (text: string, maxLength: number) => {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
 }
 
-const clampRatingMin = () => {
-  if (filters.value.ratingMin > filters.value.ratingMax) {
-    filters.value.ratingMin = filters.value.ratingMax
-  }
-}
-
-const clampRatingMax = () => {
-  if (filters.value.ratingMax < filters.value.ratingMin) {
-    filters.value.ratingMax = filters.value.ratingMin
-  }
-}
-
-const ratingFillStyle = computed(() => {
-  const min = filters.value.ratingMin
-  const max = filters.value.ratingMax
-  const left = ((min - 1) / 9) * 100
-  const right = ((max - 1) / 9) * 100
-  return {
-    clipPath: `inset(0 ${Math.max(0, 100 - right)}% 0 ${Math.max(0, left)}% round 999px)`,
-  }
-})
-
 const handleImageError = showPosterPlaceholder
 
 const viewContentDetails = (item: UnifiedContent) => {
@@ -751,6 +670,12 @@ const clearFilters = () => {
   filters.value = reset
   appliedFilters.value = { ...reset }
   currentPage.value = 1
+}
+
+/** Closing the filter sheet searches with its filters (or returns to browsing when cleared). */
+const applySheet = () => {
+  if (canSearch.value) void handleSearch()
+  else if (hasSearched.value) clearSearch()
 }
 
 const clearSearch = () => {
@@ -813,6 +738,88 @@ usePageMeta({
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 20px;
+}
+
+/* App layout */
+.chat-button {
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--navbar-primary), var(--navbar-primary)) padding-box,
+    linear-gradient(135deg, var(--coral-primary), var(--teal-primary)) border-box;
+}
+
+.chat-button img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.search-page.is-app {
+  min-height: 0;
+  padding: 0;
+}
+
+.search-page.is-app .container {
+  padding: 0 16px;
+}
+
+.search-page.is-app .results-header {
+  margin-bottom: 0.85rem;
+  text-align: left;
+}
+
+.search-page.is-app .results-header h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.search-page.is-app .results-header p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.search-page.is-app .results-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-page.is-app .result-overview,
+.search-page.is-app .result-genres,
+.search-page.is-app .result-native-title {
+  display: none;
+}
+
+.sheet-toggle {
+  display: flex;
+  width: 100%;
+}
+
+.sheet-toggle .type-toggle-btn {
+  flex: 1;
+}
+
+.sheet-sort {
+  width: 100%;
+}
+
+.sheet-sort :deep(.sort-label) {
+  display: none;
+}
+
+.sheet-filter-panel {
+  margin: 0;
+}
+
+.sheet-filter-panel :deep(.filters-header) {
+  display: none;
+}
+
+.sheet-filter-panel :deep(.filters-bar) {
+  border-radius: 14px;
+  box-shadow: none;
 }
 
 .browse-header {
@@ -970,221 +977,15 @@ usePageMeta({
   border-color: var(--coral-primary);
 }
 
-.filters-container {
-  margin-bottom: 2rem;
-  position: relative;
-}
-
-.filters-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.filters-header h3 {
-  color: var(--text-primary);
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.filters-bar {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem 1rem;
-  align-items: start;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  padding: 1.5rem;
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-}
-
-.filter-group {
+.sort-filter {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
   min-width: 0;
-}
-
-.rating-filter {
-  grid-column: 1 / -1;
-}
-
-.filter-row-time {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem 1rem;
 }
 
 .sort-filter :deep(.sort-by-controls) {
   width: 100%;
   gap: 0.25rem;
-}
-
-.filter-group label {
-  color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 0.85rem;
-}
-
-/* Same rounded control as SortByControls, so every filter reads as one set. */
-.filter-group select {
-  height: 40px;
-  padding: 0 2.25rem 0 1rem;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  background-color: var(--bg-card);
-  /* Chevron drawn from two gradients so it follows the theme's muted text color. */
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
-    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
-  background-position:
-    calc(100% - 1.15rem) 50%,
-    calc(100% - 0.85rem) 50%;
-  background-size: 5px 5px;
-  background-repeat: no-repeat;
-  box-shadow: 0 1px 2px rgba(21, 34, 56, 0.06);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.filter-group select:hover {
-  border-color: var(--border-hover);
-}
-
-.filter-group select:focus {
-  outline: none;
-  border-color: var(--coral-primary);
-  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.2);
-}
-
-.filter-group select option {
-  background: var(--bg-card);
-  color: var(--text-primary);
-}
-
-.filter-group select:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  background-color: var(--bg-muted);
-}
-
-.rating-slider {
-  position: relative;
-  height: 28px;
-  display: flex;
-  align-items: center;
-}
-
-.rating-slider-track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #fca5a5 0%, #fde047 50%, #86efac 100%);
-}
-
-.rating-slider-range {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #ef4444 0%, #facc15 50%, #22c55e 100%);
-}
-
-.rating-slider input[type='range'] {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  margin: 0;
-  background: none;
-  appearance: none;
-  -webkit-appearance: none;
-  pointer-events: none;
-  height: 6px;
-}
-
-.rating-slider input[type='range']::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  pointer-events: auto;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: none;
-  background: var(--bg-card);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-  cursor: pointer;
-}
-
-.rating-slider input[type='range']::-moz-range-thumb {
-  pointer-events: auto;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: none;
-  background: var(--bg-card);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-  cursor: pointer;
-}
-
-.rating-slider input[type='range']:nth-of-type(1) {
-  z-index: 2;
-}
-
-.rating-slider input[type='range']:nth-of-type(2) {
-  z-index: 3;
-}
-
-.rating-slider-scale {
-  display: flex;
-  justify-content: space-between;
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0 1px;
-}
-
-.clear-filters-btn {
-  background: linear-gradient(135deg, var(--coral-primary), var(--teal-primary));
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.8rem;
-  line-height: 1.15;
-  transition: all 0.3s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 0.4rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.clear-filters-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.clear-filters-btn i {
-  font-size: 0.7rem;
 }
 
 .results-header {
@@ -1415,13 +1216,7 @@ usePageMeta({
 }
 
 @media (max-width: 900px) {
-  .filters-bar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .sort-filter,
-  .rating-filter,
-  .filter-row-time {
+  .sort-filter {
     grid-column: 1 / -1;
   }
 }
@@ -1446,25 +1241,8 @@ usePageMeta({
     justify-content: center;
   }
 
-  .filters-bar {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-    padding: 1rem;
-  }
-
-  .sort-filter,
-  .rating-filter,
-  .filter-row-time {
+  .sort-filter {
     grid-column: 1;
-  }
-
-  .filter-row-time {
-    grid-template-columns: 1fr;
-  }
-
-  .clear-filters-btn {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.75rem;
   }
 
   .results-grid {

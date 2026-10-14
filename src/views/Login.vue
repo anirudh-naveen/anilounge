@@ -78,10 +78,9 @@
                 Forgot password?
               </router-link>
             </div>
-            <input
+            <PasswordInput
               id="password"
               v-model="form.password"
-              type="password"
               class="input"
               placeholder="Enter your password"
               required
@@ -121,6 +120,7 @@
 </template>
 
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue'
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'

@@ -64,6 +64,7 @@ const router = createRouter({
     await whenScrollable(savedPosition.top)
     return savedPosition
   },
+  // `meta.appTitle` titles the app layout's top bar on pages outside the tab bar (App.vue).
   routes: [
     {
       path: '/',
@@ -101,6 +102,7 @@ const router = createRouter({
       path: '/feedback',
       name: 'feedback',
       component: () => import('@/views/Feedback.vue'),
+      meta: { appTitle: 'Feedback' },
     },
     {
       // The iOS app's sign-in wall (utils/appGate.ts); no site header or footer.
@@ -113,11 +115,13 @@ const router = createRouter({
       path: '/privacy',
       name: 'privacy',
       component: () => import('@/views/Privacy.vue'),
+      meta: { appTitle: 'Privacy' },
     },
     {
       path: '/support',
       name: 'support',
       component: () => import('@/views/Support.vue'),
+      meta: { appTitle: 'Help' },
     },
     {
       path: '/watchlist',
@@ -135,13 +139,13 @@ const router = createRouter({
       path: '/friends',
       name: 'friends',
       component: () => import('@/views/Friends.vue'),
-      meta: { requiresAuth: true },
+      meta: { appTitle: 'Friends', requiresAuth: true },
     },
     {
       path: '/inbox',
       name: 'inbox',
       component: () => import('@/views/Inbox.vue'),
-      meta: { requiresAuth: true },
+      meta: { appTitle: 'Inbox', requiresAuth: true },
     },
     {
       // Messages live in the Friends page's Messages tab.
@@ -157,13 +161,13 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/Settings.vue'),
-      meta: { requiresAuth: true },
+      meta: { appTitle: 'Settings', requiresAuth: true },
     },
     {
       path: '/connections',
       name: 'connections',
       component: () => import('@/views/Connections.vue'),
-      meta: { requiresAuth: true },
+      meta: { appTitle: 'Connections', requiresAuth: true },
     },
     // Old Import page; keeps bookmarks and in-flight returns working.
     { path: '/import', redirect: (to) => ({ path: '/connections', query: to.query }) },
@@ -172,12 +176,13 @@ const router = createRouter({
       name: 'admin',
       component: () => import('@/views/Admin.vue'),
       // Admins get every tab; developers only Content (the server enforces both).
-      meta: { requiresAuth: true, requiresContentEditor: true },
+      meta: { appTitle: 'Admin', requiresAuth: true, requiresContentEditor: true },
     },
     {
       path: '/login',
       name: 'login',
       component: () => import('@/views/Login.vue'),
+      meta: { appTitle: 'Log In' },
     },
     {
       path: '/verify-email',
@@ -198,6 +203,7 @@ const router = createRouter({
       path: '/register',
       name: 'register',
       component: () => import('@/views/Register.vue'),
+      meta: { appTitle: 'Sign Up' },
     },
     {
       path: `/movie/:slug?/:id(${CATALOG_ID})`,

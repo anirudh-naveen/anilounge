@@ -38,9 +38,9 @@
 
     <div v-else-if="show" class="show-content">
       <!-- Header -->
-      <div class="show-header">
+      <div class="show-header title-header">
         <!-- Title: Poster -->
-        <div class="show-poster">
+        <div class="show-poster title-poster">
           <img
             v-if="show.posterPath"
             :src="getPosterUrl(show.posterPath)"
@@ -114,7 +114,24 @@
           <!-- Title: Actions -->
           <div class="show-actions title-actions">
             <FavoriteHeart :content-id="show._id" variant="button" />
-            <button @click="shareShow" class="btn-outline">Share</button>
+            <button @click="shareShow" class="btn-outline">
+              <svg
+                class="action-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3.5v11M8 7.5l4-4 4 4" />
+                <path
+                  d="M7 10.5H6A1.5 1.5 0 0 0 4.5 12v7A1.5 1.5 0 0 0 6 20.5h12a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5h-1"
+                />
+              </svg>
+              Share
+            </button>
             <button
               v-if="hasUpcomingEpisode"
               type="button"
@@ -122,7 +139,20 @@
               data-testid="add-to-calendar"
               @click="addToCalendar"
             >
-              Add to Calendar
+              <svg
+                class="action-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+                <path d="M3.5 10h17M8 3v4M16 3v4M12 13.5v4M10 15.5h4" />
+              </svg>
+              <span><span class="label-long">Add to </span>Calendar</span>
             </button>
           </div>
         </div>
@@ -983,6 +1013,31 @@ useCanonicalSlug(routeTitle, () => (routeTitle.value ? String(route.params.id) :
   .show-header {
     grid-template-columns: 1fr;
     gap: 1.5rem;
+  }
+}
+
+/* Phones: overview at a reading size and smaller season cards. */
+@media (max-width: 600px) {
+  .show-description p {
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  .season-cards {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 0.6rem;
+  }
+
+  .season-card-info {
+    padding: 0.4rem 0.5rem 0.5rem;
+  }
+
+  .season-card-label {
+    font-size: 0.82rem;
+  }
+
+  .season-card-meta {
+    font-size: 0.72rem;
   }
 }
 </style>

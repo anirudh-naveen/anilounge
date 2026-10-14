@@ -1,3 +1,4 @@
+import { toggleChipOfAll } from '@/utils/filterChips'
 import { matchesContentTypeFilter } from '@/services/api'
 
 export type WatchlistStatus = 'plan_to_watch' | 'watching' | 'completed' | 'on_hold' | 'dropped'
@@ -10,8 +11,20 @@ export const WATCHLIST_STATUS_OPTIONS: { value: WatchlistStatus; label: string }
   { value: 'dropped', label: 'Dropped' },
 ]
 
-export const WATCHLIST_STATUS_FILTER_OPTIONS: { value: 'all' | WatchlistStatus; label: string }[] =
-  [{ value: 'all', label: 'All' }, ...WATCHLIST_STATUS_OPTIONS]
+/** Order of the watchlist page's status sections and filter chips. */
+export const WATCHLIST_STATUS_ORDER: WatchlistStatus[] = [
+  'watching',
+  'completed',
+  'on_hold',
+  'plan_to_watch',
+  'dropped',
+]
+
+/** Status chips, in section order. There is no All chip: every chip picked reads as All. */
+export const WATCHLIST_STATUS_FILTER_OPTIONS: { value: WatchlistStatus; label: string }[] =
+  WATCHLIST_STATUS_ORDER.map(
+    (status) => WATCHLIST_STATUS_OPTIONS.find((option) => option.value === status)!,
+  )
 
 /**
  * Human-readable watchlist status for buttons and filters.
@@ -93,15 +106,6 @@ export const watchedEpisodes = (
   totalEpisodes: number | undefined,
 ) => (status === 'completed' && totalEpisodes ? totalEpisodes : currentEpisode || 0)
 
-/** Order of the watchlist page's status sections: active titles first. */
-export const WATCHLIST_STATUS_ORDER: WatchlistStatus[] = [
-  'watching',
-  'on_hold',
-  'plan_to_watch',
-  'completed',
-  'dropped',
-]
-
 /** How long after sign-up new accounts are reminded that they can import a list. */
 export const IMPORT_REMINDER_DAYS = 30
 
@@ -124,30 +128,50 @@ export function shouldShowImportReminder(
   return now.getTime() - created < IMPORT_REMINDER_DAYS * 24 * 60 * 60 * 1000
 }
 
-export type WatchlistTypeFilter = 'all' | 'movie' | 'series' | 'season'
+/** Type chips picked on a watchlist; values match `matchesContentTypeFilter`. */
+export type WatchlistTypeChoice = 'movie' | 'series' | 'season'
 
-/** Type chips on the watchlist and profile pages; values match `matchesContentTypeFilter`. */
-export const WATCHLIST_TYPE_FILTER_OPTIONS: { value: WatchlistTypeFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
+/** Type chips on the watchlist and profile pages (there is no All chip). */
+export const WATCHLIST_TYPE_FILTER_OPTIONS: { value: WatchlistTypeChoice; label: string }[] = [
   { value: 'movie', label: 'Movies' },
   { value: 'series', label: 'Series' },
   { value: 'season', label: 'Seasons' },
 ]
 
-/** Chips picked in one filter row; none picked means All. */
-export type WatchlistTypeChoice = Exclude<WatchlistTypeFilter, 'all'>
+/** Type chips picked until the user changes them: whole titles, not their seasons. */
+export const DEFAULT_WATCHLIST_TYPES: WatchlistTypeChoice[] = ['movie', 'series']
 
 /**
- * Pick or unpick a chip in a multi-select filter row. All (or picking every chip) clears
- * the row back to All.
- * @param picked - The row's picked chips.
+ * Pick or unpick a type chip. Series and Seasons exclude each other (a season row is part
+ * of a series row), so picking one drops the other; the last picked chip can't be unpicked.
+ * @param picked - The picked type chips.
  * @param value - The chip clicked.
- * @param options - Every chip value in the row except All.
  */
-export function toggleFilterChip<T extends string>(picked: T[], value: T | 'all', options: T[]) {
-  if (value === 'all') return []
-  const next = picked.includes(value) ? picked.filter((v) => v !== value) : [...picked, value]
-  return options.every((option) => next.includes(option)) ? [] : next
+export function toggleTypeChip(picked: WatchlistTypeChoice[], value: WatchlistTypeChoice) {
+  if (picked.includes(value)) {
+    return picked.length > 1 ? picked.filter((v) => v !== value) : picked
+  }
+  const rival = value === 'series' ? 'season' : value === 'season' ? 'series' : null
+  return [...picked.filter((v) => v !== rival), value]
+}
+
+/** Saved type chips, keeping only known values and at most one of Series and Seasons. */
+export function readTypeChips(saved: unknown): WatchlistTypeChoice[] {
+  if (!Array.isArray(saved)) return [...DEFAULT_WATCHLIST_TYPES]
+  const known = WATCHLIST_TYPE_FILTER_OPTIONS.map((option) => option.value)
+  const picked = known.filter((value) => saved.includes(value))
+  const valid = picked.includes('series') ? picked.filter((v) => v !== 'season') : picked
+  return valid.length ? valid : [...DEFAULT_WATCHLIST_TYPES]
+}
+
+/**
+ * Pick or unpick a status chip. Every status starts picked (stored as `[]`, shown as All);
+ * the last picked chip can't be unpicked, and picking every chip goes back to All.
+ * @param picked - The picked statuses; empty means all of them.
+ * @param value - The chip clicked.
+ */
+export function toggleStatusChip(picked: WatchlistStatus[], value: WatchlistStatus) {
+  return toggleChipOfAll(picked, value, WATCHLIST_STATUS_ORDER)
 }
 
 /** Whether a row's status is one of the picked statuses (none picked: any). */

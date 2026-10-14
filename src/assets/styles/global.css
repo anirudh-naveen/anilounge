@@ -297,6 +297,47 @@ body::before {
   pointer-events: none;
 }
 
+/* App layout (utils/nativeApp.ts): the top bar has the back button, so pages drop theirs. */
+html.app-layout .back-button,
+html.app-layout .back-link {
+  display: none;
+}
+
+/* The top bar names the page, so page title blocks go too. */
+html.app-layout .social-intro,
+html.app-layout .page-header,
+html.app-layout .doc-title {
+  display: none;
+}
+
+html.app-layout .social-page,
+html.app-layout .doc-page {
+  min-height: 0;
+  padding-top: 0;
+}
+
+/* Toasts start below the notch / Dynamic Island. On phones the library pins them
+   full-width to the very top; inset them from the edges instead. */
+.Vue-Toastification__container.top-left,
+.Vue-Toastification__container.top-right,
+.Vue-Toastification__container.top-center {
+  top: calc(var(--safe-top) + 1em);
+}
+
+@media only screen and (max-width: 600px) {
+  .Vue-Toastification__container.top-left,
+  .Vue-Toastification__container.top-right,
+  .Vue-Toastification__container.top-center {
+    top: calc(var(--safe-top) + 8px);
+    padding: 0 calc(12px + var(--safe-right)) 0 calc(12px + var(--safe-left));
+  }
+
+  .Vue-Toastification__container .Vue-Toastification__toast {
+    border-radius: 14px;
+    margin-bottom: 0.5rem;
+  }
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;

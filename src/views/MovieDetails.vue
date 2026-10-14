@@ -29,9 +29,9 @@
 
     <div v-else-if="movie" class="movie-content">
       <!-- Header -->
-      <div class="movie-header">
+      <div class="movie-header title-header">
         <!-- Title: Poster -->
-        <div class="movie-poster">
+        <div class="movie-poster title-poster">
           <img
             v-if="movie.posterPath"
             :src="getPosterUrl(movie.posterPath)"
@@ -85,7 +85,24 @@
           <!-- Title: Actions -->
           <div class="movie-actions title-actions">
             <FavoriteHeart :content-id="movie._id" variant="button" />
-            <button @click="shareMovie" class="btn-outline">Share</button>
+            <button @click="shareMovie" class="btn-outline">
+              <svg
+                class="action-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3.5v11M8 7.5l4-4 4 4" />
+                <path
+                  d="M7 10.5H6A1.5 1.5 0 0 0 4.5 12v7A1.5 1.5 0 0 0 6 20.5h12a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5h-1"
+                />
+              </svg>
+              Share
+            </button>
           </div>
         </div>
       </div>
@@ -458,6 +475,14 @@ useCanonicalSlug(
   .movie-header {
     grid-template-columns: 1fr;
     gap: 1.5rem;
+  }
+}
+
+/* Phones: overview at a reading size. */
+@media (max-width: 600px) {
+  .movie-description p {
+    font-size: 0.92rem;
+    line-height: 1.55;
   }
 }
 </style>

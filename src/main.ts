@@ -16,7 +16,7 @@ import './assets/styles/social.css'
 import { useAuthStore } from './stores/auth'
 import { useContentStore } from './stores/content'
 import { startMetrics } from './services/metrics'
-import { startNativeApp } from './utils/nativeApp'
+import { isAppLayout, startNativeApp } from './utils/nativeApp'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -47,6 +47,9 @@ const contentStore = useContentStore()
 authStore.restoreSession().then(() => {
   if (authStore.isAuthenticated) contentStore.loadWatchlist()
 })
+
+// Pages restyle themselves for the app layout under this class (utils/nativeApp.ts).
+if (isAppLayout) document.documentElement.classList.add('app-layout')
 
 startMetrics()
 app.mount('#app')
