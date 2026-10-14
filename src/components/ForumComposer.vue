@@ -166,13 +166,13 @@ const KIND_OPTIONS: { value: PostKind; label: string; hint: string; title: strin
   {
     value: 'guide',
     label: 'Guide',
-    hint: 'Watch orders, tips, and how-tos',
+    hint: 'Share tips and how-tos',
     title: 'What does your guide cover?',
   },
   {
     value: 'article',
     label: 'Article',
-    hint: 'Longer writing and analysis',
+    hint: 'Write in-depth analysis',
     title: 'Give your article a headline',
   },
 ]

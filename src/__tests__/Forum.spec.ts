@@ -62,7 +62,7 @@ const mountAt = async (path: string) => {
   const router = createRouter({ history: createMemoryHistory(), routes: forumRoutes(Forum) })
   await router.push(path)
   await router.isReady()
-  const wrapper = mount(Forum, { global: { plugins: [router] } })
+  const wrapper = mount(Forum, { global: { plugins: [router], stubs: { teleport: true } } })
   await flushPromises()
   return { wrapper, router }
 }

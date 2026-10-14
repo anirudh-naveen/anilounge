@@ -171,7 +171,7 @@ describe('Home', () => {
   it('prompts guests to register instead of loading activity', async () => {
     const wrapper = await mountHome()
     expect(wrapper.find('[data-testid="status-signup"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="status-signup"]').text()).toContain('Sign up')
+    expect(wrapper.find('[data-testid="status-signup"]').text()).toContain('Sign Up')
     expect(getActivity).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="updates-panel"] .panel-title').text()).toBe('Airing')
   })

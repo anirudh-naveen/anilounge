@@ -19,6 +19,15 @@
     >
       <img src="/anilounge-logo.png" alt="" width="60" height="60" />
     </button>
+    <!-- Dims the page behind the open chat; clicking it closes the chat. -->
+    <Transition name="chat-backdrop">
+      <div
+        v-if="open"
+        class="chat-backdrop"
+        data-testid="chat-backdrop"
+        @click="open = false"
+      ></div>
+    </Transition>
     <Chatbot
       v-if="open"
       :show-chatbot="true"
@@ -52,6 +61,23 @@ const onSearchResults = (results: UnifiedContent[]) => {
   bottom: calc(2rem + var(--safe-bottom));
   right: calc(2rem + var(--safe-right));
   z-index: 999;
+}
+
+.chat-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 22, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.chat-backdrop-enter-active,
+.chat-backdrop-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.chat-backdrop-enter-from,
+.chat-backdrop-leave-to {
+  opacity: 0;
 }
 
 .chat-trigger {

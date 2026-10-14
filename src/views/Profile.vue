@@ -729,6 +729,7 @@ import {
   type WatchlistStatus,
   type WatchlistTypeChoice,
 } from '@/utils/watchlist'
+import type { ChipPicks } from '@/utils/filterChips'
 import WatchlistFilters from '@/components/WatchlistFilters.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import ListSearch from '@/components/ListSearch.vue'
@@ -773,7 +774,7 @@ const favoritesStore = useFavoritesStore()
 const profile = ref<PublicProfile | null>(null)
 const isLoading = ref(true)
 const activeTab = ref<ProfileTab>('favorites')
-const watchlistFilter = ref<WatchlistStatus[]>([])
+const watchlistFilter = ref<ChipPicks<WatchlistStatus>>([])
 const watchlistTypeFilter = ref<WatchlistTypeChoice[]>([...DEFAULT_WATCHLIST_TYPES])
 const watchlistQuery = ref('')
 const watchlistSortBy = ref<SortByOption>('relevance')

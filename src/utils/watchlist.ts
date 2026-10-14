@@ -1,4 +1,4 @@
-import { toggleChipOfAll } from '@/utils/filterChips'
+import { toggleChipOfAll, type ChipPicks } from '@/utils/filterChips'
 import { matchesContentTypeFilter } from '@/services/api'
 
 export type WatchlistStatus = 'plan_to_watch' | 'watching' | 'completed' | 'on_hold' | 'dropped'
@@ -166,17 +166,17 @@ export function readTypeChips(saved: unknown): WatchlistTypeChoice[] {
 
 /**
  * Pick or unpick a status chip. Every status starts picked (stored as `[]`, shown as All);
- * the last picked chip can't be unpicked, and picking every chip goes back to All.
- * @param picked - The picked statuses; empty means all of them.
+ * unpicking the last one leaves none (`null`), and picking every chip goes back to All.
+ * @param picked - The picked statuses; empty means all of them, `null` none of them.
  * @param value - The chip clicked.
  */
-export function toggleStatusChip(picked: WatchlistStatus[], value: WatchlistStatus) {
+export function toggleStatusChip(picked: ChipPicks<WatchlistStatus>, value: WatchlistStatus) {
   return toggleChipOfAll(picked, value, WATCHLIST_STATUS_ORDER)
 }
 
-/** Whether a row's status is one of the picked statuses (none picked: any). */
-export const matchesStatusChips = (status: string, picked: WatchlistStatus[]) =>
-  !picked.length || picked.includes(status as WatchlistStatus)
+/** Whether a row's status is one of the picked statuses (`[]`: any; `null`: none). */
+export const matchesStatusChips = (status: string, picked: ChipPicks<WatchlistStatus>) =>
+  picked !== null && (!picked.length || picked.includes(status as WatchlistStatus))
 
 /** Whether a row's type is one of the picked types (none picked: any). */
 export const matchesTypeChips = (contentType: string | undefined, picked: WatchlistTypeChoice[]) =>

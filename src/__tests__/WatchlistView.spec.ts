@@ -133,30 +133,38 @@ describe('Watchlist status sections', () => {
     expect(titles()).toEqual(['Frieren', 'Spirited Away'])
     expect(wrapper.find('[data-testid="watchlist-filter-type-all"]').exists()).toBe(false)
 
-    // Every status starts picked, shown as All; unpicking one hides its titles.
-    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(true)
+    // Every status starts picked, shown as a coral All; unpicking one hides its titles.
+    expect(wrapper.get('[data-testid="watchlist-status-all"]').classes()).toContain('active')
     expect(wrapper.find('[data-testid="watchlist-filter-status-all"]').exists()).toBe(false)
     await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
     expect(titles()).toEqual(['Frieren'])
     expect(wrapper.findAll('.section-header').map((header) => header.text())).toEqual(['Watching1'])
-    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="watchlist-status-all"]').classes()).not.toContain('active')
 
     // Picking it again makes every status picked: All.
     await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
     expect(titles()).toEqual(['Frieren', 'Spirited Away'])
-    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="watchlist-status-all"]').classes()).toContain('active')
 
-    // Down to Dropped alone; the last picked chip stays picked.
-    for (const status of ['watching', 'completed', 'on_hold', 'plan_to_watch']) {
-      await wrapper.get(`[data-testid="watchlist-filter-status-${status}"]`).trigger('click')
-    }
-    await wrapper.get('[data-testid="watchlist-filter-status-dropped"]').trigger('click')
-    expect(wrapper.get('[data-testid="watchlist-filter-status-dropped"]').classes()).toContain(
+    // Clicking All unpicks every status (All goes gray); clicking it again picks them all.
+    await wrapper.get('[data-testid="watchlist-status-all"]').trigger('click')
+    expect(wrapper.get('[data-testid="watchlist-status-all"]').classes()).not.toContain('active')
+    expect(wrapper.find('[data-testid="watchlist-filter-status-dropped"]').classes()).not.toContain(
       'active',
     )
     expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
       'No titles match these filters.',
     )
+    await wrapper.get('[data-testid="watchlist-status-all"]').trigger('click')
+    expect(wrapper.get('[data-testid="watchlist-status-all"]').classes()).toContain('active')
+    expect(titles()).toEqual(['Frieren', 'Spirited Away'])
+
+    // Unpicking the last picked chip leaves none picked.
+    for (const status of ['watching', 'completed', 'on_hold', 'plan_to_watch', 'dropped']) {
+      await wrapper.get(`[data-testid="watchlist-filter-status-${status}"]`).trigger('click')
+    }
+    expect(wrapper.get('[data-testid="watchlist-status-all"]').classes()).not.toContain('active')
+    expect(titles()).toEqual([])
   })
 
   it('filters by the Search filter fields, and remembers them', async () => {

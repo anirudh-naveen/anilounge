@@ -11,7 +11,7 @@
       <span class="beta-badge">BETA</span>
       <span class="beta-text">
         <span class="beta-welcome">
-          Welcome to AniLounge Beta! This is a preview version.
+          Welcome to the Animation Lounge Beta! This is a preview version.
           <router-link to="/feedback" class="feedback-link">Report bugs or suggestions</router-link
           >.
         </span>
@@ -24,7 +24,7 @@
             class="feedback-link"
             data-testid="beta-discord"
             >Join our Discord to contribute</a
-          >
+          >.
         </span>
       </span>
       <button @click="dismissBanner" class="dismiss-btn" title="Dismiss">&times;</button>
