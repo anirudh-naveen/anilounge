@@ -627,6 +627,7 @@ import {
   readTypeChips,
   type WatchlistTypeChoice,
 } from '@/utils/watchlist'
+import { isAllPicked, type ChipPicks } from '@/utils/filterChips'
 import WatchlistFilters from '@/components/WatchlistFilters.vue'
 import CatalogFilterPanel from '@/components/CatalogFilterPanel.vue'
 import {
@@ -663,7 +664,7 @@ const isPhone =
     ? window.matchMedia('(max-width: 768px)').matches
     : false
 const searchQuery = ref('')
-const statusFilter = ref<WatchlistStatus[]>([])
+const statusFilter = ref<ChipPicks<WatchlistStatus>>([])
 /** "Relevance" here is recency: the order titles were last updated. */
 const WATCHLIST_SORT_OPTIONS = DEFAULT_SORT_OPTIONS.map((option) =>
   option.value === 'relevance' ? { ...option, label: 'Updated' } : option,
@@ -707,14 +708,19 @@ const filterSheetOpen = ref(false)
 /** Status, type, and panel filters that differ from the defaults (the filter button's badge). */
 const activeFilterCount = computed(
   () =>
-    (statusFilter.value.length ? 1 : 0) +
+    (isAllPicked(statusFilter.value) ? 0 : 1) +
     (typeFilter.value.join() === DEFAULT_WATCHLIST_TYPES.join() ? 0 : 1) +
     (hasPanelFilters.value ? 1 : 0),
 )
 /** The bar's summary of the view, e.g. "Watching · Rating ↓". */
 const viewSummary = computed(() => {
-  const statuses = statusFilter.value.map(getWatchlistStatusLabel)
-  const scope = statuses.length > 1 ? `${statuses.length} statuses` : statuses[0] || 'All'
+  const statuses = (statusFilter.value ?? []).map(getWatchlistStatusLabel)
+  const scope =
+    statusFilter.value === null
+      ? 'None'
+      : statuses.length > 1
+        ? `${statuses.length} statuses`
+        : statuses[0] || 'All'
   const sort = WATCHLIST_SORT_OPTIONS.find((option) => option.value === sortBy.value)?.label
   return `${scope} · ${sort ?? ''} ${sortDirection.value === 'asc' ? '↑' : '↓'}`
 })

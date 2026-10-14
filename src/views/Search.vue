@@ -118,61 +118,70 @@
 
     <div class="container">
       <!-- Browse Header -->
-      <div v-if="!isAppLayout" class="browse-header">
+      <div
+        v-if="!isAppLayout"
+        class="browse-header"
+        :class="{ 'has-seasons': browseType === 'tv' }"
+      >
         <h1 class="browse-title">Search For</h1>
-        <div class="type-toggle" role="tablist" aria-label="Content type">
-          <button
-            type="button"
-            role="tab"
-            class="type-toggle-btn"
-            data-testid="browse-type-movie"
-            :class="{ active: browseType === 'movie' }"
-            :aria-selected="browseType === 'movie'"
-            @click="setBrowseType('movie')"
-          >
-            Movies
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="type-toggle-btn"
-            data-testid="browse-type-tv"
-            :class="{ active: browseType === 'tv' }"
-            :aria-selected="browseType === 'tv'"
-            @click="setBrowseType('tv')"
-          >
-            Series
-          </button>
-        </div>
-        <!-- Series mode lists whole series; Seasons mode lists each season instead. -->
-        <div
-          v-if="browseType === 'tv'"
-          class="type-toggle type-toggle-sm"
-          role="tablist"
-          aria-label="Series or seasons"
-        >
-          <button
-            type="button"
-            role="tab"
-            class="type-toggle-btn"
-            data-testid="tv-view-series"
-            :class="{ active: !seasonMode }"
-            :aria-selected="!seasonMode"
-            @click="setSeasonMode(false)"
-          >
-            Series
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="type-toggle-btn"
-            data-testid="tv-view-seasons"
-            :class="{ active: seasonMode }"
-            :aria-selected="seasonMode"
-            @click="setSeasonMode(true)"
-          >
-            Seasons
-          </button>
+        <div class="type-toggle-stack">
+          <div class="type-toggle" role="tablist" aria-label="Content type">
+            <button
+              type="button"
+              role="tab"
+              class="type-toggle-btn"
+              data-testid="browse-type-movie"
+              :class="{ active: browseType === 'movie' }"
+              :aria-selected="browseType === 'movie'"
+              @click="setBrowseType('movie')"
+            >
+              Movies
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="type-toggle-btn"
+              data-testid="browse-type-tv"
+              :class="{ active: browseType === 'tv' }"
+              :aria-selected="browseType === 'tv'"
+              @click="setBrowseType('tv')"
+            >
+              Series
+            </button>
+          </div>
+          <!-- Series mode lists whole series; Seasons mode lists each season instead.
+             It drops down under the Series button while Series is picked. -->
+          <Transition name="seasons-pop">
+            <div
+              v-if="browseType === 'tv'"
+              class="type-toggle type-toggle-sm seasons-toggle"
+              role="tablist"
+              aria-label="Series or seasons"
+            >
+              <button
+                type="button"
+                role="tab"
+                class="type-toggle-btn"
+                data-testid="tv-view-series"
+                :class="{ active: !seasonMode }"
+                :aria-selected="!seasonMode"
+                @click="setSeasonMode(false)"
+              >
+                Series
+              </button>
+              <button
+                type="button"
+                role="tab"
+                class="type-toggle-btn"
+                data-testid="tv-view-seasons"
+                :class="{ active: seasonMode }"
+                :aria-selected="seasonMode"
+                @click="setSeasonMode(true)"
+              >
+                Seasons
+              </button>
+            </div>
+          </Transition>
         </div>
       </div>
 
@@ -829,6 +838,36 @@ usePageMeta({
   gap: 0.85rem 1.25rem;
   margin-bottom: 1.5rem;
   color: var(--text-primary);
+  transition: margin-bottom 0.25s ease;
+}
+
+/* Room under the header for the Series/Seasons toggle that drops down. */
+.browse-header.has-seasons {
+  margin-bottom: 4.25rem;
+}
+
+.type-toggle-stack {
+  position: relative;
+}
+
+.seasons-toggle {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  white-space: nowrap;
+}
+
+.seasons-pop-enter-active,
+.seasons-pop-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.25s ease;
+}
+
+.seasons-pop-enter-from,
+.seasons-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .browse-title {

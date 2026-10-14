@@ -35,7 +35,7 @@
         v-if="!appSearchOpen && !composing"
         type="button"
         class="app-bar-button"
-        aria-label="New post"
+        aria-label="New Post"
         data-testid="new-post"
         @click="openComposer"
       >
@@ -47,7 +47,7 @@
         v-if="!appSearchOpen"
         type="button"
         class="app-bar-button"
-        :class="{ active: kinds.length > 0 || sort !== 'hot' }"
+        :class="{ active: !isAllPicked(kinds) || sort !== 'hot' }"
         aria-label="Filter and sort"
         data-testid="forum-filters-toggle"
         @click="filterSheetOpen = true"
@@ -62,10 +62,16 @@
       v-model:open="filterSheetOpen"
       title="Filter & Sort"
       reset-label="Reset"
-      :can-reset="kinds.length > 0 || sort !== 'hot'"
+      :can-reset="!isAllPicked(kinds) || sort !== 'hot'"
       @reset="router.push(withQuery({ kind: undefined, sort: undefined, page: undefined }))"
     >
-      <AppSheetSection title="Type" :note="kinds.length ? '' : 'All'">
+      <AppSheetSection
+        title="Type"
+        note="All"
+        note-toggle
+        :note-on="isAllPicked(kinds)"
+        @toggle-note="router.push(allKindsLink)"
+      >
         <div class="sheet-chips" role="group" aria-label="Post type">
           <router-link
             v-for="option in KIND_FILTERS"
@@ -105,18 +111,16 @@
       <!-- Header -->
       <header v-if="!isAppLayout" class="social-intro forum-intro">
         <div>
-          <p class="social-kicker">Community</p>
           <h1 class="social-title">{{ heading }}</h1>
           <p class="social-subtitle">{{ subtitle }}</p>
         </div>
         <button
-          v-if="!composing"
           type="button"
-          class="btn btn-primary"
+          class="btn btn-primary new-post-btn"
           data-testid="new-post"
           @click="openComposer"
         >
-          New post
+          New Post
         </button>
       </header>
 
@@ -156,37 +160,40 @@
         </div>
       </div>
 
-      <!-- Title: Composer -->
-      <section v-if="composing" class="social-panel composer-panel">
-        <h2 class="social-panel-title">New Post</h2>
-        <ForumComposer
-          :key="composeKey"
-          :preset-tags="presetTags"
-          :preset-kind="composeKind"
-          @saved="onSaved"
-          @cancel="closeComposer"
-        />
-      </section>
-
-      <!-- Title: Search -->
-      <div v-if="!isAppLayout" class="forum-search">
-        <input
-          v-model="searchTerm"
-          type="search"
-          class="input"
-          placeholder="Search posts, titles, and characters"
-          aria-label="Search the forum"
-          maxlength="100"
-          data-testid="forum-search"
-        />
-      </div>
+      <!-- Title: Composer (a modal over the dimmed list; only Cancel or posting closes it) -->
+      <Teleport to="body">
+        <Transition name="composer-fade">
+          <div v-if="composing" class="composer-overlay" data-testid="composer-overlay">
+            <section
+              class="social-panel composer-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="composer-title"
+            >
+              <h2 id="composer-title" class="social-panel-title">New Post</h2>
+              <ForumComposer
+                :key="composeKey"
+                :preset-tags="presetTags"
+                :preset-kind="composeKind"
+                @saved="onSaved"
+                @cancel="closeComposer"
+              />
+            </section>
+          </div>
+        </Transition>
+      </Teleport>
 
       <!-- Title: Controls (the app layout has them in a sheet) -->
       <div v-if="!isAppLayout" class="forum-controls">
         <div class="kind-tabs" role="group" aria-label="Post type">
           <span class="kind-label">
-            Type<span v-if="!kinds.length" class="kind-all" data-testid="forum-kind-all">
-              · All</span
+            Type<router-link
+              :to="allKindsLink"
+              class="kind-all"
+              :class="{ active: isAllPicked(kinds) }"
+              :aria-pressed="isAllPicked(kinds)"
+              data-testid="forum-kind-all"
+              >· All</router-link
             >
           </span>
           <router-link
@@ -241,6 +248,19 @@
         </div>
       </div>
 
+      <!-- Title: Search -->
+      <div v-if="!isAppLayout" class="forum-search">
+        <input
+          v-model="searchTerm"
+          type="search"
+          class="input"
+          placeholder="Search posts, titles, and characters"
+          aria-label="Search the forum"
+          maxlength="100"
+          data-testid="forum-search"
+        />
+      </div>
+
       <!-- Title: Posts -->
       <div v-if="loading && !page" class="social-loading"><div class="spinner"></div></div>
       <p v-else-if="error" class="social-empty">{{ error }}</p>
@@ -272,7 +292,13 @@
 </template>
 
 <script setup lang="ts">
-import { isChipPicked, toggleChipOfAll } from '@/utils/filterChips'
+import {
+  isAllPicked,
+  isChipPicked,
+  toggleAllChips,
+  toggleChipOfAll,
+  type ChipPicks,
+} from '@/utils/filterChips'
 import AppBar from '@/components/AppBar.vue'
 import AppSearchToggle from '@/components/AppSearchToggle.vue'
 import AppSheet from '@/components/AppSheet.vue'
@@ -307,6 +333,8 @@ const KIND_FILTERS: { value: PostKind; label: string }[] = POST_KINDS.map((kind)
   label: `${POST_KIND_LABELS[kind]}s`,
 }))
 const isPostKind = (value: string): value is PostKind => (POST_KINDS as string[]).includes(value)
+/** `?kind=` while All is switched off (no type picked). */
+const NO_KINDS = 'none'
 const SEARCH_DELAY_MS = 350
 const SORT_OPTIONS: { value: PostSort; label: string }[] = [
   { value: 'hot', label: 'Hot' },
@@ -335,20 +363,25 @@ const intOrNull = (value: unknown) => {
 const tagId = computed(() => text(route.query.tag))
 const season = computed(() => (tagId.value ? intOrNull(route.query.season) : null))
 const episode = computed(() => (season.value !== null ? intOrNull(route.query.episode) : null))
-/** Picked post types from `?kind=review,guide`; empty means every type (All). */
-const kinds = computed<PostKind[]>(() => {
+/** Picked post types from `?kind=review,guide`; empty means every type (All), `null` none. */
+const kinds = computed<ChipPicks<PostKind>>(() => {
+  if (text(route.query.kind) === NO_KINDS) return null
   const listed = text(route.query.kind).split(',')
   const picked = POST_KINDS.filter((kind) => listed.includes(kind))
   return picked.length === POST_KINDS.length ? [] : picked
 })
 /** The one picked type, when exactly one is (headings and links name it). */
-const kindFilter = computed<PostKind | ''>(() => (kinds.value.length === 1 ? kinds.value[0]! : ''))
+const kindFilter = computed<PostKind | ''>(() => (kinds.value?.length === 1 ? kinds.value[0]! : ''))
+/** `?kind=` for picks: absent for All, `none` for no types. */
+const kindParam = (picks: ChipPicks<PostKind>) =>
+  picks === null ? NO_KINDS : picks.join(',') || undefined
 /** The list after toggling one type chip. */
 const kindLink = (kind: PostKind) =>
-  withQuery({
-    kind: toggleChipOfAll(kinds.value, kind, POST_KINDS).join(',') || undefined,
-    page: undefined,
-  })
+  withQuery({ kind: kindParam(toggleChipOfAll(kinds.value, kind, POST_KINDS)), page: undefined })
+/** The list after toggling All: every type, or none while every type is picked. */
+const allKindsLink = computed(() =>
+  withQuery({ kind: kindParam(toggleAllChips(kinds.value)), page: undefined }),
+)
 /** Type the composer starts as: `?compose=<kind>`, else discussion. */
 const composeKind = computed<PostKind>(() => {
   const kind = text(route.query.compose)
@@ -379,6 +412,7 @@ const subtitle = computed(() => {
     : 'Reviews, guides, episode threads, and franchise talk from the lounge.'
 })
 const emptyCopy = computed(() => {
+  if (!kinds.value) return 'No post types picked. Pick a type or All to see posts.'
   if (query.value) return `No posts match “${query.value}”. Try other words.`
   return page.value?.tag
     ? 'No posts here yet. Start the conversation.'
@@ -409,11 +443,13 @@ const appSearchOpen = ref(Boolean(searchTerm.value))
 const filterSheetOpen = ref(false)
 /** The bar's summary of the list, e.g. "Reviews · Top". */
 const viewSummary = computed(() => {
-  const kind = !kinds.value.length
-    ? 'All'
-    : kindFilter.value
-      ? `${POST_KIND_LABELS[kindFilter.value]}s`
-      : `${kinds.value.length} types`
+  const kind = !kinds.value
+    ? 'None'
+    : !kinds.value.length
+      ? 'All'
+      : kindFilter.value
+        ? `${POST_KIND_LABELS[kindFilter.value]}s`
+        : `${kinds.value.length} types`
   const order = SORT_OPTIONS.find((option) => option.value === sort.value)?.label ?? ''
   return `${kind} · ${order}`
 })
@@ -430,6 +466,10 @@ watch(query, (value) => {
   if (value !== searchTerm.value.trim()) searchTerm.value = value
 })
 onUnmounted(() => clearTimeout(searchTimer))
+
+// The page behind the composer modal stays put while it's open.
+watch(composing, (open) => document.body.classList.toggle('modal-open', open))
+onUnmounted(() => document.body.classList.remove('modal-open'))
 
 /** Tags the composer starts with: the current filter, narrowed to its episode. */
 const presetTags = computed<PostTag[]>(() =>
@@ -458,12 +498,14 @@ const load = async () => {
       tag: tagId.value || undefined,
       season: season.value ?? undefined,
       episode: episode.value ?? undefined,
-      kind: kinds.value.join(',') || undefined,
+      kind: kinds.value?.join(',') || undefined,
       q: query.value || undefined,
       sort: sort.value,
       page: pageNumber.value,
     })
-    if (mine === seq) page.value = response.data.data as PostPage
+    const result = response.data.data as PostPage
+    // No types picked: keep the tag banner, show no posts.
+    if (mine === seq) page.value = kinds.value ? result : { ...result, items: [], total: 0 }
   } catch (err) {
     if (mine === seq) error.value = apiErrorMessage(err, 'Could not load the forum.')
   } finally {
@@ -495,7 +537,7 @@ watch(
     tagId.value,
     season.value,
     episode.value,
-    kinds.value.join(','),
+    kindParam(kinds.value),
     sort.value,
     pageNumber.value,
     query.value,
@@ -567,7 +609,7 @@ watch(
   scrollbar-width: none;
 }
 
-.is-app .kind-label {
+.kind-label {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
@@ -581,6 +623,11 @@ watch(
 
 .kind-all {
   margin-left: 0.25rem;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.kind-all.active {
   color: var(--coral-primary);
 }
 
@@ -630,16 +677,49 @@ watch(
   gap: 0.4rem;
 }
 
+.composer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(4rem + var(--safe-top)) 1rem calc(2rem + var(--safe-bottom));
+  overflow-y: auto;
+  background: rgba(8, 12, 22, 0.72);
+  backdrop-filter: blur(3px);
+}
+
 .composer-panel {
-  margin-bottom: 1.25rem;
+  width: 100%;
+  max-width: 760px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.composer-fade-enter-active,
+.composer-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.composer-fade-enter-from,
+.composer-fade-leave-to {
+  opacity: 0;
 }
 
 .composer-panel .social-panel-title {
   margin-bottom: 1rem;
 }
 
+/* Same size as the Search page's Search button. */
+.new-post-btn {
+  padding: 1rem 2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
 .forum-search {
-  margin-bottom: 0.85rem;
+  margin-bottom: 1rem;
 }
 
 .forum-controls {
@@ -648,7 +728,7 @@ watch(
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  margin-bottom: 1rem;
+  margin-bottom: 0.85rem;
 }
 
 .kind-tabs {
@@ -659,10 +739,10 @@ watch(
 }
 
 .kind-tab {
-  padding: 0.4rem 0.9rem;
+  padding: 0.3rem 0.75rem;
   border: 1px solid var(--border-color);
   border-radius: 999px;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-decoration: none;
@@ -684,7 +764,7 @@ watch(
   position: relative;
   display: flex;
   align-items: center;
-  height: 36px;
+  height: 32px;
   border: 1px solid var(--border-color);
   border-radius: 999px;
   background: var(--bg-card);
@@ -728,7 +808,7 @@ watch(
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
   appearance: none;
