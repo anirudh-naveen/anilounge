@@ -33,6 +33,7 @@ export const APP_TABS: AppTab[] = [
       'M16 8h3.5A1.5 1.5 0 0 1 21 9.5v7a1.5 1.5 0 0 1-1.5 1.5H19v3l-4-3H9.5A1.5 1.5 0 0 1 8 16.5v-3',
     ],
   },
+  { name: 'profile', label: 'Profile', to: '/profile', paths: [] },
   {
     name: 'watchlist',
     label: 'Watchlist',
@@ -47,7 +48,6 @@ export const APP_TABS: AppTab[] = [
     to: '/search',
     paths: ['m16 16 4.25 4.25'],
   },
-  { name: 'profile', label: 'Profile', to: '/profile', paths: [] },
 ]
 
 const TAB_ROUTES: Record<string, AppTabName> = {

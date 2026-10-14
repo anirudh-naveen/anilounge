@@ -1,3 +1,4 @@
+import { toggleChipOfAll } from '@/utils/filterChips'
 import { matchesContentTypeFilter } from '@/services/api'
 
 export type WatchlistStatus = 'plan_to_watch' | 'watching' | 'completed' | 'on_hold' | 'dropped'
@@ -19,13 +20,11 @@ export const WATCHLIST_STATUS_ORDER: WatchlistStatus[] = [
   'dropped',
 ]
 
-export const WATCHLIST_STATUS_FILTER_OPTIONS: { value: 'all' | WatchlistStatus; label: string }[] =
-  [
-    { value: 'all', label: 'All' },
-    ...WATCHLIST_STATUS_ORDER.map(
-      (status) => WATCHLIST_STATUS_OPTIONS.find((option) => option.value === status)!,
-    ),
-  ]
+/** Status chips, in section order. There is no All chip: every chip picked reads as All. */
+export const WATCHLIST_STATUS_FILTER_OPTIONS: { value: WatchlistStatus; label: string }[] =
+  WATCHLIST_STATUS_ORDER.map(
+    (status) => WATCHLIST_STATUS_OPTIONS.find((option) => option.value === status)!,
+  )
 
 /**
  * Human-readable watchlist status for buttons and filters.
@@ -166,16 +165,13 @@ export function readTypeChips(saved: unknown): WatchlistTypeChoice[] {
 }
 
 /**
- * Pick or unpick a chip in a multi-select filter row. All (or picking every chip) clears
- * the row back to All.
- * @param picked - The row's picked chips.
+ * Pick or unpick a status chip. Every status starts picked (stored as `[]`, shown as All);
+ * the last picked chip can't be unpicked, and picking every chip goes back to All.
+ * @param picked - The picked statuses; empty means all of them.
  * @param value - The chip clicked.
- * @param options - Every chip value in the row except All.
  */
-export function toggleFilterChip<T extends string>(picked: T[], value: T | 'all', options: T[]) {
-  if (value === 'all') return []
-  const next = picked.includes(value) ? picked.filter((v) => v !== value) : [...picked, value]
-  return options.every((option) => next.includes(option)) ? [] : next
+export function toggleStatusChip(picked: WatchlistStatus[], value: WatchlistStatus) {
+  return toggleChipOfAll(picked, value, WATCHLIST_STATUS_ORDER)
 }
 
 /** Whether a row's status is one of the picked statuses (none picked: any). */

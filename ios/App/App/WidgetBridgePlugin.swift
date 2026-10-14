@@ -1,9 +1,11 @@
 import Capacitor
+import StoreKit
 import UIKit
 import WidgetKit
 
 /// Lets the web app hand the home screen widgets their sign-in (a widget token), tell
-/// them and the app icon which site theme is picked, and refresh them. Registered in
+/// them and the app icon which site theme is picked, and refresh them; also asks for an
+/// App Store rating (`requestReview`). Registered in
 /// MainViewController; used from src/utils/nativeApp.ts as `WidgetBridge`.
 @objc(WidgetBridgePlugin)
 public class WidgetBridgePlugin: CAPPlugin, CAPBridgedPlugin {
@@ -15,7 +17,8 @@ public class WidgetBridgePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "clearToken", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "reload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setTheme", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setAppIcon", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "setAppIcon", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestReview", returnType: CAPPluginReturnPromise)
     ]
 
     /// Alternate app icons per theme (Assets.xcassets); the light theme uses the main icon.
@@ -87,6 +90,23 @@ public class WidgetBridgePlugin: CAPPlugin, CAPBridgedPlugin {
                     call.resolve(["changed": true])
                 }
             }
+        }
+    }
+
+    /// Ask iOS to show its App Store rating prompt. iOS decides whether it actually
+    /// appears (at most three times a year, and not once they've rated), so the web app
+    /// only calls this for long-time users after a good moment (src/utils/appReview.ts).
+    @objc func requestReview(_ call: CAPPluginCall) {
+        Task { @MainActor in
+            let scene = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive }
+            guard let scene else {
+                call.reject("The app isn't in the foreground.")
+                return
+            }
+            AppStore.requestReview(in: scene)
+            call.resolve()
         }
     }
 }

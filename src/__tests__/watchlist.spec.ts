@@ -20,7 +20,6 @@ import {
 
 describe('watchlist status labels', () => {
   it('maps stored statuses to the labels used on the watchlist page', () => {
-    expect(getWatchlistStatusLabel('all')).toBe('All')
     expect(getWatchlistStatusLabel('plan_to_watch')).toBe('Planned')
     expect(getWatchlistStatusLabel('watching')).toBe('Watching')
     expect(getWatchlistStatusLabel('completed')).toBe('Completed')
@@ -28,9 +27,8 @@ describe('watchlist status labels', () => {
     expect(getWatchlistStatusLabel('dropped')).toBe('Dropped')
   })
 
-  it('includes All plus every saved status in the filter chips, in section order', () => {
+  it('has a chip for every saved status, in section order, and no All chip', () => {
     expect(WATCHLIST_STATUS_FILTER_OPTIONS.map((opt) => opt.value)).toEqual([
-      'all',
       'watching',
       'completed',
       'on_hold',

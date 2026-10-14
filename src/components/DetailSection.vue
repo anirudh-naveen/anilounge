@@ -117,8 +117,11 @@ const toggle = () => {
 .detail-section-toggle {
   display: inline-flex;
   align-items: center;
+  /* Buttons center their text; a title that wraps stays left like the others. */
+  justify-content: flex-start;
   gap: 0.5rem;
   padding: 0;
+  text-align: left;
   border: 0;
   background: none;
   color: inherit;
@@ -151,5 +154,16 @@ const toggle = () => {
   gap: 0.5rem;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+/* Phones: smaller section titles and spacing. */
+@media (max-width: 600px) {
+  .detail-section {
+    margin-bottom: 1.6rem;
+  }
+
+  .detail-section-title {
+    font-size: 1.15rem;
+  }
 }
 </style>

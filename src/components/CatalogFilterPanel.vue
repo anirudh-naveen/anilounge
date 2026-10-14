@@ -312,18 +312,21 @@ const ratingFillStyle = computed(() => {
 
 .rating-slider {
   position: relative;
-  height: 28px;
+  height: 34px;
   display: flex;
   align-items: center;
 }
 
+/* Inset by half a thumb, so the colored range ends under each thumb's center. */
 .rating-slider-track {
   position: absolute;
-  left: 0;
-  right: 0;
-  height: 6px;
+  left: 12px;
+  right: 12px;
+  height: 8px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #fca5a5 0%, #fde047 50%, #86efac 100%);
+  /* Neutral outside the picked range, so the colored range stands out. */
+  background: var(--bg-muted-hover);
+  box-shadow: inset 0 0 0 1px var(--border-color);
 }
 
 .rating-slider-range {
@@ -342,30 +345,30 @@ const ratingFillStyle = computed(() => {
   appearance: none;
   -webkit-appearance: none;
   pointer-events: none;
-  height: 6px;
+  height: 8px;
 }
 
 .rating-slider input[type='range']::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;
   pointer-events: auto;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  border: none;
-  background: var(--bg-card);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  border: 3px solid var(--coral-primary);
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(21, 34, 56, 0.35);
   cursor: pointer;
 }
 
 .rating-slider input[type='range']::-moz-range-thumb {
   pointer-events: auto;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  border: none;
-  background: var(--bg-card);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  border: 3px solid var(--coral-primary);
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(21, 34, 56, 0.35);
   cursor: pointer;
 }
 
@@ -380,10 +383,10 @@ const ratingFillStyle = computed(() => {
 .rating-slider-scale {
   display: flex;
   justify-content: space-between;
-  color: var(--text-muted);
-  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
   font-weight: 600;
-  padding: 0 1px;
+  padding: 0 8px;
 }
 
 .clear-filters-btn {

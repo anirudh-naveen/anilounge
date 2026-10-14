@@ -82,7 +82,9 @@ export async function grantInfluencerIfEarned(user) {
     const week = rows[0]
     if (!week?.missing || !earnsInfluencer(week)) return false
     const { rowCount } = await query(
-      `UPDATE users SET cosmetic_roles = array_append(cosmetic_roles, 'influencer')
+      // A new badge puts the frame back on automatic (the highest badge).
+      `UPDATE users SET cosmetic_roles = array_append(cosmetic_roles, 'influencer'),
+                        profile_settings = profile_settings - 'frame'
        WHERE id = $1 AND NOT ('influencer' = ANY (cosmetic_roles))`,
       [user._id],
     )

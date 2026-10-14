@@ -5,7 +5,9 @@
   Accent and Frame, About (headline, bio, genres), Visibility, and Tabs. Edits stay in
   a local draft until Save, which hands the whole draft to the parent to send; picture
   uploads apply immediately (ProfilePictureEditor). The frame picker only shows for
-  badge holders: everyone else always wears the plain User ring.
+  badge holders (everyone else always wears the plain User ring) and lists the frames
+  they've unlocked. The highest badge's frame is automatic: picking it saves no frame, and
+  a newly granted badge resets the frame to automatic (backend).
 -->
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
@@ -86,14 +88,14 @@
             <div class="choices frames" role="radiogroup" data-testid="frame-picker">
               <button
                 v-for="option in frameOptions"
-                :key="option.value ?? 'auto'"
+                :key="option.value"
                 type="button"
                 role="radio"
                 class="choice frame-choice"
-                :class="{ auto: option.value === null, selected: draft.frame === option.value }"
-                :aria-checked="draft.frame === option.value"
-                :data-testid="`frame-${option.value ?? 'auto'}`"
-                @click="draft.frame = option.value"
+                :class="{ selected: previewFrame === option.value }"
+                :aria-checked="previewFrame === option.value"
+                :data-testid="`frame-${option.value}`"
+                @click="pickFrame(option.value)"
               >
                 <UserAvatar
                   :src="picture"
@@ -289,19 +291,26 @@ const draft = ref<ProfileSettings>({
 })
 const bio = ref(props.bio)
 const genres = ref([...props.genres])
+/** The frames the user has unlocked: each emblem badge they hold, then the User ring. */
 const frameOptions = computed(() => [
-  { value: null, label: 'Automatic', badge: props.emblemBadges[0]?.id ?? USER_FRAME },
   ...props.emblemBadges.map((badge) => ({ value: badge.id, label: badge.label, badge: badge.id })),
   { value: USER_FRAME, label: 'User', badge: USER_FRAME },
 ])
 
-/** The frame the draft puts around the avatar. */
 /** The frame the draft puts around the avatar (a lost badge's frame is the User ring). */
 const previewFrame = computed(() => {
   const frame = draft.value.frame
   if (!frame) return props.emblemBadges[0]?.id ?? USER_FRAME
   return holdsBadge(frame) ? frame : USER_FRAME
 })
+
+/**
+ * Pick a frame. The highest badge saves as automatic (no frame), so the frame follows
+ * the highest badge as badges are granted; any other pick is kept as chosen.
+ */
+const pickFrame = (frame: string) => {
+  draft.value.frame = frame === props.emblemBadges[0]?.id ? null : frame
+}
 
 /** The whole panel follows the accent being picked. */
 const accentStyle = computed(() => ({
@@ -605,17 +614,6 @@ textarea.form-control {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
   gap: 0.5rem;
-}
-
-/* Automatic stands apart from the fixed frames in coral. */
-.frame-choice.auto {
-  border-color: color-mix(in srgb, var(--coral-primary) 45%, var(--border-color));
-  color: var(--coral-primary);
-}
-
-.frame-choice.auto.selected {
-  border-color: var(--coral-primary);
-  background: color-mix(in srgb, var(--coral-primary) 14%, transparent);
 }
 
 .frame-choice {

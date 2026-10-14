@@ -34,6 +34,16 @@
         </button>
       </div>
       <span v-if="!appSearchOpen" class="app-bar-spacer"></span>
+      <button
+        v-if="!appSearchOpen"
+        type="button"
+        class="app-bar-button chat-button"
+        aria-label="Open Lounge Guide, the AI assistant"
+        data-testid="chat-launcher"
+        @click="chatOpen = true"
+      >
+        <img src="/anilounge-logo.png" alt="" width="38" height="38" />
+      </button>
       <AppSearchToggle
         v-model="searchQuery"
         v-model:expanded="appSearchOpen"
@@ -360,8 +370,8 @@
       </div>
     </div>
 
-    <!-- AI Assistant -->
-    <ChatLauncher />
+    <!-- AI Assistant (in the app layout, opened from the top bar) -->
+    <ChatLauncher v-model:open="chatOpen" :hide-trigger="isAppLayout" />
   </div>
 </template>
 
@@ -427,6 +437,8 @@ const filtersOpen = ref(false)
 /** App layout: the top bar's search field (open while it holds a search) and the filter sheet. */
 const appSearchOpen = ref(Boolean(searchQuery.value))
 const filterSheetOpen = ref(false)
+/** The Lounge Guide chat (opened from the top bar in the app layout). */
+const chatOpen = ref(false)
 const itemsPerPage = 20
 
 const {
@@ -729,6 +741,21 @@ usePageMeta({
 }
 
 /* App layout */
+.chat-button {
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--navbar-primary), var(--navbar-primary)) padding-box,
+    linear-gradient(135deg, var(--coral-primary), var(--teal-primary)) border-box;
+}
+
+.chat-button img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .search-page.is-app {
   min-height: 0;
   padding: 0;

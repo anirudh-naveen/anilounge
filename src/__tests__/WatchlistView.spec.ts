@@ -133,17 +133,27 @@ describe('Watchlist status sections', () => {
     expect(titles()).toEqual(['Frieren', 'Spirited Away'])
     expect(wrapper.find('[data-testid="watchlist-filter-type-all"]').exists()).toBe(false)
 
+    // Every status starts picked, shown as All; unpicking one hides its titles.
+    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="watchlist-filter-status-all"]').exists()).toBe(false)
     await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
-    expect(titles()).toEqual(['Spirited Away'])
-    expect(wrapper.findAll('.section-header').map((header) => header.text())).toEqual([
-      'Completed1',
-    ])
+    expect(titles()).toEqual(['Frieren'])
+    expect(wrapper.findAll('.section-header').map((header) => header.text())).toEqual(['Watching1'])
+    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(false)
 
-    await wrapper.get('[data-testid="watchlist-filter-status-watching"]').trigger('click')
+    // Picking it again makes every status picked: All.
+    await wrapper.get('[data-testid="watchlist-filter-status-completed"]').trigger('click')
     expect(titles()).toEqual(['Frieren', 'Spirited Away'])
+    expect(wrapper.find('[data-testid="watchlist-status-all"]').exists()).toBe(true)
 
-    await wrapper.get('[data-testid="watchlist-filter-status-all"]').trigger('click')
+    // Down to Dropped alone; the last picked chip stays picked.
+    for (const status of ['watching', 'completed', 'on_hold', 'plan_to_watch']) {
+      await wrapper.get(`[data-testid="watchlist-filter-status-${status}"]`).trigger('click')
+    }
     await wrapper.get('[data-testid="watchlist-filter-status-dropped"]').trigger('click')
+    expect(wrapper.get('[data-testid="watchlist-filter-status-dropped"]').classes()).toContain(
+      'active',
+    )
     expect(wrapper.get('[data-testid="watchlist-no-matches"]').text()).toContain(
       'No titles match these filters.',
     )
