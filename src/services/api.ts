@@ -226,6 +226,18 @@ export const entityAPI = {
 
   getById: (id: string) => api.get(`/entities/${id}`),
 
+  /** Search's Characters / Voice Actors tabs: trending, or a filtered page. */
+  browse: (params: {
+    type: 'character' | 'voice_actor'
+    q?: string
+    role?: string
+    media?: string
+    language?: string
+    sort?: string
+    direction?: string
+    page?: number
+  }) => api.get('/entities/browse', { params }),
+
   getContentCharacters: (contentId: string) => api.get(`/content/${contentId}/characters`),
 
   favorite: (id: string) => api.post(`/entities/${id}/favorite`),

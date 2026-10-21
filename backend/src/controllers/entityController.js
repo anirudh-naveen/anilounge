@@ -22,6 +22,7 @@ import {
   voiceActorNeedsSync,
 } from '../services/entityService.js'
 import { requestRefresh } from '../services/refreshRequests.js'
+import { browsePeople } from '../services/peopleBrowse.js'
 import { entityToSearchHit } from '../utils/entities.js'
 
 /**
@@ -62,6 +63,24 @@ export const getContentCharacters = async (req, res) => {
   } catch (error) {
     console.error('Error fetching content characters:', error)
     res.status(500).json({ success: false, message: 'Error fetching characters' })
+  }
+}
+
+/**
+ * Search's Characters / Voice Actors tabs: trending by default, else filtered pages.
+ *
+ * @param {import('express').Request} req - `query.type` (character | voice_actor), plus
+ *   `q`, `role`, `media`, `language`, `sort`, `direction`, `page`.
+ * @param {import('express').Response} res - 200 `{ data: { items, page, pageSize, total,
+ *   trending, languages? } }` or 500.
+ * @returns {Promise<void>}
+ */
+export const browseEntities = async (req, res) => {
+  try {
+    const type = req.query.type === 'voice_actor' ? 'voice_actor' : 'character'
+    res.json({ success: true, data: await browsePeople(type, req.query) })
+  } catch (error) {
+    sendError(res, error, 'Error browsing people')
   }
 }
 
@@ -174,6 +193,7 @@ export const unfavoriteEntity = async (req, res) => {
 
 export default {
   getContentCharacters,
+  browseEntities,
   searchCatalogEntities,
   getEntityById,
   favoriteEntity,
