@@ -15,16 +15,16 @@
     <AppBar>
       <div v-if="!appSearchOpen" class="app-bar-segments" role="tablist" aria-label="Content type">
         <button
-          v-for="tab in SEARCH_TABS"
+          v-for="tab in APP_TABS"
           :key="tab.id"
           type="button"
           role="tab"
-          :class="{ active: activeTab === tab.id }"
-          :aria-selected="activeTab === tab.id"
-          :data-testid="`browse-type-${tab.id}`"
-          @click="setBrowseType(tab.id)"
+          :class="{ active: appTab === tab.id }"
+          :aria-selected="appTab === tab.id"
+          :data-testid="`app-browse-type-${tab.id}`"
+          @click="setAppTab(tab.id)"
         >
-          {{ tab.short }}
+          {{ tab.label }}
         </button>
       </div>
       <span v-if="!appSearchOpen" class="app-bar-spacer"></span>
@@ -90,6 +90,26 @@
             @click="setSeasonMode(true)"
           >
             Seasons
+          </button>
+        </div>
+      </AppSheetSection>
+      <AppSheetSection v-if="peopleKind" title="Show">
+        <div
+          class="type-toggle sheet-toggle"
+          role="tablist"
+          aria-label="Characters or voice actors"
+        >
+          <button
+            v-for="tab in PEOPLE_TABS"
+            :key="tab.id"
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            :class="{ active: activeTab === tab.id }"
+            :aria-selected="activeTab === tab.id"
+            @click="setBrowseType(tab.id)"
+          >
+            {{ tab.label }}
           </button>
         </div>
       </AppSheetSection>
@@ -489,7 +509,20 @@ const SEARCH_TABS: { id: SearchTab; label: string; short: string }[] = [
   { id: 'character', label: 'Characters', short: 'Characters' },
   { id: 'voice', label: 'Voice Actors', short: 'Voices' },
 ]
+const PEOPLE_TABS = SEARCH_TABS.filter((tab) => tab.id === 'character' || tab.id === 'voice')
+/**
+ * The app layout's top bar has room for three segments: People stands for both people
+ * tabs, picked in the filter sheet (as Series / Seasons is).
+ */
+const APP_TABS = [
+  { id: 'movie', label: 'Movies' },
+  { id: 'tv', label: 'Series' },
+  { id: 'people', label: 'People' },
+] as const
+type AppTab = (typeof APP_TABS)[number]['id']
 const people = usePeopleSearch()
+/** The people tab People opens: the one last used, else Characters. */
+let lastPeopleTab: 'character' | 'voice' = 'character'
 /** The Characters (`?type=character`) or Voice Actors (`?type=voice`) tab, else null. */
 const peopleKind = computed<PeopleKind | null>(() => {
   const raw = Array.isArray(route.query.type) ? route.query.type[0] : route.query.type
@@ -502,6 +535,8 @@ const activeTab = computed<SearchTab>(() =>
       ? 'voice'
       : browseType.value,
 )
+const appTab = computed<AppTab>(() => (peopleKind.value ? 'people' : browseType.value))
+const setAppTab = (tab: AppTab) => setBrowseType(tab === 'people' ? lastPeopleTab : tab)
 const searching = computed(() =>
   peopleKind.value ? people.tabs[peopleKind.value].loading : contentStore.isLoading,
 )
@@ -668,6 +703,7 @@ watch(
   peopleKind,
   (kind, previous) => {
     if (kind) {
+      lastPeopleTab = kind === 'voice_actor' ? 'voice' : 'character'
       if (previous !== undefined) searchQuery.value = people.tabs[kind].query
       people.ensureLoaded(kind)
     } else if (previous) {

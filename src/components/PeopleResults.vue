@@ -250,4 +250,18 @@ const open = (person: PersonCard) => {
     font-size: 0.7rem;
   }
 }
+
+/* App layout: the compact results header Search's catalog results use. */
+:global(html.app-layout) .results-header {
+  margin-bottom: 0.85rem;
+}
+
+:global(html.app-layout) .results-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+:global(html.app-layout) .results-header p {
+  font-size: 0.85rem;
+}
 </style>
