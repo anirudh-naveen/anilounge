@@ -507,7 +507,7 @@ const SEARCH_TABS: { id: SearchTab; label: string; short: string }[] = [
   { id: 'movie', label: 'Movies', short: 'Movies' },
   { id: 'tv', label: 'Series', short: 'Series' },
   { id: 'character', label: 'Characters', short: 'Characters' },
-  { id: 'voice', label: 'Voice Actors', short: 'Voices' },
+  { id: 'voice', label: 'Voices', short: 'Voices' },
 ]
 const PEOPLE_TABS = SEARCH_TABS.filter((tab) => tab.id === 'character' || tab.id === 'voice')
 /**
