@@ -26,6 +26,7 @@ vi.mock('@/services/api', async (importOriginal) => {
     entityAPI: {
       ...actual.entityAPI,
       search: vi.fn().mockResolvedValue({ data: { success: true, data: [] } }),
+      browse: vi.fn(),
     },
   }
 })
@@ -446,5 +447,63 @@ describe('content store search', () => {
     expect(ids).not.toContain('s1')
     expect(ids).not.toContain('m1')
     expect(ids).not.toContain('t1')
+  })
+})
+
+describe('Search people tabs', () => {
+  const page = (items: object[], extra: object = {}) =>
+    ({
+      data: {
+        success: true,
+        data: { items, page: 1, pageSize: 24, total: items.length, trending: true, ...extra },
+      },
+    }) as Awaited<ReturnType<typeof entityAPI.browse>>
+
+  beforeEach(() => {
+    window.scrollTo = vi.fn()
+    vi.mocked(entityAPI.browse).mockReset()
+    vi.mocked(entityAPI.browse).mockResolvedValue(
+      page([
+        {
+          _id: 'c1',
+          entityType: 'character',
+          name: 'Uzumaki, Naruto',
+          imagePath: '',
+          subtitle: 'Naruto',
+        },
+      ]),
+    )
+  })
+
+  it('shows trending characters with character filters instead of the catalog ones', async () => {
+    const { wrapper } = await mountPage('/search?type=character')
+    expect(entityAPI.browse).toHaveBeenCalledWith(expect.objectContaining({ type: 'character' }))
+    expect(wrapper.get('[data-testid="people-results-character"]').text()).toContain(
+      'Trending Characters',
+    )
+    expect(wrapper.text()).toContain('Naruto Uzumaki')
+
+    await openFilters(wrapper)
+    expect(wrapper.find('[data-testid="filter-role"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="filter-genre"]').exists()).toBe(false)
+  })
+
+  it('swaps in the voice actor filters and searches with them', async () => {
+    vi.mocked(entityAPI.browse).mockResolvedValue(page([], { languages: ['Japanese', 'Korean'] }))
+    const { wrapper, router } = await mountPage('/search?type=character')
+    await wrapper.get('[data-testid="browse-type-voice"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.type).toBe('voice')
+
+    await openFilters(wrapper)
+    expect(wrapper.find('[data-testid="filter-role"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="filter-dub-language"]').setValue('Korean')
+    await wrapper.get('[data-testid="search-query"]').setValue('Kana')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(entityAPI.browse).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'voice_actor', q: 'Kana', language: 'Korean' }),
+    )
   })
 })
