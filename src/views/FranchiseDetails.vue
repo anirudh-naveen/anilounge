@@ -2,8 +2,10 @@
   FranchiseDetails.vue — franchise detail view.
 
   Own screen for a catalog franchise: its name, nicknames, rating across the
-  franchise, and every movie, series, and special in it as a numbered watch-order
-  timeline (release order, with each title after its prequels).
+  franchise, every movie, series, and special in it as a numbered watch-order
+  timeline (release order, with each title after its prequels), then every
+  character in those titles and everyone who worked on them. Content editors can
+  reorder the timeline for everyone and add titles to it from here.
 -->
 <template>
   <div class="franchise-details">
@@ -39,17 +41,93 @@
         <p v-if="franchise.about" class="about-text">{{ franchise.about }}</p>
       </div>
 
-      <h2 class="timeline-heading">Watch Order</h2>
-      <p class="timeline-note">Release order, with each title placed after the story it follows.</p>
+      <div class="timeline-head">
+        <h2 class="timeline-heading">Watch Order</h2>
+        <button
+          v-if="authStore.canEditContent"
+          type="button"
+          class="btn-edit"
+          data-testid="edit-watch-order"
+          @click="editing = !editing"
+        >
+          <i :class="editing ? 'fas fa-check' : 'fas fa-pen'"></i>
+          {{ editing ? 'Done' : 'Edit Order' }}
+        </button>
+      </div>
+      <p class="timeline-note">
+        {{
+          franchise.customOrder
+            ? 'Watch order set by the AniLounge team.'
+            : 'Release order, with each title placed after the story it follows.'
+        }}
+      </p>
+
+      <div v-if="editing" class="order-editor" data-testid="watch-order-editor">
+        <div class="add-title">
+          <input
+            v-model="addQuery"
+            type="search"
+            placeholder="Add a movie, series, or special..."
+            aria-label="Search titles to add"
+            data-testid="add-title-search"
+          />
+          <ul v-if="addResults.length" class="add-results">
+            <li v-for="hit in addResults" :key="hit.id">
+              <button
+                type="button"
+                :disabled="busy"
+                :data-testid="`add-title-${hit.id}`"
+                @click="addWork(hit)"
+              >
+                <span>{{ hit.title }}</span>
+                <small>
+                  {{ hit.kind }}<span v-if="hitYear(hit)"> · {{ hitYear(hit) }}</span>
+                </small>
+              </button>
+            </li>
+          </ul>
+        </div>
+        <button
+          v-if="franchise.customOrder"
+          type="button"
+          class="btn-reset"
+          :disabled="busy"
+          data-testid="reset-watch-order"
+          @click="resetOrder"
+        >
+          Reset to Release Order
+        </button>
+      </div>
 
       <ol v-if="franchise.works.length" class="timeline" data-testid="franchise-timeline">
         <li
           v-for="(work, index) in franchise.works"
           :key="work._id"
           class="timeline-item"
+          :class="{ editing }"
           :data-testid="`franchise-work-${work._id}`"
-          @click="openWork(work)"
+          @click="!editing && openWork(work)"
         >
+          <span v-if="editing" class="order-move">
+            <button
+              type="button"
+              :disabled="busy || index === 0"
+              :aria-label="`Move ${workTitle(work)} up`"
+              data-testid="move-up"
+              @click.stop="moveWork(index, -1)"
+            >
+              <i class="fas fa-chevron-up"></i>
+            </button>
+            <button
+              type="button"
+              :disabled="busy || index === franchise.works.length - 1"
+              :aria-label="`Move ${workTitle(work)} down`"
+              data-testid="move-down"
+              @click.stop="moveWork(index, 1)"
+            >
+              <i class="fas fa-chevron-down"></i>
+            </button>
+          </span>
           <span class="timeline-step">{{ index + 1 }}</span>
           <div class="timeline-card">
             <FavoriteHeart :content-id="work._id" />
@@ -82,6 +160,77 @@
       </ol>
 
       <p v-else class="no-works">No catalog titles are linked to this franchise yet.</p>
+
+      <!-- Franchise: Characters -->
+      <DetailSection
+        v-if="franchise.characters.length"
+        name="franchise-characters"
+        title="Characters"
+        class="people-section"
+      >
+        <template #aside>
+          <span class="people-count">{{ franchise.characters.length }}</span>
+        </template>
+        <div class="character-grid" data-testid="franchise-characters">
+          <router-link
+            v-for="character in franchise.characters"
+            :key="character._id"
+            :to="{
+              name: 'CharacterDetails',
+              params: { id: character._id },
+              query: { from: route.fullPath },
+            }"
+            class="character-card"
+            :data-testid="`character-card-${character._id}`"
+          >
+            <img
+              v-if="character.imagePath"
+              :src="getPosterUrl(character.imagePath)"
+              :alt="characterName(character.name)"
+              loading="lazy"
+              referrerpolicy="no-referrer"
+              @error="hideBrokenImage"
+            />
+            <div v-else class="no-photo"><i class="fas fa-user"></i></div>
+            <p class="person-name">{{ characterName(character.name) }}</p>
+            <p v-if="character.role" class="person-role">{{ character.role }}</p>
+          </router-link>
+        </div>
+      </DetailSection>
+
+      <!-- Franchise: Staff -->
+      <DetailSection
+        v-if="franchise.staff.length"
+        name="franchise-staff"
+        title="Staff"
+        class="people-section"
+      >
+        <template #aside>
+          <span class="people-count">{{ franchise.staff.length }}</span>
+        </template>
+        <div class="staff-list" data-testid="franchise-staff">
+          <router-link
+            v-for="person in franchise.staff"
+            :key="person._id"
+            :to="detailPath('/staff', person._id, person.name)"
+            class="staff-card"
+            :data-testid="`staff-${person._id}`"
+          >
+            <img
+              v-if="person.imagePath"
+              :src="getProfileUrl(person.imagePath)"
+              :alt="person.name"
+              loading="lazy"
+              @error="hideBrokenImage"
+            />
+            <div v-else class="no-photo"><i class="fas fa-user"></i></div>
+            <div class="staff-text">
+              <p class="person-name">{{ person.name }}</p>
+              <p class="person-role">{{ person.roles.join(', ') }}</p>
+            </div>
+          </router-link>
+        </div>
+      </DetailSection>
     </div>
   </div>
 </template>
@@ -90,17 +239,24 @@
 import { isEpisodic } from '@/utils/contentKinds'
 import { goBackOr } from '@/utils/navigation'
 import { hideBrokenImage } from '@/utils/posters'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useToast } from 'vue-toastification'
 import {
+  adminAPI,
   contentAPI,
   getCardContentTypeDisplay,
   getDetailsRouteName,
   getPosterUrl,
+  getProfileUrl,
 } from '@/services/api'
 import { getDisplayTitle } from '@/utils/titles'
+import { canonicalCharacterName } from '@/utils/entities'
+import { apiErrorMessage } from '@/utils/social'
+import { useAuthStore } from '@/stores/auth'
 import type { FranchiseDetails, UnifiedContent } from '@/types/content'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import DetailSection from '@/components/DetailSection.vue'
 import { usePageMeta } from '@/composables/usePageMeta'
 import { useCanonicalSlug } from '@/composables/useCanonicalSlug'
 import { detailPath } from '@/utils/slug'
@@ -108,10 +264,31 @@ import { entityPageMeta } from '@/utils/pageMeta'
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
+const authStore = useAuthStore()
 
 const franchise = ref<FranchiseDetails | null>(null)
 const loading = ref(true)
 const error = ref('')
+
+/** Content editors: the timeline shows move buttons and an add-title search. */
+const editing = ref(false)
+const busy = ref(false)
+
+interface TitleHit {
+  id: string
+  kind: string
+  title: string
+  releaseDate?: string | null
+}
+
+const addQuery = ref('')
+const addResults = ref<TitleHit[]>([])
+const SEARCH_DELAY_MS = 300
+let addTimer: ReturnType<typeof setTimeout> | undefined
+let addSeq = 0
+
+const characterName = (name: string) => canonicalCharacterName(name) || name
 
 const countsLabel = computed(() => {
   const works = franchise.value?.works || []
@@ -142,6 +319,79 @@ const workYear = (work: UnifiedContent) => {
   const year = date && !Number.isNaN(date.getTime()) ? date.getFullYear() : 0
   return year || work.startSeasonYear || null
 }
+
+const hitYear = (hit: TitleHit) => (hit.releaseDate ? new Date(hit.releaseDate).getFullYear() : '')
+
+/** Run an admin change; the response carries the updated franchise. */
+const saveChange = async (
+  call: () => Promise<{ data: { data: FranchiseDetails; message: string } }>,
+) => {
+  busy.value = true
+  try {
+    const response = await call()
+    franchise.value = response.data.data
+    toast.success(response.data.message)
+    return true
+  } catch (err) {
+    toast.error(apiErrorMessage(err, 'That did not work.'))
+    return false
+  } finally {
+    busy.value = false
+  }
+}
+
+const moveWork = (index: number, step: -1 | 1) => {
+  const value = franchise.value
+  if (!value) return
+  const order = value.works.map((work) => work._id)
+  const [moved] = order.splice(index, 1)
+  order.splice(index + step, 0, moved!)
+  saveChange(() => adminAPI.setFranchiseWatchOrder(value._id, order))
+}
+
+const resetOrder = () => {
+  const value = franchise.value
+  if (!value || !window.confirm('Go back to the release order for everyone?')) return
+  saveChange(() => adminAPI.setFranchiseWatchOrder(value._id, []))
+}
+
+const addWork = async (hit: TitleHit) => {
+  const value = franchise.value
+  if (!value) return
+  const ok = await saveChange(() => adminAPI.addFranchiseWork(value._id, hit.id))
+  if (ok) {
+    addQuery.value = ''
+    addResults.value = []
+  }
+}
+
+watch(addQuery, (value) => {
+  clearTimeout(addTimer)
+  const term = value.trim()
+  if (term.length < 2) {
+    addSeq++
+    addResults.value = []
+    return
+  }
+  addTimer = setTimeout(async () => {
+    const seq = ++addSeq
+    try {
+      const response = await adminAPI.searchContent({ q: term, type: 'work' })
+      const taken = new Set(
+        (franchise.value?.works || []).flatMap((work) => [work._id, work.seriesId || '']),
+      )
+      if (seq === addSeq) {
+        addResults.value = (response.data.data.items as TitleHit[])
+          .filter((hit) => !taken.has(hit.id))
+          .slice(0, 8)
+      }
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Search failed.'))
+    }
+  }, SEARCH_DELAY_MS)
+})
+
+onBeforeUnmount(() => clearTimeout(addTimer))
 
 const loadFranchise = async (id: string) => {
   loading.value = true
@@ -178,6 +428,8 @@ const goBack = () => goBackOr(router, () => router.push((route.query.from as str
 watch(
   () => route.params.id,
   (id) => {
+    editing.value = false
+    addQuery.value = ''
     if (typeof id === 'string') loadFranchise(id)
   },
   { immediate: true },
@@ -279,9 +531,126 @@ useCanonicalSlug(
   margin: 0.75rem 0 0;
 }
 
+.timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+
 .timeline-heading {
-  margin: 0 0 0.25rem;
+  margin: 0;
   color: var(--text-primary);
+}
+
+.btn-edit,
+.btn-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-edit:hover,
+.btn-reset:hover:not(:disabled) {
+  border-color: var(--coral-primary);
+}
+
+.order-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+}
+
+.add-title {
+  position: relative;
+  flex: 1 1 260px;
+}
+
+.add-title input {
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.add-results {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.add-results button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.add-results button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.add-results small {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.order-move {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.order-move button {
+  width: 28px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.order-move button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.timeline-item.editing {
+  cursor: default;
+}
+
+.timeline-item.editing:hover .timeline-card {
+  transform: none;
 }
 
 .timeline-note {
@@ -401,6 +770,110 @@ useCanonicalSlug(
   color: var(--text-muted);
 }
 
+.people-section {
+  margin-top: 2rem;
+}
+
+.people-count {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.character-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 1rem 0.75rem;
+}
+
+.character-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.character-card img,
+.character-card .no-photo {
+  width: 100%;
+  aspect-ratio: 11 / 14;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--bg-hover);
+}
+
+.no-photo {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 1.3rem;
+}
+
+.character-card .person-name {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.person-name {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.person-role {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.staff-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.staff-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  text-decoration: none;
+  min-width: 0;
+}
+
+.staff-card:hover {
+  border-color: var(--coral-primary);
+}
+
+.character-card:hover .person-name {
+  color: var(--coral-primary);
+}
+
+.staff-card img,
+.staff-card .no-photo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  font-size: 1rem;
+  background: var(--bg-hover);
+}
+
+.staff-text {
+  min-width: 0;
+}
+
+.staff-card .person-role {
+  font-size: 0.8rem;
+}
+
 @media (max-width: 600px) {
   .franchise-details {
     padding: 1rem;
@@ -408,6 +881,10 @@ useCanonicalSlug(
 
   .franchise-title {
     font-size: 1.7rem;
+  }
+
+  .character-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   }
 }
 </style>

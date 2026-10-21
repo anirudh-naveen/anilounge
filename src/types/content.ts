@@ -116,6 +116,26 @@ export interface FranchiseDetails {
   imagePath: string
   rating: number | null
   works: UnifiedContent[]
+  /** An admin set the watch order by hand. */
+  customOrder: boolean
+  /** Everyone in the franchise's titles, main characters first. */
+  characters: FranchiseCharacter[]
+  /** Everyone who worked on its titles, key staff first, with each of their roles. */
+  staff: FranchiseStaff[]
+}
+
+export interface FranchiseCharacter {
+  _id: string
+  name: string
+  imagePath: string
+  role: string
+}
+
+export interface FranchiseStaff {
+  _id: string
+  name: string
+  imagePath: string
+  roles: string[]
 }
 
 export interface StudioRef {

@@ -1508,3 +1508,7 @@ CREATE TABLE IF NOT EXISTS content_moves (
   moved_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS content_moves_to_idx ON content_moves (to_id);
+
+-- Watch order an admin set on the franchise page (display ids: seasons stand in for
+-- their series); null means the computed release/sequel order.
+ALTER TABLE franchises ADD COLUMN IF NOT EXISTS watch_order UUID[];
