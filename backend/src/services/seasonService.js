@@ -352,13 +352,29 @@ export async function getSeasonGuide(content) {
     ...stored,
     currentSeason: stored.seasons.find((season) => season.contentId === id)?.seasonNumber ?? null,
   }
-  if (stored && !(await needsTmdbFill(stored, content))) return own
-  if (!stored && content.contentType === 'season') return empty
+  if (!(await guideNeedsBuild(content, stored))) return own || empty
 
   const built = await readCache('episode_guide', id)
   const staleMs = content.malStatus === 'currently_airing' ? AIRING_GUIDE_STALE_MS : GUIDE_STALE_MS
   if (isStale(built, staleMs)) await requestRefresh('episode_guide', id)
   return built?.data || own || empty
+}
+
+/**
+ * Whether a title's guide must be built from TMDB/MAL (by `refreshSeasonGuide`)
+ * rather than read from the stored seasons and episodes.
+ * @param {object} content
+ * @param {object | null} [stored] - The stored guide, when already loaded.
+ * @returns {Promise<boolean>}
+ */
+export async function guideNeedsBuild(content, stored) {
+  if (content.contentType !== 'tv' && content.contentType !== 'season') return false
+  const guide =
+    stored === undefined
+      ? await storedGuide(content.contentType === 'season' ? content.seriesId : String(content._id))
+      : stored
+  if (guide) return needsTmdbFill(guide, content)
+  return content.contentType !== 'season'
 }
 
 /**

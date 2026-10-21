@@ -10,6 +10,7 @@
  */
 
 import { query } from '../../config/postgres.js'
+import { isStale, readCache, writeCache } from './refreshRequests.js'
 import { escapeRegex } from '../utils/catalogChatQuery.js'
 import Entity from '../models/Entity.js'
 import Content from '../models/Content.js'
@@ -22,10 +23,10 @@ import {
   siblingMalId,
 } from './characterMerge.js'
 import {
-  ANILIST_CHARACTERS_PER_TITLE,
   anilistImage,
   cleanAnilistText,
   getAnilistCharacter,
+  getAnilistCharacterEdges,
   getAnilistMedia,
   getAnilistStaff,
   mapAnilistCharacterEdge,
@@ -56,7 +57,14 @@ import {
 } from '../utils/entities.js'
 
 const FETCH_TIMEOUT_MS = 20000
-const MAX_CHARACTERS_PER_TITLE = 12
+/** Most characters stored per title from one source (AniList pages, TMDB credits). */
+const MAX_INGESTED_CHARACTERS = 200
+/** Portraits backfilled per title in one cast refresh. */
+const MAX_PORTRAIT_BACKFILL = 12
+/** Pages show a title's whole cast. */
+const ALL_CHARACTERS = Number.MAX_SAFE_INTEGER
+/** A title's full cast is fetched again after this long. */
+const CAST_STALE_MS = 30 * 24 * 60 * 60 * 1000
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const STALE_MS = 7 * 24 * 60 * 60 * 1000
 /** A failed or partial AniList/TMDB ingest is not retried on every page view. */
@@ -517,7 +525,8 @@ export async function ingestAnilistCharacters(content, options = {}) {
     await rememberTitleAnilistId(content._id, media.id)
     content.anilistId = media.id
   }
-  const payloads = (media.characters?.edges || [])
+  const edges = (await getAnilistCharacterEdges(media.id, options)) || media.characters?.edges
+  const payloads = (edges || [])
     .map((edge) => mapAnilistCharacterEdge(edge, content._id))
     .filter(Boolean)
     .sort(
@@ -525,7 +534,7 @@ export async function ingestAnilistCharacters(content, options = {}) {
         (right.appearance?.importance || 0) - (left.appearance?.importance || 0) ||
         appearanceRoleRank(left.appearance?.role) - appearanceRoleRank(right.appearance?.role),
     )
-    .slice(0, Math.min(MAX_CHARACTERS_PER_TITLE, ANILIST_CHARACTERS_PER_TITLE))
+    .slice(0, MAX_INGESTED_CHARACTERS)
   return upsertCharacterPayloads(payloads)
 }
 
@@ -543,7 +552,7 @@ export async function ingestTmdbCharacters(content, options = {}) {
     content.contentType === 'tv' ? `/tv/${tmdbId}/aggregate_credits` : `/movie/${tmdbId}/credits`
   const body = await fetchJson(`${TMDB_BASE}${path}?api_key=${encodeURIComponent(apiKey)}`, options)
   const cast = Array.isArray(body?.cast) ? body.cast : []
-  const payloads = mapTmdbCharacterCredits(cast, content._id).slice(0, MAX_CHARACTERS_PER_TITLE)
+  const payloads = mapTmdbCharacterCredits(cast, content._id).slice(0, MAX_INGESTED_CHARACTERS)
   // TMDB has no character images; TVmaze has them for many western shows.
   if (content.contentType === 'tv' && payloads.length) {
     try {
@@ -712,21 +721,27 @@ async function seriesCharacters(series, options, { sync = true } = {}) {
   // An anime's cast comes with its seasons (MAL/AniList entries); a show TMDB lists
   // keeps its cast on the series row itself (TMDB credits the whole show).
   const anime = Boolean(first && (first.malId || first.anilistId))
-  if (sync && anime) await ensureCharactersForContent(first, options)
-  else if (sync) await ensureCharactersForContent(series, { ...options, ownCredits: true })
+  if (sync && anime) {
+    // Every season, so each season's own page has its whole cast.
+    for (const seasonId of seasonIds) {
+      const season = seasonId === seasonIds[0] ? first : await Content.findById(seasonId)
+      if (season) await ensureCharactersForContent(season, options)
+    }
+  } else if (sync) await ensureCharactersForContent(series, { ...options, ownCredits: true })
   const { rows: cast } = await query(
     'SELECT DISTINCT character_id::text AS id FROM appearances WHERE work_id = ANY($1::uuid[])',
     [[String(series._id), ...seasonIds]],
   )
   if (!cast.length) return []
   const docs = await Entity.find({ _id: { $in: cast.map((row) => row.id) } })
-  return highlightedCharacters(docs, anime ? seasonIds[0] : series._id, MAX_CHARACTERS_PER_TITLE)
+  return highlightedCharacters(docs, anime ? seasonIds[0] : series._id, ALL_CHARACTERS)
 }
 
 /**
  * A title's stored characters, most important first, and whether the refresh job
- * should fetch its cast (none stored, or the stored cast looks incomplete).
- * Reads only the database.
+ * should fetch its cast: none stored, the stored cast looks incomplete, or its full
+ * cast hasn't been fetched in CAST_STALE_MS. A season with no cast of its own shows its
+ * series' (a show TMDB lists keeps its cast on the series row). Reads only the database.
  * @param {object} content
  * @returns {Promise<{ characters: object[], needsRefresh: boolean }>}
  */
@@ -737,10 +752,39 @@ export async function storedCharactersForContent(content) {
     characters = await seriesCharacters(content, {}, { sync: false })
   if (!characters) {
     const docs = await Entity.find({ entityType: 'character', 'appearances.content': content._id })
-    characters = highlightedCharacters(docs, content._id, MAX_CHARACTERS_PER_TITLE)
+    characters = highlightedCharacters(docs, content._id, ALL_CHARACTERS)
+  }
+  if (!characters.length && content.contentType === 'season' && content.seriesId) {
+    const docs = await Entity.find({
+      entityType: 'character',
+      'appearances.content': content.seriesId,
+    })
+    const shared = highlightedCharacters(docs, content.seriesId, ALL_CHARACTERS)
+    if (shared.length) return { characters: shared, needsRefresh: false }
   }
   const malId = positiveId(content.malId) || (await siblingMalId(content._id))
-  return { characters, needsRefresh: needsCharacterRefresh(content, characters, malId) }
+  const needsRefresh =
+    needsCharacterRefresh(content, characters, malId) ||
+    isStale(await readCache('cast', content._id), CAST_STALE_MS)
+  return { characters, needsRefresh }
+}
+
+/**
+ * Whether a title's full cast was fetched within CAST_STALE_MS.
+ * @param {string} contentId
+ * @returns {Promise<boolean>}
+ */
+export async function castIsFresh(contentId) {
+  return !isStale(await readCache('cast', contentId), CAST_STALE_MS)
+}
+
+/**
+ * Note that a title's full cast was just fetched (see `storedCharactersForContent`).
+ * @param {string} contentId
+ * @returns {Promise<void>}
+ */
+export async function markCastFetched(contentId) {
+  await writeCache('cast', contentId, { fetchedAt: new Date().toISOString() })
 }
 
 /**
@@ -758,7 +802,7 @@ async function loadCharactersForContent(content, options = {}) {
   const key = String(content._id)
   const lastAttempt = characterSyncAttempts.get(key) || 0
   if (!options.force && docs.length && Date.now() - lastAttempt < CHARACTER_RETRY_MS) {
-    return highlightedCharacters(docs, content._id, MAX_CHARACTERS_PER_TITLE)
+    return highlightedCharacters(docs, content._id, ALL_CHARACTERS)
   }
 
   const malId = Number(content.malId) > 0 ? Number(content.malId) : await siblingMalId(content._id)
@@ -766,7 +810,7 @@ async function loadCharactersForContent(content, options = {}) {
 
   if (!options.force && !needsCharacterRefresh(content, docs, malId)) {
     characterSyncAttempts.set(key, Date.now())
-    return highlightedCharacters(docs, content._id, MAX_CHARACTERS_PER_TITLE)
+    return highlightedCharacters(docs, content._id, ALL_CHARACTERS)
   }
   characterSyncAttempts.set(key, Date.now())
 
@@ -810,7 +854,7 @@ async function loadCharactersForContent(content, options = {}) {
   const missingPortraits = docs.filter(
     (doc) => !characterPortraitPath(doc.imagePath) && hasSourceId(doc),
   )
-  for (const doc of missingPortraits.slice(0, MAX_CHARACTERS_PER_TITLE)) {
+  for (const doc of missingPortraits.slice(0, MAX_PORTRAIT_BACKFILL)) {
     try {
       await ensureCharacterAbout(doc, options)
     } catch (error) {
@@ -827,7 +871,7 @@ async function loadCharactersForContent(content, options = {}) {
     content.characterSyncAt = new Date()
   }
 
-  return highlightedCharacters(docs, content._id, MAX_CHARACTERS_PER_TITLE)
+  return highlightedCharacters(docs, content._id, ALL_CHARACTERS)
 }
 
 /**

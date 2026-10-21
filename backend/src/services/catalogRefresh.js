@@ -20,6 +20,7 @@ import {
   ensureStudioDetails,
   ensureVoiceActorAbout,
   ensureVoiceActorCredits,
+  markCastFetched,
 } from './entityService.js'
 import { claimRefreshRequests } from './refreshRequests.js'
 import { refreshSeasonGuide } from './seasonService.js'
@@ -38,7 +39,9 @@ let lastRun = null
 const handlers = {
   cast: async (id) => {
     const content = await Content.findById(id)
-    if (content) await ensureCharactersForContent(content)
+    if (!content) return
+    await ensureCharactersForContent(content, { force: true })
+    await markCastFetched(id)
   },
   character: async (id) => {
     const entity = await Entity.findById(id)

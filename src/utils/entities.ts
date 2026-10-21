@@ -11,8 +11,6 @@ import type {
   UnifiedContent,
 } from '@/types/content'
 
-export const HIGHLIGHTED_CHARACTERS_PER_TITLE = 10
-
 const fold = (value?: string) =>
   String(value || '')
     .toLowerCase()
@@ -32,16 +30,6 @@ export function cleanCharacterName(value?: string) {
     .replace(/\(\s*\)/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-/**
- * First N characters for title/episode slides.
- */
-export function highlightedCharacters<T>(
-  items: T[] | undefined,
-  limit = HIGHLIGHTED_CHARACTERS_PER_TITLE,
-): T[] {
-  return (items || []).slice(0, limit)
 }
 
 /**

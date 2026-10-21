@@ -19,7 +19,7 @@
     </div>
     <div v-else class="cast-list">
       <button
-        v-for="entity in highlighted"
+        v-for="entity in items"
         :key="entity._id"
         type="button"
         class="cast-card"
@@ -39,23 +39,16 @@
         <p class="cast-name">{{ displayName(entity) }}</p>
         <p v-if="roleFor(entity)" class="cast-role">{{ roleFor(entity) }}</p>
       </button>
-      <p v-if="overflowCount" class="cast-overflow">+{{ overflowCount }} more</p>
     </div>
   </DetailSection>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { CatalogEntity } from '@/types/content'
 import DetailSection from '@/components/DetailSection.vue'
 import { getDetailsRouteName, getPosterUrl } from '@/services/api'
-import {
-  appearanceForContent,
-  canonicalCharacterName,
-  displayPersonName,
-  highlightedCharacters,
-} from '@/utils/entities'
+import { appearanceForContent, canonicalCharacterName, displayPersonName } from '@/utils/entities'
 
 const props = withDefaults(
   defineProps<{
@@ -72,9 +65,6 @@ const props = withDefaults(
     showRole: false,
   },
 )
-
-const highlighted = computed(() => highlightedCharacters(props.items))
-const overflowCount = computed(() => Math.max(0, props.items.length - highlighted.value.length))
 
 const displayName = (entity: CatalogEntity) =>
   entity.entityType === 'voice_actor'
@@ -186,16 +176,6 @@ const handleImageError = (event: Event) => {
   margin: 0.15rem 0 0;
   font-size: 0.75rem;
   color: var(--text-muted);
-}
-
-.cast-overflow {
-  flex: 0 0 auto;
-  align-self: center;
-  margin: 0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  white-space: nowrap;
 }
 
 /* Phones: smaller portraits, so more of the cast fits on screen. */
