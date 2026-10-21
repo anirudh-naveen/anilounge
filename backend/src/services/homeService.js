@@ -9,7 +9,8 @@ import { query } from '../../config/postgres.js'
 import { contentTypeFromKind } from '../db/kinds.js'
 import { mapContentRow } from '../models/Content.js'
 import Entity from '../models/Entity.js'
-import { ensureCharacterAbout, serializeEntityDetails } from './entityService.js'
+import { characterNeedsAbout, serializeEntityDetails } from './entityService.js'
+import { requestRefresh } from './refreshRequests.js'
 import { friendIds } from './friendService.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -344,7 +345,7 @@ async function pickCharacterId(day) {
 
 /**
  * One main character from a well-rated title, stable for the whole UTC day.
- * Missing bios are filled from AniList on first request.
+ * Missing bios are queued for the refresh job.
  * @param {Date} [now]
  * @returns {Promise<object | null>}
  */
@@ -355,13 +356,13 @@ export async function getCharacterOfTheDay(now = new Date()) {
   const id = await pickCharacterId(day)
   const entity = id ? await Entity.findById(id) : null
   if (!entity) return null
-  try {
-    await ensureCharacterAbout(entity)
-  } catch (error) {
-    console.error('Character of the day bio lookup failed:', error.message)
-  }
   const character = await serializeEntityDetails(entity)
   const payload = { day, character }
+  // A missing bio is fetched by the refresh job; until then, read it again each time.
+  if (characterNeedsAbout(entity)) {
+    await requestRefresh('character', entity._id)
+    return payload
+  }
   characterCache.clear()
   characterCache.set(day, payload)
   return payload

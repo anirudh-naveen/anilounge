@@ -700,7 +700,7 @@ export async function ensureCharactersForContent(content, options = {}) {
  * @param {{ fetchImpl?: typeof fetch }} [options]
  * @returns {Promise<object[] | null>} Null for a series without seasons.
  */
-async function seriesCharacters(series, options) {
+async function seriesCharacters(series, options, { sync = true } = {}) {
   const { rows } = await query(
     `SELECT content_id::text AS id FROM seasons WHERE series_id = $1
      ORDER BY season_number, part_number`,
@@ -712,8 +712,8 @@ async function seriesCharacters(series, options) {
   // An anime's cast comes with its seasons (MAL/AniList entries); a show TMDB lists
   // keeps its cast on the series row itself (TMDB credits the whole show).
   const anime = Boolean(first && (first.malId || first.anilistId))
-  if (anime) await ensureCharactersForContent(first, options)
-  else await ensureCharactersForContent(series, { ...options, ownCredits: true })
+  if (sync && anime) await ensureCharactersForContent(first, options)
+  else if (sync) await ensureCharactersForContent(series, { ...options, ownCredits: true })
   const { rows: cast } = await query(
     'SELECT DISTINCT character_id::text AS id FROM appearances WHERE work_id = ANY($1::uuid[])',
     [[String(series._id), ...seasonIds]],
@@ -721,6 +721,26 @@ async function seriesCharacters(series, options) {
   if (!cast.length) return []
   const docs = await Entity.find({ _id: { $in: cast.map((row) => row.id) } })
   return highlightedCharacters(docs, anime ? seasonIds[0] : series._id, MAX_CHARACTERS_PER_TITLE)
+}
+
+/**
+ * A title's stored characters, most important first, and whether the refresh job
+ * should fetch its cast (none stored, or the stored cast looks incomplete).
+ * Reads only the database.
+ * @param {object} content
+ * @returns {Promise<{ characters: object[], needsRefresh: boolean }>}
+ */
+export async function storedCharactersForContent(content) {
+  if (!content?._id) return { characters: [], needsRefresh: false }
+  let characters = null
+  if (content.contentType === 'tv')
+    characters = await seriesCharacters(content, {}, { sync: false })
+  if (!characters) {
+    const docs = await Entity.find({ entityType: 'character', 'appearances.content': content._id })
+    characters = highlightedCharacters(docs, content._id, MAX_CHARACTERS_PER_TITLE)
+  }
+  const malId = positiveId(content.malId) || (await siblingMalId(content._id))
+  return { characters, needsRefresh: needsCharacterRefresh(content, characters, malId) }
 }
 
 /**
@@ -843,7 +863,8 @@ async function fillCharacterFromAnilist(entity, needsPortrait, options) {
   if (!data) return entity
   const about = cleanAnilistText(data.description)
   if (!entity.about && about) entity.about = about
-  if (!entity.nativeName && data.name?.native) entity.nativeName = normalizeEntityName(data.name.native)
+  if (!entity.nativeName && data.name?.native)
+    entity.nativeName = normalizeEntityName(data.name.native)
   const aliases = uniqueEntityNames(entity.alternativeNames, data.name?.alternative || [])
   if (aliases.length) entity.alternativeNames = aliases.filter((alias) => alias !== entity.name)
   const image = anilistImage(data.image?.large)
@@ -864,7 +885,8 @@ async function fillVoiceActorFromAnilist(entity, needsImage, options) {
   if (!data) return entity
   const about = cleanAnilistText(data.description)
   if (!entity.about && about) entity.about = about
-  if (!entity.nativeName && data.name?.native) entity.nativeName = normalizeEntityName(data.name.native)
+  if (!entity.nativeName && data.name?.native)
+    entity.nativeName = normalizeEntityName(data.name.native)
   const aliases = uniqueEntityNames(entity.alternativeNames, data.name?.alternative || [])
   if (aliases.length) entity.alternativeNames = aliases.filter((alias) => alias !== entity.name)
   const image = anilistImage(data.image?.large)
@@ -1054,7 +1076,9 @@ async function anilistVoicedRows(entity, options) {
   const rows = []
   for (const edge of staff.characterMedia?.edges || []) {
     if (edge?.node?.type && edge.node.type !== 'ANIME') continue
-    const role = { MAIN: 'Main', SUPPORTING: 'Supporting', BACKGROUND: 'Cameo' }[edge?.characterRole]
+    const role = { MAIN: 'Main', SUPPORTING: 'Supporting', BACKGROUND: 'Cameo' }[
+      edge?.characterRole
+    ]
     for (const character of edge?.characters || []) {
       const mapped = mapAnilistCharacterEdge(
         { role: edge.characterRole, node: character, voiceActorRoles: [] },
@@ -1111,9 +1135,7 @@ async function ingestVoiceActorCredits(entity, options = {}) {
     characterIdFilters.length
       ? Entity.find({ entityType: 'character', $or: characterIdFilters })
       : Promise.resolve([]),
-    contentIdFilters.length
-      ? Content.find({ $or: contentIdFilters })
-      : Promise.resolve([]),
+    contentIdFilters.length ? Content.find({ $or: contentIdFilters }) : Promise.resolve([]),
   ])
   const known = new Map()
   for (const doc of existingCharacters) {
@@ -1166,7 +1188,7 @@ export async function ensureVoiceActorCredits(entity, options = {}) {
 
   const key = `va-voices:${entity._id}`
   if (ingestLocks.has(key)) {
-    await ingestLocks.get(key)
+    await ingestLocks.get(key).catch(() => {})
     const fresh = await Entity.findById(entity._id)
     return fresh || entity
   }
@@ -1177,6 +1199,42 @@ export async function ensureVoiceActorCredits(entity, options = {}) {
   } finally {
     ingestLocks.delete(key)
   }
+}
+
+/**
+ * Whether a character page should queue an AniList fill (bio, native name, portrait).
+ * @param {object} entity
+ * @returns {boolean}
+ */
+export function characterNeedsAbout(entity) {
+  if (!entity || entity.entityType !== 'character') return false
+  const needsPortrait = !characterPortraitPath(entity.imagePath)
+  if (entity.about && entity.nativeName && !needsPortrait) return false
+  // Without an AniList id the fill only clears a non-portrait image.
+  return Boolean(positiveId(entity.anilistId) || (needsPortrait && entity.imagePath))
+}
+
+/**
+ * Whether a voice actor page should queue an AniList bio or roles refresh.
+ * @param {object} entity
+ * @returns {boolean}
+ */
+export function voiceActorNeedsSync(entity) {
+  if (!entity || entity.entityType !== 'voice_actor') return false
+  const needsAbout = !entity.about || !voiceActorImagePath(entity.imagePath)
+  if (needsAbout && positiveId(entity.anilistId)) return true
+  const hasCharacterLinks = (entity.appearances || []).some((row) => row.character)
+  return !(voiceCreditsAreFresh(entity) && hasCharacterLinks)
+}
+
+/**
+ * Whether a studio page should queue a TMDB logo/description lookup.
+ * @param {object} entity
+ * @returns {boolean}
+ */
+export function studioNeedsDetails(entity) {
+  if (!entity || entity.entityType !== 'studio') return false
+  return !(studioImagePath(entity.imagePath) && entity.about)
 }
 
 /**
@@ -1326,7 +1384,8 @@ export async function serializeEntityDetails(entity, options = {}) {
     },
   ])
   const serialized = serializeEntity(entity, options)
-  if (entity.entityType === 'voice_actor') serialized.staffCredits = await staffCreditsOf(entity._id)
+  if (entity.entityType === 'voice_actor')
+    serialized.staffCredits = await staffCreditsOf(entity._id)
   return serialized
 }
 

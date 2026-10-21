@@ -18,10 +18,7 @@ import {
   getFranchise,
   setFranchiseWatchOrder,
 } from '../services/franchiseService.js'
-import {
-  ingestMalRankingByTypes,
-  ingestTmdbNowPlayingMovies,
-} from '../services/contentSyncService.js'
+import { requestRefresh } from '../services/refreshRequests.js'
 import {
   applyContentRatingChange,
   applyListDetails,
@@ -53,61 +50,18 @@ import { mirrorWatchlistChange } from '../services/connectionSync.js'
 
 const movieLikeTypes = ['movie', 'special']
 
-/** Longest a page view waits for an airing refresh before answering with what it has. */
-const AIRING_REFRESH_WAIT_MS = 2500
-/** After a failed refresh, views skip that title for this long. */
-const AIRING_REFRESH_BACKOFF_MS = 15 * 60 * 1000
-/** @type {Map<string, Promise<void>>} Refreshes in flight, shared by concurrent viewers. */
-const airingRefreshes = new Map()
-/** @type {Map<string, number>} Title id -> time its last refresh failed. */
-const airingRefreshFailures = new Map()
-
 /**
- * Fetch MAL/TMDB airing schedule onto a TV document when the stored slot is missing or stale.
- * Failures are logged; callers still return the existing catalog row.
+ * Queue a MAL/TMDB airing schedule refresh when the stored slot is missing or stale.
+ * A series with seasons gets its schedule from them (the six-hourly import).
  * @param {object} content - Content document.
  * @returns {Promise<void>}
  */
-const refreshAiringIfNeeded = async (content) => {
-  const id = String(content._id)
-  // A series with seasons gets its schedule from them (the six-hourly import); TMDB's
-  // whole-show counts would undo its totals.
-  if (content.contentType === 'tv') {
-    const { rows } = await dbQuery('SELECT 1 FROM seasons WHERE series_id = $1 LIMIT 1', [id])
-    if (rows.length) return
-  }
-  const failedAt = airingRefreshFailures.get(id)
-  if (failedAt && Date.now() - failedAt < AIRING_REFRESH_BACKOFF_MS) return
-  // Everyone viewing a stale airing title at once shares one MAL/TMDB refresh.
-  let refresh = airingRefreshes.get(id)
-  if (!refresh) {
-    refresh = (async () => {
-      try {
-        const changed = await unifiedContentService.refreshAiringSchedule(content)
-        if (changed) await content.save()
-        else if (unifiedContentService.needsAiringRefresh(content)) {
-          airingRefreshFailures.set(id, Date.now())
-        }
-      } catch (error) {
-        airingRefreshFailures.set(id, Date.now())
-        console.error('Airing schedule refresh failed:', error.message)
-      } finally {
-        airingRefreshes.delete(id)
-        if (airingRefreshFailures.size > 5000) airingRefreshFailures.clear()
-      }
-    })()
-    airingRefreshes.set(id, refresh)
-  }
-  // A slow provider must not hold the page: answer after a short wait; the refresh
-  // finishes in the background and the next view gets the new schedule.
-  let timer
-  await Promise.race([
-    refresh,
-    new Promise((resolve) => {
-      timer = setTimeout(resolve, AIRING_REFRESH_WAIT_MS)
-    }),
+const queueAiringRefresh = async (content) => {
+  if (!unifiedContentService.needsAiringRefresh(content)) return
+  const { rows } = await dbQuery('SELECT 1 FROM seasons WHERE series_id = $1 LIMIT 1', [
+    String(content._id),
   ])
-  clearTimeout(timer)
+  if (!rows.length) await requestRefresh('airing', content._id)
 }
 
 /**
@@ -193,30 +147,6 @@ export const getContent = async (req, res) => {
         : matchContentType(contentType, req.query.seasons === '1')
     const query = mergeCatalogQuery(typeQuery, tabQuery)
 
-    if (tab === 'upcoming' && (contentType === 'tv' || contentType === 'movie')) {
-      const existingUpcoming = await Content.countDocuments(query)
-      if (existingUpcoming === 0) {
-        try {
-          const types = contentType === 'tv' ? ['tv'] : ['movie', 'special']
-          await ingestMalRankingByTypes('upcoming', 50, types)
-        } catch (error) {
-          console.error('Upcoming catalog ingest failed:', error.message)
-        }
-      }
-    }
-
-    if (tab === 'theatres' && contentType === 'movie') {
-      const existingTheatres = await Content.countDocuments(query)
-      if (existingTheatres === 0) {
-        try {
-          await ingestTmdbNowPlayingMovies(40)
-        } catch (error) {
-          console.error('Now-in-theatres catalog ingest failed:', error.message)
-        }
-      }
-    }
-
-    // The page itself is a pure read: served by the read replica when one is configured.
     const total = await withReplica(() => Content.countDocuments(query))
     const totalPages = singlePage ? (total > 0 ? 1 : 0) : Math.ceil(total / limit)
 
@@ -272,7 +202,7 @@ export const getContentById = async (req, res) => {
       })
     }
 
-    await refreshAiringIfNeeded(content)
+    await queueAiringRefresh(content)
     await attachTitleDetails(content)
 
     res.json({
