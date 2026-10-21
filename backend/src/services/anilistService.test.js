@@ -10,6 +10,7 @@ import {
   convertAnilistToContent,
   fetchAnilistMediaBatch,
   fetchAnilistPopular,
+  getAnilistCharacterEdges,
   getAnilistMedia,
   mapAnilistCharacterEdge,
   pickAnilistMatch,
@@ -36,7 +37,14 @@ describe('AniList import', () => {
     averageScore: 83,
     description: 'A god <i>ascends</i> again.',
     coverImage: { large: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/tgcf.jpg' },
-    studios: { edges: [{ isMain: true, node: { id: 9, name: 'Haoliners Animation League', isAnimationStudio: true } }] },
+    studios: {
+      edges: [
+        {
+          isMain: true,
+          node: { id: 9, name: 'Haoliners Animation League', isAnimationStudio: true },
+        },
+      ],
+    },
   }
 
   it('builds a full catalog title for an AniList-only anime', () => {
@@ -61,7 +69,10 @@ describe('AniList import', () => {
 
   it('pages the popularity ranking and caches each anime', async () => {
     const { fetchImpl, calls } = fakeFetch([
-      { status: 200, body: { data: { Page: { pageInfo: { hasNextPage: true }, media: [donghua] } } } },
+      {
+        status: 200,
+        body: { data: { Page: { pageInfo: { hasNextPage: true }, media: [donghua] } } },
+      },
     ])
     const page = await fetchAnilistPopular({ page: 2, perPage: 50 }, { fetchImpl })
     assert.equal(page.hasNextPage, true)
@@ -100,7 +111,12 @@ function fakeFetch(responses) {
 }
 
 const voice = (id, name, languageV2, native = null) => ({
-  voiceActor: { id, name: { full: name, native }, image: { large: `https://s4.anilist.co/staff/${id}.jpg` }, languageV2 },
+  voiceActor: {
+    id,
+    name: { full: name, native },
+    image: { large: `https://s4.anilist.co/staff/${id}.jpg` },
+    languageV2,
+  },
 })
 
 describe('mapAnilistCharacterEdge', () => {
@@ -297,7 +313,10 @@ describe('fetchAnilistMediaBatch', () => {
       { status: 200, body: { data: { Page: { media: [{ id: 127230, idMal: 44511 }] } } } },
     ])
     const media = await fetchAnilistMediaBatch({ malIds: [44511, 999999] }, { fetchImpl })
-    assert.deepEqual(media.map((item) => item.id), [127230])
+    assert.deepEqual(
+      media.map((item) => item.id),
+      [127230],
+    )
     assert.deepEqual(calls[0].variables, { ids: [44511, 999999] })
 
     assert.equal((await getAnilistMedia({ malId: 44511 }, { fetchImpl })).id, 127230)
@@ -309,7 +328,10 @@ describe('fetchAnilistMediaBatch', () => {
   it('does not reuse a cached entry without characters for a character request', async () => {
     const { fetchImpl, calls } = fakeFetch([
       { status: 200, body: { data: { Page: { media: [{ id: 1, idMal: 2 }] } } } },
-      { status: 200, body: { data: { Page: { media: [{ id: 1, idMal: 2, characters: { edges: [] } }] } } } },
+      {
+        status: 200,
+        body: { data: { Page: { media: [{ id: 1, idMal: 2, characters: { edges: [] } }] } } },
+      },
     ])
     await fetchAnilistMediaBatch({ malIds: [2] }, { fetchImpl })
     await fetchAnilistMediaBatch({ malIds: [2] }, { fetchImpl, withCharacters: true })
@@ -331,7 +353,31 @@ describe('anilistFullName', () => {
       anilistFullName({ first: 'Ace', middle: 'D.', last: 'Portgas', full: 'Ace D. Portgas' }),
       'Ace D. Portgas',
     )
-    assert.equal(anilistFullName({ first: 'Subaru', last: 'Natsuki', full: 'Subaru Natsuki' }), 'Subaru Natsuki')
+    assert.equal(
+      anilistFullName({ first: 'Subaru', last: 'Natsuki', full: 'Subaru Natsuki' }),
+      'Subaru Natsuki',
+    )
     assert.equal(anilistFullName({ full: 'Pikachu' }), 'Pikachu')
+  })
+})
+
+describe('getAnilistCharacterEdges', () => {
+  it('collects every page of a title’s characters', async () => {
+    const pages = []
+    const fetchImpl = async (_url, init) => {
+      const { page } = JSON.parse(init.body).variables
+      pages.push(page)
+      const characters = {
+        pageInfo: { hasNextPage: page < 2 },
+        edges: [{ role: 'MAIN', node: { id: page } }],
+      }
+      return new Response(JSON.stringify({ data: { Media: { characters } } }), { status: 200 })
+    }
+    const edges = await getAnilistCharacterEdges(21, { fetchImpl })
+    assert.deepEqual(pages, [1, 2])
+    assert.deepEqual(
+      edges.map((edge) => edge.node.id),
+      [1, 2],
+    )
   })
 })

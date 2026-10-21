@@ -19,13 +19,23 @@
  *               rebuild studio credits (MAL studios, then AniList animation
  *               studios, then TMDB companies), genres, aliases, MAL relations.
  *               After the series migration this runs the seasons phase instead.
- *   characters  Re-ingest characters and voice actors for every title from
- *               AniList (by AniList or MAL id), TMDB credits otherwise.
+ *   characters  Re-ingest every title's whole cast and its voice actors from
+ *               AniList (by AniList or MAL id, every page), TMDB credits
+ *               otherwise. Titles whose full cast was fetched in the last 30 days
+ *               are skipped; an anime series is covered by its seasons.
  *   studios     Fill studio ids, logos, and about (TMDB); merge
  *               studio rows that resolve to the same MAL producer.
  *   cleanup     Merge titles whose names differ only by case/spacing, franchise
  *               characters, and same-name studios; enforce links, prune
  *               orphans, audit.
+ *   profiles    Bio, native name, aliases, and portrait (AniList) for every
+ *               character missing one.
+ *   voices      Bio and photo, then every voiced role in catalog titles
+ *               (AniList), for every voice actor.
+ *   guides      Store the episode guide of every show whose episodes aren't in
+ *               the seasons/episodes tables (built from TMDB/MAL).
+ *   watch       Store Where to Watch (AniList links, TMDB providers) for every
+ *               movie, series, season, and special.
  *   seasons     (Only when named.) Import every series with its seasons and
  *               episodes, and every movie and special, through
  *               services/catalogImport.js: source snapshots, fields by source
@@ -42,6 +52,7 @@
  *   npm run db:reload -- --phases backup,import,cleanup --import-limit 2000
  *   npm run db:reload -- --phases seasons --workers 2
  *   npm run db:reload -- --phases western,cleanup --western-min-votes 50
+ *   npm run db:reload -- --phases characters,cleanup,profiles,voices
  *
  * Progress is checkpointed to backend/logs/reload-checkpoint.json so an
  * interrupted run resumes where it stopped. Titles or studios whose sources
@@ -56,7 +67,17 @@ import Content from '../models/Content.js'
 import Entity from '../models/Entity.js'
 import DatabasePopulator from '../services/contentSyncService.js'
 import unifiedContentService from '../services/unifiedContentService.js'
-import { ensureCharactersForContent, ensureStudioDetails } from '../services/entityService.js'
+import {
+  castIsFresh,
+  ensureCharacterAbout,
+  ensureCharactersForContent,
+  ensureStudioDetails,
+  ensureVoiceActorAbout,
+  ensureVoiceActorCredits,
+  markCastFetched,
+} from '../services/entityService.js'
+import { guideNeedsBuild, refreshSeasonGuide } from '../services/seasonService.js'
+import { refreshWatchSources } from '../services/watchProviderService.js'
 import {
   anilistStatus,
   configureAnilistCache,
@@ -92,6 +113,10 @@ const ALL_PHASES = [
   'characters',
   'studios',
   'cleanup',
+  'profiles',
+  'voices',
+  'guides',
+  'watch',
 ]
 /**
  * Order phases run in: seasons (and new titles' seasons) before characters and cleanup.
@@ -110,6 +135,10 @@ const PHASE_ORDER = [
   'characters',
   'studios',
   'cleanup',
+  'profiles',
+  'voices',
+  'guides',
+  'watch',
   'photos',
 ]
 const FAMILY_KINDS = [
@@ -617,8 +646,7 @@ async function phaseWestern(options, checkpoint) {
       // A title merged into (or attached as) an anime season imports through its series.
       if (content.contentType === 'tv') {
         await importSeries(content.seriesId || contentId, { details: false })
-      }
-      else await importStandalone(contentId)
+      } else await importStandalone(contentId)
       checkpoint.mark('seasons', contentId)
       checkpoint.mark('western', contentId)
       console.log(`  ${outcome} "${item.title}" (TMDB ${item.type} ${item.tmdbId})`)
@@ -697,11 +725,18 @@ async function phaseCharacters(options, checkpoint) {
     console.log('  AniList is unreachable; deferring characters.')
     return false
   }
-  const ids = await watchableIds(options.limit)
-  const done = checkpoint.done('characters')
-  const groups = (await groupByFamily(ids))
-    .map((group) => group.filter((id) => !done.has(id)))
-    .filter((group) => group.length)
+  // An anime series' cast is its seasons' (each season is in the list).
+  const { rows: animeSeries } = await query(
+    `SELECT DISTINCT sn.series_id::text AS id FROM seasons sn JOIN content f ON f.id = sn.content_id
+     WHERE f.mal_id IS NOT NULL OR f.anilist_id IS NOT NULL`,
+  )
+  const coveredBySeasons = new Set(animeSeries.map((row) => row.id))
+  const ids = []
+  for (const id of await watchableIds(options.limit)) {
+    if (coveredBySeasons.has(id)) await markCastFetched(id)
+    else if (!(await castIsFresh(id))) ids.push(id)
+  }
+  const groups = (await groupByFamily(ids)).filter((group) => group.length)
   const todo = groups.flat()
   console.log(`  ${todo.length} titles in ${groups.length} families to ingest characters for`)
   console.log(`  AniList media cached: ${await prefetchAnilist(todo, { withCharacters: true })}`)
@@ -724,6 +759,7 @@ async function phaseCharacters(options, checkpoint) {
           stats.deferred += 1
           continue
         }
+        await markCastFetched(id)
         checkpoint.mark('characters', id)
       } catch (error) {
         stats.failed += 1
@@ -770,6 +806,110 @@ async function phaseStudios(options, checkpoint) {
   checkpoint.flush()
   console.log('  Studios:', stats)
   return stats.deferred === 0
+}
+
+/**
+ * Run `fill` over every row the query lists that this phase hasn't finished, stopping
+ * if AniList goes down. Rows are checkpointed, so a rerun skips ones a source had
+ * nothing for.
+ * @param {string} phase
+ * @param {string} sql - Selects `id`.
+ * @param {(id: string) => Promise<void>} fill
+ * @param {object} options
+ * @param {Checkpoint} checkpoint
+ * @param {{ anilist?: boolean }} [needs] - `anilist`: defer the phase while it's down.
+ * @returns {Promise<boolean>} Whether every row was done.
+ */
+async function fillRows(phase, sql, fill, options, checkpoint, { anilist = true } = {}) {
+  if (anilist && !(await probeAnilist())) {
+    console.log(`  AniList is unreachable; deferring ${phase}.`)
+    return false
+  }
+  const done = checkpoint.done(phase)
+  const todo = (await query(sql)).rows.map((row) => row.id).filter((id) => !done.has(id))
+  const list = options.limit ? todo.slice(0, options.limit) : todo
+  console.log(`  ${list.length} rows to fill`)
+  const stats = { filled: 0, deferred: 0, failed: 0 }
+  let stopped = false
+  await runQueue(phase, list, options.workers, async (id) => {
+    if (anilist && !anilistStatus().available) {
+      stopped = true
+      return 'stop'
+    }
+    try {
+      await fill(id)
+      if (anilist && failing(anilistStatus)) {
+        stats.deferred += 1
+        return
+      }
+      stats.filled += 1
+      checkpoint.mark(phase, id)
+    } catch (error) {
+      stats.failed += 1
+      console.error(`  ${phase} ${id} failed: ${error.message}`)
+    }
+  })
+  checkpoint.flush()
+  console.log(`  ${phase}:`, stats)
+  if (stopped) console.log(`  AniList went down mid-phase; rerun --phases ${phase}.`)
+  return !stopped && stats.deferred === 0
+}
+
+async function phaseProfiles(options, checkpoint) {
+  return fillRows(
+    'profiles',
+    `SELECT c.id::text AS id FROM content c
+     WHERE c.kind = 'character' AND c.anilist_id IS NOT NULL
+       AND (coalesce(c.about, '') = '' OR c.native_name IS NULL OR coalesce(c.image_path, '') = '')
+     ORDER BY c.id`,
+    async (id) => {
+      const entity = await Entity.findById(id)
+      if (entity) await ensureCharacterAbout(entity)
+    },
+    options,
+    checkpoint,
+  )
+}
+
+async function phaseVoices(options, checkpoint) {
+  return fillRows(
+    'voices',
+    `SELECT c.id::text AS id FROM content c WHERE c.kind = 'voice' AND c.anilist_id IS NOT NULL
+     ORDER BY c.id`,
+    async (id) => {
+      const entity = await Entity.findById(id)
+      if (!entity) return
+      await ensureVoiceActorAbout(entity)
+      await ensureVoiceActorCredits(entity)
+    },
+    options,
+    checkpoint,
+  )
+}
+
+async function phaseGuides(options, checkpoint) {
+  return fillRows(
+    'guides',
+    `SELECT id::text AS id FROM content WHERE kind IN ('series', 'season') ORDER BY id`,
+    async (id) => {
+      const content = await Content.findById(id)
+      if (content && (await guideNeedsBuild(content))) await refreshSeasonGuide(id)
+    },
+    options,
+    checkpoint,
+    { anilist: false },
+  )
+}
+
+async function phaseWatch(options, checkpoint) {
+  return fillRows(
+    'watch',
+    `SELECT id::text AS id FROM content WHERE kind IN ('movie', 'series', 'season', 'special')
+     ORDER BY id`,
+    (id) => refreshWatchSources(id),
+    options,
+    checkpoint,
+  )
 }
 
 async function phaseCleanup() {
@@ -876,6 +1016,10 @@ async function run() {
     characters: () => phaseCharacters(options, checkpoint),
     studios: () => phaseStudios(options, checkpoint),
     cleanup: () => phaseCleanup(),
+    profiles: () => phaseProfiles(options, checkpoint),
+    voices: () => phaseVoices(options, checkpoint),
+    guides: () => phaseGuides(options, checkpoint),
+    watch: () => phaseWatch(options, checkpoint),
     seasons: () => phaseSeasons(options, checkpoint),
     episodes: () => phaseEpisodes(options, checkpoint),
     photos: async () => {

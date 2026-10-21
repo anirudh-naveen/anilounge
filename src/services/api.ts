@@ -226,6 +226,18 @@ export const entityAPI = {
 
   getById: (id: string) => api.get(`/entities/${id}`),
 
+  /** Search's Characters / Voice Actors tabs: trending, or a filtered page. */
+  browse: (params: {
+    type: 'character' | 'voice_actor'
+    q?: string
+    role?: string
+    media?: string
+    language?: string
+    sort?: string
+    direction?: string
+    page?: number
+  }) => api.get('/entities/browse', { params }),
+
   getContentCharacters: (contentId: string) => api.get(`/content/${contentId}/characters`),
 
   favorite: (id: string) => api.post(`/entities/${id}/favorite`),
@@ -455,6 +467,14 @@ export const adminAPI = {
   /** Add or remove a cast/voice/studio link; returns the editor row `editorId`. */
   changeLink: (op: 'add' | 'remove', link: Record<string, unknown>, editorId: string) =>
     api.post(`/admin/links/${op}`, { link, editorId }),
+
+  /** Set a franchise's watch order for everyone; an empty list resets it. */
+  setFranchiseWatchOrder: (franchiseId: string, workIds: string[]) =>
+    api.put(`/admin/franchises/${franchiseId}/watch-order`, { workIds }),
+
+  /** Add a movie, series, or special to a franchise (moving it from another). */
+  addFranchiseWork: (franchiseId: string, workId: string) =>
+    api.post(`/admin/franchises/${franchiseId}/works`, { workId }),
 
   reorderCast: (workId: string, characterIds: string[]) =>
     api.put(`/admin/content/${workId}/cast-order`, { characterIds }),

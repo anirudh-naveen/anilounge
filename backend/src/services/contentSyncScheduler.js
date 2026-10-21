@@ -1,12 +1,16 @@
 /**
  * Cron wrapper around DatabasePopulator for hourly TMDB/MAL catalog refresh, plus a
- * re-import of airing shows' seasons and episodes every six hours (catalogImport.js).
+ * re-import of airing shows' seasons and episodes, and of the Upcoming (MAL) and
+ * In Theatres (TMDB) lists, every six hours (catalogImport.js, contentSyncService.js).
  * Domain service: start/stop scheduling, overlap guard, and last-run status.
  * Mutates Content via populateDatabase with clear:false and the process PostgreSQL pool.
  */
 import cron from 'node-cron'
 import { withJobLock } from '../utils/jobLock.js'
-import DatabasePopulator from './contentSyncService.js'
+import DatabasePopulator, {
+  ingestMalRankingByTypes,
+  ingestTmdbNowPlayingMovies,
+} from './contentSyncService.js'
 import { refreshAiringSeries } from './catalogImport.js'
 import { hasSeriesStructure } from './seriesStructure.js'
 
@@ -20,6 +24,34 @@ let isRunning = false
 let lastSync = null
 let scheduledTask = null
 let lastAiringRefresh = 0
+let lastListRefresh = 0
+
+/**
+ * Re-import the Upcoming and In Theatres lists the catalog tabs show. Each source
+ * failing is logged and leaves the stored list as it is.
+ * @returns {Promise<{ upcoming: boolean, theatres: boolean }>} Which lists were refreshed.
+ */
+async function refreshCatalogLists() {
+  const result = { upcoming: false, theatres: false }
+  if (process.env.MAL_CLIENT_ID) {
+    try {
+      await ingestMalRankingByTypes('upcoming', 50, ['tv'])
+      await ingestMalRankingByTypes('upcoming', 50, ['movie', 'special'])
+      result.upcoming = true
+    } catch (error) {
+      console.error('Upcoming list refresh failed:', error.message)
+    }
+  }
+  if (process.env.TMDB_API_KEY) {
+    try {
+      await ingestTmdbNowPlayingMovies(40)
+      result.theatres = true
+    } catch (error) {
+      console.error('In-theatres list refresh failed:', error.message)
+    }
+  }
+  return result
+}
 
 /**
  * Positive integer from env, else fallback.
@@ -85,9 +117,7 @@ export async function runContentSync(trigger = 'manual') {
   const malLimit = parseLimit(process.env.CONTENT_SYNC_MAL_LIMIT, DEFAULT_MAL_LIMIT)
 
   try {
-    console.log(
-      `Content sync starting (${trigger}): TMDB=${tmdbLimit}, MAL=${malLimit}`,
-    )
+    console.log(`Content sync starting (${trigger}): TMDB=${tmdbLimit}, MAL=${malLimit}`)
 
     const populator = new DatabasePopulator()
     const stats = await populator.populateDatabase({
@@ -105,6 +135,12 @@ export async function runContentSync(trigger = 'manual') {
       airing = await refreshAiringSeries()
     }
 
+    let lists = null
+    if (Date.now() - lastListRefresh >= AIRING_REFRESH_MS) {
+      lastListRefresh = Date.now()
+      lists = await refreshCatalogLists()
+    }
+
     lastSync = {
       trigger,
       status: 'success',
@@ -112,6 +148,7 @@ export async function runContentSync(trigger = 'manual') {
       finishedAt: new Date().toISOString(),
       stats,
       airing,
+      lists,
     }
 
     console.log('Content sync completed:', stats)

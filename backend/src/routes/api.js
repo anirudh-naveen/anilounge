@@ -165,6 +165,7 @@ router.get('/content/:id', validateObjectId, contentController.getContentById)
 router.get('/content/:id/episodes', validateObjectId, contentController.getContentEpisodes)
 router.get('/content/:id/characters', validateObjectId, entityController.getContentCharacters)
 router.get('/entities', entityController.searchCatalogEntities)
+router.get('/entities/browse', entityController.browseEntities)
 router.get('/entities/:id', validateObjectId, optionalAuthenticate, entityController.getEntityById)
 router.get('/franchises/:id', validateObjectId, contentController.getFranchiseById)
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
@@ -513,6 +514,20 @@ router.put(
   validateObjectId,
   [body('characterIds').isArray({ max: 500 })],
   adminController.reorderCast,
+)
+router.put(
+  '/admin/franchises/:id/watch-order',
+  contentEditorOnly,
+  validateObjectId,
+  [body('workIds').isArray({ max: 500 })],
+  contentController.updateFranchiseWatchOrder,
+)
+router.post(
+  '/admin/franchises/:id/works',
+  contentEditorOnly,
+  validateObjectId,
+  [body('workId').isString()],
+  contentController.addWorkToFranchise,
 )
 router.get('/admin/log', adminOnly, adminController.getLog)
 router.get('/admin/metrics', adminOnly, metricsController.getMetrics)

@@ -2,9 +2,11 @@
 <!--
   Search.vue — catalog browse and search view.
 
-  Movies/Series toggle (Series has a Series/Seasons mode), search field, collapsible filters, and horizontal
-  catalog rails (trending, in theatres / airing + this season, upcoming). Search results
-  replace the rails. Backed by the content store. Hosts the floating AI
+  Movies/Series/Characters/Voice Actors toggle (Series has a Series/Seasons mode), search
+  field, collapsible filters, and horizontal catalog rails (trending, in theatres / airing
+  + this season, upcoming). Search results replace the rails. The Characters and Voice
+  Actors tabs (`?type=character`, `?type=voice`) have their own filters and search
+  (usePeopleSearch), showing a page of trending people until something is searched. Backed by the content store. Hosts the floating AI
   assistant, which can also fill these results.
 -->
 <template>
@@ -13,24 +15,16 @@
     <AppBar>
       <div v-if="!appSearchOpen" class="app-bar-segments" role="tablist" aria-label="Content type">
         <button
+          v-for="tab in APP_TABS"
+          :key="tab.id"
           type="button"
           role="tab"
-          :class="{ active: browseType === 'movie' }"
-          :aria-selected="browseType === 'movie'"
-          data-testid="browse-type-movie"
-          @click="setBrowseType('movie')"
+          :class="{ active: appTab === tab.id }"
+          :aria-selected="appTab === tab.id"
+          :data-testid="`app-browse-type-${tab.id}`"
+          @click="setAppTab(tab.id)"
         >
-          Movies
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :class="{ active: browseType === 'tv' }"
-          :aria-selected="browseType === 'tv'"
-          data-testid="browse-type-tv"
-          @click="setBrowseType('tv')"
-        >
-          Series
+          {{ tab.label }}
         </button>
       </div>
       <span v-if="!appSearchOpen" class="app-bar-spacer"></span>
@@ -99,21 +93,52 @@
           </button>
         </div>
       </AppSheetSection>
-      <AppSheetSection title="Sort">
-        <SortByControls
-          v-model:sort-by="filters.sortBy"
-          v-model:sort-direction="filters.sortDirection"
-          class="sheet-sort"
-        />
+      <AppSheetSection v-if="peopleKind" title="Show">
+        <div
+          class="type-toggle sheet-toggle"
+          role="tablist"
+          aria-label="Characters or voice actors"
+        >
+          <button
+            v-for="tab in PEOPLE_TABS"
+            :key="tab.id"
+            type="button"
+            role="tab"
+            class="type-toggle-btn"
+            :class="{ active: activeTab === tab.id }"
+            :aria-selected="activeTab === tab.id"
+            @click="setBrowseType(tab.id)"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </AppSheetSection>
-      <AppSheetSection title="Filters" plain>
-        <CatalogFilterPanel
-          v-model="filters"
-          :year-options="yearFilterOptions"
+      <AppSheetSection v-if="peopleKind" title="Filter & Sort" plain>
+        <PeopleFilterPanel
+          v-model="people.tabs[peopleKind].filters"
+          :kind="peopleKind"
+          :languages="people.tabs[peopleKind].result?.languages"
           class="sheet-filter-panel"
           @clear="clearFilters"
         />
       </AppSheetSection>
+      <template v-else>
+        <AppSheetSection title="Sort">
+          <SortByControls
+            v-model:sort-by="filters.sortBy"
+            v-model:sort-direction="filters.sortDirection"
+            class="sheet-sort"
+          />
+        </AppSheetSection>
+        <AppSheetSection title="Filters" plain>
+          <CatalogFilterPanel
+            v-model="filters"
+            :year-options="yearFilterOptions"
+            class="sheet-filter-panel"
+            @clear="clearFilters"
+          />
+        </AppSheetSection>
+      </template>
     </AppSheet>
 
     <div class="container">
@@ -127,26 +152,18 @@
         <div class="type-toggle-stack">
           <div class="type-toggle" role="tablist" aria-label="Content type">
             <button
+              v-for="tab in SEARCH_TABS"
+              :key="tab.id"
               type="button"
               role="tab"
               class="type-toggle-btn"
-              data-testid="browse-type-movie"
-              :class="{ active: browseType === 'movie' }"
-              :aria-selected="browseType === 'movie'"
-              @click="setBrowseType('movie')"
+              :data-testid="`browse-type-${tab.id}`"
+              :class="{ active: activeTab === tab.id }"
+              :aria-selected="activeTab === tab.id"
+              @click="setBrowseType(tab.id)"
             >
-              Movies
-            </button>
-            <button
-              type="button"
-              role="tab"
-              class="type-toggle-btn"
-              data-testid="browse-type-tv"
-              :class="{ active: browseType === 'tv' }"
-              :aria-selected="browseType === 'tv'"
-              @click="setBrowseType('tv')"
-            >
-              Series
+              <span class="tab-label">{{ tab.label }}</span>
+              <span class="tab-label-short">{{ tab.short }}</span>
             </button>
           </div>
           <!-- Series mode lists whole series; Seasons mode lists each season instead.
@@ -210,10 +227,10 @@
               type="submit"
               class="search-btn"
               data-testid="search-submit"
-              :disabled="contentStore.isLoading || !canSearch"
+              :disabled="searching || !canSearch"
             >
-              <span v-if="contentStore.isLoading" class="spinner"></span>
-              {{ contentStore.isLoading ? 'Searching...' : 'Search' }}
+              <span v-if="searching" class="spinner"></span>
+              {{ searching ? 'Searching...' : 'Search' }}
             </button>
             <button
               type="button"
@@ -233,9 +250,17 @@
         </form>
       </div>
 
-      <!-- Filters -->
+      <!-- Filters (the people tabs' own, else the catalog's) -->
+      <PeopleFilterPanel
+        v-if="filtersOpen && !isAppLayout && peopleKind"
+        id="search-filters"
+        v-model="people.tabs[peopleKind].filters"
+        :kind="peopleKind"
+        :languages="people.tabs[peopleKind].result?.languages"
+        @clear="clearFilters"
+      />
       <CatalogFilterPanel
-        v-if="filtersOpen && !isAppLayout"
+        v-else-if="filtersOpen && !isAppLayout"
         id="search-filters"
         v-model="filters"
         :year-options="yearFilterOptions"
@@ -250,8 +275,18 @@
       </CatalogFilterPanel>
 
       <!-- Results -->
+      <!-- Title: People -->
+      <PeopleResults
+        v-if="peopleKind"
+        :kind="peopleKind"
+        :result="people.tabs[peopleKind].result"
+        :loading="people.tabs[peopleKind].loading"
+        :error="people.tabs[peopleKind].error"
+        @page="goToPeoplePage"
+      />
+
       <!-- Title: Loading State -->
-      <div v-if="contentStore.isLoading && hasSearched" class="loading-container">
+      <div v-else-if="contentStore.isLoading && hasSearched" class="loading-container">
         <div class="spinner"></div>
         <p>Searching for amazing content...</p>
       </div>
@@ -419,6 +454,14 @@ import ContentRail from '@/components/ContentRail.vue'
 import ChatLauncher from '@/components/ChatLauncher.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import CatalogFilterPanel from '@/components/CatalogFilterPanel.vue'
+import PeopleFilterPanel from '@/components/PeopleFilterPanel.vue'
+import PeopleResults from '@/components/PeopleResults.vue'
+import {
+  defaultPeopleFilters,
+  hasActivePeopleFilters,
+  usePeopleSearch,
+  type PeopleKind,
+} from '@/composables/usePeopleSearch'
 import { applySort } from '@/utils/sorting'
 import { getTotalVoteCount, getWeightedAverage } from '@/utils/ratings'
 import { getDisplayTitle, getNativeTitle } from '@/utils/titles'
@@ -457,9 +500,53 @@ const {
 } = storeToRefs(contentStore)
 
 const browseType = computed(() => normalizeBrowseType(route.query.type))
+
+type SearchTab = BrowseContentType | 'character' | 'voice'
+/** `short` labels fit the app layout's top bar. */
+const SEARCH_TABS: { id: SearchTab; label: string; short: string }[] = [
+  { id: 'movie', label: 'Movies', short: 'Movies' },
+  { id: 'tv', label: 'Series', short: 'Series' },
+  { id: 'character', label: 'Characters', short: 'Characters' },
+  { id: 'voice', label: 'Voices', short: 'Voices' },
+]
+const PEOPLE_TABS = SEARCH_TABS.filter((tab) => tab.id === 'character' || tab.id === 'voice')
+/**
+ * The app layout's top bar has room for three segments: People stands for both people
+ * tabs, picked in the filter sheet (as Series / Seasons is).
+ */
+const APP_TABS = [
+  { id: 'movie', label: 'Movies' },
+  { id: 'tv', label: 'Series' },
+  { id: 'people', label: 'People' },
+] as const
+type AppTab = (typeof APP_TABS)[number]['id']
+const people = usePeopleSearch()
+/** The people tab People opens: the one last used, else Characters. */
+let lastPeopleTab: 'character' | 'voice' = 'character'
+/** The Characters (`?type=character`) or Voice Actors (`?type=voice`) tab, else null. */
+const peopleKind = computed<PeopleKind | null>(() => {
+  const raw = Array.isArray(route.query.type) ? route.query.type[0] : route.query.type
+  return raw === 'character' ? 'character' : raw === 'voice' ? 'voice_actor' : null
+})
+const activeTab = computed<SearchTab>(() =>
+  peopleKind.value === 'character'
+    ? 'character'
+    : peopleKind.value === 'voice_actor'
+      ? 'voice'
+      : browseType.value,
+)
+const appTab = computed<AppTab>(() => (peopleKind.value ? 'people' : browseType.value))
+const setAppTab = (tab: AppTab) => setBrowseType(tab === 'people' ? lastPeopleTab : tab)
+const searching = computed(() =>
+  peopleKind.value ? people.tabs[peopleKind.value].loading : contentStore.isLoading,
+)
 /** Series tab in Seasons mode (`?view=seasons`): results list seasons, not series. */
 const seasonMode = computed(() => browseType.value === 'tv' && route.query.view === 'seasons')
-const hasExtraFilters = computed(() => hasActiveSearchFilters(filters.value))
+const hasExtraFilters = computed(() =>
+  peopleKind.value
+    ? hasActivePeopleFilters(people.tabs[peopleKind.value].filters)
+    : hasActiveSearchFilters(filters.value),
+)
 const browseRails = computed(() =>
   browseType.value === 'tv' ? TV_BROWSE_RAILS : MOVIE_BROWSE_RAILS,
 )
@@ -523,32 +610,48 @@ const paginatedResults = computed(() => {
   return filteredResults.value.slice(start, end)
 })
 
-const canSearch = computed(
-  () => Boolean(searchQuery.value.trim()) || hasActiveSearchFilters(filters.value),
-)
+const canSearch = computed(() => Boolean(searchQuery.value.trim()) || hasExtraFilters.value)
 
 /**
  * After a search, while the query and filters still match what was searched (or the
  * query has been emptied with nothing left to search), the Search button turns into
  * Reset (back to the browse highlights).
  */
-const showReset = computed(
-  () =>
+const showReset = computed(() => {
+  const kind = peopleKind.value
+  if (kind) {
+    const tab = people.tabs[kind]
+    return (
+      people.hasSearched(kind) &&
+      !tab.loading &&
+      (!canSearch.value ||
+        (searchQuery.value.trim() === tab.query &&
+          (Object.keys(tab.filters) as (keyof typeof tab.filters)[]).every(
+            (key) => tab.filters[key] === tab.applied[key],
+          )))
+    )
+  }
+  return (
     hasSearched.value &&
     !contentStore.isLoading &&
     (!canSearch.value ||
       (searchQuery.value === contentStore.lastSearchQuery &&
         (Object.keys(filters.value) as (keyof SearchFilters)[]).every(
           (key) => filters.value[key] === appliedFilters.value[key],
-        ))),
-)
+        )))
+  )
+})
 
 const searchPlaceholder = computed(() =>
-  browseType.value === 'tv'
-    ? seasonMode.value
-      ? 'Search for seasons...'
-      : 'Search for series...'
-    : 'Search for movies...',
+  peopleKind.value === 'character'
+    ? 'Search for characters...'
+    : peopleKind.value === 'voice_actor'
+      ? 'Search for voice actors...'
+      : browseType.value === 'tv'
+        ? seasonMode.value
+          ? 'Search for seasons...'
+          : 'Search for series...'
+        : 'Search for movies...',
 )
 
 const yearFilterOptions = computed(() => buildYearFilterOptions(contentStore.allContent))
@@ -577,17 +680,38 @@ const railEmptyText = (id: string) => {
   return 'No trending movies right now.'
 }
 
-const setBrowseType = (type: BrowseContentType) => {
-  if (type === browseType.value) return
+const setBrowseType = (type: SearchTab) => {
+  if (type === activeTab.value) return
   const query = { ...route.query }
-  if (type === 'tv') {
-    query.type = 'tv'
-  } else {
+  if (type === 'movie') {
     delete query.type
-    delete query.view
+  } else {
+    query.type = type
   }
+  if (type !== 'tv') delete query.view
   void router.replace({ query })
 }
+
+const goToPeoplePage = (page: number) => {
+  if (!peopleKind.value) return
+  void people.goToPage(peopleKind.value, page)
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+// Each tab keeps its own search text; the people tabs load their trending page.
+watch(
+  peopleKind,
+  (kind, previous) => {
+    if (kind) {
+      lastPeopleTab = kind === 'voice_actor' ? 'voice' : 'character'
+      if (previous !== undefined) searchQuery.value = people.tabs[kind].query
+      people.ensureLoaded(kind)
+    } else if (previous) {
+      searchQuery.value = contentStore.lastSearchQuery
+    }
+  },
+  { immediate: true },
+)
 
 const setSeasonMode = (on: boolean) => {
   if (on === seasonMode.value) return
@@ -608,6 +732,14 @@ watch(
     if (previous !== undefined) {
       appliedFilters.value = { ...appliedFilters.value, type }
     }
+  },
+  { immediate: true },
+)
+
+watch(
+  [browseType, peopleKind],
+  ([type, kind]) => {
+    if (kind) return
     void contentStore.loadCatalogRails(type).catch((error) => {
       console.error('Error loading browse rails:', error)
       toast.error(type === 'tv' ? 'Failed to load series.' : 'Failed to load movies.')
@@ -651,6 +783,10 @@ const handleSearch = async () => {
     toast.info('Enter a search term or set a filter to search.')
     return
   }
+  if (peopleKind.value) {
+    await people.submit(peopleKind.value, searchQuery.value)
+    return
+  }
 
   appliedFilters.value = { ...filters.value }
   hasSearched.value = true
@@ -677,6 +813,13 @@ watch(
 )
 
 const clearFilters = () => {
+  const kind = peopleKind.value
+  if (kind) {
+    const tab = people.tabs[kind]
+    tab.filters = defaultPeopleFilters()
+    void (tab.query ? people.submit(kind, tab.query) : people.reset(kind))
+    return
+  }
   const reset = { ...defaultSearchFilters(), type: browseType.value }
   filters.value = reset
   appliedFilters.value = { ...reset }
@@ -685,11 +828,17 @@ const clearFilters = () => {
 
 /** Closing the filter sheet searches with its filters (or returns to browsing when cleared). */
 const applySheet = () => {
+  const searched = peopleKind.value ? people.hasSearched(peopleKind.value) : hasSearched.value
   if (canSearch.value) void handleSearch()
-  else if (hasSearched.value) clearSearch()
+  else if (searched) clearSearch()
 }
 
 const clearSearch = () => {
+  if (peopleKind.value) {
+    searchQuery.value = ''
+    void people.reset(peopleKind.value)
+    return
+  }
   searchQuery.value = ''
   hasSearched.value = false
   contentStore.clearSearchResults()
@@ -1294,6 +1443,33 @@ usePageMeta({
   .results-grid {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
     gap: 0.75rem;
+  }
+}
+
+.tab-label-short {
+  display: none;
+}
+
+/* Phones: the four tabs share the row, with short labels. */
+@media (max-width: 600px) {
+  .type-toggle-stack,
+  .type-toggle-stack > .type-toggle:first-child {
+    width: 100%;
+  }
+
+  .type-toggle-stack > .type-toggle:first-child .type-toggle-btn {
+    flex: 1;
+    padding: 0.5rem 0.35rem;
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+
+  .tab-label {
+    display: none;
+  }
+
+  .tab-label-short {
+    display: inline;
   }
 }
 </style>

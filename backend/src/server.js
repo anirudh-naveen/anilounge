@@ -32,6 +32,7 @@ import {
   getCatalogMaintenanceStatus,
   startCatalogMaintenance,
 } from './services/catalogMaintenance.js'
+import { getCatalogRefreshStatus, startCatalogRefresh } from './services/catalogRefresh.js'
 import { extraFrontendOriginsFromEnv, isAllowedCorsOrigin } from './utils/allowedFrontends.js'
 import { authLimiter } from './middleware/authRateLimit.js'
 import { rateLimitKey, rateLimitMax, trustProxySetting } from './middleware/rateLimitKey.js'
@@ -87,6 +88,7 @@ app.get('/health', (req, res) => {
     version: '1.0.0-beta',
     contentSync: getContentSyncStatus(),
     catalogMaintenance: getCatalogMaintenanceStatus(),
+    catalogRefresh: getCatalogRefreshStatus(),
   })
 })
 
@@ -352,8 +354,8 @@ app.use((err, req, res, next) => {
   }
 })
 
-// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync and
-// catalog-maintenance schedulers
+// Bind PORT; EADDRINUSE exits so a stale process is obvious. Starts the content-sync,
+// catalog-maintenance, and catalog-refresh schedulers
 // creates/syncs the bot accounts (Lounge Keeper, Lounge Cleaner, Lounge Guide),
 // and makes sure the README demo login exists and is unlocked (and resets it nightly).
 app
@@ -363,6 +365,7 @@ app
     console.log(`Health check: http://localhost:${PORT}/health`)
     startContentSyncScheduler()
     startCatalogMaintenance()
+    startCatalogRefresh()
     startInactiveAccountScheduler()
     startUnverifiedAccountScheduler()
     startFriendRequestCleanupScheduler()

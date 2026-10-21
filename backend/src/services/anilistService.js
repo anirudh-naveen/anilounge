@@ -448,6 +448,44 @@ export async function getAnilistCharacter(id, options = {}) {
   return data?.Character || null
 }
 
+const CHARACTER_PAGE_SIZE = 25
+const MAX_CHARACTER_PAGES = 8
+
+/**
+ * Every character edge of an anime (main characters first), page by page, up to
+ * MAX_CHARACTER_PAGES pages. Same edge shape as the media query's `characters`.
+ * @param {number} mediaId - AniList media id.
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object[] | null>} null when AniList failed on the first page.
+ */
+export async function getAnilistCharacterEdges(mediaId, { fetchImpl } = {}) {
+  if (!positiveInt(mediaId)) return null
+  const edges = []
+  for (let page = 1; page <= MAX_CHARACTER_PAGES; page += 1) {
+    const data = await anilistRequest(
+      `query ($id: Int, $page: Int, $perPage: Int) { Media(id: $id, type: ANIME) {
+        characters(sort: [ROLE, RELEVANCE, ID], page: $page, perPage: $perPage) {
+          pageInfo { hasNextPage }
+          edges {
+            role
+            node { id name { first middle last full native alternative } image { large } favourites }
+            voiceActorRoles(sort: [RELEVANCE, ID]) {
+              voiceActor { id name { full native } image { large } languageV2 }
+            }
+          }
+        }
+      } }`,
+      { id: positiveInt(mediaId), page, perPage: CHARACTER_PAGE_SIZE },
+      { fetchImpl },
+    )
+    const characters = data?.Media?.characters
+    if (!characters) return page === 1 ? null : edges
+    edges.push(...(characters.edges || []))
+    if (!characters.pageInfo?.hasNextPage) break
+  }
+  return edges
+}
+
 /**
  * AniList staff detail plus voiced characters (most popular media first).
  * @param {number} id
@@ -552,7 +590,8 @@ export function anilistStudioRefs(media, { animationOnly = false } = {}) {
   }
   return refs.sort(
     (left, right) =>
-      Number(right.animation) - Number(left.animation) || Number(right.isMain) - Number(left.isMain),
+      Number(right.animation) - Number(left.animation) ||
+      Number(right.isMain) - Number(left.isMain),
   )
 }
 
@@ -692,7 +731,10 @@ export function convertAnilistToContent(media) {
     posterPath: anilistImage(media.coverImage?.extraLarge || media.coverImage?.large),
     studios: animation.map((ref) => ref.name),
     studioRefs: animation.map(({ name, anilistId: id }) => ({ name, anilistId: id })),
-    allStudioRefs: anilistStudioRefs(media).map(({ name, anilistId: id }) => ({ name, anilistId: id })),
+    allStudioRefs: anilistStudioRefs(media).map(({ name, anilistId: id }) => ({
+      name,
+      anilistId: id,
+    })),
   }
 }
 
