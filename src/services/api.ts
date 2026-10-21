@@ -456,6 +456,14 @@ export const adminAPI = {
   changeLink: (op: 'add' | 'remove', link: Record<string, unknown>, editorId: string) =>
     api.post(`/admin/links/${op}`, { link, editorId }),
 
+  /** Set a franchise's watch order for everyone; an empty list resets it. */
+  setFranchiseWatchOrder: (franchiseId: string, workIds: string[]) =>
+    api.put(`/admin/franchises/${franchiseId}/watch-order`, { workIds }),
+
+  /** Add a movie, series, or special to a franchise (moving it from another). */
+  addFranchiseWork: (franchiseId: string, workId: string) =>
+    api.post(`/admin/franchises/${franchiseId}/works`, { workId }),
+
   reorderCast: (workId: string, characterIds: string[]) =>
     api.put(`/admin/content/${workId}/cast-order`, { characterIds }),
 

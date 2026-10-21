@@ -514,6 +514,20 @@ router.put(
   [body('characterIds').isArray({ max: 500 })],
   adminController.reorderCast,
 )
+router.put(
+  '/admin/franchises/:id/watch-order',
+  contentEditorOnly,
+  validateObjectId,
+  [body('workIds').isArray({ max: 500 })],
+  contentController.updateFranchiseWatchOrder,
+)
+router.post(
+  '/admin/franchises/:id/works',
+  contentEditorOnly,
+  validateObjectId,
+  [body('workId').isString()],
+  contentController.addWorkToFranchise,
+)
 router.get('/admin/log', adminOnly, adminController.getLog)
 router.get('/admin/metrics', adminOnly, metricsController.getMetrics)
 router.get('/admin/sync-changes', adminOnly, adminController.listSyncChanges)

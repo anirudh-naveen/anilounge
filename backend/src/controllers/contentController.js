@@ -13,7 +13,11 @@ import { consumeAiCall } from '../services/aiUsageService.js'
 import relationshipService from '../services/relationshipService.js'
 import { getSeasonGuide } from '../services/seasonService.js'
 import { attachTitleDetails } from '../services/titleDetails.js'
-import { getFranchise } from '../services/franchiseService.js'
+import {
+  addFranchiseWork,
+  getFranchise,
+  setFranchiseWatchOrder,
+} from '../services/franchiseService.js'
 import {
   ingestMalRankingByTypes,
   ingestTmdbNowPlayingMovies,
@@ -40,6 +44,7 @@ import {
   sortForCatalogTab,
 } from '../utils/catalogTabs.js'
 import { validationResult } from 'express-validator'
+import { sendError } from '../utils/httpError.js'
 import { censorText } from '../utils/moderation.js'
 import { query as dbQuery, startSession, withReplica } from '../../config/postgres.js'
 import { clearWatchHistory, recordBacklog, recordWatch } from '../services/watchEvents.js'
@@ -976,9 +981,45 @@ export const getFranchiseById = async (req, res) => {
   }
 }
 
+/**
+ * Set (or with an empty list, reset) a franchise's watch order for everyone.
+ *
+ * @param {import('express').Request} req - `params.id`, `body.workIds` in the new order.
+ * @param {import('express').Response} res - 200 `{ data }` (the franchise), 400, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const updateFranchiseWatchOrder = async (req, res) => {
+  try {
+    await setFranchiseWatchOrder(req.user, req.params.id, req.body?.workIds)
+    const data = await getFranchise(req.params.id)
+    res.json({ success: true, message: 'Watch order saved.', data })
+  } catch (error) {
+    sendError(res, error, 'Error saving watch order')
+  }
+}
+
+/**
+ * Add a title to a franchise.
+ *
+ * @param {import('express').Request} req - `params.id`, `body.workId`.
+ * @param {import('express').Response} res - 200 `{ data }` (the franchise), 400, 404, or 500.
+ * @returns {Promise<void>}
+ */
+export const addWorkToFranchise = async (req, res) => {
+  try {
+    await addFranchiseWork(req.user, req.params.id, req.body?.workId)
+    const data = await getFranchise(req.params.id)
+    res.json({ success: true, message: 'Title added.', data })
+  } catch (error) {
+    sendError(res, error, 'Error adding title')
+  }
+}
+
 export default {
   getContent,
   getFranchiseById,
+  updateFranchiseWatchOrder,
+  addWorkToFranchise,
   getContentById,
   getContentEpisodes,
   aiChat,
