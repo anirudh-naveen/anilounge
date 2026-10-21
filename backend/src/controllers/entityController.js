@@ -12,16 +12,16 @@ import { kindFromEntityType } from '../db/kinds.js'
 import { addFavorite } from '../services/favoriteService.js'
 import { sendError } from '../utils/httpError.js'
 import {
-  ensureCharacterAbout,
-  ensureCharactersForContent,
-  ensureStudioDetails,
-  ensureVoiceActorAbout,
-  ensureVoiceActorCredits,
+  characterNeedsAbout,
   ensureVoiceActorsForCharacter,
   searchEntities,
   serializeEntity,
   serializeEntityDetails,
+  storedCharactersForContent,
+  studioNeedsDetails,
+  voiceActorNeedsSync,
 } from '../services/entityService.js'
+import { requestRefresh } from '../services/refreshRequests.js'
 import { entityToSearchHit } from '../utils/entities.js'
 
 /**
@@ -32,10 +32,10 @@ import { entityToSearchHit } from '../utils/entities.js'
  */
 async function userHasFavorite(user, entityId) {
   if (!user) return false
-  const { rows } = await query(
-    'SELECT 1 FROM favorites WHERE user_id = $1 AND content_id = $2',
-    [user._id, String(entityId)],
-  )
+  const { rows } = await query('SELECT 1 FROM favorites WHERE user_id = $1 AND content_id = $2', [
+    user._id,
+    String(entityId),
+  ])
   return rows.length > 0
 }
 
@@ -52,7 +52,9 @@ export const getContentCharacters = async (req, res) => {
     if (!content) {
       return res.status(404).json({ success: false, message: 'Content not found' })
     }
-    const docs = await ensureCharactersForContent(content)
+    // Stored cast only; a missing or incomplete one is fetched by the refresh job.
+    const { characters: docs, needsRefresh } = await storedCharactersForContent(content)
+    if (needsRefresh) await requestRefresh('cast', content._id)
     res.json({
       success: true,
       data: docs.map((doc) => serializeEntity(doc)),
@@ -95,21 +97,17 @@ export const searchCatalogEntities = async (req, res) => {
  */
 export const getEntityById = async (req, res) => {
   try {
-    let entity = await Entity.findById(req.params.id)
+    const entity = await Entity.findById(req.params.id)
     if (!entity) {
       return res.status(404).json({ success: false, message: 'Entity not found' })
     }
+    // Stored data only; anything missing or stale is fetched by the refresh job.
     if (entity.entityType === 'character') {
-      await ensureCharacterAbout(entity)
+      if (characterNeedsAbout(entity)) await requestRefresh('character', entity._id)
       await ensureVoiceActorsForCharacter(entity)
     }
-    if (entity.entityType === 'voice_actor') {
-      await ensureVoiceActorAbout(entity)
-      entity = (await ensureVoiceActorCredits(entity)) || entity
-    }
-    if (entity.entityType === 'studio') {
-      await ensureStudioDetails(entity)
-    }
+    if (voiceActorNeedsSync(entity)) await requestRefresh('voice_actor', entity._id)
+    if (studioNeedsDetails(entity)) await requestRefresh('studio', entity._id)
     const isFavorited = await userHasFavorite(req.user, entity._id)
     res.json({
       success: true,

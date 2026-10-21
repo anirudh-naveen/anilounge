@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { mergeAppearance, personIdsConflict } from './entityService.js'
+import {
+  characterNeedsAbout,
+  mergeAppearance,
+  personIdsConflict,
+  studioNeedsDetails,
+  voiceActorNeedsSync,
+} from './entityService.js'
 import { characterSourceIdsConflict } from './characterMerge.js'
 import { externalIdsConflict } from '../utils/titles.js'
 import { pickPrimaryCharacter } from '../utils/entities.js'
@@ -72,5 +78,37 @@ describe('cross-source identity', () => {
       ])._id,
       'b',
     )
+  })
+})
+
+describe('what a page queues for the refresh job', () => {
+  const portrait = 'https://s4.anilist.co/file/anilistcdn/character/large/b1.png'
+
+  it('queues a character bio only when AniList can fill it', () => {
+    const character = { entityType: 'character', anilistId: 1, imagePath: portrait }
+    assert.equal(characterNeedsAbout({ ...character, about: '', nativeName: '' }), true)
+    assert.equal(characterNeedsAbout({ ...character, about: 'Bio', nativeName: 'ナルト' }), false)
+    assert.equal(characterNeedsAbout({ ...character, anilistId: null, about: '' }), false)
+  })
+
+  it('queues a voice actor with a missing bio or stale roles', () => {
+    const linked = [{ content: 'w1', character: 'c1' }]
+    const actor = {
+      entityType: 'voice_actor',
+      anilistId: 95185,
+      about: 'Voice actress.',
+      imagePath: 'https://s4.anilist.co/file/anilistcdn/staff/large/n95185.png',
+      appearances: linked,
+      voiceCreditsSyncedAt: new Date(),
+    }
+    assert.equal(voiceActorNeedsSync(actor), false)
+    assert.equal(voiceActorNeedsSync({ ...actor, about: '' }), true)
+    assert.equal(voiceActorNeedsSync({ ...actor, voiceCreditsSyncedAt: new Date(0) }), true)
+    assert.equal(voiceActorNeedsSync({ ...actor, appearances: [] }), true)
+  })
+
+  it('queues a studio missing its logo or description', () => {
+    assert.equal(studioNeedsDetails({ entityType: 'studio', imagePath: '', about: '' }), true)
+    assert.equal(studioNeedsDetails({ entityType: 'character' }), false)
   })
 })

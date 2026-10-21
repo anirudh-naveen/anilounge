@@ -4,7 +4,8 @@
  * country from TMDB, whose data comes from JustWatch (credit required wherever it is
  * shown).
  *
- * Layer: service. Both sources are fetched on demand and cached in memory; either one
+ * Layer: service. Pages read the stored sources (external_cache); the catalog refresh
+ * job fetches them (`refreshWatchSources`) when missing or stale. Either source
  * failing just leaves its part empty.
  */
 
@@ -13,14 +14,13 @@ import { isUuid } from '../db/ids.js'
 import { HttpError } from '../utils/httpError.js'
 import { fetchJson } from '../utils/fetchJson.js'
 import { anilistRequest } from './anilistService.js'
+import { isStale, readCache, requestRefresh, writeCache } from './refreshRequests.js'
 
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const TMDB_LOGO_BASE = 'https://image.tmdb.org/t/p/w92'
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000
-const CACHE_MAX = 2000
+/** Stored sources older than this are queued for a refresh. */
+const STALE_MS = 12 * 60 * 60 * 1000
 const DEFAULT_REGION = 'US'
-
-const cache = new Map()
 
 const STREAMING_LINKS_QUERY = `query ($id: Int, $idMal: Int) {
   Media(id: $id, idMal: $idMal, type: ANIME) {
@@ -115,20 +115,6 @@ async function loadTmdbRegions(row) {
   return status === 200 && body?.results ? body.results : {}
 }
 
-/** Both sources for a title (every region), cached. */
-async function sourcesFor(row) {
-  const key = String(row.id)
-  const hit = cache.get(key)
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value
-  const value = Promise.all([loadAnilistLinks(row), loadTmdbRegions(row)]).then(
-    ([streaming, regions]) => ({ streaming, regions }),
-  )
-  value.catch(() => cache.delete(key))
-  cache.set(key, { at: Date.now(), value })
-  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value)
-  return value
-}
-
 /**
  * Where to watch `contentId` in `region`.
  * @param {string} contentId
@@ -137,7 +123,34 @@ async function sourcesFor(row) {
  * @throws {HttpError} 404 unknown title.
  */
 export async function getWhereToWatch(contentId, region) {
-  if (!isUuid(contentId)) throw new HttpError(404, 'Title not found.')
+  const row = await loadWatchRow(contentId)
+  if (!row) throw new HttpError(404, 'Title not found.')
+  const country = normalizeRegion(region)
+  const stored = await readCache('watch', row.id)
+  if (isStale(stored, STALE_MS)) await requestRefresh('watch', row.id)
+  const { streaming = [], regions = {} } = stored?.data || {}
+  return { region: country, streaming, providers: regionProviders(regions[country]) }
+}
+
+/**
+ * Fetch and store both sources for a title (every region). Run by the refresh job.
+ * @param {string} contentId
+ * @returns {Promise<void>}
+ */
+export async function refreshWatchSources(contentId) {
+  const row = await loadWatchRow(contentId)
+  if (!row) return
+  const [streaming, regions] = await Promise.all([loadAnilistLinks(row), loadTmdbRegions(row)])
+  await writeCache('watch', row.id, { streaming, regions })
+}
+
+/**
+ * The title's ids for both sources, or null for an unknown title.
+ * @param {string} contentId
+ * @returns {Promise<object | null>}
+ */
+async function loadWatchRow(contentId) {
+  if (!isUuid(contentId)) return null
   const { rows } = await query(
     // A season streams where its show does (TMDB lists the show); a series links out
     // through its first season's AniList entry.
@@ -155,10 +168,7 @@ export async function getWhereToWatch(contentId, region) {
      WHERE c.id = $1 AND c.kind IN ('movie', 'series', 'season', 'special')`,
     [contentId],
   )
-  if (!rows[0]) throw new HttpError(404, 'Title not found.')
-  const country = normalizeRegion(region)
-  const { streaming, regions } = await sourcesFor(rows[0])
-  return { region: country, streaming, providers: regionProviders(regions[country]) }
+  return rows[0] || null
 }
 
-export default { getWhereToWatch }
+export default { getWhereToWatch, refreshWatchSources }
