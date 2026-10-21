@@ -62,30 +62,31 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup lang="ts" generic="V extends string = SortByOption">
 import { useId } from 'vue'
 import { DEFAULT_SORT_OPTIONS, type SortByOption, type SortDirection } from '@/utils/sorting'
 
+/** `V`: the sort values (catalog sorts by default; Search's people tabs pass their own). */
 const props = withDefaults(
   defineProps<{
-    sortBy: SortByOption
+    sortBy: V
     sortDirection: SortDirection
-    options?: { value: SortByOption; label: string }[]
+    options?: { value: V; label: string }[]
   }>(),
   {
-    options: () => [...DEFAULT_SORT_OPTIONS],
+    options: () => [...DEFAULT_SORT_OPTIONS] as unknown as { value: V; label: string }[],
   },
 )
 
 const emit = defineEmits<{
-  'update:sortBy': [value: SortByOption]
+  'update:sortBy': [value: V]
   'update:sortDirection': [value: SortDirection]
 }>()
 
 const selectId = `sort-by-${useId()}`
 
 const onSortByChange = (event: Event) => {
-  emit('update:sortBy', (event.target as HTMLSelectElement).value as SortByOption)
+  emit('update:sortBy', (event.target as HTMLSelectElement).value as V)
 }
 
 const toggleDirection = () => {

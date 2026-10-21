@@ -1508,3 +1508,29 @@ CREATE TABLE IF NOT EXISTS content_moves (
   moved_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS content_moves_to_idx ON content_moves (to_id);
+
+-- Watch order an admin set on the franchise page (display ids: seasons stand in for
+-- their series); null means the computed release/sequel order.
+ALTER TABLE franchises ADD COLUMN IF NOT EXISTS watch_order UUID[];
+
+-- Page loads read only the database; when what they read is missing or stale they
+-- queue a refresh here, and the catalog refresh job (services/catalogRefresh.js) fetches
+-- it from AniList/TMDB/MAL. `attempted_at` keeps a row from being re-queued right away.
+CREATE TABLE IF NOT EXISTS refresh_requests (
+  kind          TEXT NOT NULL,
+  target_id     UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  requested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  attempted_at  TIMESTAMPTZ,
+  PRIMARY KEY (kind, target_id)
+);
+CREATE INDEX IF NOT EXISTS refresh_requests_requested_idx ON refresh_requests (requested_at);
+
+-- Fetched data with no table of its own (where to watch, TMDB-built episode guides),
+-- stored by the refresh job so pages can read it from the database.
+CREATE TABLE IF NOT EXISTS external_cache (
+  kind          TEXT NOT NULL,
+  content_id    UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  data          JSONB NOT NULL,
+  refreshed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (kind, content_id)
+);

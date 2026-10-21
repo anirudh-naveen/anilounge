@@ -4,7 +4,9 @@
  * the series migration has run, the guide is built live from TMDB, mapping every
  * TMDB season onto the catalog row for that season (utils/seasonPlan.js).
  *
- * Domain service used by `contentController.getContentEpisodes`.
+ * Domain service used by `contentController.getContentEpisodes`. Pages read
+ * `getSeasonGuide`, which never calls TMDB/MAL: a guide that needs them is built by
+ * the catalog refresh job (`refreshSeasonGuide`) and stored in external_cache.
  */
 import { query } from '../../config/postgres.js'
 import { escapeLike } from '../db/mongoFilter.js'
@@ -12,6 +14,7 @@ import Content, { loadWorksById } from '../models/Content.js'
 import { tmdbEpisodesForSeason } from './catalogImport.js'
 import { EPISODE_ROLES } from '../utils/staffCredits.js'
 import unifiedContentService from './unifiedContentService.js'
+import { isStale, readCache, requestRefresh, writeCache } from './refreshRequests.js'
 import { collectContentTitles, normalizeTitle } from '../utils/titles.js'
 import {
   MIN_PREFIX_LENGTH,
@@ -22,6 +25,9 @@ import {
 } from '../utils/seasonPlan.js'
 
 const MAX_ANCHORS = 3
+/** A stored TMDB-built guide is rebuilt after this long (sooner while airing). */
+const GUIDE_STALE_MS = 7 * 24 * 60 * 60 * 1000
+const AIRING_GUIDE_STALE_MS = 6 * 60 * 60 * 1000
 
 /**
  * Lowercased, whitespace-collapsed name used for franchise prefix checks.
@@ -329,14 +335,83 @@ async function fillFromTmdb(guide, series) {
 }
 
 /**
- * Episodes, seasons, and which season `content` is. A season row or a series gets its
- * show's stored guide with its own season selected. Before the series migration a
- * row that is one season of a TMDB show (e.g. MAL's "Season 2") gets that show's
- * guide built live from TMDB; otherwise the row's own episodes.
+ * The season guide for a page, from the database only: the stored guide when it is
+ * complete, else the one the refresh job built (queued when missing or stale), else
+ * whatever is stored.
  * @param {object} content
  * @returns {Promise<{ seriesId: string, currentSeason: number | null, episodes: object[], seasons: object[] }>}
  */
 export async function getSeasonGuide(content) {
+  const id = String(content._id)
+  const empty = { seriesId: id, currentSeason: null, episodes: [], seasons: [] }
+  if (content.contentType !== 'tv' && content.contentType !== 'season') return empty
+
+  const seriesId = content.contentType === 'season' ? content.seriesId : id
+  const stored = await storedGuide(seriesId)
+  const own = stored && {
+    ...stored,
+    currentSeason: stored.seasons.find((season) => season.contentId === id)?.seasonNumber ?? null,
+  }
+  if (!(await guideNeedsBuild(content, stored))) return own || empty
+
+  const built = await readCache('episode_guide', id)
+  const staleMs = content.malStatus === 'currently_airing' ? AIRING_GUIDE_STALE_MS : GUIDE_STALE_MS
+  if (isStale(built, staleMs)) await requestRefresh('episode_guide', id)
+  return built?.data || own || empty
+}
+
+/**
+ * Whether a title's guide must be built from TMDB/MAL (by `refreshSeasonGuide`)
+ * rather than read from the stored seasons and episodes.
+ * @param {object} content
+ * @param {object | null} [stored] - The stored guide, when already loaded.
+ * @returns {Promise<boolean>}
+ */
+export async function guideNeedsBuild(content, stored) {
+  if (content.contentType !== 'tv' && content.contentType !== 'season') return false
+  const guide =
+    stored === undefined
+      ? await storedGuide(content.contentType === 'season' ? content.seriesId : String(content._id))
+      : stored
+  if (guide) return needsTmdbFill(guide, content)
+  return content.contentType !== 'season'
+}
+
+/**
+ * Whether a stored guide has seasons without episodes that TMDB could fill.
+ * @param {object} guide
+ * @param {object} content
+ * @returns {Promise<boolean>}
+ */
+async function needsTmdbFill(guide, content) {
+  const stocked = new Set(guide.episodes.map((episode) => episode.contentId))
+  if (guide.seasons.every((season) => stocked.has(season.contentId))) return false
+  const show = content.contentType === 'season' ? await Content.findById(guide.seriesId) : content
+  return Boolean(show?.tmdbId)
+}
+
+/**
+ * Build a title's guide (calling TMDB/MAL where needed) and store it for pages. Run
+ * by the refresh job.
+ * @param {string} contentId
+ * @returns {Promise<void>}
+ */
+export async function refreshSeasonGuide(contentId) {
+  const content = await Content.findById(contentId)
+  if (!content) return
+  await writeCache('episode_guide', contentId, await buildSeasonGuide(content))
+}
+
+/**
+ * Episodes, seasons, and which season `content` is. A season row or a series gets its
+ * show's stored guide with its own season selected. Before the series migration a
+ * row that is one season of a TMDB show (e.g. MAL's "Season 2") gets that show's
+ * guide built live from TMDB; otherwise the row's own episodes. Calls TMDB/MAL, so
+ * only background work uses it (pages read `getSeasonGuide`).
+ * @param {object} content
+ * @returns {Promise<{ seriesId: string, currentSeason: number | null, episodes: object[], seasons: object[] }>}
+ */
+export async function buildSeasonGuide(content) {
   const id = String(content._id)
   const empty = { seriesId: id, currentSeason: null, episodes: [], seasons: [] }
   if (content.contentType !== 'tv' && content.contentType !== 'season') return empty
@@ -378,7 +453,7 @@ export async function getSeasonGuide(content) {
  *   null when the guide has no such episode.
  */
 export async function resolveTmdbEpisode(content, season, episode) {
-  const guide = await getSeasonGuide(content)
+  const guide = await buildSeasonGuide(content)
   const match = guide.episodes.find(
     (card) =>
       (card.tmdbSeasonNumber ?? card.seasonNumber) === season &&
