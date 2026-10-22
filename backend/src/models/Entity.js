@@ -3,7 +3,13 @@
  */
 import crypto from 'crypto'
 import { query } from '../../config/postgres.js'
-import { appearanceRole, appearanceRoleToApi, entityTypeFromKind, kindFromEntityType } from '../db/kinds.js'
+import { isConnectionError } from '../utils/dbErrors.js'
+import {
+  appearanceRole,
+  appearanceRoleToApi,
+  entityTypeFromKind,
+  kindFromEntityType,
+} from '../db/kinds.js'
 import { compileMongoFilter, compileSort } from '../db/mongoFilter.js'
 import { DocQuery } from '../db/query.js'
 import { asId, isUuid } from '../db/ids.js'
@@ -132,9 +138,7 @@ Entity.prototype.toObject = function toObject() {
 
 Entity.prototype.populate = async function populate(specs) {
   const list = Array.isArray(specs) ? specs : [specs]
-  const contentIds = [
-    ...new Set(this.appearances.map((row) => asId(row.content)).filter(Boolean)),
-  ]
+  const contentIds = [...new Set(this.appearances.map((row) => asId(row.content)).filter(Boolean))]
   const characterIds = [
     ...new Set(this.appearances.map((row) => asId(row.character)).filter(Boolean)),
   ]
@@ -278,6 +282,7 @@ async function insertVoiceCredits(credits) {
       params,
     )
   } catch (error) {
+    if (isConnectionError(error)) throw error
     console.error('Failed to save voice credits:', error.message)
   }
 }
@@ -428,6 +433,7 @@ Entity.prototype.save = async function save() {
         )
       }
     } catch (error) {
+      if (isConnectionError(error)) throw error
       console.error('Failed to save character appearances:', error.message)
     }
   }
@@ -457,6 +463,7 @@ Entity.prototype.save = async function save() {
         })),
       )
     } catch (error) {
+      if (isConnectionError(error)) throw error
       console.error('Failed to save voice appearances:', error.message)
     }
   }
