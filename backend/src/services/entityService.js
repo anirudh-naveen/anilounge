@@ -10,6 +10,7 @@
  */
 
 import { query } from '../../config/postgres.js'
+import { isConnectionError } from '../utils/dbErrors.js'
 import { isStale, readCache, writeCache } from './refreshRequests.js'
 import { escapeRegex } from '../utils/catalogChatQuery.js'
 import Entity from '../models/Entity.js'
@@ -375,6 +376,7 @@ async function attachVoiceActorsToPayload(payload, now, characterId) {
       const voiceActor = await upsertVoiceActorPayload(vaPayload, now)
       if (voiceActor) credit.entity = voiceActor._id
     } catch (error) {
+      if (isConnectionError(error)) throw error
       console.error(`Voice actor upsert failed for ${credit?.name}:`, error.message)
     }
   }
@@ -459,6 +461,7 @@ async function upsertCharacterPayloads(payloads) {
       try {
         return await upsertOne(payload)
       } catch (error) {
+        if (isConnectionError(error)) throw error
         console.error(`Character upsert failed for ${payload?.name}:`, error.message)
         return null
       }
@@ -822,6 +825,7 @@ async function loadCharactersForContent(content, options = {}) {
       })
       if (positiveId(ingestContent.anilistId)) content.anilistId = ingestContent.anilistId
     } catch (error) {
+      if (isConnectionError(error)) throw error
       console.error('AniList character ingest failed:', error.message)
     }
   }
@@ -834,6 +838,7 @@ async function loadCharactersForContent(content, options = {}) {
     try {
       await ingestTmdbCharacters(content, options)
     } catch (error) {
+      if (isConnectionError(error)) throw error
       console.error('TMDB character ingest failed:', error.message)
     }
   }
@@ -843,6 +848,7 @@ async function loadCharactersForContent(content, options = {}) {
   try {
     await mergeFranchiseCharactersForWork(content._id)
   } catch (error) {
+    if (isConnectionError(error)) throw error
     console.error('Franchise character merge failed:', error.message)
   }
 
@@ -858,6 +864,7 @@ async function loadCharactersForContent(content, options = {}) {
     try {
       await ensureCharacterAbout(doc, options)
     } catch (error) {
+      if (isConnectionError(error)) throw error
       console.error(`Character portrait backfill failed for ${doc.name}:`, error.message)
     }
   }
@@ -1208,6 +1215,7 @@ async function ingestVoiceActorCredits(entity, options = {}) {
       if (content) appearance.content = content._id
       if (mergeAppearance(entity, appearance)) changed = true
     } catch (error) {
+      if (isConnectionError(error)) throw error
       console.error(`Voice credit ingest failed for ${mapped?.name}:`, error.message)
     }
   }
