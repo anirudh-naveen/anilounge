@@ -9,6 +9,7 @@
 import * as adminService from '../services/adminService.js'
 import adminLinks from '../services/adminLinks.js'
 import { LOG_CATEGORIES, listLogMonths, readLogMonth } from '../services/adminLog.js'
+import * as deletedUsers from '../services/deletedUsers.js'
 import { sendError } from '../utils/httpError.js'
 
 /**
@@ -205,6 +206,22 @@ export const listUsers = async (req, res) => {
 }
 
 /**
+ * Accounts deleted by their owner or by the inactive / unverified cleanups, newest first.
+ *
+ * @param {import('express').Request} req - `query.q`, `query.reason`, `query.page`.
+ * @param {import('express').Response} res - 200 `{ data: page }` or 500.
+ * @returns {Promise<void>}
+ */
+export const listDeletedUsers = async (req, res) => {
+  try {
+    const data = await deletedUsers.listDeletedUsers(req.query)
+    res.json({ success: true, data })
+  } catch (error) {
+    sendError(res, error, 'Error loading deleted users')
+  }
+}
+
+/**
  * Creator only: make a user an admin or a regular user.
  *
  * @param {import('express').Request} req - `params.id`, `body.role` ('user' | 'admin').
@@ -286,6 +303,7 @@ export default {
   countSyncChanges,
   resolveSyncChanges,
   listUsers,
+  listDeletedUsers,
   setUserRole,
   muteUser,
   setBan,

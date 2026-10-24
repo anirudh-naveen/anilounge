@@ -529,6 +529,10 @@ export const adminAPI = {
   listUsers: (params: { q?: string; filter?: string; page?: number }) =>
     api.get('/admin/users', { params }),
 
+  /** Accounts deleted in Settings or by the inactive / unverified cleanups, newest first. */
+  listDeletedUsers: (params: { q?: string; reason?: string; page?: number }) =>
+    api.get('/admin/deleted-users', { params }),
+
   setUserRole: (id: string, role: 'user' | 'admin') => api.put(`/admin/users/${id}/role`, { role }),
 
   /** Badge-only roles; `roles` is the full list the user should have. */

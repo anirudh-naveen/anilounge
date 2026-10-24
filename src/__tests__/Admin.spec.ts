@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   getContent: vi.fn(),
   updateContent: vi.fn(),
   listUsers: vi.fn(),
+  listDeletedUsers: vi.fn(),
   setUserRole: vi.fn(),
   muteUser: vi.fn(),
   setBan: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock('@/services/api', async (original) => ({
     getContent: api.getContent,
     updateContent: api.updateContent,
     listUsers: api.listUsers,
+    listDeletedUsers: api.listDeletedUsers,
     setUserRole: api.setUserRole,
     muteUser: api.muteUser,
     setBan: api.setBan,
@@ -267,7 +269,7 @@ describe('Admin page', () => {
     const wrapper = mountAdmin('admin')
     await flushPromises()
     expect(wrapper.find('.tab-count').text()).toBe('2')
-    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[3]!.trigger('click')
     await flushPromises()
     const syncSection = wrapper
       .findAll('[data-testid="admin-log"] .log-section-tab')
@@ -389,7 +391,7 @@ describe('Admin page', () => {
     })
     const wrapper = mountAdmin('creator')
     await flushPromises()
-    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[3]!.trigger('click')
     await flushPromises()
     const text = wrapper.find('[data-testid="admin-log-text"]').text()
     expect(text).toContain('2026-09-29 17:32')
@@ -440,7 +442,7 @@ describe('Admin page', () => {
     )
     const wrapper = mountAdmin('admin')
     await flushPromises()
-    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[3]!.trigger('click')
     await flushPromises()
     const section = wrapper
       .findAll('[data-testid="admin-log"] .log-section-tab')
@@ -461,7 +463,7 @@ describe('Admin page', () => {
     api.getLog.mockResolvedValue({ data: { data: { months: [], month: null, entries: [] } } })
     const wrapper = mountAdmin('admin')
     await flushPromises()
-    await wrapper.findAll('.admin-tab')[2]!.trigger('click')
+    await wrapper.findAll('.admin-tab')[3]!.trigger('click')
     await flushPromises()
     const tabs = wrapper.findAll('[data-testid="admin-log"] .log-section-tab')
     expect(tabs.map((tab) => tab.text().replace(/\d+$/, '').trim())).toEqual([
@@ -511,5 +513,42 @@ describe('Admin page', () => {
     await wrapper.get('[data-testid="report-delete"]').trigger('click')
     await flushPromises()
     expect(api.removeComment).toHaveBeenCalledWith('comment-1')
+  })
+
+  it('lists deleted users with why they were deleted', async () => {
+    api.listDeletedUsers.mockResolvedValue(
+      page([
+        {
+          id: 'd1',
+          userId: 'gone-1',
+          username: 'leaver',
+          reason: 'self',
+          joinedAt: '2026-01-02T00:00:00Z',
+          lastActiveAt: '2026-09-01T00:00:00Z',
+          deletedAt: '2026-10-01T00:00:00Z',
+        },
+        {
+          id: 'd2',
+          userId: 'gone-2',
+          username: 'ghost',
+          reason: 'unverified',
+          joinedAt: '2026-09-28T00:00:00Z',
+          lastActiveAt: null,
+          deletedAt: '2026-10-01T00:00:00Z',
+        },
+      ]),
+    )
+    const wrapper = mountAdmin('admin')
+    await flushPromises()
+    const tab = wrapper.findAll('.admin-tab')[2]!
+    expect(tab.text()).toBe('Deleted Users')
+    await tab.trigger('click')
+    await flushPromises()
+    expect(api.listDeletedUsers).toHaveBeenCalledWith(expect.objectContaining({ page: 1 }))
+    const text = wrapper.find('[data-testid="admin-deleted-users"]').text()
+    expect(text).toContain('leaver')
+    expect(text).toContain('Deleted themselves')
+    expect(text).toContain('ghost')
+    expect(text).toContain('Never verified')
   })
 })
