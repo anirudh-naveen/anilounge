@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { lockCompletedProgress, reopenCompletedProgress } from './watchlistWrites.js'
+import { lockCompletedProgress, reopenCompletedProgress, touchProgress } from './watchlistWrites.js'
 
 describe('lockCompletedProgress', () => {
   it('moves a completed row to the last episode and remembers where it was', () => {
@@ -57,5 +57,30 @@ describe('reopenCompletedProgress', () => {
     const watching = { status: 'watching', currentEpisode: 12, previousEpisode: 5 }
     reopenCompletedProgress(watching, 'watching', 12)
     assert.equal(watching.currentEpisode, 12)
+  })
+})
+
+describe('touchProgress', () => {
+  const before = new Date('2026-01-01T00:00:00Z')
+
+  it('leaves the row alone when only the rating changed', () => {
+    const item = { status: 'watching', currentEpisode: 4, rating: 9, updatedAt: before }
+    touchProgress(item, 'watching', 4)
+    assert.equal(item.updatedAt, before)
+  })
+
+  it('bumps the row when the episode or status moved', () => {
+    const episode = { status: 'watching', currentEpisode: 5, updatedAt: before }
+    touchProgress(episode, 'watching', 4)
+    assert.ok(episode.updatedAt > before)
+    const status = { status: 'completed', currentEpisode: 4, updatedAt: before }
+    touchProgress(status, 'watching', 4)
+    assert.ok(status.updatedAt > before)
+  })
+
+  it('stamps backlog edits as imported', () => {
+    const item = { status: 'watching', currentEpisode: 5, updatedAt: before }
+    touchProgress(item, 'watching', 4, true)
+    assert.equal(item.importedAt, item.updatedAt)
   })
 })
