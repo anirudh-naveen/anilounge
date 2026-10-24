@@ -97,6 +97,23 @@ export function reopenCompletedProgress(item, statusBefore, episodeBefore) {
 }
 
 /**
+ * Bump a row's `updatedAt` (what orders the home activity feed) only when its status
+ * or episode moved, so rating or note edits don't post an update. A backlog edit is
+ * stamped as imported too, keeping it out of the feed.
+ *
+ * @param {object} item - Watchlist row after this edit, mutated in place.
+ * @param {string} statusBefore - Row status before the edit.
+ * @param {number} episodeBefore - Row episode before the edit.
+ * @param {boolean} [backlog=false]
+ * @returns {void}
+ */
+export function touchProgress(item, statusBefore, episodeBefore, backlog = false) {
+  if (item.status === statusBefore && item.currentEpisode === episodeBefore) return
+  item.updatedAt = new Date()
+  if (backlog) item.importedAt = item.updatedAt
+}
+
+/**
  * Resolve the user's current rating for a title: watchlist rating first, then legacy `user.ratings`.
  *
  * @param {object} user - User document with `watchlist` and optional `ratings`.
