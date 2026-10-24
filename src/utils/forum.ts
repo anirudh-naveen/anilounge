@@ -32,6 +32,9 @@ export const POST_KIND_LABELS: Record<PostKind, string> = {
 /** Post kinds in display order. */
 export const POST_KINDS = Object.keys(POST_KIND_LABELS) as PostKind[]
 
+/** Where the Forum tab opens: every type but megathreads, which the user can switch back on. */
+export const FORUM_HOME = `/forum?kind=${POST_KINDS.filter((kind) => kind !== 'megathread').join(',')}`
+
 /** Kinds a review can score. */
 export const REVIEWABLE_KINDS: TagKind[] = ['movie', 'series', 'season', 'special']
 
