@@ -29,6 +29,7 @@ import {
   setWatchedEpisode,
   stampListDates,
   syncLegacyUserRating,
+  touchProgress,
   syncSeriesFromSeasons,
 } from '../services/watchlistWrites.js'
 import {
@@ -458,8 +459,7 @@ export const addToWatchlist = async (req, res) => {
       existingItem.notes = notes || existingItem.notes
       applyListDetails(existingItem, req.body)
       if (!backlog) stampListDates(existingItem)
-      existingItem.updatedAt = new Date()
-      if (backlog) existingItem.importedAt = existingItem.updatedAt
+      touchProgress(existingItem, statusBefore, episodeBefore, backlog)
     } else {
       user.watchlist.push({
         content: contentId,
@@ -697,8 +697,7 @@ export const updateWatchlistItem = async (req, res) => {
     if (!watchlistItem.totalEpisodes) watchlistItem.totalEpisodes = maxEpisodes
     if (!watchlistItem.totalSeasons) watchlistItem.totalSeasons = maxSeasons
 
-    watchlistItem.updatedAt = new Date()
-    if (backlog) watchlistItem.importedAt = watchlistItem.updatedAt
+    touchProgress(watchlistItem, statusBefore, episodeBefore, backlog)
 
     syncLegacyUserRating(user, contentId, getEffectiveUserRating(user, contentId))
     await applyContentRatingChange(content, previousRating, getEffectiveUserRating(user, contentId))
@@ -782,7 +781,6 @@ export const voteContent = async (req, res) => {
     const watchlistItem = user.watchlist.find((item) => item.content.toString() === contentId)
     if (watchlistItem) {
       watchlistItem.rating = rating
-      watchlistItem.updatedAt = new Date()
     }
 
     syncLegacyUserRating(user, contentId, rating)

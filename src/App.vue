@@ -56,7 +56,13 @@
               </span>
               <span class="nav-text">Home</span>
             </router-link>
-            <router-link to="/forum" class="nav-link" aria-label="Forum" title="Forum">
+            <router-link
+              :to="FORUM_HOME"
+              class="nav-link"
+              active-class="router-link-exact-active"
+              aria-label="Forum"
+              title="Forum"
+            >
               <span class="nav-icon" aria-hidden="true">
                 <svg
                   viewBox="0 0 24 24"
@@ -371,6 +377,7 @@ import { DONATE_URL } from '@/utils/donations'
 import AppTabBar from '@/components/AppTabBar.vue'
 import { isAppLayout, isNativeApp } from '@/utils/nativeApp'
 import { appTabFor } from '@/utils/appTabs'
+import { FORUM_HOME } from '@/utils/forum'
 import { goBackOr } from '@/utils/navigation'
 
 const router = useRouter()

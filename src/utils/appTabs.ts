@@ -6,6 +6,7 @@
  */
 
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
+import { FORUM_HOME } from '@/utils/forum'
 
 export type AppTabName = 'home' | 'forum' | 'watchlist' | 'search' | 'profile'
 
@@ -27,7 +28,7 @@ export const APP_TABS: AppTab[] = [
   {
     name: 'forum',
     label: 'Forum',
-    to: '/forum',
+    to: FORUM_HOME,
     paths: [
       'M4.5 3.5h10A1.5 1.5 0 0 1 16 5v7a1.5 1.5 0 0 1-1.5 1.5H9L5 17v-3.5h-.5A1.5 1.5 0 0 1 3 12V5a1.5 1.5 0 0 1 1.5-1.5Z',
       'M16 8h3.5A1.5 1.5 0 0 1 21 9.5v7a1.5 1.5 0 0 1-1.5 1.5H19v3l-4-3H9.5A1.5 1.5 0 0 1 8 16.5v-3',
