@@ -12,6 +12,7 @@ import jwt from 'jsonwebtoken'
 import User, { DEMO_USER_EMAIL } from '../models/User.js'
 import { endSession, revokeAllSessions, startSession } from '../services/sessionService.js'
 import { touchUserActivity } from '../services/inactiveAccountService.js'
+import { deleteUsers } from '../services/deletedUsers.js'
 import {
   deleteAvatar,
   deleteLegacyAvatarFile,
@@ -66,7 +67,10 @@ function rejectInvalid(req, res) {
   const [first] = errors.array()
   return res.status(400).json({
     success: false,
-    message: typeof first?.msg === 'string' && first.msg !== 'Invalid value' ? first.msg : 'Validation failed.',
+    message:
+      typeof first?.msg === 'string' && first.msg !== 'Invalid value'
+        ? first.msg
+        : 'Validation failed.',
     errors: errors.array(),
   })
 }
@@ -742,7 +746,7 @@ export const deleteAccount = async (req, res) => {
     }
 
     await endSession(req, res)
-    await query('DELETE FROM users WHERE id = $1 AND is_demo = false', [user._id])
+    await deleteUsers('id = $1 AND is_demo = false', [user._id], 'self')
 
     // The stored avatar row is removed by ON DELETE CASCADE.
     deleteLegacyAvatarFile(user.profilePicture)
