@@ -806,6 +806,88 @@
         </div>
       </section>
 
+      <!-- Title: Deleted Users -->
+      <section
+        v-else-if="activeTab === 'deleted'"
+        class="social-panel"
+        data-testid="admin-deleted-users"
+      >
+        <div class="admin-filters">
+          <input
+            v-model="deletedQuery"
+            type="search"
+            class="input"
+            placeholder="Search by username"
+            aria-label="Search deleted users"
+          />
+          <div class="kind-tabs compact" role="tablist" aria-label="Deletion reason">
+            <button
+              v-for="option in DELETION_FILTERS"
+              :key="option.id"
+              type="button"
+              role="tab"
+              class="kind-tab"
+              :class="{ active: deletedFilter === option.id }"
+              :aria-selected="deletedFilter === option.id"
+              @click="deletedFilter = option.id"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+        <p class="social-meta admin-rules">
+          Accounts deleted in Settings, unused for a year, or never verified. Only the username and
+          dates are kept.
+          <template v-if="deletedResults.total">
+            {{ deletedResults.total }} {{ deletedResults.total === 1 ? 'account' : 'accounts' }}.
+          </template>
+        </p>
+        <div v-if="deletedLoading" class="social-loading"><div class="spinner"></div></div>
+        <p v-else-if="deletedError" class="social-empty admin-error">{{ deletedError }}</p>
+        <p v-else-if="!deletedResults.items.length" class="social-empty">No deleted users.</p>
+        <ul v-else class="social-list">
+          <li v-for="entry in deletedResults.items" :key="entry.id" class="user-item">
+            <div class="social-row">
+              <UserAvatar :name="entry.username" :size="40" />
+              <div class="social-row-body">
+                <span class="social-name">{{ entry.username }}</span>
+                <div class="social-meta">
+                  Deleted {{ shortDate(entry.deletedAt) }} · joined
+                  {{ shortDate(entry.joinedAt) }} · last active {{ shortDate(entry.lastActiveAt) }}
+                  <span
+                    class="admin-pill"
+                    :class="{ danger: entry.reason === 'self', muted: entry.reason !== 'self' }"
+                  >
+                    {{ DELETION_LABELS[entry.reason] }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+        <div v-if="pageCount(deletedResults) > 1" class="admin-pager">
+          <button
+            type="button"
+            class="btn btn-ghost btn-small"
+            :disabled="deletedResults.page <= 1"
+            @click="loadDeleted(deletedResults.page - 1)"
+          >
+            Previous
+          </button>
+          <span class="social-meta"
+            >Page {{ deletedResults.page }} of {{ pageCount(deletedResults) }}</span
+          >
+          <button
+            type="button"
+            class="btn btn-ghost btn-small"
+            :disabled="deletedResults.page >= pageCount(deletedResults)"
+            @click="loadDeleted(deletedResults.page + 1)"
+          >
+            Next
+          </button>
+        </div>
+      </section>
+
       <!-- Title: Metrics -->
       <AdminMetrics v-else-if="activeTab === 'metrics'" />
       <AdminNews v-else-if="activeTab === 'news'" />
@@ -1116,6 +1198,15 @@ type EditableContent = {
   locked: string[]
   links: LinkGroup[]
 }
+type DeletedUser = {
+  id: string
+  userId: string
+  username: string
+  reason: 'self' | 'inactive' | 'unverified'
+  joinedAt: string | null
+  lastActiveAt: string | null
+  deletedAt: string
+}
 type AdminUser = {
   id: string
   username: string
@@ -1148,6 +1239,7 @@ type AdminUser = {
 const TABS = [
   { id: 'content', label: 'Content' },
   { id: 'users', label: 'Users' },
+  { id: 'deleted', label: 'Deleted Users' },
   { id: 'log', label: 'Log' },
   { id: 'reports', label: 'Reports' },
   { id: 'metrics', label: 'Metrics' },
@@ -1155,7 +1247,7 @@ const TABS = [
 ] as const
 type TabId = (typeof TABS)[number]['id']
 /** Developers (not admins) only get the Content tab. */
-const ADMIN_ONLY_TABS: TabId[] = ['users', 'log', 'reports', 'metrics', 'news']
+const ADMIN_ONLY_TABS: TabId[] = ['users', 'deleted', 'log', 'reports', 'metrics', 'news']
 const KINDS: Array<{ id: Kind; singular: string; plural: string }> = [
   { id: 'movie', singular: 'Movie', plural: 'Movies' },
   { id: 'series', singular: 'Series', plural: 'Series' },
@@ -1199,6 +1291,17 @@ const USER_FILTERS = [
   { id: 'banned', label: 'Banned' },
   { id: 'flagged', label: 'Flagged' },
 ] as const
+const DELETION_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'self', label: 'Deleted themselves' },
+  { id: 'inactive', label: 'Inactive' },
+  { id: 'unverified', label: 'Never verified' },
+] as const
+const DELETION_LABELS: Record<DeletedUser['reason'], string> = {
+  self: 'Deleted themselves',
+  inactive: 'Inactive for a year',
+  unverified: 'Never verified',
+}
 const MUTE_OPTIONS = [
   { id: '1h', label: '1 hour' },
   { id: '24h', label: '24 hours' },
@@ -1568,6 +1671,53 @@ const loadUsers = async (page = 1) => {
   }
 }
 
+// --- Deleted users ---------------------------------------------------------
+
+const deletedQuery = ref('')
+const deletedFilter = ref<(typeof DELETION_FILTERS)[number]['id']>('all')
+const deletedResults = ref<Page<DeletedUser>>(emptyPage())
+const deletedLoading = ref(false)
+const deletedError = ref('')
+let deletedTimer: ReturnType<typeof setTimeout> | undefined
+let deletedSeq = 0
+
+const loadDeleted = async (page = 1) => {
+  const seq = ++deletedSeq
+  deletedLoading.value = true
+  try {
+    const response = await adminAPI.listDeletedUsers({
+      q: deletedQuery.value.trim() || undefined,
+      reason: deletedFilter.value === 'all' ? undefined : deletedFilter.value,
+      page,
+    })
+    if (seq === deletedSeq) {
+      deletedResults.value = response.data.data
+      deletedError.value = ''
+    }
+  } catch (error) {
+    if (seq === deletedSeq) {
+      deletedError.value = apiErrorMessage(error, 'Could not load deleted users.')
+      toast.error(deletedError.value)
+    }
+  } finally {
+    if (seq === deletedSeq) deletedLoading.value = false
+  }
+}
+
+watch([deletedQuery, deletedFilter], () => {
+  clearTimeout(deletedTimer)
+  deletedTimer = setTimeout(() => loadDeleted(1), SEARCH_DELAY_MS)
+})
+
+const shortDate = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    : '—'
+
 watch([userQuery, userFilter], () => {
   clearTimeout(userTimer)
   userTimer = setTimeout(() => loadUsers(1), SEARCH_DELAY_MS)
@@ -1576,6 +1726,7 @@ watch([userQuery, userFilter], () => {
 watch(activeTab, (tab) => {
   if (tab === 'users' && !usersLoaded.value && !usersLoading.value) loadUsers(1)
   if (tab === 'reports') loadReports(1)
+  if (tab === 'deleted') loadDeleted(1)
   if (tab === 'log') {
     if (logCategory.value === 'feedback') loadFeedback(1)
     else loadLog()

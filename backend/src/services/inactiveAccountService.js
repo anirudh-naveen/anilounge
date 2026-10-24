@@ -15,6 +15,7 @@ import { query } from '../../config/postgres.js'
 import { withJobLock } from '../utils/jobLock.js'
 import { sendInactiveAccountDeleted, sendInactivityWarning } from './emailService.js'
 import { deleteLegacyAvatarFile } from './avatarService.js'
+import { deleteUsers } from './deletedUsers.js'
 
 export const INACTIVITY_LIMIT_DAYS = 365
 /** Warning points, in days before deletion, largest first. */
@@ -84,14 +85,13 @@ export function planInactivityAction(lastActiveAt, warnedDays, now = new Date())
  * @returns {Promise<boolean>} True when a row was deleted.
  */
 async function deleteInactiveAccount(row) {
-  const result = await query(
-    `DELETE FROM users
-     WHERE id = $1 AND is_demo = false
-       AND last_active_at < now() - make_interval(days => $2)`,
+  const deleted = await deleteUsers(
+    'id = $1 AND is_demo = false AND last_active_at < now() - make_interval(days => $2)',
     [row.id, INACTIVITY_LIMIT_DAYS],
+    'inactive',
   )
-  if (result.rowCount) deleteLegacyAvatarFile(row.profile_picture)
-  return Boolean(result.rowCount)
+  if (deleted) deleteLegacyAvatarFile(row.profile_picture)
+  return Boolean(deleted)
 }
 
 /**

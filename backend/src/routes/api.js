@@ -543,6 +543,7 @@ router.get('/admin/forum-reports', adminOnly, forumController.listReports)
 router.get('/admin/forum-reports/count', adminOnly, forumController.countReports)
 router.post('/admin/forum-reports/dismiss', adminOnly, forumController.dismissReports)
 router.get('/admin/users', adminOnly, adminController.listUsers)
+router.get('/admin/deleted-users', adminOnly, adminController.listDeletedUsers)
 /** Site news (admins only, not developers), posted to inboxes as Lounge Keeper. */
 router.get('/admin/news', adminOnly, newsController.listNews)
 router.post(

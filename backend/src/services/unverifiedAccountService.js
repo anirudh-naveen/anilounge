@@ -16,6 +16,7 @@ import { withJobLock } from '../utils/jobLock.js'
 import { issueEmailCode } from './accountSecurityService.js'
 import { sendVerificationReminder } from './emailService.js'
 import { deleteLegacyAvatarFile } from './avatarService.js'
+import { deleteUsers } from './deletedUsers.js'
 
 const HOUR_MS = 60 * 60 * 1000
 export const UNVERIFIED_SIGNUP_TTL_MS = 72 * HOUR_MS
@@ -86,12 +87,12 @@ async function runPass(summary, now) {
         summary.reminded += 1
       } else if (plan.action === 'delete') {
         // Re-check in SQL so a verification that lands mid-run is never deleted.
-        const result = await query(
-          `DELETE FROM users
-           WHERE id = $1 AND pending_signup AND email_verified_at IS NULL AND is_demo = false`,
+        const deleted = await deleteUsers(
+          'id = $1 AND pending_signup AND email_verified_at IS NULL AND is_demo = false',
           [row.id],
+          'unverified',
         )
-        if (result.rowCount) {
+        if (deleted) {
           summary.deleted += 1
           deleteLegacyAvatarFile(row.profile_picture)
         }
