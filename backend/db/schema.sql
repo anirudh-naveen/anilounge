@@ -94,6 +94,21 @@ ALTER TABLE admin_log DROP CONSTRAINT IF EXISTS admin_log_category_check;
 ALTER TABLE admin_log ADD CONSTRAINT admin_log_category_check
   CHECK (category IN ('content', 'moderation', 'sync', 'admin'));
 
+-- Deleted accounts (services/deletedUsers.js), for the admin page's Deleted Users tab.
+-- Written in the same statement as the DELETE; only the username and dates are kept
+-- (no email), and no foreign key, since the user row is gone. `reason`: 'self' = deleted
+-- in Settings, 'inactive' = a year unused, 'unverified' = sign-up never verified.
+CREATE TABLE IF NOT EXISTS deleted_users (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL,
+  username        TEXT NOT NULL,
+  reason          TEXT NOT NULL CHECK (reason IN ('self', 'inactive', 'unverified')),
+  joined_at       TIMESTAMPTZ,
+  last_active_at  TIMESTAMPTZ,
+  deleted_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS deleted_users_deleted_idx ON deleted_users (deleted_at DESC);
+
 -- Bug reports and suggestions from the Feedback page (controllers/feedbackController.js).
 -- Each one is also emailed to SUPPORT_EMAIL; admins read them in the admin Log tab.
 CREATE TABLE IF NOT EXISTS feedback (
