@@ -337,7 +337,17 @@ export const contentAPI = {
   whereToWatch: (contentId: string, region: string) =>
     api.get(`/content/${contentId}/where-to-watch`, { params: { region } }),
 
+  /** "Watchers who liked this also liked": community picks for a title. */
+  similar: (contentId: string, limit = 12) =>
+    api.get(`/content/${contentId}/similar`, { params: { limit } }),
+
   getFranchise: (id: string) => api.get(`/franchises/${id}`),
+}
+
+export const recommendationsAPI = {
+  /** "Recommended for you" picks from the viewer's highest ratings. */
+  list: (type: 'movie' | 'tv', limit = 20) =>
+    api.get('/recommendations', { params: { type, limit } }),
 }
 
 export const aiAPI = {

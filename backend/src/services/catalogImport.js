@@ -28,6 +28,10 @@ import {
   tmdbSnapshot,
 } from '../utils/sourceSnapshots.js'
 import { fribbEntryFor, fribbTmdbPlacement } from '../utils/fribb.js'
+import {
+  anilistRecommendationLinks,
+  tmdbRecommendationLinks,
+} from '../utils/recommendationLinks.js'
 import { loadFribbIndex } from './fribbService.js'
 import { seasonRowName } from '../utils/seasonPlan.js'
 import { uniqueTitles } from '../utils/titles.js'
@@ -39,13 +43,16 @@ import { personNameKey, romajiNameKey } from '../utils/entities.js'
  * @param {object} doc - Content document
  * @param {{ anilist?: object | null }} [options] - The row's AniList media when already
  *   fetched (null: AniList has none); fetched here otherwise.
- * @returns {Promise<{ snapshots: Record<string, object>, schedule: object[], streaming: object[] }>}
- *   `schedule`: AniList airing times by episode; `streaming`: AniList streaming episodes.
+ * @returns {Promise<{ snapshots: Record<string, object>, schedule: object[], streaming: object[],
+ *   recommendations: RecommendationLinks }>}
+ *   `schedule`: AniList airing times by episode; `streaming`: AniList streaming episodes;
+ *   `recommendations`: each fetched source's recommendation links.
  */
 export async function fetchSnapshots(doc, { anilist } = {}) {
   const snapshots = {}
   let schedule = []
   let streaming = []
+  const recommendations = {}
 
   if (doc.anilistId || doc.malId) {
     const [media] =
@@ -58,6 +65,7 @@ export async function fetchSnapshots(doc, { anilist } = {}) {
       snapshots.anilist = compactSnapshot(anilistSnapshot(media))
       schedule = media.airingSchedule?.nodes || []
       streaming = media.streamingEpisodes || []
+      recommendations.anilist = anilistRecommendationLinks(media)
     }
   }
 
@@ -72,10 +80,13 @@ export async function fetchSnapshots(doc, { anilist } = {}) {
   const tmdbType = { movie: 'movie', tv: 'tv' }[doc.contentType]
   if (doc.tmdbId && tmdbType) {
     const details = await unifiedContentService.getTmdbImportDetails(doc.tmdbId, tmdbType)
-    if (details) snapshots.tmdb = compactSnapshot(tmdbSnapshot(details, tmdbType))
+    if (details) {
+      snapshots.tmdb = compactSnapshot(tmdbSnapshot(details, tmdbType))
+      recommendations.tmdb = tmdbRecommendationLinks(details, tmdbType)
+    }
   }
 
-  return { snapshots, schedule, streaming }
+  return { snapshots, schedule, streaming, recommendations }
 }
 
 /**
@@ -473,14 +484,50 @@ export async function writeExternalIds(contentId, externalIds) {
 }
 
 /**
- * Resolve a row from snapshots, save it, and write its tags, staff, and ids.
+ * @typedef {{ anilist?: { targetType: string, targetId: number, weight: number }[],
+ *   tmdb?: { targetType: string, targetId: number, weight: number }[] }} RecommendationLinks
+ */
+
+/**
+ * Replace a row's recommendation links from each source that was fetched; a source
+ * left out keeps what it had.
+ * @param {string} contentId
+ * @param {RecommendationLinks} [links]
+ * @returns {Promise<number>} Links written
+ */
+export async function writeRecommendationLinks(contentId, links = {}) {
+  let written = 0
+  for (const [source, rows] of Object.entries(links)) {
+    if (!rows) continue
+    await query('DELETE FROM content_recommendations WHERE content_id = $1 AND source = $2', [
+      contentId,
+      source,
+    ])
+    for (const row of rows) {
+      await query(
+        `INSERT INTO content_recommendations (content_id, source, target_type, target_id, weight)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (content_id, source, target_type, target_id) DO UPDATE
+           SET weight = EXCLUDED.weight, fetched_at = now()`,
+        [contentId, source, row.targetType, row.targetId, row.weight],
+      )
+      written += 1
+    }
+  }
+  return written
+}
+
+/**
+ * Resolve a row from snapshots, save it, and write its tags, staff, ids, and
+ * recommendation links.
  * @param {object} doc - Content document
  * @param {Record<string, object>} snapshots
- * @param {{ save?: object, adjust?: (doc: object) => void }} [options] - `save` is passed to
- *   `Content.save`; `adjust` changes the document after resolving, before saving.
+ * @param {{ save?: object, adjust?: (doc: object) => void, recommendations?: RecommendationLinks }}
+ *   [options] - `save` is passed to `Content.save`; `adjust` changes the document after
+ *   resolving, before saving; `recommendations` from `fetchSnapshots`.
  * @returns {Promise<object>} The saved document.
  */
-export async function saveResolved(doc, snapshots, { save = {}, adjust } = {}) {
+export async function saveResolved(doc, snapshots, { save = {}, adjust, recommendations } = {}) {
   const resolved = resolveFields(snapshots, { anime: isAnime(doc, snapshots) })
   applyResolvedFields(doc, resolved.fields, snapshots)
   if (adjust) adjust(doc)
@@ -491,6 +538,7 @@ export async function saveResolved(doc, snapshots, { save = {}, adjust } = {}) {
   if (resolved.fields.staff) await writeStaff(id, resolved.fields.staff)
   const fribb = fribbEntryFor(await loadFribbIndex(), doc)
   await writeExternalIds(id, { ...(fribb?.externalIds || {}), ...resolved.externalIds })
+  if (recommendations) await writeRecommendationLinks(id, recommendations)
   return doc
 }
 
@@ -653,7 +701,9 @@ export async function importSeason(
   season,
   { siblings, tmdb = null, seriesTmdbId = null, save = {}, anilist, details = true },
 ) {
-  const { snapshots, schedule, streaming } = await fetchSnapshots(season, { anilist })
+  const { snapshots, schedule, streaming, recommendations } = await fetchSnapshots(season, {
+    anilist,
+  })
   if (season.tmdbSeasonNumber == null && tmdb) {
     // A season the airing dates couldn't place (announced, or added later): Fribb's
     // placement, when it fits TMDB's seasons.
@@ -678,6 +728,7 @@ export async function importSeason(
 
   await saveResolved(season, snapshots, {
     save,
+    recommendations,
     adjust: (doc) => {
       const part = Number(doc.partNumber) > 1 ? ` Part ${doc.partNumber}` : ''
       doc.seasonLabel ||= `Season ${doc.seasonNumber}${part}`
@@ -840,7 +891,7 @@ export async function importSeries(seriesId, { save = {}, details = true } = {})
   }
   seasons = await loadSeasons(seriesId)
 
-  const { snapshots } = await fetchSnapshots(series)
+  const { snapshots, recommendations } = await fetchSnapshots(series)
   const first = seasons[0] ? await loadSnapshots(String(seasons[0]._id)) : {}
   for (const source of ['anilist', 'mal']) {
     if (!first[source]) continue
@@ -862,6 +913,7 @@ export async function importSeries(seriesId, { save = {}, details = true } = {})
   }
   const saved = await saveResolved(series, snapshots, {
     save,
+    recommendations,
     adjust: (doc) => Object.assign(doc, seriesTotals(seasons)),
   })
   // AniList, MAL, and TMDB credits of the same person end up as one person.
@@ -878,8 +930,8 @@ export async function importSeries(seriesId, { save = {}, details = true } = {})
 export async function importStandalone(contentId, { save = {} } = {}) {
   const doc = await Content.findById(contentId)
   if (!doc || !['movie', 'special'].includes(doc.contentType)) return null
-  const { snapshots } = await fetchSnapshots(doc)
-  return saveResolved(doc, snapshots, { save })
+  const { snapshots, recommendations } = await fetchSnapshots(doc)
+  return saveResolved(doc, snapshots, { save, recommendations })
 }
 
 /**

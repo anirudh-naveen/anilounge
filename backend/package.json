@@ -26,7 +26,7 @@
     "pg": "^8.23.0",
     "qrcode": "^1.5.4",
     "sanitize-html": "^2.17.0",
-    "satori": "^0.47.1",
+    "satori": "^0.63.2",
     "xss": "^1.0.15"
   },
   "scripts": {
@@ -44,6 +44,7 @@
     "db:reload": "node src/scripts/reloadCatalog.js",
     "db:fix-season-counts": "node src/scripts/fixSeasonCounts.js",
     "db:sync-series-watchlists": "node src/scripts/syncSeriesWatchlists.js",
+    "db:backfill-recommendations": "node src/scripts/backfillRecommendations.js",
     "db:merge-split-series": "node src/scripts/mergeSplitSeries.js",
     "populate-unified": "node src/scripts/populateUnified.js",
     "calculate-user-ratings": "node src/scripts/calculateInitialUserRatings.js",

@@ -2,11 +2,12 @@
   ContentRail.vue — horizontal catalog strip (component).
 
   Scrollable poster row used by Search browse (trending, in theatres / airing,
-  upcoming). View All links to the full Movies or Series catalog page.
+  upcoming, recommended for you). View All links to the full Movies or Series catalog
+  page; `showWhy` puts each pick's reason under its title.
 -->
 <template>
   <section class="content-rail" :data-testid="`browse-rail-${railId}`">
-    <div class="rail-header">
+    <div v-if="!hideHeader" class="rail-header">
       <h2 class="rail-title">{{ title }}</h2>
       <router-link v-if="viewAll" :to="viewAll" class="rail-view-all">View All</router-link>
     </div>
@@ -44,6 +45,9 @@
         </div>
         <div class="rail-info">
           <h3 class="rail-card-title">{{ getDisplayTitle(item) }}</h3>
+          <p v-if="showWhy && item.why" class="rail-card-why" :title="item.why">
+            {{ item.because?.[0]?.title ? `Because you liked ${item.because[0].title}` : item.why }}
+          </p>
         </div>
         <ContentHoverPreview
           :item="item"
@@ -74,12 +78,18 @@ withDefaults(
     emptyText?: string
     isAuthenticated?: boolean
     inWatchlist?: (id: string) => boolean
+    /** Show each item's `why` (recommendation reason) under its title. */
+    showWhy?: boolean
+    /** Leave out the title row (when a DetailSection heads the rail). */
+    hideHeader?: boolean
   }>(),
   {
     loading: false,
     emptyText: 'Nothing to show here yet.',
     isAuthenticated: false,
     inWatchlist: () => false,
+    showWhy: false,
+    hideHeader: false,
   },
 )
 
@@ -193,6 +203,17 @@ const handleImageError = showPosterPlaceholder
   font-weight: 600;
   color: var(--text-ink);
   line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rail-card-why {
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
