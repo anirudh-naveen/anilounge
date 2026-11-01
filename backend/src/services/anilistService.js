@@ -69,13 +69,14 @@ const CHARACTER_FIELDS = `
   }
 `
 
-/** What the catalog import adds per title (art, trailer, tags, key staff, schedule). */
+/** What the catalog import adds per title (art, trailer, tags, recommendations, key staff, schedule). */
 const DETAIL_FIELDS = `
   bannerImage
   trailer { id site }
   source(version: 3)
   nextAiringEpisode { airingAt episode }
   tags { name category rank isMediaSpoiler isGeneralSpoiler isAdult }
+  recommendations(sort: [RATING_DESC, ID], perPage: 15) { nodes { rating mediaRecommendation { id } } }
   staff(sort: [RELEVANCE, ID], perPage: 25) {
     edges { role node { id name { full native } image { large } } }
   }
@@ -329,6 +330,29 @@ export async function fetchAnilistDetailsBatch(
       )
       results.push(...(data?.Page?.media || []))
     }
+  }
+  return results
+}
+
+/**
+ * AniList anime with only their recommendations, by AniList id (the recommendation
+ * backfill; imports get them with `DETAIL_FIELDS`). Not cached.
+ * @param {number[]} anilistIds
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<object[]>} `{ id, recommendations }` per anime found
+ */
+export async function fetchAnilistRecommendationsBatch(anilistIds, { fetchImpl } = {}) {
+  const ids = [...new Set(anilistIds.map(positiveInt).filter(Boolean))]
+  const results = []
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const data = await anilistRequest(
+      `query ($ids: [Int]) { Page(perPage: ${BATCH_SIZE}) { media(id_in: $ids, type: ANIME) {
+        id recommendations(sort: [RATING_DESC, ID], perPage: 15) { nodes { rating mediaRecommendation { id } } }
+      } } }`,
+      { ids: ids.slice(i, i + BATCH_SIZE) },
+      { fetchImpl },
+    )
+    results.push(...(data?.Page?.media || []))
   }
   return results
 }

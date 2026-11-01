@@ -29,6 +29,7 @@ import adminController from '../controllers/adminController.js'
 import * as feedbackController from '../controllers/feedbackController.js'
 import metricsController from '../controllers/metricsController.js'
 import newsController from '../controllers/newsController.js'
+import recommendationController from '../controllers/recommendationController.js'
 import authMiddleware, {
   optionalAuthenticate,
   refreshAccessToken,
@@ -297,6 +298,9 @@ router.post(
 )
 
 router.get('/watchlist', contentController.getWatchlist)
+
+/** "Recommended for you" on the Search tab, from the viewer's highest ratings. */
+router.get('/recommendations', recommendationController.getRecommendations)
 router.delete('/watchlist/:contentId', validateObjectId, contentController.removeFromWatchlist)
 router.put(
   '/watchlist/:contentId',

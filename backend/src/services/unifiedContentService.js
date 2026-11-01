@@ -336,12 +336,38 @@ class UnifiedContentService {
             'videos',
             movie ? 'release_dates' : 'content_ratings',
             movie ? 'credits' : 'aggregate_credits',
+            'recommendations',
           ].join(','),
         },
       })
       return response.data
     } catch (error) {
       console.error(`TMDB ${contentType} import error:`, error.response?.data || error.message)
+      return null
+    }
+  }
+
+  /**
+   * A TMDB movie or show's recommendations (first page), shaped like the import details'
+   * `recommendations` so `tmdbRecommendationLinks` reads either.
+   * @param {number} tmdbId
+   * @param {'movie' | 'tv'} contentType
+   * @returns {Promise<{ id: number, recommendations: { results: object[] } } | null>}
+   */
+  async getTmdbRecommendations(tmdbId, contentType) {
+    if (!this.hasTmdbKey) return null
+    try {
+      await this.throttle('tmdb')
+      const response = await this.tmdbClient.get(
+        `${contentType === 'movie' ? '/movie' : '/tv'}/${tmdbId}/recommendations`,
+        { params: { api_key: this.tmdbApiKey } },
+      )
+      return { id: tmdbId, recommendations: { results: response.data?.results || [] } }
+    } catch (error) {
+      console.error(
+        `TMDB ${contentType} recommendations error:`,
+        error.response?.data || error.message,
+      )
       return null
     }
   }

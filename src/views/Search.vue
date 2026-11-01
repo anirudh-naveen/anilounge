@@ -411,6 +411,19 @@
           :in-watchlist="contentStore.isInWatchlist"
           @select="viewContentDetails"
         />
+        <ContentRail
+          v-if="authStore.isAuthenticated"
+          :key="`${browseType}-recommended`"
+          rail-id="recommended"
+          title="Recommended for you"
+          :items="recommendedRail.items"
+          :loading="recommendedRail.loading || !recommendedRail.loaded"
+          :empty-text="recommendedEmptyText"
+          :is-authenticated="authStore.isAuthenticated"
+          :in-watchlist="contentStore.isInWatchlist"
+          show-why
+          @select="viewContentDetails"
+        />
       </div>
     </div>
 
@@ -451,6 +464,7 @@ import ContentHoverPreview from '@/components/ContentHoverPreview.vue'
 import WatchlistCardTag from '@/components/WatchlistCardTag.vue'
 import AiringBadge from '@/components/AiringBadge.vue'
 import ContentRail from '@/components/ContentRail.vue'
+import { usePersonalRecommendations } from '@/composables/usePersonalRecommendations'
 import ChatLauncher from '@/components/ChatLauncher.vue'
 import SortByControls from '@/components/SortByControls.vue'
 import CatalogFilterPanel from '@/components/CatalogFilterPanel.vue'
@@ -553,6 +567,19 @@ const browseRails = computed(() =>
 const railsLoading = computed(() =>
   browseType.value === 'tv' ? contentStore.tvRailsLoading : contentStore.movieRailsLoading,
 )
+const personalRecommendations = usePersonalRecommendations()
+const recommendedRail = computed(() => personalRecommendations.state.rails[browseType.value])
+const recommendedEmptyText = computed(() => {
+  const rail = recommendedRail.value
+  if (rail.status === 'error') return "Couldn't load your recommendations."
+  if (rail.status === 'needs_ratings') {
+    const left = Math.max(1, rail.needed - rail.rated)
+    return `Rate ${left} more title${left === 1 ? '' : 's'} to get picks based on your favourites.`
+  }
+  return browseType.value === 'tv'
+    ? 'No new series to suggest yet. Rate more titles to widen your picks.'
+    : 'No new movies to suggest yet. Rate more titles to widen your picks.'
+})
 
 // Computed properties
 const searchResults = computed(() => contentStore.searchResults)
@@ -744,6 +771,15 @@ watch(
       console.error('Error loading browse rails:', error)
       toast.error(type === 'tv' ? 'Failed to load series.' : 'Failed to load movies.')
     })
+  },
+  { immediate: true },
+)
+
+watch(
+  [browseType, peopleKind, () => authStore.isAuthenticated, () => authStore.user?.id],
+  ([type, kind, signedIn, userId]) => {
+    if (kind || !signedIn) return
+    void personalRecommendations.load(type, String(userId || 'me'))
   },
   { immediate: true },
 )

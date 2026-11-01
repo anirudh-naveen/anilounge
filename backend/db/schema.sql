@@ -1549,3 +1549,18 @@ CREATE TABLE IF NOT EXISTS external_cache (
   refreshed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (kind, content_id)
 );
+
+-- Community "watchers who liked this also liked" links (services/recommendationService.js):
+-- AniList's recommendations and TMDB's /recommendations for a row, kept as the source's
+-- id so a target imported later is found without refetching. `weight` is 0-1, scaled
+-- per source (utils/recommendationLinks.js) so the sources can be added up.
+CREATE TABLE IF NOT EXISTS content_recommendations (
+  content_id   UUID NOT NULL REFERENCES content (id) ON DELETE CASCADE,
+  source       TEXT NOT NULL CHECK (source IN ('anilist', 'tmdb')),
+  -- 'anime' (AniList id), 'movie' or 'tv' (TMDB id).
+  target_type  TEXT NOT NULL CHECK (target_type IN ('anime', 'movie', 'tv')),
+  target_id    INTEGER NOT NULL,
+  weight       DOUBLE PRECISION NOT NULL CHECK (weight > 0 AND weight <= 1),
+  fetched_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (content_id, source, target_type, target_id)
+);
