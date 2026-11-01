@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { anilistRecommendationLinks, tmdbRecommendationLinks } from './recommendationLinks.js'
+import {
+  anilistRecommendationLinks,
+  rankSimilarTitles,
+  tmdbRecommendationLinks,
+} from './recommendationLinks.js'
 
 describe('anilistRecommendationLinks', () => {
   it('weights links by votes and drops unvoted, duplicate, and self links', () => {
@@ -63,5 +67,39 @@ describe('tmdbRecommendationLinks', () => {
 
   it('is undefined when recommendations were not fetched', () => {
     assert.equal(tmdbRecommendationLinks({ id: 1 }, 'tv'), undefined)
+  })
+})
+
+describe('rankSimilarTitles', () => {
+  it('counts each source once and adds the sources up', () => {
+    const ranked = rankSimilarTitles([
+      { targetId: 'both', source: 'anilist', weight: 0.4 },
+      { targetId: 'both', source: 'tmdb', weight: 0.4 },
+      { targetId: 'anilist-only', source: 'anilist', weight: 0.7 },
+      { targetId: 'anilist-only', source: 'anilist', weight: 0.6 },
+      { targetId: 'anilist-only', source: 'anilist', weight: 0.5 },
+    ])
+    assert.deepEqual(
+      ranked.map((pick) => [pick.id, pick.score, pick.sources]),
+      [
+        ['both', 0.8, ['anilist', 'tmdb']],
+        ['anilist-only', 0.7, ['anilist']],
+      ],
+    )
+  })
+
+  it('breaks ties on catalog score and keeps the limit', () => {
+    const ranked = rankSimilarTitles(
+      [
+        { targetId: 'low', source: 'tmdb', weight: 0.5, targetScore: 6 },
+        { targetId: 'high', source: 'tmdb', weight: 0.5, targetScore: 9 },
+        { targetId: 'weak', source: 'tmdb', weight: 0.1 },
+      ],
+      { limit: 2 },
+    )
+    assert.deepEqual(
+      ranked.map((pick) => pick.id),
+      ['high', 'low'],
+    )
   })
 })

@@ -7,7 +7,7 @@
 -->
 <template>
   <section class="content-rail" :data-testid="`browse-rail-${railId}`">
-    <div class="rail-header">
+    <div v-if="!hideHeader" class="rail-header">
       <h2 class="rail-title">{{ title }}</h2>
       <router-link v-if="viewAll" :to="viewAll" class="rail-view-all">View All</router-link>
     </div>
@@ -80,6 +80,8 @@ withDefaults(
     inWatchlist?: (id: string) => boolean
     /** Show each item's `why` (recommendation reason) under its title. */
     showWhy?: boolean
+    /** Leave out the title row (when a DetailSection heads the rail). */
+    hideHeader?: boolean
   }>(),
   {
     loading: false,
@@ -87,6 +89,7 @@ withDefaults(
     isAuthenticated: false,
     inWatchlist: () => false,
     showWhy: false,
+    hideHeader: false,
   },
 )
 

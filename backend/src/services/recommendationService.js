@@ -1,8 +1,9 @@
 /**
- * recommendationService.js — "Recommended for you": picks from the community
- * recommendation links (`content_recommendations`) of the titles a user rated highest.
+ * recommendationService.js — Picks from the community recommendation links
+ * (`content_recommendations`): "Recommended for you" from the titles a user rated
+ * highest, and "Watchers who liked this also liked" for one title.
  *
- * Domain service behind GET /recommendations. Seasons count as their series on both
+ * Domain service behind GET /recommendations and GET /content/:id/similar. Seasons count as their series on both
  * ends: a rated season seeds with its whole show's links, and a recommended season is
  * picked as its series. Titles the user has rated or listed, anything else in their
  * series or franchise, are never picked. Ranking: utils/personalRecommendations.js.
@@ -20,6 +21,7 @@ import {
   seedThreshold,
 } from '../utils/personalRecommendations.js'
 import { FingerprintCache } from '../utils/fingerprintCache.js'
+import { rankSimilarTitles } from '../utils/recommendationLinks.js'
 
 /** Catalog kind picked for each Search tab. */
 const TARGET_KINDS = { movie: 'movie', tv: 'series' }
@@ -27,6 +29,8 @@ const TARGET_KINDS = { movie: 'movie', tv: 'series' }
 /** New links from catalog refreshes show up within this long. */
 const CACHE_TTL_MS = 10 * 60 * 1000
 const cache = new FingerprintCache({ ttlMs: CACHE_TTL_MS, maxEntries: 2000 })
+/** A title's similar titles change only when the catalog refreshes its links. */
+const similarCache = new FingerprintCache({ ttlMs: 60 * 60 * 1000, maxEntries: 5000 })
 
 /**
  * The user's ratings, and a fingerprint of them and their watchlist that changes when
@@ -173,4 +177,79 @@ export async function getRecommendationsForUser(userId, { type = 'tv', limit = 2
   return result
 }
 
-export default { getRecommendationsForUser }
+/**
+ * "Watchers who liked this also liked" for a movie, special, series, or season. A
+ * season stands for its series: links from every season of the show are used, and
+ * linked seasons are listed as their series. Titles in the same franchise (sequels,
+ * spin-offs) are left out.
+ * @param {string} contentId
+ * @param {{ limit?: number }} [options]
+ * @returns {Promise<object[]>} Catalog rows (movies and series), best first
+ */
+export async function getSimilarTitles(contentId, { limit = 12 } = {}) {
+  const key = `${contentId}:${limit}`
+  const cached = similarCache.get(key, '')
+  if (cached) return cached
+
+  const { rows } = await query(
+    `WITH self AS (
+       SELECT COALESCE(sn.series_id, c.id) AS show_id
+       FROM content c LEFT JOIN seasons sn ON sn.content_id = c.id
+       WHERE c.id = $1
+     ),
+     members AS (
+       SELECT show_id AS member_id FROM self
+       UNION SELECT sn.content_id FROM self JOIN seasons sn ON sn.series_id = self.show_id
+     ),
+     franchise AS (
+       SELECT DISTINCT fm.franchise_id
+       FROM franchise_members fm JOIN members m ON m.member_id = fm.member_id
+     ),
+     targets AS (
+       SELECT cr.source, t.id AS target_id, cr.weight
+       FROM members m
+       JOIN content_recommendations cr ON cr.content_id = m.member_id AND cr.source = 'anilist'
+       JOIN content t ON t.anilist_id = cr.target_id AND t.kind IN ('season', 'movie', 'special')
+       UNION ALL
+       SELECT cr.source, t.id, cr.weight
+       FROM members m
+       JOIN content_recommendations cr ON cr.content_id = m.member_id AND cr.source = 'tmdb'
+       JOIN content t ON t.tmdb_id = cr.target_id
+         AND t.kind = CASE cr.target_type WHEN 'movie' THEN 'movie' ELSE 'series' END
+     ),
+     links AS (
+       SELECT t.source, COALESCE(sn.series_id, t.target_id) AS target_show, max(t.weight) AS weight
+       FROM targets t LEFT JOIN seasons sn ON sn.content_id = t.target_id
+       GROUP BY 1, 2
+     )
+     SELECT l.source, l.target_show::text AS target_id, l.weight,
+            COALESCE(mv.unified_score, ser.unified_score) AS target_score
+     FROM links l
+     JOIN content tc ON tc.id = l.target_show AND tc.kind IN ('movie', 'series')
+     LEFT JOIN movies mv ON mv.content_id = tc.id
+     LEFT JOIN series ser ON ser.content_id = tc.id
+     WHERE l.target_show NOT IN (SELECT show_id FROM self)
+       AND NOT EXISTS (
+         SELECT 1 FROM franchise_members fm
+         JOIN franchise f ON f.franchise_id = fm.franchise_id
+         WHERE fm.member_id = l.target_show
+            OR fm.member_id IN (SELECT content_id FROM seasons WHERE series_id = l.target_show)
+       )`,
+    [contentId],
+  )
+  const ranked = rankSimilarTitles(
+    rows.map((row) => ({
+      source: row.source,
+      targetId: row.target_id,
+      weight: Number(row.weight),
+      targetScore: row.target_score == null ? null : Number(row.target_score),
+    })),
+    { limit },
+  )
+  const works = await loadWorksById(ranked.map((pick) => pick.id))
+  const items = ranked.map((pick) => works.get(pick.id)).filter(Boolean)
+  similarCache.set(key, '', items)
+  return items
+}
+
+export default { getRecommendationsForUser, getSimilarTitles }
