@@ -273,6 +273,9 @@
       <!-- Title: Credits -->
       <StudioLinks :content="show" />
       <TitleExtras :content="show" :sections="['staff']" />
+
+      <!-- Title: Similar Titles -->
+      <SimilarTitles :content-id="show._id" />
     </div>
 
     <JoinPrompt
@@ -329,6 +332,7 @@ import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
 import { openCalendarFile, shareLink } from '@/utils/nativeApp'
 import WhereToWatch from '@/components/WhereToWatch.vue'
+import SimilarTitles from '@/components/SimilarTitles.vue'
 import { useToast } from 'vue-toastification'
 
 const route = useRoute()

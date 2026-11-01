@@ -134,6 +134,9 @@
       <!-- Title: Credits -->
       <StudioLinks :content="movie" />
       <TitleExtras :content="movie" :sections="['staff']" />
+
+      <!-- Title: Similar Titles -->
+      <SimilarTitles :content-id="movie._id" />
     </div>
 
     <JoinPrompt
@@ -168,6 +171,7 @@ import { detailPath } from '@/utils/slug'
 import { titlePageMeta } from '@/utils/pageMeta'
 import { shareLink } from '@/utils/nativeApp'
 import WhereToWatch from '@/components/WhereToWatch.vue'
+import SimilarTitles from '@/components/SimilarTitles.vue'
 import TitleExtras from '@/components/TitleExtras.vue'
 import FranchiseLink from '@/components/FranchiseLink.vue'
 import MainStudio from '@/components/MainStudio.vue'

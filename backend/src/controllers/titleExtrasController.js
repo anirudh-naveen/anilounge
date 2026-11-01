@@ -1,14 +1,15 @@
 /**
- * HTTP handlers for a title's links out to other apps: where to watch it, and its
- * upcoming episodes as a calendar file.
+ * HTTP handlers for a title's links out to other apps (where to watch it, its upcoming
+ * episodes as a calendar file) and to other titles ("watchers who liked this also liked").
  *
- * Layer: controller. Public; rules live in `services/watchProviderService.js` and
- * `services/calendarService.js`.
+ * Layer: controller. Public; rules live in `services/watchProviderService.js`,
+ * `services/calendarService.js`, and `services/recommendationService.js`.
  */
 
 import { getWhereToWatch } from '../services/watchProviderService.js'
 import { episodeCalendarFor } from '../services/calendarService.js'
 import { sendError } from '../utils/httpError.js'
+import { getSimilarTitles } from '../services/recommendationService.js'
 
 /**
  * Streaming links and services for a title in the viewer's country.
@@ -46,4 +47,22 @@ export const episodeCalendar = async (req, res) => {
   }
 }
 
-export default { whereToWatch, episodeCalendar }
+/**
+ * Titles the community recommends to people who liked this one.
+ *
+ * @param {import('express').Request} req - `params.id`, optional `query.limit` (1-24).
+ * @param {import('express').Response} res - 200 `{ data: { items } }` or 500.
+ * @returns {Promise<void>}
+ */
+export const similarTitles = async (req, res) => {
+  try {
+    const limit = Math.min(24, Math.max(1, Number.parseInt(req.query.limit, 10) || 12))
+    const items = await getSimilarTitles(req.params.id, { limit })
+    res.set('Cache-Control', 'public, max-age=3600')
+    res.json({ success: true, data: { items } })
+  } catch (error) {
+    sendError(res, error, 'Error loading similar titles')
+  }
+}
+
+export default { whereToWatch, episodeCalendar, similarTitles }
