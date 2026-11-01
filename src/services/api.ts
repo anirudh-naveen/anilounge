@@ -340,6 +340,12 @@ export const contentAPI = {
   getFranchise: (id: string) => api.get(`/franchises/${id}`),
 }
 
+export const recommendationsAPI = {
+  /** "Recommended for you" picks from the viewer's highest ratings. */
+  list: (type: 'movie' | 'tv', limit = 20) =>
+    api.get('/recommendations', { params: { type, limit } }),
+}
+
 export const aiAPI = {
   chat: (message: string, history: Array<{ role: string; text: string }> = []) =>
     api.post('/ai/chat', { message, history }),

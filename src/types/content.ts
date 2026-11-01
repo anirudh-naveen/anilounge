@@ -56,8 +56,10 @@ export interface UnifiedContent {
   startSeason?: 'winter' | 'spring' | 'summer' | 'fall'
   /** Last known air/end date (TMDB `last_air_date` or MAL `end_date`). */
   lastAirDate?: string | Date
-  /** Chat recommendation reason grounded in catalog fields. */
+  /** Chat or "Recommended for you" reason ("Because you rated Frieren 9/10"). */
   why?: string
+  /** "Recommended for you": the user's rated titles that led here, strongest first. */
+  because?: Array<{ id: string; title: string; rating: number }>
   /** Season rows: the series, season number, and label ("Season 2", "Stone Wars"). */
   seriesId?: string | null
   /** Catalog lists: a series with season rows, tracked season by season. */
