@@ -172,6 +172,7 @@ router.get('/franchises/:id', validateObjectId, contentController.getFranchiseBy
 router.get('/content/:contentId/related', validateObjectId, contentController.getRelatedContent)
 /** Links out to other apps: streaming services, and upcoming episodes for a calendar. */
 router.get('/content/:id/where-to-watch', validateObjectId, titleExtrasController.whereToWatch)
+router.get('/content/:id/similar', validateObjectId, titleExtrasController.similarTitles)
 router.get('/content/:id/calendar.ics', validateObjectId, titleExtrasController.episodeCalendar)
 
 /** Homepage sections. Release updates use the watchlist when a token is present. */

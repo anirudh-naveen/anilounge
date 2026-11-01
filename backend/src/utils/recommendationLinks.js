@@ -3,7 +3,8 @@
  *
  * Utils layer: turn a source's "people who liked this also liked" list into
  * `content_recommendations` rows with a 0-1 weight, so AniList's vote counts and
- * TMDB's list order can be added up by services/recommendationService.js.
+ * TMDB's list order can be added up by services/recommendationService.js, and rank
+ * the titles linked from one title for its "Watchers who liked this also liked".
  */
 
 /** Votes at which an AniList link counts fully on the absolute half of its weight. */
@@ -87,4 +88,48 @@ export function tmdbRecommendationLinks(details, contentType) {
     })
   }
   return links
+}
+
+/** Catalog score's share of a similar title's score: breaks ties between equal links. */
+const SIMILAR_QUALITY_WEIGHT = 0.05
+
+/**
+ * Rank titles linked from one title. Each source counts once per target (its
+ * strongest link from any of the title's seasons), and the sources add up, so a
+ * title both AniList and TMDB recommend outranks one only either does.
+ * @param {{ targetId: string, source: string, weight: number,
+ *   targetScore?: number | null }[]} links
+ * @param {{ limit?: number }} [options]
+ * @returns {{ id: string, score: number, sources: string[] }[]} Best first
+ */
+export function rankSimilarTitles(links, { limit = 12 } = {}) {
+  const targets = new Map()
+  for (const link of links || []) {
+    const weight = Number(link.weight)
+    if (!link.targetId || !(weight > 0)) continue
+    let target = targets.get(link.targetId)
+    if (!target) {
+      const quality = Number(link.targetScore)
+      target = {
+        id: link.targetId,
+        quality: Number.isFinite(quality) && quality > 0 ? quality / 10 : 0,
+        bySource: new Map(),
+      }
+      targets.set(link.targetId, target)
+    }
+    target.bySource.set(link.source, Math.max(target.bySource.get(link.source) || 0, weight))
+  }
+  return [...targets.values()]
+    .map((target) => ({
+      id: target.id,
+      score:
+        Math.round(
+          ([...target.bySource.values()].reduce((sum, weight) => sum + weight, 0) +
+            target.quality * SIMILAR_QUALITY_WEIGHT) *
+            1000,
+        ) / 1000,
+      sources: [...target.bySource.keys()].sort(),
+    }))
+    .sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1))
+    .slice(0, limit)
 }
