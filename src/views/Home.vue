@@ -895,6 +895,7 @@ usePageMeta(() => ({
   margin: 0;
   line-height: 1.45;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .activity-user {
@@ -1079,6 +1080,7 @@ usePageMeta(() => ({
   display: flex;
   flex-direction: column;
   justify-content: center;
+  overflow-wrap: anywhere;
 }
 
 .character-name {
@@ -1354,6 +1356,7 @@ usePageMeta(() => ({
 .is-app .home-layout {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 0.85rem;
 }
 
