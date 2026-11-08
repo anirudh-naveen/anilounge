@@ -1642,6 +1642,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* What doesn't fit on the one line (an airing badge on a narrow row) wraps out of
+     sight instead of running under the episode count. */
+  flex-wrap: wrap;
+  min-width: 0;
+  max-height: 1.35rem;
+  overflow: hidden;
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
@@ -2179,10 +2185,15 @@ onUnmounted(() => {
     display: none;
   }
 
+  /* Fixed episode and score columns (every row is its own grid, so `auto` let them
+     shift row to row), sized and spaced in step with the screen width. */
   .item-header {
-    grid-template-columns: 40px minmax(0, 1fr) auto auto 3.5rem;
+    grid-template-columns:
+      40px minmax(0, 1fr) clamp(3.25rem, 14vw, 4.5rem) clamp(2rem, 9vw, 2.75rem)
+      3.5rem;
     grid-template-rows: 56px;
     min-height: 56px;
+    column-gap: clamp(0.5rem, 3vw, 1.25rem);
   }
 
   .item-poster {
