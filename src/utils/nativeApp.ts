@@ -303,10 +303,16 @@ const pushPlugin = (router?: Router) => {
         .catch(() => {})
     })
     // Tapping a notification opens the page it is about.
-    await PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
-      const path = (notification.data as { path?: unknown } | undefined)?.path
-      if (router && typeof path === 'string' && path.startsWith('/')) router.push(path)
-    })
+    // Waits for the first navigation, as app links do (startNativeApp).
+    await PushNotifications.addListener(
+      'pushNotificationActionPerformed',
+      async ({ notification }) => {
+        const path = (notification.data as { path?: unknown } | undefined)?.path
+        if (!router || typeof path !== 'string' || !path.startsWith('/')) return
+        await router.isReady().catch(() => {})
+        router.push(path)
+      },
+    )
     return plugin
   })
   return pushListeners
@@ -463,10 +469,15 @@ export async function startNativeApp(router: Router): Promise<void> {
   // Attach the push tap listener early, so a tap that launched the app is handled.
   pushPlugin(router).catch(() => {})
 
-  // An anilounge.net link tapped in another app opens that page here.
-  const openAppLink = (address: string | undefined) => {
+  // An anilounge.net link tapped in another app, or a widget tap, opens that page here.
+  // On a cold launch the link arrives while the first navigation (to the start page) is
+  // still waiting on the session check; a redirect from that navigation would still be
+  // applied afterwards and replace the linked page, so open the link once it has settled.
+  const openAppLink = async (address: string | undefined) => {
     const path = address && appLinkPath(address)
-    if (path && path !== router.currentRoute.value.fullPath) router.push(path)
+    if (!path) return
+    await router.isReady().catch(() => {})
+    if (path !== router.currentRoute.value.fullPath) router.push(path)
   }
   App.addListener('appUrlOpen', ({ url }) => openAppLink(url))
   App.getLaunchUrl()

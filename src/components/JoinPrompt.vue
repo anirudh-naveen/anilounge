@@ -1,5 +1,9 @@
 <!--
-  JoinPrompt.vue — sign-up nudge for signed-out visitors (component).
+  JoinPrompt.vue — nudge for signed-out visitors (component).
+
+  On the website it promotes the iOS app (a link to the App Store,
+  `VITE_APP_STORE_URL`); inside the iOS app it is a sign-up nudge, using the
+  page's `title` / `message`.
 
   A small card that slides up in the corner (a bottom sheet on phones) a few
   seconds after a signed-out visitor lands, e.g. from a search engine. It never
@@ -14,7 +18,7 @@
       v-if="visible"
       class="join-prompt"
       role="complementary"
-      :aria-label="title"
+      :aria-label="heading"
       data-testid="join-prompt"
     >
       <button type="button" class="join-close" aria-label="Close" @click="dismiss">×</button>
@@ -22,23 +26,42 @@
         <img src="/anilounge-logo.png" alt="" class="join-mark" width="28" height="28" />
         <span><span class="join-kicker-ani">Ani</span>Lounge</span>
       </p>
-      <h2 class="join-title">{{ title }}</h2>
-      <p class="join-message">{{ message }}</p>
-      <ListSyncNote v-if="listSync" />
-      <div class="join-actions">
-        <router-link
-          :to="{ path: '/login', query: { redirect: route.fullPath } }"
-          class="btn btn-ghost btn-small"
-          data-testid="join-signin"
-          >Log In</router-link
-        >
-        <router-link
-          :to="{ path: '/register', query: { redirect: route.fullPath } }"
-          class="btn btn-primary btn-small"
-          data-testid="join-signup"
-          >Sign Up</router-link
-        >
-      </div>
+      <template v-if="promoteApp">
+        <h2 class="join-title">{{ heading }}</h2>
+        <p class="join-message">
+          Track what you watch, get new-episode alerts, and add watchlist widgets to your home
+          screen. Free on iPhone.
+        </p>
+        <div class="join-actions">
+          <a
+            :href="APP_STORE_URL"
+            target="_blank"
+            rel="noopener"
+            class="btn btn-primary btn-small"
+            data-testid="join-app-store"
+            >Download on the App Store</a
+          >
+        </div>
+      </template>
+      <template v-else>
+        <h2 class="join-title">{{ heading }}</h2>
+        <p class="join-message">{{ message }}</p>
+        <ListSyncNote v-if="listSync" />
+        <div class="join-actions">
+          <router-link
+            :to="{ path: '/login', query: { redirect: route.fullPath } }"
+            class="btn btn-ghost btn-small"
+            data-testid="join-signin"
+            >Log In</router-link
+          >
+          <router-link
+            :to="{ path: '/register', query: { redirect: route.fullPath } }"
+            class="btn btn-primary btn-small"
+            data-testid="join-signup"
+            >Sign Up</router-link
+          >
+        </div>
+      </template>
     </aside>
   </Transition>
 </template>
@@ -48,6 +71,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import ListSyncNote from '@/components/ListSyncNote.vue'
+import { isNativeApp } from '@/utils/nativeApp'
 
 const props = withDefaults(
   defineProps<{
@@ -59,6 +83,15 @@ const props = withDefaults(
   }>(),
   { delayMs: 4000, listSync: false },
 )
+
+/** The iOS app's App Store page; `VITE_APP_STORE_URL` overrides it. */
+const APP_STORE_URL = String(
+  import.meta.env.VITE_APP_STORE_URL ?? 'https://apps.apple.com/app/id6822099163',
+).trim()
+
+/** On the website, promote the iOS app instead of signing up. */
+const promoteApp = !isNativeApp && Boolean(APP_STORE_URL)
+const heading = computed(() => (promoteApp ? 'Get the AniLounge App' : props.title))
 
 /** sessionStorage key: set once the visitor closes a prompt. */
 const DISMISSED_KEY = 'anilounge-join-prompt-dismissed'

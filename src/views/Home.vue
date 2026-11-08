@@ -6,7 +6,7 @@
   prompt for guests, followed by trending series and movie rails), a release sidebar for watchlist titles that falls back
   to trending releases, the character of the day, and forum highlights (picked
   from the watchlist when signed in; the pick refreshes every few hours).
-  Guests also get a "Join the Community" pop-up (`JoinPrompt`), and everyone a Ko-fi
+  Guests also get a pop-up (`JoinPrompt`: the iOS app on the website, sign-up in the app), and everyone a Ko-fi
   donation card (`SupportCard`) when a donation page is configured.
 -->
 <template>
@@ -68,7 +68,7 @@
         </template>
         <template v-else>
           <h1 class="home-title">
-            Welcome To the <span class="gradient-text">Animation Lounge.</span>
+            Welcome to the <span class="gradient-text">Animation Lounge.</span>
           </h1>
           <p class="home-subtitle">
             Find new favorites, record all you've watched, and connect with people across the globe.
