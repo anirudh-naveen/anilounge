@@ -74,6 +74,11 @@ vi.mock('@capacitor/status-bar', () => ({
 
 const push = vi.fn()
 const currentRoute = { value: { fullPath: '/' } }
+/** Resolves once the router's first navigation has settled. */
+let finishFirstNavigation: () => void = () => {}
+const isReady = vi.fn(() => new Promise<void>((resolve) => (finishFirstNavigation = resolve)))
+/** Lets the awaited `router.isReady()` in the link handlers resolve. */
+const settle = () => new Promise((resolve) => setTimeout(resolve))
 
 /** Click a link and report whether the page's own navigation was cancelled. */
 const click = (href: string, target = '', openWith = '') => {
@@ -99,8 +104,13 @@ describe('nativeApp (inside the iOS app)', () => {
 
   beforeAll(async () => {
     const { startNativeApp } = await import('@/utils/nativeApp')
-    await startNativeApp({ push, currentRoute } as unknown as Router)
-    await new Promise((resolve) => setTimeout(resolve))
+    await startNativeApp({ push, currentRoute, isReady } as unknown as Router)
+    await settle()
+    // The launch link waits for the first navigation (its redirects would replace it).
+    expect(push).not.toHaveBeenCalled()
+    finishFirstNavigation()
+    isReady.mockImplementation(() => Promise.resolve())
+    await settle()
     launchPushes = [...push.mock.calls]
   })
 
@@ -117,9 +127,10 @@ describe('nativeApp (inside the iOS app)', () => {
     expect(launchPushes).toEqual([['/forum?sort=new']])
   })
 
-  it('opens anilounge.net links tapped while the app is running, ignoring others', () => {
+  it('opens anilounge.net links tapped while the app is running, ignoring others', async () => {
     appListeners.appUrlOpen!({ url: 'https://anilounge.net/u/mika#forum' })
     appListeners.appUrlOpen!({ url: 'https://example.com/u/mika' })
+    await settle()
     expect(push).toHaveBeenCalledTimes(1)
     expect(push).toHaveBeenCalledWith('/u/mika#forum')
   })
@@ -172,13 +183,14 @@ describe('nativeApp (inside the iOS app)', () => {
     await expect(shareLink(link)).resolves.toBe('cancelled')
   })
 
-  it('opens the page a tapped notification points to', () => {
+  it('opens the page a tapped notification points to', async () => {
     pushListeners.pushNotificationActionPerformed!({
       notification: { data: { path: '/forum/post/p1#comment-c2' } },
     } as never)
     pushListeners.pushNotificationActionPerformed!({
       notification: { data: { path: 'https://evil.example' } },
     } as never)
+    await settle()
     expect(push).toHaveBeenCalledTimes(1)
     expect(push).toHaveBeenCalledWith('/forum/post/p1#comment-c2')
   })
@@ -200,9 +212,10 @@ describe('nativeApp (inside the iOS app)', () => {
     expect(unregisterDevice).not.toHaveBeenCalled()
   })
 
-  it('opens the page for a widget tap', () => {
+  it('opens the page for a widget tap', async () => {
     appListeners.appUrlOpen!({ url: 'anilounge://app/tv-show/frieren/12?tab=cast' })
     appListeners.appUrlOpen!({ url: 'anilounge://other/tv-show/frieren/12' })
+    await settle()
     expect(push).toHaveBeenCalledTimes(1)
     expect(push).toHaveBeenCalledWith('/tv-show/frieren/12?tab=cast')
   })
