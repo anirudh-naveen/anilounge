@@ -84,9 +84,9 @@ const props = withDefaults(
   { delayMs: 4000, listSync: false },
 )
 
-/** The iOS app's App Store page; `VITE_APP_STORE_URL` sets it. */
+/** The iOS app's App Store page; `VITE_APP_STORE_URL` overrides it. */
 const APP_STORE_URL = String(
-  import.meta.env.VITE_APP_STORE_URL ?? 'https://apps.apple.com/us/search?term=AniLounge',
+  import.meta.env.VITE_APP_STORE_URL ?? 'https://apps.apple.com/app/id6822099163',
 ).trim()
 
 /** On the website, promote the iOS app instead of signing up. */
