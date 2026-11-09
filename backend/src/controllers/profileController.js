@@ -14,6 +14,7 @@ import User from '../models/User.js'
 import { serializeEntity } from '../utils/entities.js'
 import { computeProfileStats } from '../utils/profileStats.js'
 import { loadWatchHistory } from '../services/watchEvents.js'
+import { attachSeriesSeasonCounts } from '../services/seriesStructure.js'
 import { getAvatar } from '../services/avatarService.js'
 import { moderationMessage } from '../utils/moderation.js'
 import { listProfileFriends, relationshipBetween } from '../services/friendService.js'
@@ -45,6 +46,8 @@ const PUBLIC_CONTENT_FIELDS = [
   'genres',
   'malStatus',
   'nextEpisodeAirDate',
+  // Lets the watchlist list a one-season show (its season row) as a series.
+  'seriesSeasonCount',
 ]
 
 /**
@@ -199,6 +202,7 @@ export const getPublicProfile = async (req, res) => {
     const watchlistRows = (user.watchlist || []).filter(
       (item) => item.content && typeof item.content === 'object',
     )
+    if (shows('watchlist')) await attachSeriesSeasonCounts(watchlistRows.map((row) => row.content))
 
     const [favoriteContent, favoriteEntities] = shows('favorites')
       ? await Promise.all([loadFavoriteContent(user._id), loadFavoriteEntities(user)])
