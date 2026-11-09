@@ -181,3 +181,28 @@ export const matchesStatusChips = (status: string, picked: ChipPicks<WatchlistSt
 /** Whether a row's type is one of the picked types (none picked: any). */
 export const matchesTypeChips = (contentType: string | undefined, picked: WatchlistTypeChoice[]) =>
   !picked.length || picked.some((type) => matchesContentTypeFilter(contentType, type))
+
+/**
+ * Whether a title is a one-season show listed by its season (common for anime, which is
+ * catalogued season by season): the server keeps a series row only for series of two or
+ * more seasons (backend `syncSeriesFromSeasons`), so this season is the whole show, and
+ * counts as a series as well as a season.
+ * @param content - A watchlist row's title (the API adds `seriesSeasonCount` to seasons).
+ */
+export const isOneSeasonShow = (
+  content: { contentType?: string; seriesSeasonCount?: number | null } | null | undefined,
+) => content?.contentType === 'season' && content.seriesSeasonCount === 1
+
+/** Whether a row counts under a type chip (a one-season show's season also counts as a series). */
+export const countsUnderTypeChip = (
+  contentType: string | undefined,
+  oneSeasonShow: boolean | undefined,
+  chip: WatchlistTypeChoice,
+) => matchesContentTypeFilter(contentType, chip) || (!!oneSeasonShow && chip === 'series')
+
+/** Whether a row passes the picked type chips (none picked: any). */
+export const matchesRowTypeChips = (
+  contentType: string | undefined,
+  oneSeasonShow: boolean | undefined,
+  picked: WatchlistTypeChoice[],
+) => !picked.length || picked.some((chip) => countsUnderTypeChip(contentType, oneSeasonShow, chip))

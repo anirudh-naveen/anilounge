@@ -26,6 +26,31 @@ export const guideNumberSql = (seasonId) => `(
 )`
 
 /**
+ * Give each season its series' season count (`seriesSeasonCount`), so a list can tell a
+ * one-season show (common for anime, catalogued season by season) from one season of a
+ * longer series. Other titles are left alone.
+ * @param {object[]} contents - Catalog titles (season ones have `contentType` 'season'
+ *   and `seriesId`), mutated in place.
+ * @returns {Promise<void>}
+ */
+export async function attachSeriesSeasonCounts(contents) {
+  const seasons = contents.filter(
+    (content) => content?.contentType === 'season' && content.seriesId,
+  )
+  if (!seasons.length) return
+  const seriesIds = [...new Set(seasons.map((content) => String(content.seriesId)))]
+  const { rows } = await query(
+    `SELECT series_id, count(*)::int AS n FROM seasons WHERE series_id = ANY($1::uuid[])
+     GROUP BY series_id`,
+    [seriesIds],
+  )
+  const counts = new Map(rows.map((row) => [String(row.series_id), row.n]))
+  for (const content of seasons) {
+    content.seriesSeasonCount = counts.get(String(content.seriesId)) ?? null
+  }
+}
+
+/**
  * A series' counts, airing state, next episode, and scores from its seasons. Fields
  * no season has (a TMDB-only show's seasons carry no airing state) keep the series' own.
  * @param {string} seriesId

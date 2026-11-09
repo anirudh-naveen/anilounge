@@ -623,7 +623,8 @@ import {
   watchedEpisodes,
   type WatchlistStatus,
   matchesStatusChips,
-  matchesTypeChips,
+  matchesRowTypeChips,
+  isOneSeasonShow,
   readTypeChips,
   type WatchlistTypeChoice,
 } from '@/utils/watchlist'
@@ -805,6 +806,8 @@ const getContentType = (item: WatchlistItem) => {
   if (typeof item === 'string') return 'Unknown'
   if (typeof item.content === 'string') return 'Unknown'
   if (!item.content?.contentType) return 'Unknown'
+  // A one-season show is listed by its season, but it is the whole series.
+  if (isStandaloneSeason(item)) return getCardContentTypeDisplay('tv')
   return getCardContentTypeDisplay(item.content.contentType)
 }
 
@@ -984,18 +987,23 @@ const matchesSearch = (item: WatchlistItem, query: string) => {
 const getItemContentType = (item: WatchlistItem) =>
   typeof item.content === 'string' ? undefined : item.content?.contentType
 
+/** A one-season show listed by its season: it counts as a series too. */
+const isStandaloneSeason = (item: WatchlistItem) =>
+  typeof item.content === 'object' && isOneSeasonShow(item.content)
+
 /** Status and type of every row, for the filter chips' counts. */
 const filterRows = computed(() =>
   contentStore.watchlist.map((item) => ({
     status: item.status,
     contentType: getItemContentType(item),
+    standalone: isStandaloneSeason(item),
   })),
 )
 
 /** Whether a row passes the status and type chips and the filter panel. */
 const matchesFilters = (item: WatchlistItem) =>
   matchesStatusChips(item.status, statusFilter.value) &&
-  matchesTypeChips(getItemContentType(item), typeFilter.value) &&
+  matchesRowTypeChips(getItemContentType(item), isStandaloneSeason(item), typeFilter.value) &&
   (!hasPanelFilters.value ||
     (typeof item.content === 'object' &&
       !!item.content &&

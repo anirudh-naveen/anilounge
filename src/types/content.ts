@@ -62,6 +62,8 @@ export interface UnifiedContent {
   because?: Array<{ id: string; title: string; rating: number }>
   /** Season rows: the series, season number, and label ("Season 2", "Stone Wars"). */
   seriesId?: string | null
+  /** Watchlist season rows: how many seasons their series has (1: a one-season show). */
+  seriesSeasonCount?: number | null
   /** Catalog lists: a series with season rows, tracked season by season. */
   hasSeasons?: boolean
   /** Catalog lists: a series' only season row, which its card stands for. */

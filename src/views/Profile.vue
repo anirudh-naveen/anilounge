@@ -724,7 +724,8 @@ import { getDisplayTitle } from '@/utils/titles'
 import {
   getWatchlistStatusLabel,
   matchesStatusChips,
-  matchesTypeChips,
+  matchesRowTypeChips,
+  isOneSeasonShow,
   DEFAULT_WATCHLIST_TYPES,
   type WatchlistStatus,
   type WatchlistTypeChoice,
@@ -1054,6 +1055,7 @@ const watchlistFilterRows = computed(() =>
   (profile.value?.watchlist || []).map((row) => ({
     status: row.status,
     contentType: row.content.contentType,
+    standalone: isOneSeasonShow(row.content),
   })),
 )
 
@@ -1061,7 +1063,9 @@ const filteredWatchlist = computed(() => {
   const query = watchlistQuery.value.trim().toLowerCase()
   const rows = (profile.value?.watchlist || []).filter((row) => {
     if (!matchesStatusChips(row.status, watchlistFilter.value)) return false
-    if (!matchesTypeChips(row.content.contentType, watchlistTypeFilter.value)) return false
+    const standalone = isOneSeasonShow(row.content)
+    if (!matchesRowTypeChips(row.content.contentType, standalone, watchlistTypeFilter.value))
+      return false
     if (!query) return true
     const { title, englishTitle, originalTitle } = row.content
     return [getDisplayTitle(row.content), title, englishTitle, originalTitle].some((name) =>
