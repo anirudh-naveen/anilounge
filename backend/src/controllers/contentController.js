@@ -12,6 +12,7 @@ import geminiService from '../services/geminiService.js'
 import { consumeAiCall } from '../services/aiUsageService.js'
 import relationshipService from '../services/relationshipService.js'
 import { getSeasonGuide } from '../services/seasonService.js'
+import { attachSeriesSeasonCounts } from '../services/seriesStructure.js'
 import { attachTitleDetails } from '../services/titleDetails.js'
 import {
   addFranchiseWork,
@@ -541,6 +542,9 @@ export const getWatchlist = async (req, res) => {
         message: 'User not found',
       })
     }
+
+    // Lets the page list a one-season show (its season row alone) as a series.
+    await attachSeriesSeasonCounts(user.watchlist.map((item) => item.content))
 
     res.json({
       success: true,

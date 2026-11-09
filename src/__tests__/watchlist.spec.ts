@@ -9,6 +9,9 @@ import {
   WATCHLIST_TYPE_FILTER_OPTIONS,
   readTypeChips,
   toggleTypeChip,
+  countsUnderTypeChip,
+  matchesRowTypeChips,
+  isOneSeasonShow,
 } from '@/utils/watchlist'
 import { matchesContentTypeFilter } from '@/services/api'
 import type { UnifiedContent } from '@/types/content'
@@ -83,6 +86,20 @@ describe('watchlist type filters', () => {
     expect(readTypeChips(['all', 'bogus'])).toEqual(['movie', 'series'])
     expect(readTypeChips(['season', 'movie'])).toEqual(['movie', 'season'])
     expect(readTypeChips(['series', 'season'])).toEqual(['series'])
+  })
+
+  it("counts a one-season show's season as a series too", () => {
+    expect(isOneSeasonShow({ contentType: 'season', seriesSeasonCount: 1 })).toBe(true)
+    expect(isOneSeasonShow({ contentType: 'season', seriesSeasonCount: 3 })).toBe(false)
+    expect(isOneSeasonShow({ contentType: 'season' })).toBe(false)
+    expect(isOneSeasonShow({ contentType: 'tv', seriesSeasonCount: 1 })).toBe(false)
+
+    expect(matchesRowTypeChips('season', true, ['movie', 'series'])).toBe(true)
+    expect(matchesRowTypeChips('season', true, ['season'])).toBe(true)
+    expect(matchesRowTypeChips('season', false, ['movie', 'series'])).toBe(false)
+    expect(matchesRowTypeChips('movie', false, ['series'])).toBe(false)
+    expect(countsUnderTypeChip('season', true, 'series')).toBe(true)
+    expect(countsUnderTypeChip('season', true, 'movie')).toBe(false)
   })
 })
 

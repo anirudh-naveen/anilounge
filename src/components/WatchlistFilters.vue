@@ -59,13 +59,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { matchesContentTypeFilter } from '@/services/api'
 import { isAllPicked, isChipPicked, toggleAllChips, type ChipPicks } from '@/utils/filterChips'
 import {
   WATCHLIST_STATUS_FILTER_OPTIONS,
   WATCHLIST_TYPE_FILTER_OPTIONS,
+  countsUnderTypeChip,
+  matchesRowTypeChips,
   matchesStatusChips,
-  matchesTypeChips,
   toggleStatusChip,
   toggleTypeChip,
   type WatchlistStatus,
@@ -73,8 +73,11 @@ import {
 } from '@/utils/watchlist'
 
 const props = defineProps<{
-  /** Every row on the list, before filtering: its status and content type. */
-  rows: { status: string; contentType?: string }[]
+  /**
+   * Every row on the list, before filtering: its status and content type, and whether it
+   * is a season listed without its series (it counts as a series too).
+   */
+  rows: { status: string; contentType?: string; standalone?: boolean }[]
 }>()
 
 /** Picked chips per row; an empty status row means All, `null` none. */
@@ -84,7 +87,9 @@ const type = defineModel<WatchlistTypeChoice[]>('type', { required: true })
 const isPicked = (value: WatchlistStatus) => isChipPicked(status.value, value)
 
 const statusChips = computed(() => {
-  const rows = props.rows.filter((row) => matchesTypeChips(row.contentType, type.value))
+  const rows = props.rows.filter((row) =>
+    matchesRowTypeChips(row.contentType, row.standalone, type.value),
+  )
   return WATCHLIST_STATUS_FILTER_OPTIONS.map((option) => ({
     ...option,
     count: rows.filter((row) => row.status === option.value).length,
@@ -95,7 +100,8 @@ const typeChips = computed(() => {
   const rows = props.rows.filter((row) => matchesStatusChips(row.status, status.value))
   return WATCHLIST_TYPE_FILTER_OPTIONS.map((option) => ({
     ...option,
-    count: rows.filter((row) => matchesContentTypeFilter(row.contentType, option.value)).length,
+    count: rows.filter((row) => countsUnderTypeChip(row.contentType, row.standalone, option.value))
+      .length,
   }))
 })
 </script>
