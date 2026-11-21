@@ -1,5 +1,5 @@
 /**
- * Data for the iOS home screen widgets: "Watchlist updates" (the viewer's and friends'
+ * Data for the app home screen widgets (iOS and Android): "Watchlist updates" (the viewer's and friends'
  * recent watchlist changes, as on the home page) and "Recent releases" (new episodes
  * and premieres for the viewer's watchlist, or trending ones).
  *

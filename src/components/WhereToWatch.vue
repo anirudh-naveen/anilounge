@@ -1,7 +1,7 @@
 <!--
   WhereToWatch.vue — where a title can be watched, as a row of logos (component).
 
-  Each logo opens the title on that service: AniList's direct links first (in the iOS
+  Each logo opens the title on that service: AniList's direct links first (in the apps
   app they open the service's own app when installed), then the services that carry it
   in the viewer's country, from TMDB (data by JustWatch, which must be credited).
   Hovering a logo names the service. Shown to viewers in the United States only
@@ -136,7 +136,7 @@ const regionName = computed(() => {
   }
 })
 
-/** In the app, hand streaming links to iOS so they open the service's own app. */
+/** In the app, hand streaming links to the system so they open the service's own app. */
 const openLink = (event: MouseEvent, url: string) => {
   if (!isNativeApp) return
   event.preventDefault()

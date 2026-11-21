@@ -2,8 +2,8 @@
   AppSheet.vue — a bottom sheet for the app layout (component).
 
   Slides up over a dimmed page with a grabber, a title, and a Done button; dragging the
-  grabber or title down (or tapping outside) closes it. The page behind stops scrolling
-  while it's open. Used for the Watchlist and Search filter options.
+  grabber or title down (or tapping outside, or Android's back button) closes it. The
+  page behind stops scrolling while it's open. Used for the Watchlist and Search filter options.
 -->
 <template>
   <Teleport to="body">
@@ -56,6 +56,7 @@
 
 <script setup lang="ts">
 import { onUnmounted, ref, watch } from 'vue'
+import { onBackButton } from '@/utils/nativeApp'
 
 withDefaults(
   defineProps<{
@@ -76,16 +77,20 @@ const close = () => {
   emit('close')
 }
 
-// Hold the page still behind the sheet.
+// Hold the page still behind the sheet, and let Android's back button close it.
+let stopBackButton: (() => void) | null = null
 watch(
   open,
   (isOpen) => {
     document.body.style.overflow = isOpen ? 'hidden' : ''
+    stopBackButton?.()
+    stopBackButton = isOpen ? onBackButton(close) : null
   },
   { immediate: true },
 )
 onUnmounted(() => {
   document.body.style.overflow = ''
+  stopBackButton?.()
 })
 
 /** Drag-to-dismiss from the header: past this many pixels, letting go closes the sheet. */

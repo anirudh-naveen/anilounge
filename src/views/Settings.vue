@@ -310,7 +310,7 @@
           />
         </div>
 
-        <!-- Notifications (iOS app only) -->
+        <!-- Notifications (apps only) -->
         <div v-if="isNativeApp" id="notifications" class="settings-section">
           <h2>Notifications</h2>
           <div class="settings-card">
@@ -323,7 +323,11 @@
                 </p>
               </div>
               <div class="setting-control">
-                <p v-if="pushState === 'denied'" class="setting-hint">
+                <p v-if="pushState === 'denied' && isAndroidApp" class="setting-hint">
+                  Notifications are turned off for AniLounge. Turn them on in your phone's Settings
+                  app, under Apps, then AniLounge, then Notifications.
+                </p>
+                <p v-else-if="pushState === 'denied'" class="setting-hint">
                   Notifications are turned off for AniLounge. Turn them on in the iPhone Settings
                   app, under Notifications, then AniLounge.
                 </p>
@@ -803,7 +807,13 @@ import { useToast } from 'vue-toastification'
 import { useTheme, type ThemePreference } from '@/composables/useTheme'
 import SettingsSaveBar from '@/components/SettingsSaveBar.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import { enablePush, isAppLayout, isNativeApp, pushPermission } from '@/utils/nativeApp'
+import {
+  enablePush,
+  isAndroidApp,
+  isAppLayout,
+  isNativeApp,
+  pushPermission,
+} from '@/utils/nativeApp'
 import { DONATE_URL } from '@/utils/donations'
 import { useSignOut } from '@/composables/useSignOut'
 import { useInboxStore } from '@/stores/inbox'

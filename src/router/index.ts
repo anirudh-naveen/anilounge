@@ -105,7 +105,7 @@ const router = createRouter({
       meta: { appTitle: 'Feedback' },
     },
     {
-      // The iOS app's sign-in wall (utils/appGate.ts); no site header or footer.
+      // The apps' sign-in wall (utils/appGate.ts); no site header or footer.
       path: '/welcome',
       name: 'appWelcome',
       component: () => import('@/views/AppWelcome.vue'),
@@ -263,7 +263,7 @@ router.beforeEach(async (to) => {
   // Wait for the session cookie check so a signed-in reload is not bounced to /login.
   await authStore.restoreSession()
 
-  // The iOS app needs an account; signed-out visitors get the welcome screen.
+  // The apps need an account; signed-out visitors get the welcome screen.
   const gate = appGateRedirect(to, { isNativeApp, isAuthenticated: authStore.isAuthenticated })
   if (gate) return gate
 

@@ -282,7 +282,7 @@ export const communicationAPI = {
   update: (changes: CommunicationSettings) => api.put('/account/communication', changes),
 }
 
-/** Kinds of iOS push notification (Settings → Notifications); all on by default. */
+/** Kinds of app push notification (Settings → Notifications); all on by default. */
 export interface PushSettings {
   friends: boolean
   forum: boolean
@@ -291,7 +291,9 @@ export interface PushSettings {
 }
 
 export const pushAPI = {
-  registerDevice: (token: string) => api.post('/push/devices', { token }),
+  /** `platform` picks the push service: APNs for `ios`, Firebase for `android`. */
+  registerDevice: (token: string, platform: 'ios' | 'android') =>
+    api.post('/push/devices', { token, platform }),
 
   unregisterDevice: (token: string) => api.delete(`/push/devices/${encodeURIComponent(token)}`),
 
@@ -300,7 +302,7 @@ export const pushAPI = {
   updateSettings: (changes: Partial<PushSettings>) => api.put('/push/settings', changes),
 }
 
-/** Home screen widget sign-in (the iOS app stores the token for its widgets). */
+/** Home screen widget sign-in (the app stores the token for its widgets). */
 export const widgetAPI = {
   issueToken: () => api.post('/widget/token', {}),
 

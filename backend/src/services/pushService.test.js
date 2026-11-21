@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { describePush, normalizePushSettings, releaseLabel } from './pushService.js'
+import {
+  describePush,
+  fcmMessage,
+  normalizeDeviceToken,
+  normalizePushSettings,
+  releaseLabel,
+} from './pushService.js'
 
 describe('describePush', () => {
   it('words social pushes and links to the right page', () => {
@@ -76,5 +82,40 @@ describe('normalizePushSettings', () => {
       releases: true,
     })
     assert.deepEqual(normalizePushSettings(null).releases, true)
+  })
+})
+
+describe('normalizeDeviceToken', () => {
+  const apns = 'AB'.repeat(32)
+  const fcm = `dGVzdA:APA91b${'x_Y-z9'.repeat(25)}`
+
+  it('lowercases APNs tokens and treats a missing platform as iOS', () => {
+    assert.equal(normalizeDeviceToken(apns), apns.toLowerCase())
+    assert.equal(normalizeDeviceToken(` ${apns} `, 'ios'), apns.toLowerCase())
+  })
+
+  it('keeps FCM tokens exactly as given', () => {
+    assert.equal(normalizeDeviceToken(fcm, 'android'), fcm)
+  })
+
+  it('rejects tokens that do not fit the platform', () => {
+    assert.equal(normalizeDeviceToken(fcm, 'ios'), null)
+    assert.equal(normalizeDeviceToken('abc', 'android'), null)
+    assert.equal(normalizeDeviceToken(apns, 'windows'), null)
+    assert.equal(normalizeDeviceToken(42, 'ios'), null)
+  })
+})
+
+describe('fcmMessage', () => {
+  it('sends the path as data and uses the kind as the Android channel', () => {
+    const message = fcmMessage(
+      'tok',
+      { title: 'New friend', body: 'Hi', path: '/u/mika' },
+      'friends',
+    )
+    assert.deepEqual(message.message.notification, { title: 'New friend', body: 'Hi' })
+    assert.deepEqual(message.message.data, { path: '/u/mika', kind: 'friends' })
+    assert.equal(message.message.android.notification.channel_id, 'friends')
+    assert.equal(message.message.token, 'tok')
   })
 })

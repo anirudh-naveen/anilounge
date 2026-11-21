@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The share card: the site's dark background with rounded corners. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="0dp">
+    <shape android:shape="rectangle">
+        <solid android:color="@color/app_background" />
+        <corners android:radius="20dp" />
+    </shape>
+</inset>

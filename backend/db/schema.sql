@@ -1460,8 +1460,8 @@ CREATE TABLE IF NOT EXISTS user_blocks (
 );
 CREATE INDEX IF NOT EXISTS user_blocks_blocked_idx ON user_blocks (blocked_id);
 
--- iOS app push notifications (services/pushService.js). One row per device token from
--- Apple; a token belongs to the account last signed in on that device. `environment` is
+-- App push notifications (services/pushService.js). One row per device token from
+-- Apple or Firebase; a token belongs to the account last signed in on that device. `environment` is
 -- the APNs server that accepted it ('sandbox' for Xcode builds). Settings → Notifications
 -- turns kinds off in `users.push_settings` ({ "friends": false, ... }; missing = on).
 CREATE TABLE IF NOT EXISTS push_devices (
@@ -1472,6 +1472,11 @@ CREATE TABLE IF NOT EXISTS push_devices (
   last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS push_devices_user_idx ON push_devices (user_id);
+-- 'ios' tokens go to APNs, 'android' tokens to Firebase Cloud Messaging.
+ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'ios';
+ALTER TABLE push_devices DROP CONSTRAINT IF EXISTS push_devices_platform_check;
+ALTER TABLE push_devices ADD CONSTRAINT push_devices_platform_check
+  CHECK (platform IN ('ios', 'android'));
 ALTER TABLE users ADD COLUMN IF NOT EXISTS push_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- iOS home screen widget tokens (services/widgetService.js): read-only access to the

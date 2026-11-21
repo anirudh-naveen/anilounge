@@ -15,9 +15,10 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | [Vue Toastification](https://github.com/Maronato/vue-toastification) | Toast notifications |
 | [Cropper.js](https://github.com/fengyuanchen/cropperjs) / [vue-cropperjs](https://github.com/Agontuk/vue-cropperjs) | Profile picture cropping |
 | [Google Fonts](https://fonts.google.com) | Fraunces (display) and Outfit (body) typefaces |
-| [Capacitor](https://capacitorjs.com) | iOS app shell (`ios/`, `capacitor.config.ts`) that loads the live site, so deploys reach the app without an App Store release; `src/utils/nativeApp.ts` handles the in-app parts |
+| [Capacitor](https://capacitorjs.com) | iOS and Android app shells (`ios/`, `android/`, `capacitor.config.ts`) that load the live site, so deploys reach the apps without an App Store or Google Play release; `src/utils/nativeApp.ts` handles the in-app parts |
 | [WidgetKit](https://developer.apple.com/documentation/widgetkit) / SwiftUI | iOS home screen widgets, "Watchlist updates" and "Recent releases" (`ios/App/AniLoungeWidgets/`), fed by `GET /api/widget/feed` with a per-device widget token shared through an App Group |
 | iOS share extension (SwiftUI) | "Share to AniLounge" from Safari, AniList, MyAnimeList, or TMDB adds the title to the watchlist (`ios/App/AniLoungeShare/`, `services/shareService.js`) |
+| Android app widgets and share target (Java, RemoteViews) | The same two widgets and "Add to AniLounge" share target on Android (`android/app/src/main/java/net/anilounge/app/widget/`, `.../share/`), using the same widget token and endpoints |
 | iCalendar (.ics) | "Add to calendar" for a show's upcoming episodes (`services/calendarService.js`) |
 | Web Locks API | Coordinates session refresh across browser tabs |
 | [schema.org](https://schema.org) JSON-LD + Open Graph | Per-page structured data and link previews (`usePageMeta`, `src/utils/pageMeta.ts`) |
@@ -87,6 +88,8 @@ The languages, frameworks, services, and tools AniLounge is built with.
 | --- | --- |
 | [Vercel](https://vercel.com) | Frontend hosting; proxies `/api`, `/uploads`, and the sitemaps to the backend and sets security headers (`vercel.json`); DNS for anilounge.net; Routing Middleware for search-engine HTML |
 | [Apple Push Notification service](https://developer.apple.com/documentation/usernotifications) | iOS app push notifications over HTTP/2 with a .p8 token key (`services/pushService.js`); friend, forum, message, and new-release alerts |
+| [Firebase Cloud Messaging](https://firebase.google.com/docs/cloud-messaging) | Android app push notifications through the HTTP v1 API with a service account (`services/pushService.js`); the same alerts, one notification channel per kind |
+| [Google Play In-App Review](https://developer.android.com/guide/playcore/in-app-review) | The Android app's rating prompt (`WidgetBridgePlugin.java`, `src/utils/appReview.ts`) |
 | [Railway](https://railway.com) | Backend API and production PostgreSQL (client IPs read from Vercel's `X-Vercel-Forwarded-For`, `middleware/clientIp.js`) |
 | [Docker](https://www.docker.com) / Docker Compose | Local PostgreSQL (`docker-compose.yml`) |
 

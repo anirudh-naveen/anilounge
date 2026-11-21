@@ -229,83 +229,91 @@
               class="watchlist-item"
               :class="{ expanded: expandedItems.has(getContentId(item)) }"
             >
-              <!-- Title: Compact Row -->
-              <div class="item-header" @click="toggleExpanded(item)">
-                <div class="item-poster">
-                  <img
-                    :src="getPosterUrl(getContentPosterPath(item))"
-                    :alt="getContentTitle(item)"
-                    @error="handleImageError"
-                  />
-                </div>
-
-                <div class="item-title-section">
-                  <h3 class="item-title" @click.stop="viewContentDetails(item)">
-                    {{ getContentTitle(item) }}
-                  </h3>
-                  <div class="item-meta">
-                    <span class="item-type">{{ getContentType(item) }}</span>
-                    <span v-if="getContentYear(item)" class="item-year">{{
-                      getContentYear(item)
-                    }}</span>
-                    <AiringBadge
-                      v-if="typeof item.content !== 'string' && item.content"
-                      :content="item.content"
-                      variant="inline"
+              <!-- Title: Compact Row (Watching rows swipe: right for progress, left to drop) -->
+              <SwipeRow
+                :right="swipeActions(item).right"
+                :left="swipeActions(item).left"
+                @commit="(direction) => onSwipe(item, direction)"
+              >
+                <div class="item-header" @click="toggleExpanded(item)">
+                  <div class="item-poster">
+                    <img
+                      :src="getPosterUrl(getContentPosterPath(item))"
+                      :alt="getContentTitle(item)"
+                      @error="handleImageError"
                     />
                   </div>
-                </div>
 
-                <div class="item-progress">
-                  <div v-if="tracksItemEpisodes(item)" class="episode-progress">
-                    <span class="episodes-watched">{{ getCurrentEpisodes(item) }}</span>
-                    <span class="episode-separator">/</span>
-                    <span class="total-episodes">{{ getTotalEpisodes(item) || '?' }}</span>
+                  <div class="item-title-section">
+                    <h3 class="item-title" @click.stop="viewContentDetails(item)">
+                      {{ getContentTitle(item) }}
+                    </h3>
+                    <div class="item-meta">
+                      <span class="item-type">{{ getContentType(item) }}</span>
+                      <span v-if="getContentYear(item)" class="item-year">{{
+                        getContentYear(item)
+                      }}</span>
+                      <AiringBadge
+                        v-if="typeof item.content !== 'string' && item.content"
+                        :content="item.content"
+                        variant="inline"
+                      />
+                    </div>
                   </div>
-                  <div v-else class="movie-progress">—</div>
-                </div>
 
-                <div class="item-rating">
-                  <span
-                    v-if="getItemRating(item)"
-                    class="rating-value"
-                    :style="getRatingStyle(getItemRating(item))"
-                    >{{ getItemRating(item) }}</span
-                  >
-                  <span v-else class="no-rating-text">—</span>
-                </div>
+                  <div class="item-progress">
+                    <div v-if="tracksItemEpisodes(item)" class="episode-progress">
+                      <span class="episodes-watched">{{ getCurrentEpisodes(item) }}</span>
+                      <span class="episode-separator">/</span>
+                      <span class="total-episodes">{{ getTotalEpisodes(item) || '?' }}</span>
+                    </div>
+                    <div v-else class="movie-progress">—</div>
+                  </div>
 
-                <div class="item-status" :class="getStatusClass(item.status)">
-                  {{ getStatusLabel(item.status) }}
-                </div>
+                  <div class="item-rating">
+                    <span
+                      v-if="getItemRating(item)"
+                      class="rating-value"
+                      :style="getRatingStyle(getItemRating(item))"
+                      >{{ getItemRating(item) }}</span
+                    >
+                    <span v-else class="no-rating-text">—</span>
+                  </div>
 
-                <div class="item-actions">
-                  <!-- Seasons are favorited through their series. -->
-                  <FavoriteHeart
-                    v-if="!isSeason(item)"
-                    :content-id="getContentId(item)"
-                    variant="inline"
-                  />
-                  <button
-                    class="expand-btn"
-                    type="button"
-                    :aria-expanded="expandedItems.has(getContentId(item))"
-                    :aria-label="
-                      expandedItems.has(getContentId(item)) ? 'Collapse details' : 'Expand details'
-                    "
-                  >
-                    {{ expandedItems.has(getContentId(item)) ? '▼' : '▶' }}
-                  </button>
-                </div>
+                  <div class="item-status" :class="getStatusClass(item.status)">
+                    {{ getStatusLabel(item.status) }}
+                  </div>
 
-                <div class="item-progress-track">
-                  <div
-                    class="item-progress-bar"
-                    :class="getStatusClass(item.status)"
-                    :style="{ width: getProgressPercent(item) + '%' }"
-                  ></div>
+                  <div class="item-actions">
+                    <!-- Seasons are favorited through their series. -->
+                    <FavoriteHeart
+                      v-if="!isSeason(item)"
+                      :content-id="getContentId(item)"
+                      variant="inline"
+                    />
+                    <button
+                      class="expand-btn"
+                      type="button"
+                      :aria-expanded="expandedItems.has(getContentId(item))"
+                      :aria-label="
+                        expandedItems.has(getContentId(item))
+                          ? 'Collapse details'
+                          : 'Expand details'
+                      "
+                    >
+                      {{ expandedItems.has(getContentId(item)) ? '▼' : '▶' }}
+                    </button>
+                  </div>
+
+                  <div class="item-progress-track">
+                    <div
+                      class="item-progress-bar"
+                      :class="getStatusClass(item.status)"
+                      :style="{ width: getProgressPercent(item) + '%' }"
+                    ></div>
+                  </div>
                 </div>
-              </div>
+              </SwipeRow>
 
               <!-- Title: Expanded Details -->
               <div v-if="expandedItems.has(getContentId(item))" class="item-details">
@@ -642,12 +650,13 @@ import ImportReminder from '@/components/ImportReminder.vue'
 import ListSearch from '@/components/ListSearch.vue'
 import BacklogModeToggle from '@/components/BacklogModeToggle.vue'
 import FavoriteHeart from '@/components/FavoriteHeart.vue'
+import SwipeRow, { type SwipeAction } from '@/components/SwipeRow.vue'
 import { usePageTitle } from '@/composables/usePageMeta'
 import AppBar from '@/components/AppBar.vue'
 import AppSearchToggle from '@/components/AppSearchToggle.vue'
 import AppSheet from '@/components/AppSheet.vue'
 import AppSheetSection from '@/components/AppSheetSection.vue'
-import { isAppLayout } from '@/utils/nativeApp'
+import { haptic, isAppLayout } from '@/utils/nativeApp'
 import { useBacklogMode } from '@/composables/useBacklogMode'
 
 usePageTitle('Watchlist')
@@ -1208,6 +1217,73 @@ const saveWatchlistItem = async (item: WatchlistItem) => {
   }
 }
 
+/** Swipe tints, as the iOS system colors. */
+const SWIPE_GREEN = '#30d158'
+const SWIPE_BLUE = '#0a84ff'
+const SWIPE_RED = '#ff453a'
+
+/**
+ * Whether a row gets the app's swipe actions: Watching movies and single-season shows (a
+ * series of several seasons is updated a season at a time in its editor).
+ */
+const canQuickSwipe = (item: WatchlistItem) => {
+  if (!isAppLayout || item.status !== 'watching') return false
+  if (typeof item.content !== 'object' || !item.content) return false
+  if (!tracksItemEpisodes(item)) return true
+  const { contentType } = item.content
+  if (contentType === 'season') return isStandaloneSeason(item)
+  if (contentType === 'tv') return getTotalSeasons(item) <= 1 && !isSeasonSummary(item)
+  return true
+}
+
+/** Swiping right finishes the next episode, completing the title when it's the last one. */
+const finishesWithNextSwipe = (item: WatchlistItem) => {
+  if (!tracksItemEpisodes(item)) return true
+  const total = getTotalEpisodes(item)
+  return total > 0 && getCurrentEpisodes(item) + 1 >= total
+}
+
+const swipeActions = (
+  item: WatchlistItem,
+): { right: SwipeAction | null; left: SwipeAction | null } => {
+  if (!canQuickSwipe(item)) return { right: null, left: null }
+  return {
+    right: finishesWithNextSwipe(item)
+      ? { label: 'Complete', icon: 'check', color: SWIPE_BLUE }
+      : { label: '+1 Ep', icon: 'plus', color: SWIPE_GREEN, keepsRow: true },
+    left: { label: 'Drop', icon: 'drop', color: SWIPE_RED },
+  }
+}
+
+/** Apply a swipe at once, then save it; the row goes back if the save fails. */
+const onSwipe = async (item: WatchlistItem, direction: 'left' | 'right') => {
+  const itemId = getContentId(item) || ''
+  let updates: Partial<WatchlistItem>
+  if (direction === 'left') updates = { status: 'dropped' }
+  else if (finishesWithNextSwipe(item)) {
+    const total = getTotalEpisodes(item)
+    updates = { status: 'completed', ...(total > 0 ? { currentEpisode: total } : {}) }
+  } else updates = { currentEpisode: getCurrentEpisodes(item) + 1 }
+
+  const index = contentStore.watchlist.findIndex((row) => getContentId(row) === itemId)
+  if (index === -1) return
+  const previous = contentStore.watchlist[index]!
+  contentStore.watchlist[index] = { ...previous, ...updates } as WatchlistItem
+  // The open editor shows the new values too.
+  localFormData.value.delete(itemId)
+  if (updates.status === 'completed') haptic('success')
+
+  try {
+    await contentStore.updateWatchlistItem(itemId, updates)
+  } catch (error) {
+    console.error('Error saving swipe:', error)
+    const at = contentStore.watchlist.findIndex((row) => getContentId(row) === itemId)
+    if (at !== -1) contentStore.watchlist[at] = previous
+    localFormData.value.delete(itemId)
+    toast.error(`Couldn't update ${getContentTitle(item)}`)
+  }
+}
+
 const removeFromWatchlist = async (item: WatchlistItem) => {
   try {
     await contentStore.removeFromWatchlist(getContentId(item))
@@ -1596,6 +1672,8 @@ onUnmounted(() => {
 .watchlist-item:hover {
   border-color: var(--border-hover);
   background: var(--bg-hover);
+  /* A swipeable row covers the item with its own (opaque) background. */
+  --swipe-row-bg: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-card);
 }
 
 .item-header {

@@ -1,5 +1,5 @@
 <!--
-  AppWelcome.vue — first screen of the iOS app for signed-out visitors (view).
+  AppWelcome.vue — first screen of the apps for signed-out visitors (view).
 
   The app is built around your account (watchlist, friends, alerts, widgets), so it
   asks people to sign up or log in, and says why. The router sends every signed-out

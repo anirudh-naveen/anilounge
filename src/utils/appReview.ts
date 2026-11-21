@@ -1,8 +1,9 @@
 /**
- * appReview.ts — when the iOS app asks for an App Store rating (utils).
+ * appReview.ts — when the apps ask for an App Store or Google Play rating (utils).
  *
- * Apple only allows its own rating prompt, and iOS decides whether it actually shows
- * (at most three times a year, never again once they've rated). So the app only asks
+ * Apple and Google only allow their own rating prompts, and the system decides whether
+ * it actually shows (iOS at most three times a year; Google Play applies its own quota;
+ * neither again once they've rated). So the app only asks
  * people who have used it for a while, right after a good moment (saving to their
  * watchlist), and asks again a few months later in case they didn't rate. Usage is
  * counted per device in localStorage; utils/nativeApp.ts does the asking.

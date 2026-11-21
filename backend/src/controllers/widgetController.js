@@ -1,5 +1,5 @@
 /**
- * HTTP handlers for the iOS home screen widgets.
+ * HTTP handlers for the app (iOS and Android) home screen widgets.
  *
  * Layer: controller. The feed is public (signed in with a widget token, see
  * `services/widgetService.js`); issuing a token needs the app's normal sign-in. The

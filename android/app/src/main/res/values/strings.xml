@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AniLounge</string>
+    <string name="title_activity_main">AniLounge</string>
+    <string name="package_name">net.anilounge.app</string>
+    <string name="custom_url_scheme">net.anilounge.app</string>
+
+    <!-- Home screen widgets (widget/) -->
+    <string name="widget_loading">Loading…</string>
+    <string name="widget_watchlist_label">Watchlist updates</string>
+    <string name="widget_watchlist_description">What you and your friends are watching.</string>
+    <string name="widget_releases_label">Recent releases</string>
+    <string name="widget_releases_description">New episodes and premieres from your watchlist.</string>
+
+    <!-- Share target (share/ShareActivity.java) -->
+    <string name="share_label">Add to AniLounge</string>
+
+    <!-- Notification channels (NotificationChannels.java) -->
+    <string name="channel_friends">Friends</string>
+    <string name="channel_friends_description">Friend requests and new friends.</string>
+    <string name="channel_forum">Forum replies</string>
+    <string name="channel_forum_description">Comments on your posts and replies to your comments.</string>
+    <string name="channel_messages">Messages</string>
+    <string name="channel_messages_description">Direct messages from friends.</string>
+    <string name="channel_releases">New episodes</string>
+    <string name="channel_releases_description">New episodes and releases from your watchlist.</string>
+</resources>

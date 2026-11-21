@@ -1,9 +1,10 @@
 <!--
   JoinPrompt.vue — nudge for signed-out visitors (component).
 
-  On the website it promotes the iOS app (a link to the App Store,
-  `VITE_APP_STORE_URL`); inside the iOS app it is a sign-up nudge, using the
-  page's `title` / `message`.
+  On the website it promotes the apps (the App Store, `VITE_APP_STORE_URL`, and
+  Google Play, `VITE_PLAY_STORE_URL`: Android visitors see Google Play, iPhone
+  and iPad visitors the App Store, everyone else both); inside the apps it is a
+  sign-up nudge, using the page's `title` / `message`.
 
   A small card that slides up in the corner (a bottom sheet on phones) a few
   seconds after a signed-out visitor lands, e.g. from a search engine. It never
@@ -30,16 +31,26 @@
         <h2 class="join-title">{{ heading }}</h2>
         <p class="join-message">
           Track what you watch, get new-episode alerts, and add watchlist widgets to your home
-          screen. Free on iPhone.
+          screen. {{ freeOn }}
         </p>
         <div class="join-actions">
           <a
+            v-if="showAppStore"
             :href="APP_STORE_URL"
             target="_blank"
             rel="noopener"
             class="btn btn-primary btn-small"
             data-testid="join-app-store"
             >Download on the App Store</a
+          >
+          <a
+            v-if="showPlayStore"
+            :href="PLAY_STORE_URL"
+            target="_blank"
+            rel="noopener"
+            class="btn btn-primary btn-small"
+            data-testid="join-play-store"
+            >Get it on Google Play</a
           >
         </div>
       </template>
@@ -89,8 +100,31 @@ const APP_STORE_URL = String(
   import.meta.env.VITE_APP_STORE_URL ?? 'https://apps.apple.com/app/id6822099163',
 ).trim()
 
-/** On the website, promote the iOS app instead of signing up. */
-const promoteApp = !isNativeApp && Boolean(APP_STORE_URL)
+/**
+ * The Android app's Google Play page (`VITE_PLAY_STORE_URL`). Unset hides it, so set it
+ * once the listing is live, e.g. https://play.google.com/store/apps/details?id=net.anilounge.app
+ */
+const PLAY_STORE_URL = String(import.meta.env.VITE_PLAY_STORE_URL ?? '').trim()
+
+const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent
+const onAndroid = /Android/i.test(userAgent)
+// iPadOS reports a Mac, so a touch screen on "Mac" counts as an iPad.
+const onIOS =
+  /iPhone|iPad|iPod/i.test(userAgent) ||
+  (/Macintosh/i.test(userAgent) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)
+
+/** Store links for this visitor's device: its own store, or both on a computer. */
+const showPlayStore = Boolean(PLAY_STORE_URL) && !onIOS
+const showAppStore = Boolean(APP_STORE_URL) && !(onAndroid && showPlayStore)
+const freeOn =
+  showAppStore && showPlayStore
+    ? 'Free on iPhone and Android.'
+    : showPlayStore
+      ? 'Free on Android.'
+      : 'Free on iPhone.'
+
+/** On the website, promote the apps instead of signing up. */
+const promoteApp = !isNativeApp && (showAppStore || showPlayStore)
 const heading = computed(() => (promoteApp ? 'Get the AniLounge App' : props.title))
 
 /** sessionStorage key: set once the visitor closes a prompt. */

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The site's dark navbar (navbar-primary in the dark theme); also the splash. -->
+    <color name="app_background">#0F1726</color>
+    <!-- The site's coral-primary. -->
+    <color name="accent">#E07A5F</color>
+    <color name="colorPrimary">#0F1726</color>
+    <color name="colorPrimaryDark">#0F1726</color>
+    <color name="colorAccent">#E07A5F</color>
+</resources>

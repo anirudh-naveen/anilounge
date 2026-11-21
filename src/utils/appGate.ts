@@ -1,5 +1,5 @@
 /**
- * appGate.ts — the iOS app's sign-in wall (utils).
+ * appGate.ts — the apps' sign-in wall (utils).
  *
  * The app is built around an account, so signed-out visitors are sent to the welcome
  * screen (AppWelcome.vue), which explains why and offers sign-up and log-in. Sign-in
@@ -24,7 +24,7 @@ export const APP_PUBLIC_ROUTES = new Set([
 /**
  * Where to send a navigation instead, or null to let it through.
  * @param to - The route being opened.
- * @param state - Whether this is the iOS app and whether someone is signed in.
+ * @param state - Whether this is an app (iOS or Android) and whether someone is signed in.
  */
 export function appGateRedirect(
   to: Pick<RouteLocationNormalized, 'name' | 'fullPath'>,

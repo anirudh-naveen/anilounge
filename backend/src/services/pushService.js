@@ -1,7 +1,9 @@
 /**
- * Push notifications to the iOS app through Apple Push Notification service (APNs).
+ * Push notifications to the iOS app through Apple Push Notification service (APNs), and
+ * to the Android app through Firebase Cloud Messaging (FCM).
  *
- * Layer: service. The app registers its device token (`push_devices`); inbox
+ * Layer: service. The app registers its device token (`push_devices`, with its
+ * `platform`); inbox
  * notifications, direct messages, and new releases of followed titles are pushed to
  * every device of the recipient, unless they turned that kind off in Settings
  * (`users.push_settings`). Sending never throws, so a push failure cannot undo the
@@ -11,12 +13,19 @@
  * minutes. A token is tried against the server its device last worked on
  * (production for TestFlight/App Store builds, sandbox for Xcode builds), then the other.
  *
+ * FCM uses the HTTP v1 API with an OAuth token from a Firebase service account (a
+ * JWT signed with its private key, exchanged for an access token that lasts an hour).
+ * Android pushes go to a notification channel per kind (android/…/NotificationChannels.java),
+ * so people can also mute a kind in Android's own settings.
+ *
  * Env: APNS_KEY (the .p8 contents; `\n` escapes allowed), APNS_KEY_ID, APNS_TEAM_ID,
- * APNS_BUNDLE_ID (default net.anilounge.app). Without the key, pushes are skipped.
+ * APNS_BUNDLE_ID (default net.anilounge.app); FCM_SERVICE_ACCOUNT (the service account
+ * JSON, or base64 of it). Each platform's pushes are skipped while its key is unset.
  */
 
 import http2 from 'node:http2'
 import cron from 'node-cron'
+import axios from 'axios'
 import jwt from 'jsonwebtoken'
 import { query } from '../../config/postgres.js'
 import { withJobLock } from '../utils/jobLock.js'
@@ -58,9 +67,35 @@ function config() {
   }
 }
 
-/** Whether pushes can be sent (APNs is configured). */
+function fcmConfig() {
+  const raw = process.env.FCM_SERVICE_ACCOUNT?.trim()
+  if (!raw) return null
+  try {
+    const text = raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8')
+    const account = JSON.parse(text)
+    if (!account.project_id || !account.client_email || !account.private_key) return null
+    return {
+      projectId: account.project_id,
+      clientEmail: account.client_email,
+      privateKey: String(account.private_key).replace(/\\n/g, '\n'),
+      tokenUri: account.token_uri || 'https://oauth2.googleapis.com/token',
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Whether pushes can be sent (APNs or FCM is configured). */
 export function pushEnabled() {
-  return config() !== null
+  return config() !== null || fcmConfig() !== null
+}
+
+/** Platforms whose pushes can be sent right now. */
+function enabledPlatforms() {
+  const platforms = []
+  if (config()) platforms.push('ios')
+  if (fcmConfig()) platforms.push('android')
+  return platforms
 }
 
 // ---------------------------------------------------------------------------
@@ -156,26 +191,46 @@ export function releaseLabel(release) {
 // Devices and settings
 // ---------------------------------------------------------------------------
 
-const TOKEN_PATTERN = /^[0-9a-f]{64,200}$/i
+const PLATFORMS = ['ios', 'android']
+/** APNs tokens are hex; FCM registration tokens are longer and case-sensitive. */
+const TOKEN_PATTERNS = {
+  ios: /^[0-9a-f]{64,200}$/,
+  android: /^[A-Za-z0-9_:-]{100,4096}$/,
+}
+
+/**
+ * A device token as stored: APNs tokens lowercased, FCM tokens as given.
+ * @param {unknown} token
+ * @param {string} platform - `ios` or `android`.
+ * @returns {string | null} Null when it isn't a valid token for that platform.
+ */
+export function normalizeDeviceToken(token, platform = 'ios') {
+  if (typeof token !== 'string' || !PLATFORMS.includes(platform)) return null
+  const trimmed = token.trim()
+  const value = platform === 'ios' ? trimmed.toLowerCase() : trimmed
+  return TOKEN_PATTERNS[platform].test(value) ? value : null
+}
 
 /**
  * Register this device for `userId`'s pushes. A token signed in under another account
  * moves to this one.
  * @param {string} userId
- * @param {unknown} token - Hex APNs device token.
+ * @param {unknown} token - Hex APNs device token, or an FCM registration token.
+ * @param {unknown} [platform] - `ios` (default, for app builds that don't send it) or `android`.
  * @returns {Promise<void>}
- * @throws {HttpError} 400 malformed token.
+ * @throws {HttpError} 400 malformed token or platform.
  */
-export async function registerDevice(userId, token) {
-  const value = typeof token === 'string' ? token.trim().toLowerCase() : ''
-  if (!TOKEN_PATTERN.test(value)) throw new HttpError(400, 'Invalid device token.')
+export async function registerDevice(userId, token, platform = 'ios') {
+  const kind = platform ?? 'ios'
+  const value = normalizeDeviceToken(token, kind)
+  if (!value) throw new HttpError(400, 'Invalid device token.')
   await query(
-    `INSERT INTO push_devices (token, user_id) VALUES ($1, $2)
+    `INSERT INTO push_devices (token, user_id, platform) VALUES ($1, $2, $3)
      ON CONFLICT (token) DO UPDATE
-       SET user_id = EXCLUDED.user_id, last_seen_at = now(),
+       SET user_id = EXCLUDED.user_id, platform = EXCLUDED.platform, last_seen_at = now(),
            created_at = CASE WHEN push_devices.user_id = EXCLUDED.user_id
                              THEN push_devices.created_at ELSE now() END`,
-    [value, userId],
+    [value, userId, kind],
   )
 }
 
@@ -186,8 +241,12 @@ export async function registerDevice(userId, token) {
  * @returns {Promise<void>}
  */
 export async function unregisterDevice(userId, token) {
-  const value = typeof token === 'string' ? token.trim().toLowerCase() : ''
-  await query('DELETE FROM push_devices WHERE token = $1 AND user_id = $2', [value, userId])
+  const value = typeof token === 'string' ? token.trim() : ''
+  // APNs tokens are stored lowercased; FCM tokens exactly as given.
+  await query('DELETE FROM push_devices WHERE token IN ($1, lower($1)) AND user_id = $2', [
+    value,
+    userId,
+  ])
 }
 
 /**
@@ -325,7 +384,7 @@ export function postToApns(settings, environment, token, payload) {
  * Deliver to one device, trying its last environment first and the other on a token
  * the first rejects; dead tokens are deleted.
  */
-async function sendToDevice(settings, device, payload) {
+async function sendToApnsDevice(settings, device, payload) {
   const order =
     device.environment === 'sandbox' ? ['sandbox', 'production'] : ['production', 'sandbox']
   for (const environment of order) {
@@ -350,6 +409,82 @@ async function sendToDevice(settings, device, payload) {
   await query('DELETE FROM push_devices WHERE token = $1', [device.token])
 }
 
+let cachedFcmToken = null
+
+/** An OAuth access token for FCM, reused until a few minutes before it expires. */
+async function fcmAccessToken(settings) {
+  if (cachedFcmToken && Date.now() < cachedFcmToken.expiresAt) return cachedFcmToken.token
+  const now = Math.floor(Date.now() / 1000)
+  const assertion = jwt.sign(
+    {
+      iss: settings.clientEmail,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      aud: settings.tokenUri,
+      iat: now,
+      exp: now + 3600,
+    },
+    settings.privateKey,
+    { algorithm: 'RS256', noTimestamp: true },
+  )
+  const { data } = await axios.post(
+    settings.tokenUri,
+    new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),
+    { timeout: 10_000 },
+  )
+  const lifetimeMs = (Number(data.expires_in) || 3600) * 1000
+  cachedFcmToken = { token: data.access_token, expiresAt: Date.now() + lifetimeMs - 5 * 60 * 1000 }
+  return cachedFcmToken.token
+}
+
+/**
+ * The FCM v1 message for one Android device (exported for tests).
+ * @param {string} token - FCM registration token.
+ * @param {{ title: string, body: string, path: string }} message
+ * @param {string} group - Push kind; also the Android notification channel.
+ */
+export function fcmMessage(token, message, group) {
+  return {
+    message: {
+      token,
+      notification: { title: message.title, body: message.body },
+      // Tapping the notification opens `path` (utils/nativeApp.ts).
+      data: { path: message.path, kind: group },
+      android: {
+        priority: 'high',
+        notification: { channel_id: group, sound: 'default' },
+      },
+    },
+  }
+}
+
+/** FCM error codes that mean the token will never work again. */
+const FCM_DEAD_CODES = new Set(['UNREGISTERED', 'SENDER_ID_MISMATCH'])
+
+async function sendToFcmDevice(settings, device, message, group) {
+  try {
+    const accessToken = await fcmAccessToken(settings)
+    await axios.post(
+      `https://fcm.googleapis.com/v1/projects/${settings.projectId}/messages:send`,
+      fcmMessage(device.token, message, group),
+      { headers: { authorization: `Bearer ${accessToken}` }, timeout: 10_000 },
+    )
+  } catch (error) {
+    const status = error.response?.status || 0
+    const details = error.response?.data?.error?.details || []
+    const code = details.find((detail) => detail?.errorCode)?.errorCode || null
+    const invalidToken =
+      status === 400 &&
+      code === 'INVALID_ARGUMENT' &&
+      /registration token/i.test(error.response?.data?.error?.message || '')
+    if (status === 404 || FCM_DEAD_CODES.has(code) || invalidToken) {
+      await query('DELETE FROM push_devices WHERE token = $1', [device.token])
+      return
+    }
+    if (status === 401) cachedFcmToken = null
+    console.error(`FCM push failed (${status || 'no response'}${code ? ` ${code}` : ''}).`)
+  }
+}
+
 /**
  * Push to every device of `userId` when they allow `kind`. Never throws.
  * @param {string} userId
@@ -358,17 +493,18 @@ async function sendToDevice(settings, device, payload) {
  * @returns {Promise<void>}
  */
 export async function pushToUser(userId, kind, info) {
-  const settings = config()
+  const apns = config()
+  const fcm = fcmConfig()
   const group = KIND_OF[kind]
-  if (!settings || !group || !userId) return
+  if ((!apns && !fcm) || !group || !userId) return
   try {
     const message = describePush(kind, info)
     if (!message) return
     const { rows } = await query(
-      `SELECT d.token, d.environment FROM push_devices d JOIN users u ON u.id = d.user_id
-       WHERE d.user_id = $1 AND u.banned_at IS NULL
+      `SELECT d.token, d.environment, d.platform FROM push_devices d JOIN users u ON u.id = d.user_id
+       WHERE d.user_id = $1 AND u.banned_at IS NULL AND d.platform = ANY($3::text[])
          AND COALESCE((u.push_settings ->> $2)::boolean, true)`,
-      [userId, group],
+      [userId, group, enabledPlatforms()],
     )
     if (!rows.length) return
     const payload = {
@@ -379,7 +515,13 @@ export async function pushToUser(userId, kind, info) {
       },
       path: message.path,
     }
-    await Promise.all(rows.map((device) => sendToDevice(settings, device, payload)))
+    await Promise.all(
+      rows.map((device) =>
+        device.platform === 'android'
+          ? sendToFcmDevice(fcm, device, message, group)
+          : sendToApnsDevice(apns, device, payload),
+      ),
+    )
   } catch (error) {
     console.error(`Push (${kind}) failed:`, error.message)
   }

@@ -5,7 +5,7 @@
  * choice runs light → dawn → penumbra → dusk → dark (the default), is saved in
  * localStorage as a display preference, and is applied as `data-theme` on <html>.
  * Settings can preview a theme before saving it. index.html applies the saved
- * theme before first paint so pages do not flash. In the iOS app the widgets follow the
+ * theme before first paint so pages do not flash. In the apps the widgets follow the
  * saved theme, and the app icon switches to match when a new one is picked.
  */
 
@@ -51,7 +51,7 @@ const applyTheme = (theme: ThemePreference) => {
 
 watch(shown, applyTheme, { immediate: true })
 
-// In the iOS app, the home screen widgets follow the saved theme (not previews).
+// In the apps, the home screen widgets follow the saved theme (not previews).
 watch(preference, setWidgetTheme, { immediate: true })
 
 /**

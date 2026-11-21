@@ -1,5 +1,5 @@
 /**
- * HTTP handlers for iOS push notification devices and settings.
+ * HTTP handlers for app (iOS and Android) push notification devices and settings.
  *
  * Layer: controller. All routes require auth; rules live in `services/pushService.js`.
  * The shared demo account can't register a device (everyone signed in to it would get
@@ -12,14 +12,15 @@ import { assertNotDemo, sendError } from '../utils/httpError.js'
 /**
  * Register the app's device token for the signed-in user.
  *
- * @param {import('express').Request} req - `body.token` (hex APNs token).
+ * @param {import('express').Request} req - `body.token` (hex APNs token or FCM token) and
+ *   `body.platform` (`ios`, the default, or `android`).
  * @param {import('express').Response} res - 200, 400 bad token, 403 demo, or 500.
  * @returns {Promise<void>}
  */
 export const registerDevice = async (req, res) => {
   try {
     assertNotDemo(req.user)
-    await pushService.registerDevice(req.user._id, req.body?.token)
+    await pushService.registerDevice(req.user._id, req.body?.token, req.body?.platform)
     res.json({ success: true, data: { registered: true } })
   } catch (error) {
     sendError(res, error, 'Error registering for notifications')

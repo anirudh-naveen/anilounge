@@ -1,7 +1,7 @@
 /**
- * nativeApp.ts — behaviour for the iOS app, which loads this site in a native shell
- * (capacitor.config.ts). In browsers `isNativeApp` is false and `startNativeApp` does
- * nothing, so plugin code is only downloaded inside the app.
+ * nativeApp.ts — behaviour for the iOS and Android apps, which load this site in a native
+ * shell (capacitor.config.ts). In browsers `isNativeApp` is false and `startNativeApp`
+ * does nothing, so plugin code is only downloaded inside the app.
  */
 
 import { Capacitor, registerPlugin } from '@capacitor/core'
@@ -11,9 +11,15 @@ import { noteWatchlistSave, recordAppOpen } from '@/utils/appReview'
 
 export const isNativeApp = Capacitor.isNativePlatform()
 
+/** Which app this is: `ios`, `android`, or `web` in browsers. */
+export const nativePlatform = Capacitor.getPlatform() as 'ios' | 'android' | 'web'
+
+/** The Android app (Google Play); `isNativeApp` covers both apps. */
+export const isAndroidApp = isNativeApp && nativePlatform === 'android'
+
 /**
  * Whether to show the app layout (bottom tab bar, compact top bars, sheets) instead of
- * the site chrome. On in the iOS app; in development, `?app-layout=1` previews it in a
+ * the site chrome. On in the apps; in development, `?app-layout=1` previews it in a
  * browser for the rest of the tab and `?app-layout=0` turns it back off.
  */
 export const isAppLayout = isNativeApp || (import.meta.env.DEV && previewAppLayout())
@@ -54,7 +60,10 @@ const reloadIfRedeployed = async () => {
   }
 }
 
-/** Hosts whose links open in the app (universal links; ios/App/App/App.entitlements). */
+/**
+ * Hosts whose links open in the app (iOS universal links, ios/App/App/App.entitlements;
+ * Android App Links, android/app/src/main/AndroidManifest.xml).
+ */
 const APP_LINK_HOSTS = new Set(['anilounge.net', 'www.anilounge.net'])
 
 /**
@@ -74,8 +83,9 @@ export function appLinkPath(address: string): string | null {
 }
 
 /**
- * Off-site links open in an in-app browser sheet instead of leaving the app. The app has
- * no tabs, so this site's new-tab links open in place (iOS would send them to Safari).
+ * Off-site links open in an in-app browser sheet (Safari View Controller on iOS, a Custom
+ * Tab on Android) instead of leaving the app. The app has no tabs, so this site's new-tab
+ * links open in place (the system would send them to the browser).
  */
 const handleLinks = (router: Router, openUrl: (url: string) => void) => {
   document.addEventListener(
@@ -103,7 +113,7 @@ const handleLinks = (router: Router, openUrl: (url: string) => void) => {
 
 /**
  * Open a link in the app it belongs to (a Crunchyroll or Netflix link opens their app
- * when installed), else in Safari. Browsers open it in a new tab.
+ * when installed), else in the system browser. Browsers open it in a new tab.
  */
 export async function openInOtherApp(url: string): Promise<void> {
   if (!isNativeApp) {
@@ -115,12 +125,17 @@ export async function openInOtherApp(url: string): Promise<void> {
 }
 
 /**
- * Open a calendar (.ics) link. In the app it opens in the in-app browser, which offers
- * "Add to Calendar"; browsers download or open it.
+ * Open a calendar (.ics) link. On iOS it opens in the in-app browser, which offers "Add
+ * to Calendar"; Android downloads it and hands it to the calendar app (WidgetBridge);
+ * browsers download or open it.
  */
 export async function openCalendarFile(url: string): Promise<void> {
   if (!isNativeApp) {
     window.location.assign(url)
+    return
+  }
+  if (isAndroidApp) {
+    await WidgetBridge.openCalendarFile({ url })
     return
   }
   const { Browser } = await import('@capacitor/browser')
@@ -223,16 +238,16 @@ export async function shareLink(link: {
 }
 
 /**
- * A light tap of haptic feedback in the app (`success` for bigger moments like a new
- * friend). Does nothing in browsers.
+ * A light tap of haptic feedback in the app (`medium` for a firmer tick, `success` for
+ * bigger moments like a new friend). Does nothing in browsers.
  */
-export function haptic(kind: 'tap' | 'success' = 'tap'): void {
+export function haptic(kind: 'tap' | 'medium' | 'success' = 'tap'): void {
   if (!isNativeApp) return
   import('@capacitor/haptics')
     .then(({ Haptics, ImpactStyle, NotificationType }) =>
       kind === 'success'
         ? Haptics.notification({ type: NotificationType.Success })
-        : Haptics.impact({ style: ImpactStyle.Light }),
+        : Haptics.impact({ style: kind === 'medium' ? ImpactStyle.Medium : ImpactStyle.Light }),
     )
     .catch(() => {})
 }
@@ -272,7 +287,10 @@ export async function saveTextFile(filename: string, text: string): Promise<void
 // Push notifications
 // ---------------------------------------------------------------------------
 
-/** This device's APNs token, once registered with the API (so sign-out can remove it). */
+/**
+ * This device's push token (APNs on iOS, Firebase on Android), once registered with the
+ * API (so sign-out can remove it).
+ */
 const PUSH_TOKEN_KEY = 'anilounge:push-token'
 
 const storedPushToken = (): string | null => {
@@ -291,7 +309,7 @@ const pushPlugin = (router?: Router) => {
     const { PushNotifications } = plugin
     await PushNotifications.addListener('registration', ({ value }) => {
       pushAPI
-        .registerDevice(value)
+        .registerDevice(value, isAndroidApp ? 'android' : 'ios')
         .then(() => {
           try {
             localStorage.setItem(PUSH_TOKEN_KEY, value)
@@ -318,7 +336,7 @@ const pushPlugin = (router?: Router) => {
   return pushListeners
 }
 
-/** Notification permission for this app: 'unavailable' outside the iOS app. */
+/** Notification permission for this app: 'unavailable' outside the apps. */
 export async function pushPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unavailable'> {
   if (!isNativeApp) return 'unavailable'
   const { PushNotifications } = await pushPlugin()
@@ -327,7 +345,7 @@ export async function pushPermission(): Promise<'granted' | 'denied' | 'prompt' 
 }
 
 /**
- * Ask for notification permission (iOS shows its prompt once) and register this
+ * Ask for notification permission (the system shows its prompt once) and register this
  * device for the signed-in user.
  * @returns Whether notifications are now on.
  */
@@ -367,7 +385,10 @@ export async function forgetPushDevice(): Promise<void> {
 // Home screen widgets
 // ---------------------------------------------------------------------------
 
-/** The app's own plugin (ios/App/App/WidgetBridgePlugin.swift). */
+/**
+ * The app's own plugin (ios/App/App/WidgetBridgePlugin.swift,
+ * android/app/src/main/java/net/anilounge/app/WidgetBridgePlugin.java).
+ */
 interface WidgetBridgePlugin {
   getToken(): Promise<{ token: string | null }>
   setToken(options: { token: string }): Promise<void>
@@ -376,6 +397,8 @@ interface WidgetBridgePlugin {
   setTheme(options: { theme: string }): Promise<void>
   setAppIcon(options: { theme: string }): Promise<{ changed: boolean }>
   requestReview(): Promise<void>
+  /** Android only: download an .ics file and open it in the calendar app. */
+  openCalendarFile(options: { url: string }): Promise<void>
 }
 
 const WidgetBridge = registerPlugin<WidgetBridgePlugin>('WidgetBridge')
@@ -408,7 +431,8 @@ export function setWidgetTheme(theme: string): void {
 
 /**
  * Switch the home screen icon to match a theme someone just picked. iOS shows a brief
- * "icon changed" notice, so this only runs on an actual change in Settings.
+ * "icon changed" notice (Android swaps it once the app is in the background), so this
+ * only runs on an actual change in Settings.
  */
 export function setAppIconTheme(theme: string): void {
   if (isNativeApp) WidgetBridge.setAppIcon({ theme }).catch(() => {})
@@ -419,7 +443,7 @@ const REVIEW_DELAY_MS = 1500
 
 /**
  * A watchlist save went through: for long-time app users, now and then ask for an App
- * Store rating (utils/appReview.ts). Does nothing in browsers.
+ * Store or Google Play rating (utils/appReview.ts). Does nothing in browsers.
  */
 export function noteGoodMoment(): void {
   if (!isNativeApp) return
@@ -436,7 +460,50 @@ export function refreshWidgets(): void {
   if (isNativeApp) WidgetBridge.reload().catch(() => {})
 }
 
-/** Set up the native shell. Call once after the app mounts. */
+// ---------------------------------------------------------------------------
+// Android back button
+// ---------------------------------------------------------------------------
+
+/** Things the back button closes before going back a page (open sheets), newest last. */
+const backHandlers: Array<() => void> = []
+
+/**
+ * While something like a sheet is open, Android's back button (or back gesture) closes
+ * it instead of leaving the page, as iOS's swipe-down does.
+ * @param close - Closes it.
+ * @returns Call when it closes another way, to stop handling back for it.
+ */
+export function onBackButton(close: () => void): () => void {
+  backHandlers.push(close)
+  return () => {
+    const index = backHandlers.lastIndexOf(close)
+    if (index !== -1) backHandlers.splice(index, 1)
+  }
+}
+
+/**
+ * What the back button does: close the newest sheet, else go back a page, else leave
+ * the app running in the background (as the home button would).
+ * @returns What happened, for tests.
+ */
+export function handleBackButton(
+  canGoBack: boolean,
+  goBack: () => void,
+  minimize: () => void,
+): 'closed' | 'back' | 'minimized' {
+  const close = backHandlers.pop()
+  if (close) {
+    close()
+    return 'closed'
+  }
+  if (canGoBack) {
+    goBack()
+    return 'back'
+  }
+  minimize()
+  return 'minimized'
+}
+
 /**
  * Stop iOS zooming in when a text field under 16px is focused. The app shell turns off
  * pinch zoom (Capacitor's `zoomEnabled`), so that zoom could never be pinched back out.
@@ -448,6 +515,7 @@ function lockViewportZoom() {
   }
 }
 
+/** Set up the native shell. Call once after the app mounts. */
 export async function startNativeApp(router: Router): Promise<void> {
   if (!isNativeApp) return
   lockViewportZoom()
@@ -468,6 +536,17 @@ export async function startNativeApp(router: Router): Promise<void> {
 
   // Attach the push tap listener early, so a tap that launched the app is handled.
   pushPlugin(router).catch(() => {})
+
+  // Android's back button: close a sheet, else go back, else background the app.
+  if (isAndroidApp) {
+    App.addListener('backButton', ({ canGoBack }) => {
+      handleBackButton(
+        canGoBack,
+        () => router.back(),
+        () => App.minimizeApp().catch(() => {}),
+      )
+    })
+  }
 
   // An anilounge.net link tapped in another app, or a widget tap, opens that page here.
   // On a cold launch the link arrives while the first navigation (to the start page) is

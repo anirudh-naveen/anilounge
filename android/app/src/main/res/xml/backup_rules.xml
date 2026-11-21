@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older: back up everything but the widgets' sign-in (widget/WidgetStore.java). -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="anilounge_widgets.xml" />
+    <exclude domain="sharedpref" path="anilounge_app_icon.xml" />
+</full-backup-content>

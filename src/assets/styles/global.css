@@ -3,11 +3,13 @@
   --font-body: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
 
-  /* Screen edges the iOS app draws under (notch, home indicator); 0 in browsers. */
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
+  /* Screen edges the apps draw under (notch, home indicator, Android's status and
+     navigation bars); 0 in browsers. Android's shell sets --safe-area-inset-* itself
+     (Capacitor SystemBars), since older Android WebViews report no env() insets. */
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
 
   /* Canvas */
   --primary-color: #f4f5f7;

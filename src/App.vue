@@ -383,7 +383,7 @@ import { goBackOr } from '@/utils/navigation'
 const router = useRouter()
 const route = useRoute()
 /**
- * Pages that show without the site chrome (the iOS app's welcome screen). The app also
+ * Pages that show without the site chrome (the apps' welcome screen). The app also
  * holds the chrome back until the first page resolves, so a signed-out launch doesn't
  * flash the site header before the welcome screen.
  */

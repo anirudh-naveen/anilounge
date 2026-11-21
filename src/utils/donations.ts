@@ -5,8 +5,8 @@
  * every donate link). Donations made with an account's email give it the Supporter badge
  * (the backend's Ko-fi webhook, services/donationService.js).
  *
- * Hidden in the iOS app: the badge is a digital perk, which App Store rules only allow
- * selling through Apple's in-app purchase.
+ * Hidden in the iOS and Android apps: the badge is a digital perk, which App Store and
+ * Google Play rules only allow selling through their own in-app purchases.
  */
 
 import { isNativeApp } from '@/utils/nativeApp'

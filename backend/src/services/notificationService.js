@@ -1,6 +1,6 @@
 /**
- * In-site notifications for the profile-menu inbox, also pushed to the recipient's iOS
- * devices (services/pushService.js).
+ * In-site notifications for the profile-menu inbox, also pushed to the recipient's app
+ * devices (iOS and Android) (services/pushService.js).
  *
  * Layer: service. Social actions (friend requests, comments, replies) and language
  * warnings call `notify`;

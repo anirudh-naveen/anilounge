@@ -277,7 +277,7 @@ const replaceConnection = (next: AccountConnection) => {
 /**
  * Open the site's approval page in a new tab. The tab is opened before the API call so
  * popup blockers see it as part of the click; if it's blocked anyway, approve here.
- * The iOS app has no tabs, so it always approves here (capacitor.config.ts keeps the
+ * The apps have no tabs, so they always approve here (capacitor.config.ts keeps the
  * sites in the app).
  */
 const connect = async (provider: ConnectionProvider) => {

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: back up everything but the widgets' sign-in (widget/WidgetStore.java). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="anilounge_widgets.xml" />
+        <exclude domain="sharedpref" path="anilounge_app_icon.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="anilounge_widgets.xml" />
+        <exclude domain="sharedpref" path="anilounge_app_icon.xml" />
+    </device-transfer>
+</data-extraction-rules>

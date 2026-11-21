@@ -22,7 +22,7 @@ const widgetBridge = vi.hoisted(() => ({
   setAppIcon: vi.fn(() => Promise.resolve({ changed: true })),
 }))
 vi.mock('@capacitor/core', () => ({
-  Capacitor: { isNativePlatform: () => true },
+  Capacitor: { isNativePlatform: () => true, getPlatform: () => 'ios' },
   registerPlugin: () => widgetBridge,
 }))
 const appListeners: Record<string, (event: { url: string }) => void> = {}
@@ -203,7 +203,7 @@ describe('nativeApp (inside the iOS app)', () => {
 
     pushListeners.registration!({ value: 'ab'.repeat(32) } as never)
     await new Promise((resolve) => setTimeout(resolve))
-    expect(registerDevice).toHaveBeenCalledWith('ab'.repeat(32))
+    expect(registerDevice).toHaveBeenCalledWith('ab'.repeat(32), 'ios')
 
     await forgetPushDevice()
     expect(unregisterDevice).toHaveBeenCalledWith('ab'.repeat(32))
@@ -246,6 +246,39 @@ describe('nativeApp (inside the iOS app)', () => {
   it('hides donation links', async () => {
     const { DONATE_URL } = await import('@/utils/donations')
     expect(DONATE_URL).toBe('')
+  })
+})
+
+describe('handleBackButton', () => {
+  it('closes the newest sheet first, then goes back, then backgrounds the app', async () => {
+    const { handleBackButton, onBackButton } = await import('@/utils/nativeApp')
+    const goBack = vi.fn()
+    const minimize = vi.fn()
+    const closeFirst = vi.fn()
+    const closeSecond = vi.fn()
+    onBackButton(closeFirst)
+    const stopSecond = onBackButton(closeSecond)
+
+    expect(handleBackButton(true, goBack, minimize)).toBe('closed')
+    expect(closeSecond).toHaveBeenCalledTimes(1)
+    // Already closed by the back button: forgetting it again changes nothing.
+    stopSecond()
+    expect(handleBackButton(true, goBack, minimize)).toBe('closed')
+    expect(closeFirst).toHaveBeenCalledTimes(1)
+
+    expect(handleBackButton(true, goBack, minimize)).toBe('back')
+    expect(goBack).toHaveBeenCalledTimes(1)
+    expect(handleBackButton(false, goBack, minimize)).toBe('minimized')
+    expect(minimize).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips a sheet that was closed another way', async () => {
+    const { handleBackButton, onBackButton } = await import('@/utils/nativeApp')
+    const close = vi.fn()
+    const goBack = vi.fn()
+    onBackButton(close)()
+    expect(handleBackButton(true, goBack, vi.fn())).toBe('back')
+    expect(close).not.toHaveBeenCalled()
   })
 })
 

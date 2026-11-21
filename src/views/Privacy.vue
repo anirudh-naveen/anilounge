@@ -1,6 +1,6 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <!--
-  Privacy.vue — privacy policy for the website and the iOS app.
+  Privacy.vue — privacy policy for the website and the iOS and Android apps.
 
   Keep it in step with what the backend stores (db/schema.sql) and who it shares data
   with (TECHNOLOGY.md); update POLICY_DATE whenever the substance changes.
@@ -14,8 +14,8 @@
         <p class="doc-date">Last updated {{ POLICY_DATE }}</p>
 
         <p>
-          This policy covers AniLounge at anilounge.net and the AniLounge iOS app. AniLounge is
-          free, has no ads, and does not sell your data. Questions go to
+          This policy covers AniLounge at anilounge.net and the AniLounge apps for iOS and Android.
+          AniLounge is free, has no ads, and does not sell your data. Questions go to
           <a :href="`mailto:${SUPPORT_EMAIL}`">{{ SUPPORT_EMAIL }}</a
           >.
         </p>
@@ -87,6 +87,11 @@
         <ul>
           <li><strong>Vercel</strong> hosts the website.</li>
           <li><strong>Railway</strong> hosts our servers and database.</li>
+          <li>
+            <strong>Apple</strong> and <strong>Google (Firebase Cloud Messaging)</strong> deliver
+            push notifications to the apps, if you turn them on. They receive your device's
+            notification token and each notification's text.
+          </li>
           <li><strong>Resend</strong> and <strong>Zoho Mail</strong> send and receive email.</li>
           <li>
             <strong>Google Gemini</strong> answers the chat assistant. It receives what you type
@@ -156,7 +161,7 @@
 import { SUPPORT_EMAIL } from '@/utils/community'
 import { usePageMeta } from '@/composables/usePageMeta'
 
-const POLICY_DATE = 'October 10, 2026'
+const POLICY_DATE = 'November 16, 2026'
 
 // Keep in step with STATIC_PAGES in backend/src/services/seoService.js.
 usePageMeta({

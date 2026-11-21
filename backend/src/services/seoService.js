@@ -67,7 +67,7 @@ const STATIC_PAGES = {
   '/support': {
     title: 'Support',
     description:
-      'Get help with the AniLounge website and iOS app: contact options, bug reports, and answers to common account questions.',
+      'Get help with the AniLounge website and the iOS and Android apps: contact options, bug reports, and answers to common account questions.',
     heading: 'AniLounge support',
   },
 }

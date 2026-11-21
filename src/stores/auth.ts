@@ -62,7 +62,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = userData
     token.value = authToken
     setAccessToken(authToken)
-    // In the iOS app: (re)register this device for the account's pushes if allowed, and
+    // In the app: (re)register this device for the account's pushes if allowed, and
     // sign the home screen widgets in.
     refreshPushRegistration().catch(() => {})
     connectWidgets().catch(() => {})

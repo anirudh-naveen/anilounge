@@ -178,10 +178,10 @@ router.get('/content/:id/calendar.ics', validateObjectId, titleExtrasController.
 /** Homepage sections. Release updates use the watchlist when a token is present. */
 router.get('/home/updates', optionalAuthenticate, homeController.getUpdates)
 
-/** iOS home screen widgets: their feed and signing them out (widget token, not session). */
+/** App home screen widgets (iOS and Android): their feed and signing out (widget token). */
 router.get('/widget/feed', widgetController.getFeed)
 router.delete('/widget/token', widgetController.revokeToken)
-/** "Share to AniLounge" (iOS share extension, widget token): find a link's title, add it. */
+/** "Share to AniLounge" (iOS share extension / Android share target, widget token): find a link's title, add it. */
 router.post('/widget/share/lookup', widgetController.lookupShared)
 router.post('/widget/share/add', widgetController.addShared)
 router.get('/home/character-of-the-day', homeController.getCharacterOfTheDay)
@@ -439,10 +439,10 @@ router.post('/friends/requests', blockWhenMuted(), friendController.sendRequest)
 router.post('/friends/requests/:id/accept', validateObjectId, friendController.acceptRequest)
 router.delete('/friends/:id', validateObjectId, friendController.removeFriend)
 
-/** A widget token for this device (the signed-in iOS app hands it to its widgets). */
+/** A widget token for this device (the signed-in app hands it to its widgets). */
 router.post('/widget/token', widgetController.issueToken)
 
-/** iOS app push notifications: this device's token, and which kinds to send. */
+/** App push notifications (APNs or FCM): this device's token, and which kinds to send. */
 router.post('/push/devices', pushController.registerDevice)
 router.delete('/push/devices/:token', pushController.unregisterDevice)
 router.get('/push/settings', pushController.getSettings)

@@ -1,6 +1,6 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <!--
-  Support.vue — how to get help with the website and the iOS app (the App Store's
+  Support.vue — how to get help with the website and the apps (the App Store's and Google Play's
   support URL), with answers to common account questions.
 -->
 <template>
@@ -9,7 +9,7 @@
       <article class="doc-card fade-in">
         <p class="kicker">Help</p>
         <h1 class="doc-title">Support</h1>
-        <p class="doc-date">For the AniLounge website and iOS app</p>
+        <p class="doc-date">For the AniLounge website and the iOS and Android apps</p>
 
         <h2>Contact Us</h2>
         <ul>
@@ -57,8 +57,8 @@
 
         <h3>Do I Need To Update the App?</h3>
         <p>
-          Most new features appear in the app automatically, without an App Store update. Keep the
-          app updated anyway so you get fixes to the app itself.
+          Most new features appear in the app automatically, without an App Store or Google Play
+          update. Keep the app updated anyway so you get fixes to the app itself.
         </p>
 
         <p class="doc-footnote">
@@ -78,7 +78,7 @@ import { usePageMeta } from '@/composables/usePageMeta'
 usePageMeta({
   title: 'Support',
   description:
-    'Get help with the AniLounge website and iOS app: contact options, bug reports, and answers to common account questions.',
+    'Get help with the AniLounge website and the iOS and Android apps: contact options, bug reports, and answers to common account questions.',
   path: '/support',
 })
 
